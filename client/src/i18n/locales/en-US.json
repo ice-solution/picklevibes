@@ -1,0 +1,163 @@
+{
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "facilities": "Facilities",
+    "pricing": "Pricing",
+    "booking": "Booking",
+    "dashboard": "Dashboard",
+    "admin": "Admin",
+    "login": "Login",
+    "register": "Register",
+    "logout": "Logout",
+    "profile": "Profile"
+  },
+  "language": {
+    "chinese": "中文",
+    "english": "English",
+    "switch": "Switch Language"
+  },
+  "home": {
+    "hero": {
+      "title": "Welcome to PickleVibes",
+      "subtitle": "Professional Pickleball Court Booking Platform",
+      "description": "Providing quality pickleball courts, professional coaching, for the best pickleball experience",
+      "bookNow": "Book Now",
+      "learnMore": "Learn More"
+    },
+    "features": {
+      "title": "Why Choose Us?",
+      "professional": {
+        "title": "Professional Courts",
+        "description": "Standard pickleball courts with professional surface materials"
+      },
+      "equipment": {
+        "title": "Quality Equipment",
+        "description": "Professional paddles and ball equipment provided"
+      },
+      "coaching": {
+        "title": "Expert Coaching",
+        "description": "Experienced coaching team guidance"
+      },
+      "booking": {
+        "title": "Easy Booking",
+        "description": "24/7 online booking system"
+      }
+    }
+  },
+  "dashboard": {
+    "welcome": "Welcome back, {{name}}!",
+    "subtitle": "Manage your bookings and view your pickleball activities",
+    "stats": {
+      "totalBookings": "Total Bookings",
+      "upcoming": "Upcoming",
+      "membershipLevel": "Membership Level",
+      "skillLevel": "Skill Level"
+    },
+    "upcomingBookings": "Upcoming Bookings",
+    "newBooking": "New Booking",
+    "noBookings": "No Bookings",
+    "noBookingsDesc": "You don't have any bookings yet",
+    "bookNow": "Book Now",
+    "quickActions": "Quick Actions",
+    "bookCourt": "Book Court",
+    "editProfile": "Edit Profile",
+    "viewPricing": "View Pricing",
+    "recentActivity": "Recent Activity",
+    "noActivity": "No activity records"
+  },
+  "booking": {
+    "title": "Book Court",
+    "selectCourt": "Select Court",
+    "selectDate": "Select Date",
+    "selectTime": "Select Time",
+    "playerInfo": "Player Information",
+    "summary": "Booking Summary",
+    "confirm": "Confirm Booking",
+    "status": {
+      "confirmed": "Confirmed",
+      "pending": "Pending",
+      "cancelled": "Cancelled",
+      "completed": "Completed",
+      "noShow": "No Show"
+    },
+    "payment": {
+      "paid": "Paid",
+      "pending": "Pending",
+      "failed": "Failed"
+    }
+  },
+  "admin": {
+    "title": "Admin Console",
+    "subtitle": "Manage bookings, courts and view system statistics",
+    "stats": {
+      "totalBookings": "Total Bookings",
+      "confirmed": "Confirmed",
+      "pending": "Pending",
+      "totalRevenue": "Total Revenue"
+    },
+    "tabs": {
+      "bookings": "Booking Management",
+      "courts": "Court Management",
+      "revenue": "Revenue Statistics",
+      "analytics": "Data Analytics"
+    },
+    "allBookings": "All Bookings",
+    "courtManagement": "Court Management",
+    "revenueStats": "Revenue Statistics",
+    "dataAnalytics": "Data Analytics"
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "name": "Name",
+    "phone": "Phone",
+    "forgotPassword": "Forgot Password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signUp": "Sign Up Now",
+    "signIn": "Sign In Now"
+  },
+  "common": {
+    "loading": "Loading...",
+    "error": "Error",
+    "success": "Success",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "edit": "Edit",
+    "delete": "Delete",
+    "view": "View",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "submit": "Submit",
+    "search": "Search",
+    "filter": "Filter",
+    "sort": "Sort",
+    "date": "Date",
+    "time": "Time",
+    "price": "Price",
+    "total": "Total",
+    "subtotal": "Subtotal",
+    "discount": "Discount",
+    "currency": "HK$"
+  },
+  "facilities": {
+    "title": "Facilities",
+    "subtitle": "Professional pickleball facilities for the best sports experience",
+    "courts": "Court Facilities",
+    "amenities": "Amenities",
+    "features": "Featured Services"
+  },
+  "pricing": {
+    "title": "Pricing Plans",
+    "subtitle": "Choose the pricing plan that suits you best",
+    "peakHour": "Peak Hours",
+    "offPeak": "Off-Peak Hours",
+    "memberDiscount": "Member Discount"
+  }
+}

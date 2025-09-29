@@ -1,0 +1,163 @@
+{
+  "nav": {
+    "home": "首頁",
+    "about": "關於我們",
+    "facilities": "設施",
+    "pricing": "價格",
+    "booking": "預約",
+    "dashboard": "儀表板",
+    "admin": "管理",
+    "login": "登入",
+    "register": "註冊",
+    "logout": "登出",
+    "profile": "個人資料"
+  },
+  "language": {
+    "chinese": "中文",
+    "english": "English",
+    "switch": "切換語言"
+  },
+  "home": {
+    "hero": {
+      "title": "歡迎來到 PickleVibes",
+      "subtitle": "專業匹克球場地預約平台",
+      "description": "提供優質的匹克球場地，專業的教練指導，讓您享受最棒的匹克球體驗",
+      "bookNow": "立即預約",
+      "learnMore": "了解更多"
+    },
+    "features": {
+      "title": "為什麼選擇我們？",
+      "professional": {
+        "title": "專業場地",
+        "description": "標準匹克球場地，專業地面材質"
+      },
+      "equipment": {
+        "title": "優質設備",
+        "description": "提供專業球拍和球類設備"
+      },
+      "coaching": {
+        "title": "專業教練",
+        "description": "經驗豐富的教練團隊指導"
+      },
+      "booking": {
+        "title": "便捷預約",
+        "description": "24/7 線上預約系統"
+      }
+    }
+  },
+  "dashboard": {
+    "welcome": "歡迎回來，{{name}}！",
+    "subtitle": "管理您的預約和查看您的匹克球活動",
+    "stats": {
+      "totalBookings": "總預約",
+      "upcoming": "即將到來",
+      "membershipLevel": "會員等級",
+      "skillLevel": "技能等級"
+    },
+    "upcomingBookings": "即將到來的預約",
+    "newBooking": "新預約",
+    "noBookings": "暫無預約",
+    "noBookingsDesc": "您還沒有任何預約",
+    "bookNow": "立即預約",
+    "quickActions": "快速操作",
+    "bookCourt": "預約場地",
+    "editProfile": "編輯資料",
+    "viewPricing": "查看價格",
+    "recentActivity": "最近活動",
+    "noActivity": "暫無活動記錄"
+  },
+  "booking": {
+    "title": "預約場地",
+    "selectCourt": "選擇場地",
+    "selectDate": "選擇日期",
+    "selectTime": "選擇時間",
+    "playerInfo": "參與者信息",
+    "summary": "預約摘要",
+    "confirm": "確認預約",
+    "status": {
+      "confirmed": "已確認",
+      "pending": "待確認",
+      "cancelled": "已取消",
+      "completed": "已完成",
+      "noShow": "未到場"
+    },
+    "payment": {
+      "paid": "已付款",
+      "pending": "待付款",
+      "failed": "付款失敗"
+    }
+  },
+  "admin": {
+    "title": "管理員控制台",
+    "subtitle": "管理預約、場地和查看系統統計數據",
+    "stats": {
+      "totalBookings": "總預約",
+      "confirmed": "已確認",
+      "pending": "待確認",
+      "totalRevenue": "總收入"
+    },
+    "tabs": {
+      "bookings": "預約管理",
+      "courts": "場地管理",
+      "revenue": "收入統計",
+      "analytics": "數據分析"
+    },
+    "allBookings": "所有預約",
+    "courtManagement": "場地管理",
+    "revenueStats": "收入統計",
+    "dataAnalytics": "數據分析"
+  },
+  "auth": {
+    "login": "登入",
+    "register": "註冊",
+    "email": "電子郵件",
+    "password": "密碼",
+    "confirmPassword": "確認密碼",
+    "name": "姓名",
+    "phone": "電話",
+    "forgotPassword": "忘記密碼？",
+    "noAccount": "沒有帳戶？",
+    "hasAccount": "已有帳戶？",
+    "signUp": "立即註冊",
+    "signIn": "立即登入"
+  },
+  "common": {
+    "loading": "載入中...",
+    "error": "錯誤",
+    "success": "成功",
+    "cancel": "取消",
+    "confirm": "確認",
+    "save": "保存",
+    "edit": "編輯",
+    "delete": "刪除",
+    "view": "查看",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "submit": "提交",
+    "search": "搜索",
+    "filter": "篩選",
+    "sort": "排序",
+    "date": "日期",
+    "time": "時間",
+    "price": "價格",
+    "total": "總計",
+    "subtotal": "小計",
+    "discount": "折扣",
+    "currency": "HK$"
+  },
+  "facilities": {
+    "title": "設施介紹",
+    "subtitle": "專業的匹克球設施，為您提供最佳的運動體驗",
+    "courts": "場地設施",
+    "amenities": "配套設施",
+    "features": "特色服務"
+  },
+  "pricing": {
+    "title": "價格方案",
+    "subtitle": "選擇最適合您的價格方案",
+    "peakHour": "高峰時段",
+    "offPeak": "非高峰時段",
+    "memberDiscount": "會員折扣"
+  }
+}

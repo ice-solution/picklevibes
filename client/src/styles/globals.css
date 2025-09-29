@@ -1,0 +1,116 @@
+/* PickleVibes Brand Colors - 基於 Logo 配色 */
+:root {
+  /* Primary Colors - 粉紅色系 (來自 logo) */
+  --color-primary-50: #fdf2f8;
+  --color-primary-100: #fce7f3;
+  --color-primary-200: #fbcfe8;
+  --color-primary-300: #f9a8d4;
+  --color-primary-400: #f472b6;
+  --color-primary-500: #ec4899;
+  --color-primary-600: #db2777;
+  --color-primary-700: #be185d;
+  --color-primary-800: #9d174d;
+  --color-primary-900: #831843;
+  
+  /* Secondary Colors - 青綠色系 (來自 logo) */
+  --color-secondary-50: #f0fdfa;
+  --color-secondary-100: #ccfbf1;
+  --color-secondary-200: #99f6e4;
+  --color-secondary-300: #5eead4;
+  --color-secondary-400: #2dd4bf;
+  --color-secondary-500: #14b8a6;
+  --color-secondary-600: #0d9488;
+  --color-secondary-700: #0f766e;
+  --color-secondary-800: #115e59;
+  --color-secondary-900: #134e4a;
+  
+  /* Accent Colors - 黃色/橙色系 (來自 logo 球的顏色) */
+  --color-accent-50: #fffbeb;
+  --color-accent-100: #fef3c7;
+  --color-accent-200: #fde68a;
+  --color-accent-300: #fcd34d;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+  --color-accent-700: #b45309;
+  --color-accent-800: #92400e;
+  --color-accent-900: #78350f;
+}
+
+/* 全局按鈕樣式 */
+.btn-primary {
+  @apply bg-primary-600 hover:bg-primary-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+}
+
+.btn-secondary {
+  @apply bg-secondary-600 hover:bg-secondary-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+}
+
+.btn-accent {
+  @apply bg-accent-500 hover:bg-accent-600 text-gray-900 font-semibold py-2 px-4 rounded-lg transition-colors duration-200;
+}
+
+.btn-outline {
+  @apply border-2 border-primary-600 text-primary-600 hover:bg-primary-600 hover:text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200;
+}
+
+/* 漸變背景 */
+.gradient-primary {
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-secondary-500));
+}
+
+.gradient-accent {
+  background: linear-gradient(135deg, var(--color-accent-400), var(--color-primary-500));
+}
+
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-primary-500), var(--color-secondary-500));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* 卡片樣式 */
+.card-primary {
+  @apply bg-white rounded-xl shadow-lg border border-primary-100 hover:shadow-xl transition-shadow duration-300;
+}
+
+.card-secondary {
+  @apply bg-white rounded-xl shadow-lg border border-secondary-100 hover:shadow-xl transition-shadow duration-300;
+}
+
+/* 輸入框樣式 */
+.input-primary {
+  @apply border-2 border-gray-300 focus:border-primary-500 focus:ring-primary-500 rounded-lg;
+}
+
+/* 自定義滾動條 */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-primary-50);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary-400);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-500);
+}
+
+/* 動畫增強 */
+.animate-gradient {
+  background-size: 200% 200%;
+  animation: gradient 3s ease infinite;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
