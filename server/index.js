@@ -47,7 +47,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with']
 }));
 
-// 解析JSON
+// Stripe Webhook 需要原始請求體，必須在 express.json() 之前
+app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+
+// 解析JSON（其他路由）
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 

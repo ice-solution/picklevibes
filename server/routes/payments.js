@@ -493,10 +493,11 @@ router.post('/checkout-success', async (req, res) => {
   }
 });
 
-// @route   GET /api/payments/webhook
+// @route   POST /api/payments/webhook
 // @desc    Stripe webhook處理
 // @access  Public
-router.post('/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
+// 注意: express.raw() 已在 server/index.js 中為此路由設置
+router.post('/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
 
