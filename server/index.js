@@ -7,6 +7,10 @@ require('dotenv').config();
 
 const app = express();
 
+// 信任代理 - 因為使用 Cloudflare
+// 這樣 Express 可以正確識別客戶端真實 IP
+app.set('trust proxy', true);
+
 // 安全中間件
 app.use(helmet());
 
