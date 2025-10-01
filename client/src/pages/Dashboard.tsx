@@ -177,7 +177,7 @@ const Dashboard: React.FC = () => {
               </div>
 
               <div className="p-6">
-                <CurrentBookings showAll={false} limit={5} />
+                <CurrentBookings showAll={false} showUpcomingOnly={true} limit={5} />
               </div>
             </motion.div>
           </div>

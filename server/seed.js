@@ -60,7 +60,7 @@ async function seedData() {
         password: 'password123',
         phone: '0955555555',
         role: 'admin',
-        membershipLevel: 'vip'
+        membershipLevel: 'basic'
       }
     ]);
 

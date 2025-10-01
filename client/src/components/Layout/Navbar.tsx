@@ -79,6 +79,13 @@ const Navbar: React.FC = () => {
                   <UserIcon className="w-5 h-5" />
                   <span>{t('nav.dashboard')}</span>
                 </Link>
+                <Link
+                  to="/my-bookings"
+                  className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors duration-200"
+                >
+                  <CalendarDaysIcon className="w-5 h-5" />
+                  <span>我的預約</span>
+                </Link>
                 {user.role === 'admin' && (
                   <Link
                     to="/admin"

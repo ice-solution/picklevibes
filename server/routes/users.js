@@ -38,6 +38,52 @@ router.get('/', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   GET /api/users/stats
+// @desc    獲取用戶統計信息 (僅管理員)
+// @access  Private (Admin)
+router.get('/stats', [auth, adminAuth], async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const activeUsers = await User.countDocuments({ isActive: true });
+    const adminUsers = await User.countDocuments({ role: 'admin' });
+    const coachUsers = await User.countDocuments({ role: 'coach' });
+    const vipUsers = await User.countDocuments({ membershipLevel: 'vip' });
+    
+    // 按會員等級統計
+    const membershipStats = await User.aggregate([
+      {
+        $group: {
+          _id: '$membershipLevel',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    // 按角色統計
+    const roleStats = await User.aggregate([
+      {
+        $group: {
+          _id: '$role',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
+    
+    res.json({
+      totalUsers,
+      activeUsers,
+      adminUsers,
+      coachUsers,
+      vipUsers,
+      membershipStats,
+      roleStats
+    });
+  } catch (error) {
+    console.error('獲取用戶統計錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/users/:id
 // @desc    獲取單個用戶詳情 (僅管理員)
 // @access  Private (Admin)
@@ -231,53 +277,6 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
     });
   } catch (error) {
     console.error('刪除用戶錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
-  }
-});
-
-// @route   GET /api/users/stats
-// @desc    獲取用戶統計信息 (僅管理員)
-// @access  Private (Admin)
-router.get('/stats', [auth, adminAuth], async (req, res) => {
-  try {
-    const totalUsers = await User.countDocuments();
-    const activeUsers = await User.countDocuments({ isActive: true });
-    const adminUsers = await User.countDocuments({ role: 'admin' });
-    const coachUsers = await User.countDocuments({ role: 'coach' });
-    const vipUsers = await User.countDocuments({ membershipLevel: 'vip' });
-    
-    // 按會員等級統計
-    const membershipStats = await User.aggregate([
-      {
-        $group: {
-          _id: '$membershipLevel',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-    
-    // 按角色統計
-    const roleStats = await User.aggregate([
-      {
-        $group: {
-          _id: '$role',
-          count: { $sum: 1 }
-        }
-      }
-    ]);
-    
-    res.json({
-      totalUsers,
-      activeUsers,
-      inactiveUsers: totalUsers - activeUsers,
-      adminUsers,
-      coachUsers,
-      vipUsers,
-      membershipStats,
-      roleStats
-    });
-  } catch (error) {
-    console.error('獲取用戶統計錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

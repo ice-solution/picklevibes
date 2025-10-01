@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import StripePayment from '../Payment/StripePayment';
+import apiConfig from '../../config/api';
 import { 
   CalendarDaysIcon, 
   ClockIcon, 
@@ -26,6 +27,10 @@ interface BookingSummaryProps {
   timeSlot: { start: string; end: string } | null;
   bookingData: BookingData;
   availability: any;
+  showPayment: boolean;
+  createdBookingId: string;
+  onSetShowPayment: (show: boolean) => void;
+  onSetCreatedBookingId: (id: string) => void;
   onReset: () => void;
 }
 
@@ -35,6 +40,10 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   timeSlot,
   bookingData,
   availability,
+  showPayment,
+  createdBookingId,
+  onSetShowPayment,
+  onSetCreatedBookingId,
   onReset
 }) => {
   const { createBooking } = useBooking();
@@ -42,8 +51,15 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [specialRequests, setSpecialRequests] = useState('');
-  const [showPayment, setShowPayment] = useState(false);
-  const [createdBookingId, setCreatedBookingId] = useState<string>('');
+
+  // 調試信息 - 追蹤所有狀態變化
+  useEffect(() => {
+    console.log('🔍 狀態變化:', { 
+      showPayment, 
+      createdBookingId,
+      timestamp: new Date().toISOString()
+    });
+  }, [showPayment, createdBookingId]);
 
   const formatTime = (time: string) => {
     const [hour, minute] = time.split(':');
@@ -58,28 +74,46 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
     const start = timeSlot.start.split(':');
     const end = timeSlot.end.split(':');
     const startMinutes = parseInt(start[0]) * 60 + parseInt(start[1]);
-    const endMinutes = parseInt(end[0]) * 60 + parseInt(end[1]);
+    let endMinutes = parseInt(end[0]) * 60 + parseInt(end[1]);
+    
+    // 如果結束時間是 24:00，則轉換為 1440 分鐘
+    if (end[0] === '24' && end[1] === '00') {
+      endMinutes = 24 * 60;
+    }
+    
     return endMinutes - startMinutes;
   };
 
+  // 將 24:00 轉換為 00:00
+  const normalizeTime = (time: string) => {
+    if (time === '24:00') {
+      return '00:00';
+    }
+    return time;
+  };
+
   const handleSubmit = async () => {
+    console.log('🔍 handleSubmit 開始執行');
+    
     if (!user) {
       alert('請先登入');
       return;
     }
 
     if (!court || !date || !timeSlot || !bookingData.contactName) {
+      console.log('🔍 驗證失敗:', { court: !!court, date: !!date, timeSlot: !!timeSlot, contactName: !!bookingData.contactName });
       alert('請完成所有必填信息');
       return;
     }
 
+    console.log('🔍 開始創建預約');
     setIsSubmitting(true);
     try {
       const bookingPayload = {
         court: court._id,
         date,
         startTime: timeSlot.start,
-        endTime: timeSlot.end,
+        endTime: normalizeTime(timeSlot.end), // 將 24:00 轉換為 00:00
         players: [{ 
           name: bookingData.contactName, 
           email: bookingData.contactEmail, 
@@ -89,11 +123,45 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         specialRequests: specialRequests.trim() || undefined
       };
 
-      // 先創建待支付預約
+      // 步驟 1: 創建待支付預約
+      console.log('🔍 步驟 1: 創建預約');
       const newBooking = await createBooking(bookingPayload);
-      setCreatedBookingId(newBooking._id);
-      setShowPayment(true);
+      console.log('🔍 預約創建結果:', newBooking);
+      
+      if (!newBooking._id) {
+        throw new Error('預約創建失敗，未返回預約 ID');
+      }
+
+      // 步驟 2: 創建 Stripe PaymentIntent
+      console.log('🔍 步驟 2: 創建 PaymentIntent');
+      const paymentResponse = await fetch(`${apiConfig.API_BASE_URL}/payments/create-payment-intent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          bookingId: newBooking._id,
+          amount: availability?.pricing?.totalPrice || 0
+        })
+      });
+
+      if (!paymentResponse.ok) {
+        const errorData = await paymentResponse.json();
+        throw new Error(errorData.message || '創建支付意圖失敗');
+      }
+
+      const paymentData = await paymentResponse.json();
+      console.log('🔍 PaymentIntent 創建結果:', paymentData);
+
+      // 步驟 3: 設置支付狀態並顯示支付表單
+      console.log('🔍 步驟 3: 設置支付狀態');
+      onSetCreatedBookingId(newBooking._id);
+      onSetShowPayment(true);
+      
+      console.log('🔍 支付流程設置完成');
     } catch (error: any) {
+      console.error('❌ 支付流程錯誤:', error);
       alert(error.message || '預約失敗，請稍後再試');
     } finally {
       setIsSubmitting(false);
@@ -284,6 +352,13 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           </p>
         </div>
       )}
+
+      {/* 調試信息 - 總是顯示 */}
+      <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <p className="text-yellow-800 text-sm">
+          🔍 調試信息 - showPayment: {showPayment.toString()}, createdBookingId: {createdBookingId || '空'}, 條件: {(showPayment && createdBookingId).toString()}
+        </p>
+      </div>
 
       {/* Stripe 支付組件 */}
       {showPayment && createdBookingId && (

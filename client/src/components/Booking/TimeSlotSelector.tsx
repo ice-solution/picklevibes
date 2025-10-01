@@ -25,9 +25,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
   const durations = [
     { value: 60, label: '1小時' },
-    { value: 120, label: '2小時' },
-    { value: 180, label: '3小時' },
-    { value: 240, label: '4小時' }
+    { value: 120, label: '2小時' }
   ];
 
   const generateTimeSlots = useCallback(() => {
@@ -113,9 +111,11 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
     if (slot.available) {
       onSelect({ start: slot.start, end: slot.end });
       onAvailabilityChange({
+        available: true,
         pricing: {
           totalPrice: slot.price,
-          duration: selectedDuration
+          duration: selectedDuration,
+          basePrice: slot.price
         }
       });
     }

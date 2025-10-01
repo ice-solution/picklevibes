@@ -12,11 +12,13 @@ import {
 
 interface CurrentBookingsProps {
   showAll?: boolean;
+  showUpcomingOnly?: boolean;
   limit?: number;
 }
 
 const CurrentBookings: React.FC<CurrentBookingsProps> = ({ 
   showAll = false, 
+  showUpcomingOnly = false,
   limit = 5 
 }) => {
   const { bookings, fetchBookings, loading } = useBooking();
@@ -40,6 +42,21 @@ const CurrentBookings: React.FC<CurrentBookingsProps> = ({
             return userId === user.id;
           } catch (error) {
             console.warn('Error filtering booking by user:', error);
+            return false;
+          }
+        });
+      }
+      
+      // 如果只顯示 upcoming 預約
+      if (showUpcomingOnly) {
+        const now = new Date();
+        filtered = filtered.filter(booking => {
+          try {
+            const bookingDate = new Date(booking.date);
+            const bookingDateTime = new Date(`${bookingDate.toISOString().split('T')[0]}T${booking.startTime}:00`);
+            return bookingDateTime > now;
+          } catch (error) {
+            console.warn('Error filtering upcoming bookings:', error);
             return false;
           }
         });
@@ -69,7 +86,7 @@ const CurrentBookings: React.FC<CurrentBookingsProps> = ({
     } else {
       setFilteredBookings([]);
     }
-  }, [bookings, showAll, user, limit]);
+  }, [bookings, showAll, showUpcomingOnly, user, limit]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {

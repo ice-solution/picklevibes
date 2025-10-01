@@ -14,6 +14,7 @@ import Booking from './pages/Booking';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import MyBookings from './pages/MyBookings';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import PaymentResult from './pages/PaymentResult';
@@ -40,6 +41,14 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <Dashboard />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/my-bookings" 
+                  element={
+                    <ProtectedRoute>
+                      <MyBookings />
                     </ProtectedRoute>
                   } 
                 />

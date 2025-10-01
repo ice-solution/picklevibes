@@ -7,6 +7,109 @@ const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
+// @route   POST /api/payments/create-checkout-session
+// @desc    創建 Stripe Checkout Session (Redirect 支付)
+// @access  Private
+router.post('/create-checkout-session', [
+  auth,
+  body('bookingId').isMongoId().withMessage('請提供有效的預約ID'),
+  body('amount').isFloat({ min: 0 }).withMessage('金額必須大於等於0')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: '輸入驗證失敗',
+        errors: errors.array()
+      });
+    }
+
+    const { bookingId, amount } = req.body;
+
+    // 驗證預約是否存在且屬於當前用戶
+    const booking = await Booking.findById(bookingId).populate('court', 'name number type');
+    if (!booking) {
+      return res.status(404).json({ message: '預約不存在' });
+    }
+
+    if (booking.user.toString() !== req.user.id) {
+      return res.status(403).json({ message: '無權限支付此預約' });
+    }
+
+    if (booking.payment.status === 'paid') {
+      return res.status(400).json({ message: '此預約已支付' });
+    }
+
+    // 如果金額為 0，直接標記為已支付
+    if (amount <= 0) {
+      booking.payment.status = 'paid';
+      booking.status = 'confirmed';
+      await booking.save();
+      
+      return res.json({
+        message: '預約已確認（無需支付）',
+        url: null,
+        amount: 0
+      });
+    }
+
+    // 創建 Stripe Checkout Session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card', 'alipay'], // 暫時移除 wechat_pay，因為需要額外配置
+      line_items: [
+        {
+          price_data: {
+            currency: 'hkd',
+            product_data: {
+              name: `場地預約 - ${booking.court.name}`,
+              description: `預約時間: ${booking.date} ${booking.startTime}-${booking.endTime}`,
+            },
+            unit_amount: Math.round(amount * 100), // 轉換為分
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      success_url: `${process.env.CLIENT_URL}/payment-result?session_id={CHECKOUT_SESSION_ID}&status=success`,
+      cancel_url: `${process.env.CLIENT_URL}/payment-result?status=cancelled`,
+      metadata: {
+        bookingId: bookingId,
+        userId: req.user.id
+      },
+      customer_email: req.user.email,
+    });
+
+    // 更新預約的支付信息
+    booking.payment.transactionId = session.id;
+    await booking.save();
+
+    // 保存 Stripe 交易記錄
+    const stripeTransaction = new StripeTransaction({
+      paymentIntentId: session.id,
+      booking: bookingId,
+      user: req.user.id,
+      amount: Math.round(amount * 100),
+      currency: 'hkd',
+      status: 'requires_payment_method',
+      description: `場地預約 - ${booking.court.name}`,
+      metadata: {
+        sessionId: session.id,
+        bookingId: bookingId
+      }
+    });
+    await stripeTransaction.save();
+
+    res.json({
+      message: 'Checkout Session 創建成功',
+      url: session.url
+    });
+
+  } catch (error) {
+    console.error('創建 Checkout Session 錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   POST /api/payments/create-payment-intent
 // @desc    創建支付意圖
 // @access  Private
@@ -38,6 +141,19 @@ router.post('/create-payment-intent', [
 
     if (booking.payment.status === 'paid') {
       return res.status(400).json({ message: '此預約已支付' });
+    }
+
+    // 如果金額為 0，直接標記為已支付
+    if (amount <= 0) {
+      booking.payment.status = 'paid';
+      booking.status = 'confirmed';
+      await booking.save();
+      
+      return res.json({
+        message: '預約已確認（無需支付）',
+        clientSecret: null,
+        amount: 0
+      });
     }
 
     // 創建Stripe支付意圖
@@ -332,6 +448,47 @@ router.post('/test-callback', async (req, res) => {
     });
   } catch (error) {
     console.error('測試回調錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   POST /api/payments/checkout-success
+// @desc    處理 Stripe Checkout 成功回調
+// @access  Public
+router.post('/checkout-success', async (req, res) => {
+  try {
+    const { sessionId, bookingId } = req.body;
+
+    if (!sessionId || !bookingId) {
+      return res.status(400).json({ message: '缺少必要參數' });
+    }
+
+    // 驗證 Stripe Session
+    const session = await stripe.checkout.sessions.retrieve(sessionId);
+    
+    if (session.payment_status === 'paid') {
+      // 更新預約狀態
+      const booking = await Booking.findById(bookingId);
+      if (booking) {
+        booking.payment.status = 'paid';
+        booking.status = 'confirmed';
+        await booking.save();
+
+        // 更新 Stripe 交易記錄
+        await StripeTransaction.findOneAndUpdate(
+          { paymentIntentId: sessionId },
+          { 
+            status: 'succeeded',
+            paidAt: new Date(),
+            stripeResponse: session
+          }
+        );
+      }
+    }
+
+    res.json({ message: '支付狀態更新成功' });
+  } catch (error) {
+    console.error('處理 Checkout 成功回調錯誤:', error);
     res.status(500).json({ message: '服務器錯誤' });
   }
 });

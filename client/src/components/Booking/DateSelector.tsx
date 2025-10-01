@@ -11,8 +11,12 @@ const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate }) =
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   const today = new Date();
+  // 設置為今天的開始時間，避免時區問題
+  today.setHours(0, 0, 0, 0);
+  
   const maxDate = new Date();
   maxDate.setDate(today.getDate() + 7); // 最多可預約7天後
+  maxDate.setHours(23, 59, 59, 999); // 設置為當天結束時間
 
   const getDaysInMonth = (date: Date) => {
     const year = date.getFullYear();
@@ -37,7 +41,11 @@ const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate }) =
     // 添加當月的天數
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(year, month, day);
-      const isDisabled = date < today || date > maxDate;
+      // 設置為當天的開始時間，避免時區問題
+      const dateStart = new Date(date);
+      dateStart.setHours(0, 0, 0, 0);
+      
+      const isDisabled = dateStart < today || dateStart > maxDate;
       days.push({
         date,
         isCurrentMonth: true,
@@ -67,7 +75,11 @@ const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate }) =
   };
 
   const formatDate = (date: Date) => {
-    return date.toISOString().split('T')[0];
+    // 使用本地時間格式化，避免時區問題
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   };
 
   const isSelected = (date: Date) => {

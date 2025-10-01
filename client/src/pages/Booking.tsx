@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -35,9 +35,16 @@ const Booking: React.FC = () => {
     contactPhone: ''
   });
 
+  // 支付狀態管理
+  const [showPayment, setShowPayment] = useState(false);
+  const [createdBookingId, setCreatedBookingId] = useState<string>('');
+
+  // 使用 useMemo 來穩定 availability 對象，避免 BookingSummary 重新創建
+  const stableAvailability = useMemo(() => availability, [availability]);
+
   useEffect(() => {
     fetchCourts();
-  }, []); // 移除 fetchCourts 依賴，只在組件掛載時調用一次
+  }, [fetchCourts]); // 添加 fetchCourts 依賴
 
   useEffect(() => {
     if (error) {
@@ -91,8 +98,10 @@ const Booking: React.FC = () => {
       contactEmail: '',
       contactPhone: ''
     });
-    setCurrentStep(1);
     setAvailability(null);
+    setShowPayment(false);
+    setCreatedBookingId('');
+    setCurrentStep(1);
   };
 
   return (
@@ -217,7 +226,11 @@ const Booking: React.FC = () => {
                     date={selectedDate}
                     timeSlot={selectedTimeSlot}
                     bookingData={bookingFormData}
-                    availability={availability}
+                    availability={stableAvailability}
+                    showPayment={showPayment}
+                    createdBookingId={createdBookingId}
+                    onSetShowPayment={setShowPayment}
+                    onSetCreatedBookingId={setCreatedBookingId}
                     onReset={resetBooking}
                   />
                 )}

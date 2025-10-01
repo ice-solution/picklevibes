@@ -40,6 +40,15 @@ const courtSchema = new mongoose.Schema({
       price: { type: Number, required: true },     // 該時段的價格
       name: { type: String, required: true }       // 時段名稱，例如: "深夜時段", "早鳥時段", "高峰時段"
     }],
+    // 舊的價格結構（用於兼容）
+    peakHour: {
+      type: Number,
+      min: [0, '高峰時段價格不能為負數']
+    },
+    offPeak: {
+      type: Number,
+      min: [0, '非高峰時段價格不能為負數']
+    },
     memberDiscount: {
       type: Number,
       default: 0,
@@ -104,6 +113,12 @@ courtSchema.methods.isOpenAt = function(date) {
   }
   
   const time = dateObj.toTimeString().substring(0, 5);
+  
+  // 處理 24:00 的特殊情況
+  if (daySchedule.end === '24:00') {
+    return time >= daySchedule.start;
+  }
+  
   return time >= daySchedule.start && time <= daySchedule.end;
 };
 

@@ -30,7 +30,7 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
         contactPhone: formData.contactPhone || user.phone || '',
       });
     }
-  }, [user, formData, onFormDataChange]);
+  }, [user]); // 只依賴 user，避免無限重新渲染
 
   const handleInputChange = (field: keyof BookingFormData, value: string | number) => {
     onFormDataChange({

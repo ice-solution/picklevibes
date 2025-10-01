@@ -22,7 +22,12 @@ function calculateDuration(startTime, endTime) {
   const [endHour, endMin] = endTime.split(':').map(Number);
   
   const startTotalMin = startHour * 60 + startMin;
-  const endTotalMin = endHour * 60 + endMin;
+  let endTotalMin = endHour * 60 + endMin;
+  
+  // 如果結束時間小於開始時間，表示跨天（例如 22:00 到 00:00）
+  if (endTotalMin <= startTotalMin) {
+    endTotalMin += 24 * 60; // 加上 24 小時
+  }
   
   return endTotalMin - startTotalMin;
 }

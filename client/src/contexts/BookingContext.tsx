@@ -143,7 +143,9 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       fetchingBookings.current = true;
       setLoading(true);
-      const response = await axios.get('/bookings');
+      
+      // 獲取所有預約（不分頁）
+      const response = await axios.get('/bookings?limit=100');
       setBookings(response.data.bookings);
     } catch (error: any) {
       setError(error.response?.data?.message || '獲取預約信息失敗');

@@ -6,6 +6,27 @@ const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
+// 輔助函數：將 24:00 轉換為 00:00
+function normalizeTime(time) {
+  if (time === '24:00') {
+    return '00:00';
+  }
+  return time;
+}
+
+// 輔助函數：將 24:00 轉換為下一天的 00:00
+function normalizeDateTime(date, time) {
+  const normalizedDate = new Date(date);
+  
+  if (time === '24:00') {
+    // 如果是 24:00，則轉換為下一天的 00:00
+    normalizedDate.setDate(normalizedDate.getDate() + 1);
+    return { date: normalizedDate, time: '00:00' };
+  }
+  
+  return { date: normalizedDate, time };
+}
+
 // @route   POST /api/bookings
 // @desc    創建新預約
 // @access  Private
@@ -30,7 +51,15 @@ router.post('/', [
       });
     }
 
-    const { court, date, startTime, endTime, players, specialRequests } = req.body;
+    let { court, date, startTime, endTime, players, specialRequests } = req.body;
+
+    // 將 24:00 轉換為下一天的 00:00
+    const normalizedEndTime = normalizeDateTime(date, endTime);
+    const normalizedStartTime = { date: new Date(date), time: startTime };
+    
+    // 使用標準化後的時間
+    endTime = normalizedEndTime.time;
+    const endDate = normalizedEndTime.date;
 
     // 檢查場地是否存在且可用
     const courtDoc = await Court.findById(court);
@@ -56,11 +85,35 @@ router.post('/', [
 
     // 計算持續時間
     const startMinutes = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
-    const endMinutes = parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1]);
+    let endMinutes = parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1]);
+    
+    // 判斷是否跨天
+    const isOvernight = endMinutes <= startMinutes;
+    
+    // 如果結束時間小於開始時間，表示跨天（例如 22:00 到 00:00）
+    if (isOvernight) {
+      endMinutes += 24 * 60; // 加上 24 小時
+    }
+    
     const duration = endMinutes - startMinutes;
 
     if (duration <= 0) {
       return res.status(400).json({ message: '結束時間必須晚於開始時間' });
+    }
+
+    // 檢查時長限制（最多2小時）
+    if (duration < 60) {
+      return res.status(400).json({ message: '預約時長至少1小時' });
+    }
+    
+    if (duration > 120) {
+      return res.status(400).json({ message: '預約時長最多2小時' });
+    }
+
+    // 計算結束日期（如果跨天，則為下一天）
+    const calculatedEndDate = new Date(bookingDate);
+    if (isOvernight) {
+      calculatedEndDate.setDate(calculatedEndDate.getDate() + 1);
     }
 
     // 創建預約（初始狀態為 pending，等待支付）
@@ -68,6 +121,7 @@ router.post('/', [
       user: req.user.id,
       court,
       date: bookingDate,
+      endDate: calculatedEndDate, // 明確保存結束日期
       startTime,
       endTime,
       duration,
