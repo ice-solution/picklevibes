@@ -25,7 +25,7 @@ const PaymentForm: React.FC<PaymentFormProps> = ({ bookingId, amount, onSuccess,
     // 創建 Stripe Checkout Session
     const createCheckoutSession = async () => {
       try {
-        const response = await axios.post(`${apiConfig.API_BASE_URL}/payments/create-checkout-session`, {
+        const response = await axios.post('/payments/create-checkout-session', {
           bookingId,
           amount
         });

@@ -132,27 +132,15 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         throw new Error('預約創建失敗，未返回預約 ID');
       }
 
-      // 步驟 2: 創建 Stripe PaymentIntent
-      console.log('🔍 步驟 2: 創建 PaymentIntent');
-      const paymentResponse = await fetch(`${apiConfig.API_BASE_URL}/payments/create-payment-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          bookingId: newBooking._id,
-          amount: availability?.pricing?.totalPrice || 0
-        })
+      // 步驟 2: 創建 Stripe Checkout Session（使用 Redirect 支付）
+      console.log('🔍 步驟 2: 創建 Checkout Session');
+      const paymentResponse = await axios.post('/payments/create-checkout-session', {
+        bookingId: newBooking._id,
+        amount: availability?.pricing?.totalPrice || 0
       });
 
-      if (!paymentResponse.ok) {
-        const errorData = await paymentResponse.json();
-        throw new Error(errorData.message || '創建支付意圖失敗');
-      }
-
-      const paymentData = await paymentResponse.json();
-      console.log('🔍 PaymentIntent 創建結果:', paymentData);
+      const paymentData = paymentResponse.data;
+      console.log('🔍 Checkout Session 創建結果:', paymentData);
 
       // 步驟 3: 設置支付狀態並顯示支付表單
       console.log('🔍 步驟 3: 設置支付狀態');
