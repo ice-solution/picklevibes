@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import StripePayment from '../Payment/StripePayment';
+import axios from 'axios';
 import apiConfig from '../../config/api';
 import { 
   CalendarDaysIcon, 
