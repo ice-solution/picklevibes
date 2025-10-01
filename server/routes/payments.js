@@ -559,6 +559,63 @@ router.post('/webhook', async (req, res) => {
       );
       break;
 
+    case 'checkout.session.completed':
+      const session = event.data.object;
+      console.log('Checkout Session 完成:', session.id);
+      console.log('支付狀態:', session.payment_status);
+      
+      // 從 metadata 獲取 bookingId
+      const bookingId = session.metadata?.bookingId;
+      
+      if (!bookingId) {
+        console.error('❌ Checkout Session 缺少 bookingId metadata');
+        break;
+      }
+      
+      // 只有在支付成功時才更新
+      if (session.payment_status === 'paid') {
+        console.log('✅ 支付已完成，更新預約狀態...');
+        
+        const updatedBooking = await Booking.findByIdAndUpdate(
+          bookingId,
+          { 
+            'payment.status': 'paid',
+            'payment.paidAt': new Date(),
+            'payment.transactionId': session.id,
+            status: 'confirmed'
+          },
+          { new: true }
+        );
+        
+        if (updatedBooking) {
+          console.log('✅ 預約已確認:', updatedBooking._id);
+        } else {
+          console.error('❌ 找不到預約:', bookingId);
+        }
+
+        // 更新或創建 Stripe 交易記錄
+        await StripeTransaction.findOneAndUpdate(
+          { paymentIntentId: session.id },
+          { 
+            paymentIntentId: session.id,
+            booking: bookingId,
+            user: session.metadata?.userId,
+            amount: session.amount_total,
+            currency: session.currency,
+            status: 'succeeded',
+            paidAt: new Date(),
+            paymentMethod: session.payment_method_types,
+            stripeResponse: session
+          },
+          { upsert: true, new: true }
+        );
+        
+        console.log('✅ 交易記錄已更新');
+      } else {
+        console.log('⚠️  支付未完成，狀態:', session.payment_status);
+      }
+      break;
+
     default:
       console.log(`未處理的事件類型: ${event.type}`);
   }
