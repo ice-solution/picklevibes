@@ -21,6 +21,11 @@ const limiter = rateLimit({
   message: '請求過於頻繁，請稍後再試',
   standardHeaders: true,
   legacyHeaders: false,
+  // 明確告訴 rate limiter 我們在使用受信任的代理（Cloudflare）
+  validate: {
+    trustProxy: false, // 禁用 trust proxy 驗證警告
+    xForwardedForHeader: false // 禁用 X-Forwarded-For 驗證警告
+  },
   skip: (req) => {
     // 在開發環境中跳過某些請求
     return process.env.NODE_ENV === 'development' && req.path.includes('/api/health');
@@ -33,7 +38,12 @@ const batchLimiter = rateLimit({
   max: 50, // 批量 API 每分鐘50個請求
   message: '批量請求過於頻繁，請稍後再試',
   standardHeaders: true,
-  legacyHeaders: false
+  legacyHeaders: false,
+  // 明確告訴 rate limiter 我們在使用受信任的代理（Cloudflare）
+  validate: {
+    trustProxy: false, // 禁用 trust proxy 驗證警告
+    xForwardedForHeader: false // 禁用 X-Forwarded-For 驗證警告
+  }
 });
 
 app.use(limiter);
