@@ -8,11 +8,18 @@ const stripeTransactionSchema = new mongoose.Schema({
     unique: true
   },
   
-  // 關聯的預約ID
+  // 關聯的預約ID（可選）
   booking: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Booking',
-    required: [true, '預約ID為必填項目']
+    required: false
+  },
+  
+  // 關聯的充值ID（可選）
+  recharge: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Recharge',
+    required: false
   },
   
   // 用戶ID

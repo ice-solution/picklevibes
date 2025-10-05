@@ -15,6 +15,8 @@ const Booking: React.FC = () => {
     selectedDate, 
     selectedTimeSlot, 
     players,
+    includeSoloCourt,
+    soloCourtAvailable,
     loading,
     error,
     fetchCourts,
@@ -22,6 +24,8 @@ const Booking: React.FC = () => {
     setSelectedDate,
     setSelectedTimeSlot,
     setPlayers,
+    setIncludeSoloCourt,
+    checkSoloCourtAvailability,
     clearError
   } = useBooking();
   
@@ -35,9 +39,13 @@ const Booking: React.FC = () => {
     contactPhone: ''
   });
 
-  // 支付狀態管理
-  const [showPayment, setShowPayment] = useState(false);
-  const [createdBookingId, setCreatedBookingId] = useState<string>('');
+  // 調試：監控 bookingFormData 變化
+  useEffect(() => {
+    console.log('🔍 bookingFormData 更新:', bookingFormData);
+    console.log('🔍 bookingFormData.totalPlayers:', bookingFormData.totalPlayers);
+  }, [bookingFormData]);
+
+  // 預約現在使用積分支付，不再需要支付狀態管理
 
   // 使用 useMemo 來穩定 availability 對象，避免 BookingSummary 重新創建
   const stableAvailability = useMemo(() => availability, [availability]);
@@ -54,6 +62,13 @@ const Booking: React.FC = () => {
       return () => clearTimeout(timer);
     }
   }, [error, clearError]);
+
+  // 檢查單人場可用性 - 當選擇比賽場且選擇了時間段時
+  useEffect(() => {
+    if (selectedCourt?.type === 'competition' && selectedDate && selectedTimeSlot) {
+      checkSoloCourtAvailability(selectedDate, selectedTimeSlot.start, selectedTimeSlot.end);
+    }
+  }, [selectedCourt, selectedDate, selectedTimeSlot, checkSoloCourtAvailability]);
 
   const steps = [
     { id: 1, name: '選擇場地', icon: CalendarDaysIcon },
@@ -99,10 +114,28 @@ const Booking: React.FC = () => {
       contactPhone: ''
     });
     setAvailability(null);
-    setShowPayment(false);
-    setCreatedBookingId('');
+    // 預約現在使用積分支付，不再需要支付狀態重置
     setCurrentStep(1);
   };
+
+  // 處理預約數據編輯
+  const handleEditBooking = (field: keyof typeof bookingFormData, value: any) => {
+    console.log('🔍 handleEditBooking:', field, value);
+    setBookingFormData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      };
+      console.log('🔍 handleEditBooking 新數據:', newData);
+      return newData;
+    });
+  };
+
+  // 處理 PlayerForm 數據變化
+  const handlePlayerFormChange = (newFormData: typeof bookingFormData) => {
+    setBookingFormData(newFormData);
+  };
+
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
@@ -215,7 +248,7 @@ const Booking: React.FC = () => {
                 {currentStep === 4 && (
                   <PlayerForm
                     formData={bookingFormData}
-                    onFormDataChange={setBookingFormData}
+                    onFormDataChange={handlePlayerFormChange}
                     maxPlayers={selectedCourt?.capacity || 8}
                   />
                 )}
@@ -227,11 +260,11 @@ const Booking: React.FC = () => {
                     timeSlot={selectedTimeSlot}
                     bookingData={bookingFormData}
                     availability={stableAvailability}
-                    showPayment={showPayment}
-                    createdBookingId={createdBookingId}
-                    onSetShowPayment={setShowPayment}
-                    onSetCreatedBookingId={setCreatedBookingId}
                     onReset={resetBooking}
+                    onEditBooking={handleEditBooking}
+                    includeSoloCourt={includeSoloCourt}
+                    soloCourtAvailable={soloCourtAvailable}
+                    onToggleSoloCourt={setIncludeSoloCourt}
                   />
                 )}
 
@@ -303,7 +336,7 @@ const Booking: React.FC = () => {
                   <div>
                     <span className="text-sm text-gray-500">人數</span>
                     <p className="font-medium">
-                      {players.length + 1} 人
+                      {bookingFormData.totalPlayers} 人
                     </p>
                   </div>
 
@@ -312,7 +345,7 @@ const Booking: React.FC = () => {
                       <div className="flex justify-between">
                         <span className="text-sm text-gray-500">總價</span>
                         <span className="font-bold text-lg text-primary-600">
-                          ${availability.pricing?.totalPrice || 0}
+                          {availability.pricing?.totalPrice || 0} 積分
                         </span>
                       </div>
                     </div>

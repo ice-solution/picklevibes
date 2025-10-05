@@ -283,7 +283,7 @@ router.post('/', [
   adminAuth,
   body('name').trim().isLength({ min: 1, max: 50 }).withMessage('場地名稱必須在1-50個字符之間'),
   body('number').isInt({ min: 1 }).withMessage('場地編號必須是正整數'),
-  body('type').isIn(['indoor', 'outdoor', 'dink']).withMessage('場地類型必須是 indoor, outdoor 或 dink'),
+  body('type').isIn(['competition', 'training', 'solo', 'dink']).withMessage('場地類型必須是 competition, training, solo 或 dink'),
   body('capacity').isInt({ min: 2, max: 8 }).withMessage('場地容量必須在2-8人之間'),
   body('pricing.peakHour').isFloat({ min: 0 }).withMessage('高峰時段價格不能為負數'),
   body('pricing.offPeak').isFloat({ min: 0 }).withMessage('非高峰時段價格不能為負數')

@@ -24,9 +24,9 @@ const Pricing: React.FC = () => {
       color: 'gray'
     },
     {
-      name: '高級會員',
-      price: 200,
-      period: '每月',
+      name: 'VIP會員',
+      price: 0,
+      period: '新張期內免費',
       description: '適合經常打球的玩家',
       features: [
         '場地預約',
@@ -39,51 +39,11 @@ const Pricing: React.FC = () => {
       ],
       limitations: [],
       popular: true,
-      color: 'primary'
-    },
-    {
-      name: 'VIP會員',
-      price: 500,
-      period: '每月',
-      description: '適合專業玩家和企業客戶',
-      features: [
-        '場地預約',
-        '所有設施使用',
-        '30% 會員折扣',
-        '最高優先預約權',
-        '免費球拍和球類',
-        '專屬時段預約',
-        '個人教練服務',
-        '專屬VIP休息區',
-        '24/7 客戶支持',
-        '免費取消政策'
-      ],
-      limitations: [],
-      popular: false,
-      color: 'yellow'
+      color: 'primary',
+      isSpecial: true
     }
   ];
 
-  const courtRates = [
-    {
-      type: '室內場地',
-      peakHour: 150,
-      offPeak: 100,
-      description: '標準室內場地，配備空調和專業照明'
-    },
-    {
-      type: '室外場地',
-      peakHour: 120,
-      offPeak: 80,
-      description: '戶外場地，享受自然光線和空氣'
-    },
-    {
-      type: '練習場',
-      peakHour: 80,
-      offPeak: 60,
-      description: '專門用於練習和熱身的場地'
-    }
-  ];
 
   const getColorClasses = (color: string) => {
     switch (color) {
@@ -151,7 +111,7 @@ const Pricing: React.FC = () => {
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             {membershipPlans.map((plan, index) => {
               const colors = getColorClasses(plan.color);
               
@@ -163,16 +123,20 @@ const Pricing: React.FC = () => {
                   transition={{ duration: 0.6, delay: index * 0.1 }}
                   viewport={{ once: true }}
                   className={`relative bg-white rounded-2xl shadow-lg overflow-hidden ${
-                    plan.popular ? 'ring-2 ring-primary-500 scale-105' : ''
+                    plan.isSpecial 
+                      ? 'ring-4 ring-red-400 ring-opacity-50 scale-105 animate-pulse shadow-2xl' 
+                      : plan.popular 
+                      ? 'ring-2 ring-primary-500 scale-105' 
+                      : ''
                   }`}
                 >
                   {plan.popular && (
-                    <div className="absolute top-0 left-0 right-0 bg-primary-600 text-white text-center py-2 text-sm font-medium">
-                      最受歡迎
+                    <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-red-500 to-pink-500 text-white text-center py-2 text-sm font-medium animate-pulse">
+                      {plan.isSpecial ? '🎉 新張期內免費！' : '最受歡迎'}
                     </div>
                   )}
 
-                  <div className={`p-8 ${plan.popular ? 'pt-12' : ''}`}>
+                  <div className={`p-8 ${plan.popular ? 'pt-12' : ''} ${plan.isSpecial ? 'bg-gradient-to-br from-red-50 to-pink-50' : ''}`}>
                     <div className="text-center mb-8">
                       <h3 className="text-2xl font-bold text-gray-900 mb-2">
                         {plan.name}
@@ -181,12 +145,30 @@ const Pricing: React.FC = () => {
                         {plan.description}
                       </p>
                       <div className="flex items-baseline justify-center">
-                        <span className="text-4xl font-bold text-gray-900">
-                          ${plan.price}
-                        </span>
-                        <span className="text-gray-500 ml-2">
-                          {plan.period}
-                        </span>
+                        {plan.isSpecial ? (
+                          <div className="text-center">
+                            <div className="flex items-baseline justify-center mb-2">
+                              <span className="text-4xl font-bold text-red-500 animate-bounce">
+                                免費
+                              </span>
+                            </div>
+                            <div className="text-sm text-gray-500 line-through">
+                              原價 $800/半年
+                            </div>
+                            <div className="text-lg font-semibold text-green-600 mt-1">
+                              {plan.period}
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <span className="text-4xl font-bold text-gray-900">
+                              ${plan.price}
+                            </span>
+                            <span className="text-gray-500 ml-2">
+                              {plan.period}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -213,13 +195,15 @@ const Pricing: React.FC = () => {
                     </div>
 
                     <button
-                      className={`w-full py-3 px-6 rounded-lg font-medium transition-colors duration-200 ${
-                        plan.popular
+                      className={`w-full py-3 px-6 rounded-lg font-medium transition-all duration-200 ${
+                        plan.isSpecial
+                          ? 'bg-gradient-to-r from-red-500 to-pink-500 text-white hover:from-red-600 hover:to-pink-600 transform hover:scale-105 shadow-lg'
+                          : plan.popular
                           ? 'bg-primary-600 text-white hover:bg-primary-700'
                           : `border-2 ${colors.border} ${colors.text} hover:${colors.bg} hover:text-white`
                       }`}
                     >
-                      {plan.price === 0 ? '免費註冊' : '選擇方案'}
+                      {plan.isSpecial ? '🎉 立即免費成為VIP！' : plan.price === 0 ? '免費註冊' : '選擇方案'}
                     </button>
                   </div>
                 </motion.div>
@@ -229,62 +213,6 @@ const Pricing: React.FC = () => {
         </div>
       </section>
 
-      {/* 場地價格 */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">場地價格</h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              按小時計費，會員可享受折扣優惠
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {courtRates.map((rate, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-                viewport={{ once: true }}
-                className="bg-gray-50 rounded-2xl p-8 text-center"
-              >
-                <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                  {rate.type}
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  {rate.description}
-                </p>
-                
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center py-2 border-b border-gray-200">
-                    <span className="text-gray-600">非高峰時段</span>
-                    <span className="text-2xl font-bold text-primary-600">
-                      ${rate.offPeak}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center py-2">
-                    <span className="text-gray-600">高峰時段</span>
-                    <span className="text-2xl font-bold text-primary-600">
-                      ${rate.peakHour}
-                    </span>
-                  </div>
-                </div>
-
-                <div className="mt-6 text-sm text-gray-500">
-                  <p>高峰時段：週末全天，平日 18:00-22:00</p>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* 會員折扣說明 */}
       <section className="py-20 bg-primary-50">
@@ -302,7 +230,7 @@ const Pricing: React.FC = () => {
             </p>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-4xl mx-auto">
             <div className="bg-white rounded-xl p-6 text-center">
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-gray-600">0%</span>
@@ -314,14 +242,6 @@ const Pricing: React.FC = () => {
             <div className="bg-white rounded-xl p-6 text-center">
               <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-primary-600">20%</span>
-              </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">高級會員</h3>
-              <p className="text-gray-600">所有場地費用</p>
-            </div>
-
-            <div className="bg-white rounded-xl p-6 text-center">
-              <div className="w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <span className="text-2xl font-bold text-yellow-600">30%</span>
               </div>
               <h3 className="text-xl font-bold text-gray-900 mb-2">VIP會員</h3>
               <p className="text-gray-600">所有場地費用</p>
@@ -362,7 +282,7 @@ const Pricing: React.FC = () => {
               },
               {
                 question: '場地預約需要提前多久？',
-                answer: '基本會員需要提前24小時預約，高級會員可以提前48小時預約，VIP會員可以提前72小時預約。'
+                answer: '基本會員需要提前24小時預約，VIP會員可以提前48小時預約。'
               }
             ].map((faq, index) => (
               <motion.div

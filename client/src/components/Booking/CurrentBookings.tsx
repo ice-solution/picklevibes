@@ -205,7 +205,7 @@ const CurrentBookings: React.FC<CurrentBookingsProps> = ({
                   
                   <div className="text-right">
                     <span className="font-medium text-green-600">
-                      HK$ {booking.pricing?.totalPrice || 0}
+                      {booking.pricing?.totalPrice || 0} 積分
                     </span>
                   </div>
                 </div>

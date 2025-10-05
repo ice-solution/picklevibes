@@ -83,6 +83,9 @@ app.use('/api/courts', require('./routes/courts'));
 app.use('/api/content', require('./routes/content'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/users', require('./routes/users'));
+app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
+app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
+app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
 
 // 導出 batchLimiter 供路由使用
 app.set('batchLimiter', batchLimiter);
@@ -105,6 +108,28 @@ app.use((err, req, res, next) => {
 app.use('*', (req, res) => {
   res.status(404).json({ message: 'API 端點不存在' });
 });
+
+// 定時任務：檢查過期的VIP會員
+const { checkExpiredMemberships } = require('./utils/membershipChecker');
+
+// 每小時檢查一次過期的VIP會員
+setInterval(async () => {
+  try {
+    await checkExpiredMemberships();
+  } catch (error) {
+    console.error('❌ 定時檢查過期會員失敗:', error);
+  }
+}, 60 * 60 * 1000); // 每小時執行一次
+
+// 服務器啟動時也檢查一次
+setTimeout(async () => {
+  try {
+    console.log('🚀 服務器啟動，檢查過期的VIP會員...');
+    await checkExpiredMemberships();
+  } catch (error) {
+    console.error('❌ 啟動時檢查過期會員失敗:', error);
+  }
+}, 10000); // 延遲10秒執行，確保MongoDB連接已建立
 
 const PORT = process.env.PORT || 5009;
 app.listen(PORT, () => {

@@ -7,6 +7,21 @@ import {
   ClockIcon
 } from '@heroicons/react/24/outline';
 
+// 自定義社交媒體圖標
+const FacebookIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} fill="currentColor" viewBox="0 0 24 24">
+    <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+  </svg>
+);
+
+const InstagramIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+    <path d="m16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+  </svg>
+);
+
 const Footer: React.FC = () => {
   const currentYear = new Date().getFullYear();
 
@@ -50,20 +65,20 @@ const Footer: React.FC = () => {
             {/* 社交媒體 */}
             <div className="flex space-x-4">
               <a
-                href="https://facebook.com/picklevibes"
+                href="https://facebook.com/picklevibes.hk"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-10 h-10 bg-gray-800 hover:bg-primary-600 rounded-full flex items-center justify-center transition-colors duration-200"
+                className="w-10 h-10 bg-gray-800 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors duration-200 hover:scale-110 transform"
               >
-                <span className="text-sm font-bold">f</span>
+                <FacebookIcon className="w-5 h-5" />
               </a>
               <a
-                href="https://instagram.com/picklevibes"
+                href="https://instagram.com/picklevibes.hk"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-10 h-10 bg-gray-800 hover:bg-primary-600 rounded-full flex items-center justify-center transition-colors duration-200"
+                className="w-10 h-10 bg-gray-800 hover:bg-gradient-to-r hover:from-purple-500 hover:to-pink-500 rounded-full flex items-center justify-center transition-colors duration-200 hover:scale-110 transform"
               >
-                <span className="text-sm">📷</span>
+                <InstagramIcon className="w-5 h-5" />
               </a>
             </div>
           </div>
@@ -109,14 +124,14 @@ const Footer: React.FC = () => {
               <div className="flex items-start space-x-3">
                 <PhoneIcon className="w-5 h-5 text-primary-400 mt-1 flex-shrink-0" />
                 <div>
-                  <p className="text-gray-300">+852 6368 1655</p>
+                  <p className="text-gray-300">+852 5600 4956</p>
                 </div>
               </div>
               
               <div className="flex items-start space-x-3">
                 <EnvelopeIcon className="w-5 h-5 text-primary-400 mt-1 flex-shrink-0" />
                 <div>
-                  <p className="text-gray-300">info@picklevibes.com</p>
+                  <p className="text-gray-300">info@picklevibes.hk</p>
                 </div>
               </div>
               
@@ -124,8 +139,7 @@ const Footer: React.FC = () => {
                 <MapPinIcon className="w-5 h-5 text-primary-400 mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-gray-300 text-sm">
-                    Shop 338, 3/F, Hopewell Mall,<br />
-                    15 Kennedy Road, Hong Kong
+                    荔枝角永康街37至39號福源廣場8樓B-D室
                   </p>
                 </div>
               </div>
@@ -133,7 +147,7 @@ const Footer: React.FC = () => {
               <div className="flex items-start space-x-3">
                 <ClockIcon className="w-5 h-5 text-primary-400 mt-1 flex-shrink-0" />
                 <div>
-                  <p className="text-gray-300">每天 7am - 11pm</p>
+                  <p className="text-gray-300">24小時營業</p>
                 </div>
               </div>
             </div>
@@ -144,7 +158,7 @@ const Footer: React.FC = () => {
         <div className="border-t border-gray-800 mt-12 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <div className="text-gray-400 text-sm mb-4 md:mb-0">
-              © {currentYear} PickleVibes. 版權所有。由 EntroutWeb 設計。
+              © {currentYear} PickleVibes hk 版權所有。
             </div>
             
             <div className="flex space-x-6 text-sm">

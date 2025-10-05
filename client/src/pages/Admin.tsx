@@ -1,21 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { useBooking } from '../contexts/BookingContext';
 import CurrentBookings from '../components/Booking/CurrentBookings';
 import UserManagement from '../components/Admin/UserManagement';
+import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import { 
   CalendarDaysIcon, 
   UserGroupIcon,
   CurrencyDollarIcon,
   ChartBarIcon,
-  UsersIcon
+  UsersIcon,
+  TicketIcon
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
   const { user } = useAuth();
   const { bookings, courts } = useBooking();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('bookings');
+
+  // 從 URL 參數設置活動標籤
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && ['bookings', 'users', 'redeem', 'courts', 'revenue', 'analytics'].includes(tab)) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
 
   // 檢查是否為管理員
   if (user?.role !== 'admin') {
@@ -41,6 +53,7 @@ const Admin: React.FC = () => {
   const tabs = [
     { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon },
     { id: 'users', name: '用戶管理', icon: UsersIcon },
+    { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'revenue', name: '收入統計', icon: CurrencyDollarIcon },
     { id: 'analytics', name: '數據分析', icon: ChartBarIcon }
@@ -134,7 +147,10 @@ const Admin: React.FC = () => {
                 return (
                   <button
                     key={tab.id}
-                    onClick={() => setActiveTab(tab.id)}
+                    onClick={() => {
+                      setActiveTab(tab.id);
+                      setSearchParams({ tab: tab.id });
+                    }}
                     className={`py-4 px-1 border-b-2 font-medium text-sm ${
                       activeTab === tab.id
                         ? 'border-primary-500 text-primary-600'
@@ -191,8 +207,13 @@ const Admin: React.FC = () => {
                       <p className="text-sm text-gray-600 mb-2">{court.description}</p>
                       <div className="text-sm text-gray-500">
                         <p>容量: {court.capacity} 人</p>
-                        <p>類型: {court.type === 'indoor' ? '室內' : '戶外'}</p>
-                        <p>價格: HK$ {court.pricing?.offPeak} - HK$ {court.pricing?.peakHour}</p>
+                        <p>類型: {
+                          court.type === 'competition' ? '比賽場' :
+                          court.type === 'training' ? '訓練場' :
+                          court.type === 'solo' ? '單人場' :
+                          court.type === 'dink' ? '練習場' : '場地'
+                        }</p>
+                        <p>價格: {court.pricing?.offPeak} - {court.pricing?.peakHour} 積分/小時</p>
                       </div>
                     </div>
                   ))}
@@ -202,6 +223,16 @@ const Admin: React.FC = () => {
 
             {activeTab === 'users' && (
               <UserManagement />
+            )}
+
+            {activeTab === 'redeem' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <RedeemCodeManagement />
+              </motion.div>
             )}
 
             {activeTab === 'revenue' && (

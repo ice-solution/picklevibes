@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
-import StripePayment from '../Payment/StripePayment';
+// 預約現在使用積分支付，不再需要 Stripe 支付組件
 import axios from 'axios';
 import apiConfig from '../../config/api';
 import { 
@@ -28,11 +28,12 @@ interface BookingSummaryProps {
   timeSlot: { start: string; end: string } | null;
   bookingData: BookingData;
   availability: any;
-  showPayment: boolean;
-  createdBookingId: string;
-  onSetShowPayment: (show: boolean) => void;
-  onSetCreatedBookingId: (id: string) => void;
+  // 預約現在使用積分支付，不再需要支付相關參數
   onReset: () => void;
+  onEditBooking?: (field: keyof BookingData, value: any) => void;
+  includeSoloCourt?: boolean;
+  soloCourtAvailable?: boolean;
+  onToggleSoloCourt?: (include: boolean) => void;
 }
 
 const BookingSummary: React.FC<BookingSummaryProps> = ({
@@ -41,26 +42,55 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   timeSlot,
   bookingData,
   availability,
-  showPayment,
-  createdBookingId,
-  onSetShowPayment,
-  onSetCreatedBookingId,
-  onReset
+  // 預約現在使用積分支付，不再需要支付相關參數
+  onReset,
+  onEditBooking,
+  includeSoloCourt = false,
+  soloCourtAvailable = false,
+  onToggleSoloCourt
 }) => {
   const { createBooking } = useBooking();
   const { user } = useAuth();
   const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [specialRequests, setSpecialRequests] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState<BookingData>(bookingData);
 
-  // 調試信息 - 追蹤所有狀態變化
+  // 預約現在使用積分支付，不再需要支付狀態追蹤
+  
+
+  // 當 bookingData 變化時更新 editData
   useEffect(() => {
-    console.log('🔍 狀態變化:', { 
-      showPayment, 
-      createdBookingId,
-      timestamp: new Date().toISOString()
-    });
-  }, [showPayment, createdBookingId]);
+    setEditData(bookingData);
+  }, [bookingData]);
+
+  // 編輯功能
+  const handleEdit = () => {
+    setIsEditing(true);
+  };
+
+  const handleSave = () => {
+    if (onEditBooking) {
+      onEditBooking('totalPlayers', editData.totalPlayers);
+      onEditBooking('contactName', editData.contactName);
+      onEditBooking('contactEmail', editData.contactEmail);
+      onEditBooking('contactPhone', editData.contactPhone);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditData(bookingData);
+    setIsEditing(false);
+  };
+
+  const handleEditChange = (field: keyof BookingData, value: any) => {
+    setEditData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
 
   const formatTime = (time: string) => {
     const [hour, minute] = time.split(':');
@@ -121,8 +151,17 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           phone: bookingData.contactPhone 
         }],
         totalPlayers: bookingData.totalPlayers,
-        specialRequests: specialRequests.trim() || undefined
+        specialRequests: specialRequests.trim() || undefined,
+        includeSoloCourt: includeSoloCourt || false
       };
+
+      // 調試：記錄預約載荷
+      console.log('🔍 預約載荷:', {
+        includeSoloCourt: includeSoloCourt,
+        courtType: court?.type,
+        soloCourtAvailable: soloCourtAvailable,
+        payload: bookingPayload
+      });
 
       // 步驟 1: 創建待支付預約
       console.log('🔍 步驟 1: 創建預約');
@@ -133,22 +172,12 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         throw new Error('預約創建失敗，未返回預約 ID');
       }
 
-      // 步驟 2: 創建 Stripe Checkout Session（使用 Redirect 支付）
-      console.log('🔍 步驟 2: 創建 Checkout Session');
-      const paymentResponse = await axios.post('/payments/create-checkout-session', {
-        bookingId: newBooking._id,
-        amount: availability?.pricing?.totalPrice || 0
-      });
-
-      const paymentData = paymentResponse.data;
-      console.log('🔍 Checkout Session 創建結果:', paymentData);
-
-      // 步驟 3: 設置支付狀態並顯示支付表單
-      console.log('🔍 步驟 3: 設置支付狀態');
-      onSetCreatedBookingId(newBooking._id);
-      onSetShowPayment(true);
+      // 步驟 2: 預約已使用積分支付，直接完成
+      console.log('🔍 步驟 2: 預約已使用積分支付完成');
       
-      console.log('🔍 支付流程設置完成');
+      // 顯示成功消息並跳轉
+      alert('預約成功！已扣除積分。');
+      window.location.href = '/my-bookings';
     } catch (error: any) {
       console.error('❌ 支付流程錯誤:', error);
       alert(error.message || '預約失敗，請稍後再試');
@@ -157,13 +186,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
     }
   };
 
-  const handlePaymentSuccess = () => {
-    navigate('/payment-result?status=success&message=支付成功！您的預約已確認。');
-  };
-
-  const handlePaymentError = (error: string) => {
-    navigate(`/payment-result?status=error&message=${encodeURIComponent(error)}`);
-  };
+  // 預約現在使用積分支付，不再需要支付處理函數
 
   if (!court || !date || !timeSlot) {
     return (
@@ -225,6 +248,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 <p className="font-medium">{bookingData.totalPlayers} 人</p>
               </div>
             </div>
+
           </div>
         </div>
 
@@ -243,14 +267,6 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             </div>
           </div>
           
-          <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-            <p className="text-sm text-gray-600">
-              <strong>參加人數:</strong> {bookingData.totalPlayers} 人
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              實際參與者名單可於現場確認
-            </p>
-          </div>
         </div>
 
         {/* 特殊要求 */}
@@ -269,6 +285,36 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           </p>
         </div>
 
+        {/* 單人場租用選項 - 僅在選擇比賽場時顯示 */}
+        {court?.type === 'competition' && soloCourtAvailable && onToggleSoloCourt && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">額外服務</h3>
+            
+            <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+              <div className="flex items-center space-x-3">
+                <input
+                  type="checkbox"
+                  id="includeSoloCourt"
+                  checked={includeSoloCourt}
+                  onChange={(e) => onToggleSoloCourt(e.target.checked)}
+                  className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500"
+                />
+                <label htmlFor="includeSoloCourt" className="text-sm font-medium text-gray-900">
+                  同時租用單人場
+                </label>
+              </div>
+              <div className="text-right">
+                <div className="text-sm text-gray-500">額外費用</div>
+                <div className="text-lg font-semibold text-primary-600">100 積分</div>
+              </div>
+            </div>
+            
+            <p className="text-xs text-gray-500 mt-2">
+              * 單人場與主場地同時段使用，適合個人練習
+            </p>
+          </div>
+        )}
+
         {/* 價格詳情 */}
         {availability && (
           <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -277,8 +323,15 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">場地費用</span>
-                <span className="font-medium">HK$ {availability.pricing?.totalPrice || 0}</span>
+                <span className="font-medium">{availability.pricing?.totalPrice || 0} 積分</span>
               </div>
+              
+              {includeSoloCourt && (
+                <div className="flex justify-between">
+                  <span className="text-gray-600">單人場租用</span>
+                  <span className="font-medium">100 積分</span>
+                </div>
+              )}
               
               <div className="flex justify-between">
                 <span className="text-gray-600">時長</span>
@@ -288,7 +341,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               <div className="border-t border-gray-200 pt-3">
                 <div className="flex justify-between text-lg font-semibold">
                   <span>總計</span>
-                  <span className="text-primary-600">HK$ {availability.pricing?.totalPrice || 0}</span>
+                  <span className="text-primary-600">
+                    {(availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)} 積分
+                  </span>
                 </div>
               </div>
             </div>
@@ -312,6 +367,24 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         </div>
       </div>
 
+      {/* 編輯模式按鈕 */}
+      {isEditing && (
+        <div className="mt-6 flex gap-3">
+          <button
+            onClick={handleSave}
+            className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
+          >
+            保存修改
+          </button>
+          <button
+            onClick={handleCancel}
+            className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
+          >
+            取消編輯
+          </button>
+        </div>
+      )}
+
       {/* 提交按鈕 */}
       <div className="mt-8 flex gap-4">
         <button
@@ -323,9 +396,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         
         <button
           onClick={handleSubmit}
-          disabled={isSubmitting || !user}
+          disabled={isSubmitting || !user || isEditing}
           className={`flex-1 font-medium py-3 px-6 rounded-lg transition-colors duration-200 ${
-            isSubmitting || !user
+            isSubmitting || !user || isEditing
               ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
               : 'bg-primary-600 text-white hover:bg-primary-700'
           }`}
@@ -343,32 +416,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       )}
 
       {/* 調試信息 - 總是顯示 */}
-      <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-        <p className="text-yellow-800 text-sm">
-          🔍 調試信息 - showPayment: {showPayment.toString()}, createdBookingId: {createdBookingId || '空'}, 條件: {(showPayment && createdBookingId).toString()}
-        </p>
-      </div>
+      {/* 預約現在使用積分支付，不再需要調試信息 */}
 
-      {/* Stripe 支付組件 */}
-      {showPayment && createdBookingId && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="mt-8 p-6 bg-gray-50 rounded-xl"
-        >
-          <h3 className="text-xl font-semibold text-gray-900 mb-6 text-center">
-            完成支付
-          </h3>
-          
-          <StripePayment
-            bookingId={createdBookingId}
-            amount={availability?.pricing?.totalPrice || 0}
-            onSuccess={handlePaymentSuccess}
-            onError={handlePaymentError}
-          />
-        </motion.div>
-      )}
+      {/* 預約現在使用積分支付，不再需要 Stripe 支付組件 */}
     </div>
   );
 };

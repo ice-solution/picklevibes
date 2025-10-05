@@ -37,8 +37,8 @@ const Features: React.FC = () => {
     },
     {
       icon: ShoppingBagIcon,
-      title: '商店',
-      description: '讓我們談談真正重要的東西。零售療法。是的，我們有球拍。我們也有Stackd包和襯衫，但說真的，這真的是關於球拍的。',
+      title: '無人商店',
+      description: '現場有售賣機及支付機，無輪租借球拍或購買用品，由支付到拿取，全程無人化，更方便快捷。',
       color: 'text-secondary-600'
     },
     {
@@ -111,7 +111,7 @@ const Features: React.FC = () => {
               </div>
               <h4 className="text-2xl font-bold text-gray-900 mb-4">// 運動</h4>
               <p className="text-gray-600">
-                我們為各種技能水平的球員提供服務，包括每週社交混合賽、競技聯賽、私人活動，以及您擊敗會計師Phil的機會。
+                我們為各種技能水平的球員提供服務，包括每週社交混合賽、競技聯賽、私人活動等。
               </p>
             </div>
             
@@ -129,9 +129,9 @@ const Features: React.FC = () => {
               <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <ShoppingBagIcon className="w-10 h-10 text-yellow-600" />
               </div>
-              <h4 className="text-2xl font-bold text-gray-900 mb-4">// 商店</h4>
+              <h4 className="text-2xl font-bold text-gray-900 mb-4">// 公司活動</h4>
               <p className="text-gray-600">
-                讓我們談談真正重要的東西。零售療法。是的，我們有球拍。我們也有Stackd包和襯衫，但說真的，這真的是關於球拍的。
+                我們提供場地及設施，讓您舉辦聯誼公司活動，讓你公司工員更有默契，氣升士氣，我們有專業教練協助，保証每位員工也玩得盡興。
               </p>
             </div>
           </div>

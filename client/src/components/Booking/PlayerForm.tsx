@@ -23,20 +23,26 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
   // 自動填入已登入用戶的資料
   useEffect(() => {
     if (user && (!formData.contactName || !formData.contactEmail || !formData.contactPhone)) {
-      onFormDataChange({
+      const newFormData = {
         ...formData,
         contactName: formData.contactName || user.name || '',
         contactEmail: formData.contactEmail || user.email || '',
         contactPhone: formData.contactPhone || user.phone || '',
-      });
+      };
+      console.log('🔍 PlayerForm 自動填入用戶資料:', newFormData);
+      onFormDataChange(newFormData);
     }
-  }, [user]); // 只依賴 user，避免無限重新渲染
+  }, [user, formData.contactName, formData.contactEmail, formData.contactPhone]); // 添加必要的依賴
 
   const handleInputChange = (field: keyof BookingFormData, value: string | number) => {
-    onFormDataChange({
+    console.log('🔍 PlayerForm handleInputChange:', field, value);
+    const newFormData = {
       ...formData,
       [field]: value
-    });
+    };
+    console.log('🔍 PlayerForm 新數據:', newFormData);
+    
+    onFormDataChange(newFormData);
 
     // 清除該字段的錯誤
     const newErrors = { ...errors };

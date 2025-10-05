@@ -5,7 +5,8 @@ import { useBooking } from '../contexts/BookingContext';
 import Hero from '../components/Home/Hero';
 import Features from '../components/Home/Features';
 import Courts from '../components/Home/Courts';
-import Testimonials from '../components/Home/Testimonials';
+import About from '../components/Home/About';
+// import Testimonials from '../components/Home/Testimonials';
 import CTA from '../components/Home/CTA';
 
 const Home: React.FC = () => {
@@ -25,7 +26,8 @@ const Home: React.FC = () => {
       <Hero />
       <Features />
       <Courts />
-      <Testimonials />
+      <About />
+      {/* <Testimonials /> */}
       <CTA />
     </motion.div>
   );

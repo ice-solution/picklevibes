@@ -32,8 +32,12 @@ const userSchema = new mongoose.Schema({
   },
   membershipLevel: {
     type: String,
-    enum: ['basic', 'premium', 'vip'],
+    enum: ['basic', 'vip'],
     default: 'basic'
+  },
+  membershipExpiry: {
+    type: Date,
+    default: null
   },
   isActive: {
     type: Boolean,
@@ -74,6 +78,31 @@ userSchema.pre('save', async function(next) {
 // 密碼驗證方法
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+// 檢查會員狀態是否過期
+userSchema.methods.checkMembershipStatus = function() {
+  if (this.membershipLevel === 'vip' && this.membershipExpiry) {
+    const now = new Date();
+    if (now > this.membershipExpiry) {
+      this.membershipLevel = 'basic';
+      this.membershipExpiry = null;
+      return false; // 已過期
+    }
+    return true; // 仍然有效
+  }
+  return this.membershipLevel === 'vip';
+};
+
+// 設置VIP會員
+userSchema.methods.setVipMembership = function() {
+  const now = new Date();
+  const expiryDate = new Date(now.getTime() + (180 * 24 * 60 * 60 * 1000)); // 180天後
+  
+  this.membershipLevel = 'vip';
+  this.membershipExpiry = expiryDate;
+  
+  return this.save();
 };
 
 // 隱藏密碼字段

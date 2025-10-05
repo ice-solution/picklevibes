@@ -56,6 +56,8 @@ const Facilities: React.FC = () => {
         return '飲水機';
       case 'shower':
         return '淋浴設施';
+      case 'vending_machine':
+        return '售賣機';
       default:
         return amenity;
     }
@@ -63,8 +65,9 @@ const Facilities: React.FC = () => {
 
   const getCourtTypeText = (type: string) => {
     switch (type) {
-      case 'indoor': return '室內場地';
-      case 'outdoor': return '室外場地';
+      case 'competition': return '比賽場';
+      case 'training': return '訓練場';
+      case 'solo': return '單人場';
       case 'dink': return '練習場';
       default: return '場地';
     }
@@ -72,8 +75,9 @@ const Facilities: React.FC = () => {
 
   const getCourtTypeColor = (type: string) => {
     switch (type) {
-      case 'indoor': return 'bg-blue-100 text-blue-800';
-      case 'outdoor': return 'bg-green-100 text-green-800';
+      case 'competition': return 'bg-red-100 text-red-800';
+      case 'training': return 'bg-purple-100 text-purple-800';
+      case 'solo': return 'bg-orange-100 text-orange-800';
       case 'dink': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -81,28 +85,16 @@ const Facilities: React.FC = () => {
 
   const facilities = [
     {
-      title: '3個室內場地 + 2個練習場',
-      description: '配備空調的現代化室內場地，不受天氣影響，全年無休',
+      title: '3個專業場地',
+      description: '比賽場、訓練場、單人場，配備空調的現代化室內場地',
       icon: MapPinIcon,
       features: ['空調控制', '專業照明', '防滑地面', '標準尺寸']
     },
     {
-      title: '更衣室和淋浴設施',
-      description: '舒適的更衣室和現代化淋浴設施，讓您運動後保持清爽',
+      title: '淋浴設施',
+      description: '現代化淋浴設施，讓您運動後保持清爽',
       icon: BeakerIcon,
-      features: ['私人更衣室', '熱水淋浴', '毛巾服務', '儲物櫃']
-    },
-    {
-      title: 'PickleVibes 商店',
-      description: '提供專業匹克球裝備和紀念品，滿足您的所有需求',
-      icon: ShoppingBagIcon,
-      features: ['專業球拍', '運動服裝', '配件用品', '紀念品']
-    },
-    {
-      title: 'WiFi 和休息區',
-      description: '免費WiFi和舒適的休息區，讓您在運動間隙也能保持連接',
-      icon: WifiIcon,
-      features: ['免費WiFi', '舒適座椅', '充電站', '雜誌報紙']
+      features: ['熱水淋浴', '私人空間', '清潔環境', '便利使用']
     }
   ];
 
@@ -224,25 +216,40 @@ const Facilities: React.FC = () => {
                       <div className="text-sm text-gray-600">
                         <div className="flex items-center gap-1">
                           <ClockIcon className="w-4 h-4" />
-                          <span>每天 7am - 11pm</span>
+                          <span>
+                            {court.type === 'solo' ? '每天 08:00-23:00' : '24小時營業'}
+                          </span>
                         </div>
                       </div>
                     </div>
 
                     {/* 價格信息 */}
                     <div className="border-t border-gray-200 pt-4">
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-500">非高峰時段</span>
-                        <span className="text-lg font-bold text-primary-600">
-                          ${court.pricing.offPeak}/小時
-                        </span>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-sm text-gray-500">高峰時段</span>
-                        <span className="text-lg font-bold text-primary-600">
-                          ${court.pricing.peakHour}/小時
-                        </span>
-                      </div>
+                      {court.pricing.timeSlots && court.pricing.timeSlots.length > 0 ? (
+                        court.pricing.timeSlots.map((slot, idx) => (
+                          <div key={idx} className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">{slot.name}</span>
+                            <span className="text-lg font-bold text-primary-600">
+                              {slot.price} 積分/小時
+                            </span>
+                          </div>
+                        ))
+                      ) : (
+                        <>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">非繁忙時間</span>
+                            <span className="text-lg font-bold text-primary-600">
+                              {court.pricing.offPeak} 積分/小時
+                            </span>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <span className="text-sm text-gray-500">繁忙時間</span>
+                            <span className="text-lg font-bold text-primary-600">
+                              {court.pricing.peakHour} 積分/小時
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
                 </motion.div>

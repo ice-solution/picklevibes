@@ -15,7 +15,7 @@ const courtSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['indoor', 'outdoor', 'dink'],
+    enum: ['competition', 'training', 'solo', 'dink'],
     required: [true, '場地類型為必填項目']
   },
   description: {
@@ -30,7 +30,7 @@ const courtSchema = new mongoose.Schema({
   },
   amenities: [{
     type: String,
-    enum: ['air_conditioning', 'lighting', 'net', 'paddles', 'balls', 'water', 'shower']
+    enum: ['air_conditioning', 'lighting', 'net', 'paddles', 'balls', 'water', 'shower', 'vending_machine']
   }],
   pricing: {
     // 不同時段的價格設置
@@ -137,6 +137,21 @@ courtSchema.methods.getPriceForTime = function(startTime, date = null) {
     return 0;
   }
   
+  // 檢查是否為週末
+  const isWeekend = date ? (date.getDay() === 0 || date.getDay() === 6) : false;
+  
+  // 如果是週末，08:00-24:00 使用繁忙時間價格
+  if (isWeekend) {
+    const hour = parseInt(startTime.split(':')[0]);
+    if (hour >= 8 && hour < 24) {
+      // 週末 08:00-24:00 使用繁忙時間價格
+      const peakSlot = this.pricing.timeSlots.find(slot => slot.name === '繁忙時間');
+      if (peakSlot) {
+        return peakSlot.price;
+      }
+    }
+  }
+  
   // 找到匹配的時段
   for (const timeSlot of this.pricing.timeSlots) {
     if (startTime >= timeSlot.startTime && startTime < timeSlot.endTime) {
@@ -144,14 +159,25 @@ courtSchema.methods.getPriceForTime = function(startTime, date = null) {
     }
   }
   
-  // 如果沒有匹配的時段，返回第一個時段的價格
-  return this.pricing.timeSlots[0]?.price || 0;
+  // 如果沒有匹配的時段，返回0表示不開放
+  return 0;
 };
 
 // 獲取時段名稱
-courtSchema.methods.getTimeSlotName = function(startTime) {
+courtSchema.methods.getTimeSlotName = function(startTime, date = null) {
   if (!this.pricing.timeSlots || this.pricing.timeSlots.length === 0) {
     return '標準時段';
+  }
+  
+  // 檢查是否為週末
+  const isWeekend = date ? (date.getDay() === 0 || date.getDay() === 6) : false;
+  
+  // 如果是週末，08:00-24:00 顯示為繁忙時間
+  if (isWeekend) {
+    const hour = parseInt(startTime.split(':')[0]);
+    if (hour >= 8 && hour < 24) {
+      return '繁忙時間';
+    }
   }
   
   for (const timeSlot of this.pricing.timeSlots) {

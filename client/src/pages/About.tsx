@@ -1,214 +1,247 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { 
-  HeartIcon, 
+  ClockIcon, 
   UserGroupIcon, 
-  TrophyIcon,
-  SparklesIcon
+  TrophyIcon, 
+  HeartIcon,
+  MapPinIcon,
+  PhoneIcon,
+  EnvelopeIcon
 } from '@heroicons/react/24/outline';
 
 const About: React.FC = () => {
-  const values = [
-    {
-      icon: HeartIcon,
-      title: '專業',
-      description: '我們提供專業的匹克球設施和教練指導，確保每位會員都能獲得最佳的運動體驗。'
-    },
-    {
-      icon: UserGroupIcon,
-      title: '友善',
-      description: '我們營造友善的社區環境，讓每個人都能感受到歡迎和支持。'
-    },
-    {
-      icon: SparklesIcon,
-      title: '創新',
-      description: '我們不斷創新服務和設施，為會員提供最現代化的匹克球體驗。'
-    },
-    {
-      icon: TrophyIcon,
-      title: '社區',
-      description: '我們不僅僅是運動場地，更是一個團結人們的社區平台。'
-    }
-  ];
-
-  const team = [
-    {
-      name: '教練團隊',
-      description: '我們擁有經驗豐富的專業教練團隊，他們不僅技術精湛，更懂得如何激發學員的潛能。',
-      members: [
-        { name: '張教練', role: '首席教練', experience: '10年經驗' },
-        { name: '李教練', role: '高級教練', experience: '8年經驗' },
-        { name: '王教練', role: '初級教練', experience: '5年經驗' }
-      ]
-    }
-  ];
-
   return (
     <div className="min-h-screen bg-white">
       {/* Hero Section */}
-      <section className="relative py-20 bg-gradient-to-br from-primary-600 to-primary-800 text-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 30 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
-            className="text-center"
-          >
-            <h1 className="text-4xl md:text-6xl font-bold mb-6">
-              關於 PickleVibes
-            </h1>
-            <p className="text-xl md:text-2xl text-primary-100 max-w-3xl mx-auto">
-              我們是香港領先的匹克球場地，提供優質的運動體驗和社區環境。
-            </p>
-          </motion.div>
-        </div>
-      </section>
-
-      {/* Mission & Vision */}
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
-            <motion.div
-              initial={{ opacity: 0, x: -30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              viewport={{ once: true }}
-              className="bg-white rounded-2xl p-8 shadow-lg"
-            >
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">我們的使命</h2>
-              <p className="text-lg text-gray-600 leading-relaxed">
-                讓每個人都能享受匹克球的樂趣，建立健康的運動社區。我們相信運動不僅僅是身體的鍛煉，更是心靈的滋養和社交的橋樑。
-              </p>
-            </motion.div>
-
-            <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.6 }}
-              viewport={{ once: true }}
-              className="bg-white rounded-2xl p-8 shadow-lg"
-            >
-              <h2 className="text-3xl font-bold text-gray-900 mb-6">我們的願景</h2>
-              <p className="text-lg text-gray-600 leading-relaxed">
-                成為香港最受歡迎的匹克球運動中心，為所有技能水平的玩家提供最佳的運動體驗和社區環境。
-              </p>
-            </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* Values */}
-      <section className="py-20 bg-white">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">我們的價值觀</h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              這些核心價值觀指導著我們所做的每一件事，從設施設計到客戶服務。
-            </p>
-          </motion.div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {values.map((value, index) => (
-              <motion.div
-                key={index}
-                initial={{ opacity: 0, y: 30 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.6, delay: index * 0.1 }}
-                viewport={{ once: true }}
-                className="text-center"
-              >
-                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <value.icon className="w-8 h-8 text-primary-600" />
-                </div>
-                <h3 className="text-xl font-bold text-gray-900 mb-4">{value.title}</h3>
-                <p className="text-gray-600">{value.description}</p>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Team */}
-      <section className="py-20 bg-gray-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-            className="text-center mb-16"
-          >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">我們的團隊</h2>
-            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              認識我們專業的教練團隊，他們將幫助您提升匹克球技能。
-            </p>
-          </motion.div>
-
-          {team.map((teamSection, index) => (
-            <motion.div
-              key={index}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: index * 0.2 }}
-              viewport={{ once: true }}
-              className="bg-white rounded-2xl p-8 shadow-lg mb-8"
-            >
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">{teamSection.name}</h3>
-              <p className="text-gray-600 mb-8">{teamSection.description}</p>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {teamSection.members.map((member, memberIndex) => (
-                  <div key={memberIndex} className="text-center">
-                    <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                      <span className="text-2xl">👨‍🏫</span>
-                    </div>
-                    <h4 className="text-lg font-bold text-gray-900 mb-2">{member.name}</h4>
-                    <p className="text-primary-600 font-medium mb-1">{member.role}</p>
-                    <p className="text-sm text-gray-500">{member.experience}</p>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="py-20 bg-primary-600 text-white">
+      <section className="py-20 bg-gradient-to-br from-blue-50 to-green-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
+              關於 PickleVibes
+            </h1>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              香港智能匹克球室的領導者，致力於推廣全民匹克球運動普及化
+            </p>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* 品牌故事 */}
+      <section className="py-20">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             viewport={{ once: true }}
+            className="prose prose-lg max-w-none"
           >
-            <h2 className="text-4xl font-bold mb-6">準備加入我們嗎？</h2>
-            <p className="text-xl text-primary-100 mb-8 max-w-2xl mx-auto">
-              成為 PickleVibes 社區的一員，體驗最棒的匹克球運動。
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a
-                href="/booking"
-                className="bg-white text-primary-600 hover:bg-gray-100 font-bold py-4 px-8 rounded-full text-lg transition-colors duration-200"
-              >
-                立即預約
-              </a>
-              <a
-                href="/pricing"
-                className="border-2 border-white text-white hover:bg-white hover:text-primary-600 font-bold py-4 px-8 rounded-full text-lg transition-colors duration-200"
-              >
-                查看價格
-              </a>
+            <h2 className="text-3xl font-bold text-gray-900 mb-8">我們的品牌故事</h2>
+            <div className="space-y-6 text-gray-700 leading-relaxed">
+              <p>
+                都市人生活節奏急速，對健康與社交運動的需求日益增加。然而，傳統體育設施的固定開放時間和繁瑣的預訂流程，往往難以配合現代都市人彈性多變的日程，讓您錯失了與球友切磋或練習的黃金時間。
+              </p>
+              <p>
+                我們借鑒國際趨勢，創立了本地連鎖24小時智能匹克球室品牌 Picklevibes。我們致力於為大眾服務，並推廣全民匹克球運動普及化。會員可以無時間限制，隨時隨地透過手機預約，按自己的時間和進度，享受這項充滿樂趣的社交運動。
+              </p>
+              <p>
+                會員可透過全天候網上預約系統及智能自助服務，體驗先進專業的匹克球場地。從預訂、付款到智能門禁入場，全程實現無人管理與自動化，為您提供極致的便利與安心。
+              </p>
+              <p>
+                為了滿足追求高效訓練的玩家，我們特別設置了專業的發球機練習場。玩家可以利用這些高科技設備，隨時進行高重複性、針對性的個人訓練，極大提升練習效率，助您在短時間內突破技術瓶頸。
+              </p>
+              <p>
+                我們更照顧到不同玩家的需要，另設有專業教練課程及聯誼活動，讓您在輕鬆的環境中提升球技並擴展社交圈子。我們的專業團隊與熱情社群，助您實現健身、社交與技能提升的目標。
+              </p>
+              <p>
+                同時，我們推行按時段收費、無需長期合約的模式，明碼實價，高透明度收費。以優惠及合理的價錢，讓您體驗舒適自在、無時間約束的匹克球運動模式，為香港匹克球業界樹立健康、創新的服務典範。
+              </p>
             </div>
           </motion.div>
         </div>
       </section>
+
+      {/* 我們的使命 - 左字右圖 */}
+      <section className="py-20 bg-gray-50">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* 左邊 - 文字內容 */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
+              viewport={{ once: true }}
+              className="space-y-6"
+            >
+              <div className="flex items-center mb-6">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center mr-4">
+                  <HeartIcon className="w-6 h-6 text-blue-600" />
+                </div>
+                <h3 className="text-3xl font-bold text-gray-900">我們的使命</h3>
+              </div>
+              <div className="space-y-4 text-gray-700 text-lg leading-relaxed">
+                <p>
+                  我們以24小時智能自助服務，全面照顧到不同匹克球愛好者的需求，服務大眾並推廣全民匹克球運動普及化。
+                </p>
+                <p>
+                  為了讓玩家能夠進行高效率的個人化訓練，我們特別設立了專業發球機練習場，結合我們的全天候開放模式，讓您隨時隨地都能專注於技能提升。
+                </p>
+                <p>
+                  我們一改傳統體育場地租賃在玩家心目中的形象，推行全自動化網上預約及智能自助服務，免除人手交接的繁瑣，提供極致的便利性。
+                </p>
+              </div>
+            </motion.div>
+
+            {/* 右邊 - 圖片 */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              viewport={{ once: true }}
+              className="relative"
+            >
+              <div className="bg-white rounded-2xl p-4 shadow-lg">
+                <img
+                  src="/about/service1.jpg"
+                  alt="PickleVibes 智能服務"
+                  className="w-full h-96 object-cover rounded-xl"
+                />
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* 我們的目標 - 左圖右字 */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            {/* 左邊 - 圖片 */}
+            <motion.div
+              initial={{ opacity: 0, x: -20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6 }}
+              viewport={{ once: true }}
+              className="relative lg:order-1"
+            >
+              <div className="bg-gray-50 rounded-2xl p-4 shadow-lg">
+                <img
+                  src="/about/service2.jpg"
+                  alt="PickleVibes 未來願景"
+                  className="w-full h-96 object-cover rounded-xl"
+                />
+              </div>
+            </motion.div>
+
+            {/* 右邊 - 文字內容 */}
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              viewport={{ once: true }}
+              className="space-y-6 lg:order-2"
+            >
+              <div className="flex items-center mb-6">
+                <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center mr-4">
+                  <TrophyIcon className="w-6 h-6 text-green-600" />
+                </div>
+                <h3 className="text-3xl font-bold text-gray-900">我們的目標</h3>
+              </div>
+              <div className="space-y-4 text-gray-700 text-lg leading-relaxed">
+                <p>
+                  作為香港智能匹克球室的市場領導者，我們的目標是迅速擴展服務網絡，讓匹克球愛好者無論身在何處，都能輕鬆找到最近的 Picklevibes 場地。
+                </p>
+                <p>
+                  我們展望將來，致力於將 Picklevibes 打造成香港最受歡迎、最專業的匹克球社群中心。我們將持續引進高科技智能訓練設備（包括先進的發球機系統）和場地管理系統。
+                </p>
+                <p>
+                  我們的願景是將這種智能、便捷、高品質的匹克球體驗帶到亞太區以至世界各地，成為全球智能運動場地的典範。
+                </p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* 特色服務 */}
+      <section className="py-20">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">我們的特色服務</h2>
+            <p className="text-xl text-gray-600">為您提供最優質的匹克球體驗</p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.1 }}
+              viewport={{ once: true }}
+              className="text-center"
+            >
+              <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <ClockIcon className="w-8 h-8 text-blue-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">24小時服務</h3>
+              <p className="text-gray-600">全天候智能自助服務，隨時享受匹克球樂趣</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              viewport={{ once: true }}
+              className="text-center"
+            >
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <TrophyIcon className="w-8 h-8 text-green-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">專業設備</h3>
+              <p className="text-gray-600">先進發球機系統，提升訓練效率</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              viewport={{ once: true }}
+              className="text-center"
+            >
+              <div className="w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <UserGroupIcon className="w-8 h-8 text-purple-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">社群活動</h3>
+              <p className="text-gray-600">專業教練課程及聯誼活動，擴展社交圈子</p>
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              viewport={{ once: true }}
+              className="text-center"
+            >
+              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <HeartIcon className="w-8 h-8 text-red-600" />
+              </div>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">健康生活</h3>
+              <p className="text-gray-600">推廣全民匹克球運動，享受健康生活</p>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
     </div>
   );
 };

@@ -8,6 +8,9 @@ import Navbar from './components/Layout/Navbar';
 import Footer from './components/Layout/Footer';
 import Home from './pages/Home';
 import About from './pages/About';
+import FAQ from './pages/FAQ';
+import Privacy from './pages/Privacy';
+import Terms from './pages/Terms';
 import Facilities from './pages/Facilities';
 import Pricing from './pages/Pricing';
 import Booking from './pages/Booking';
@@ -18,6 +21,9 @@ import MyBookings from './pages/MyBookings';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import PaymentResult from './pages/PaymentResult';
+import Recharge from './pages/Recharge';
+import RechargeSuccess from './pages/RechargeSuccess';
+import Balance from './pages/Balance';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 
 function App() {
@@ -31,9 +37,19 @@ function App() {
               <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/about" element={<About />} />
+                <Route path="/faq" element={<FAQ />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/terms" element={<Terms />} />
                 <Route path="/facilities" element={<Facilities />} />
                 <Route path="/pricing" element={<Pricing />} />
-                <Route path="/booking" element={<Booking />} />
+                <Route 
+                  path="/booking" 
+                  element={
+                    <ProtectedRoute>
+                      <Booking />
+                    </ProtectedRoute>
+                  } 
+                />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route 
@@ -69,6 +85,30 @@ function App() {
                   } 
                 />
                 <Route path="/payment-result" element={<PaymentResult />} />
+                <Route 
+                  path="/recharge" 
+                  element={
+                    <ProtectedRoute>
+                      <Recharge />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/recharge-success" 
+                  element={
+                    <ProtectedRoute>
+                      <RechargeSuccess />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/balance" 
+                  element={
+                    <ProtectedRoute>
+                      <Balance />
+                    </ProtectedRoute>
+                  } 
+                />
               </Routes>
             </main>
             <Footer />

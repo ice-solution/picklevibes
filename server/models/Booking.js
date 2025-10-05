@@ -64,16 +64,33 @@ const bookingSchema = new mongoose.Schema({
     },
     method: {
       type: String,
-      enum: ['stripe', 'cash', 'bank_transfer'],
+      enum: ['stripe', 'cash', 'bank_transfer', 'points'],
       default: 'stripe'
     },
     transactionId: String,
     paidAt: Date,
-    refundedAt: Date
+    refundedAt: Date,
+    // 積分支付相關字段
+    pointsDeducted: {
+      type: Number,
+      default: 0
+    },
+    originalPrice: {
+      type: Number,
+      default: 0
+    },
+    discount: {
+      type: Number,
+      default: 0
+    }
   },
   specialRequests: {
     type: String,
     maxlength: [500, '特殊要求不能超過500個字符']
+  },
+  includeSoloCourt: {
+    type: Boolean,
+    default: false
   },
   cancellation: {
     cancelledAt: Date,

@@ -2,7 +2,9 @@ const express = require('express');
 const { body, validationResult, query } = require('express-validator');
 const Booking = require('../models/Booking');
 const Court = require('../models/Court');
+const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
+const whatsappService = require('../services/whatsappService');
 
 const router = express.Router();
 
@@ -40,7 +42,8 @@ router.post('/', [
   body('players.*.name').trim().isLength({ min: 1, max: 50 }).withMessage('玩家姓名必須在1-50個字符之間'),
   body('players.*.email').isEmail().withMessage('玩家電子郵件格式無效'),
   body('players.*.phone').matches(/^[0-9+\-\s()]+$/).withMessage('玩家電話號碼格式無效'),
-  body('specialRequests').optional().trim().isLength({ max: 500 }).withMessage('特殊要求不能超過500個字符')
+  body('specialRequests').optional().trim().isLength({ max: 500 }).withMessage('特殊要求不能超過500個字符'),
+  body('includeSoloCourt').optional().isBoolean().withMessage('單人場租用選項必須是布爾值')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -51,7 +54,18 @@ router.post('/', [
       });
     }
 
-    let { court, date, startTime, endTime, players, specialRequests } = req.body;
+    let { court, date, startTime, endTime, players, specialRequests, includeSoloCourt = false } = req.body;
+    
+    // 調試：記錄接收到的參數
+    console.log('🔍 預約創建請求參數:', {
+      court,
+      date,
+      startTime,
+      endTime,
+      players: players?.length,
+      specialRequests,
+      includeSoloCourt
+    });
 
     // 將 24:00 轉換為下一天的 00:00
     const normalizedEndTime = normalizeDateTime(date, endTime);
@@ -116,38 +130,195 @@ router.post('/', [
       calculatedEndDate.setDate(calculatedEndDate.getDate() + 1);
     }
 
-    // 創建預約（初始狀態為 pending，等待支付）
-    const booking = new Booking({
+    // 計算價格
+    const isMember = req.user.membershipLevel !== 'basic';
+    const isVip = req.user.membershipLevel === 'vip';
+    
+    // 創建預約對象來計算價格
+    const tempBooking = new Booking({
       user: req.user.id,
       court,
       date: bookingDate,
-      endDate: calculatedEndDate, // 明確保存結束日期
+      endDate: calculatedEndDate,
       startTime,
       endTime,
       duration,
       players,
-      totalPlayers: players.length + 1, // 包含預約者本人
+      totalPlayers: players.length + 1,
+      specialRequests
+    });
+    
+    // 計算價格
+    tempBooking.calculatePrice(courtDoc, isMember);
+    
+    // 計算實際需要扣除的積分（VIP會員8折）
+    let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
+    
+    // 如果包含單人場租用，添加100積分
+    if (includeSoloCourt) {
+      pointsToDeduct += 100;
+    }
+    
+    if (isVip) {
+      pointsToDeduct = Math.round(pointsToDeduct * 0.8); // VIP會員8折
+    }
+    
+    // 檢查用戶餘額
+    let userBalance = await UserBalance.findOne({ user: req.user.id });
+    if (!userBalance) {
+      userBalance = new UserBalance({ user: req.user.id });
+    }
+    
+    if (userBalance.balance < pointsToDeduct) {
+      return res.status(400).json({ 
+        message: '積分餘額不足',
+        required: pointsToDeduct,
+        available: userBalance.balance,
+        discount: isVip ? 'VIP會員8折' : '無折扣'
+      });
+    }
+    
+    // 扣除積分
+    await userBalance.deductBalance(
+      pointsToDeduct, 
+      `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}`,
+      null // 稍後會更新為實際的預約ID
+    );
+    
+    // 創建預約（直接確認，因為已扣積分）
+    const booking = new Booking({
+      user: req.user.id,
+      court,
+      date: bookingDate,
+      endDate: calculatedEndDate,
+      startTime,
+      endTime,
+      duration,
+      players,
+      totalPlayers: players.length + 1,
       specialRequests,
-      status: 'pending', // 明確設置為待支付狀態
+      includeSoloCourt, // 添加單人場租用信息
+      status: 'confirmed', // 直接確認
       payment: {
-        status: 'pending',
-        method: 'stripe'
+        status: 'paid',
+        method: 'points',
+        paidAt: new Date(),
+        pointsDeducted: pointsToDeduct,
+        originalPrice: tempBooking.pricing.totalPrice,
+        discount: isVip ? 20 : 0 // VIP折扣百分比
+      },
+      pricing: {
+        basePrice: tempBooking.pricing.basePrice,
+        memberDiscount: tempBooking.pricing.memberDiscount,
+        totalPrice: tempBooking.pricing.totalPrice,
+        pointsDeducted: pointsToDeduct,
+        vipDiscount: isVip ? 20 : 0,
+        soloCourtFee: includeSoloCourt ? 100 : 0 // 單人場費用
       }
     });
 
-    // 計算價格
-    const isMember = req.user.membershipLevel !== 'basic';
-    booking.calculatePrice(courtDoc, isMember);
-
     await booking.save();
+    
+    // 調試：記錄保存的預約信息
+    console.log('🔍 預約保存成功:', {
+      bookingId: booking._id,
+      includeSoloCourt: booking.includeSoloCourt,
+      soloCourtFee: booking.pricing.soloCourtFee,
+      totalPointsDeducted: booking.pricing.pointsDeducted
+    });
+    
+    // 如果包含單人場，創建單人場預約記錄
+    let soloCourtBooking = null;
+    if (includeSoloCourt) {
+      console.log('🔍 創建單人場預約記錄...');
+      
+      // 找到單人場
+      const soloCourt = await Court.findOne({ type: 'solo' });
+      if (!soloCourt) {
+        console.error('❌ 找不到單人場');
+        return res.status(500).json({ message: '找不到單人場' });
+      }
+      
+      // 創建單人場預約記錄
+      soloCourtBooking = new Booking({
+        user: req.user.id,
+        court: soloCourt._id,
+        date: bookingDate,
+        endDate: calculatedEndDate,
+        startTime,
+        endTime,
+        duration,
+        players: players, // 使用相同的玩家信息
+        totalPlayers: players.length + 1,
+        specialRequests: `單人場租用 - 與主場地同時段使用`,
+        includeSoloCourt: false, // 單人場記錄本身不包含單人場
+        status: 'confirmed',
+        payment: {
+          status: 'paid',
+          method: 'points',
+          paidAt: new Date(),
+          pointsDeducted: 0, // 單人場費用已包含在主預約中
+          originalPrice: 100,
+          discount: 0
+        },
+        pricing: {
+          basePrice: 100,
+          memberDiscount: 0,
+          totalPrice: 100,
+          pointsDeducted: 0, // 費用已包含在主預約中
+          vipDiscount: 0,
+          soloCourtFee: 0
+        }
+      });
+      
+      await soloCourtBooking.save();
+      console.log('🔍 單人場預約記錄創建成功:', {
+        soloBookingId: soloCourtBooking._id,
+        soloCourt: soloCourt.name,
+        date: bookingDate,
+        timeSlot: `${startTime}-${endTime}`
+      });
+    }
+    
+    // 更新用戶餘額記錄中的預約ID
+    const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
+    latestTransaction.relatedBooking = booking._id;
+    await userBalance.save();
 
     // 填充場地信息
     await booking.populate('court', 'name number type amenities');
 
-    res.status(201).json({
+    // 發送 WhatsApp 確認通知
+    try {
+      const phoneNumber = booking.players[0]?.phone || req.user.phone;
+      if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+        await whatsappService.sendBookingConfirmation(booking, phoneNumber);
+        console.log('✅ WhatsApp 預約確認通知已發送');
+      } else {
+        console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
+      }
+    } catch (whatsappError) {
+      console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
+      // 不影響預約創建，只記錄錯誤
+    }
+
+    // 準備響應數據
+    const responseData = {
       message: '預約創建成功',
-      booking
-    });
+      booking,
+      pointsDeducted: pointsToDeduct,
+      remainingBalance: userBalance.balance,
+      discount: isVip ? 'VIP會員8折' : '無折扣'
+    };
+
+    // 如果創建了單人場預約，添加到響應中
+    if (soloCourtBooking) {
+      await soloCourtBooking.populate('court', 'name number type amenities');
+      responseData.soloCourtBooking = soloCourtBooking;
+      responseData.message = '預約創建成功（包含單人場）';
+    }
+
+    res.status(201).json(responseData);
   } catch (error) {
     console.error('創建預約錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
@@ -249,6 +420,20 @@ router.put('/:id/cancel', [
     };
 
     await booking.save();
+
+    // 發送 WhatsApp 取消通知
+    try {
+      const phoneNumber = booking.players[0]?.phone || req.user.phone;
+      if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+        await whatsappService.sendBookingCancellation(booking, phoneNumber);
+        console.log('✅ WhatsApp 預約取消通知已發送');
+      } else {
+        console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
+      }
+    } catch (whatsappError) {
+      console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
+      // 不影響預約取消，只記錄錯誤
+    }
 
     res.json({ 
       message: '預約取消成功',

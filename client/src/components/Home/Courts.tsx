@@ -14,8 +14,9 @@ const Courts: React.FC = () => {
 
   const getCourtTypeText = (type: string) => {
     switch (type) {
-      case 'indoor': return '室內場地';
-      case 'outdoor': return '室外場地';
+      case 'competition': return '比賽場';
+      case 'training': return '訓練場';
+      case 'solo': return '單人場';
       case 'dink': return '練習場';
       default: return '場地';
     }
@@ -23,8 +24,9 @@ const Courts: React.FC = () => {
 
   const getCourtTypeColor = (type: string) => {
     switch (type) {
-      case 'indoor': return 'bg-blue-100 text-blue-800';
-      case 'outdoor': return 'bg-green-100 text-green-800';
+      case 'competition': return 'bg-red-100 text-red-800';
+      case 'training': return 'bg-purple-100 text-purple-800';
+      case 'solo': return 'bg-orange-100 text-orange-800';
       case 'dink': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -109,7 +111,9 @@ const Courts: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-1">
                     <ClockIcon className="w-4 h-4" />
-                    <span>7am-11pm</span>
+                    <span>
+                      {court.type === 'solo' ? '8am-11pm' : '24小時營業'}
+                    </span>
                   </div>
                 </div>
 
@@ -135,19 +139,32 @@ const Courts: React.FC = () => {
                 )}
 
                 {/* 價格信息 */}
-                <div className="mb-6">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">非高峰時段</span>
-                    <span className="text-lg font-bold text-primary-600">
-                      ${court.pricing.offPeak}/小時
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-500">高峰時段</span>
-                    <span className="text-lg font-bold text-primary-600">
-                      ${court.pricing.peakHour}/小時
-                    </span>
-                  </div>
+                <div className="mb-6 space-y-2">
+                  {court.pricing.timeSlots && court.pricing.timeSlots.length > 0 ? (
+                    court.pricing.timeSlots.map((slot, idx) => (
+                      <div key={idx} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">{slot.name}</span>
+                        <span className="text-lg font-bold text-primary-600">
+                          {slot.price} 積分/小時
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">非繁忙時間</span>
+                        <span className="text-lg font-bold text-primary-600">
+                          {court.pricing.offPeak} 積分/小時
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-500">繁忙時間</span>
+                        <span className="text-lg font-bold text-primary-600">
+                          {court.pricing.peakHour} 積分/小時
+                        </span>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* 預約按鈕 */}

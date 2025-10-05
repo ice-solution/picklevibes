@@ -7,7 +7,10 @@ import {
   ShieldCheckIcon,
   StarIcon,
   XMarkIcon,
-  CheckIcon
+  CheckIcon,
+  CurrencyDollarIcon,
+  PlusIcon,
+  ClockIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
@@ -17,10 +20,20 @@ interface User {
   email: string;
   phone: string;
   role: 'user' | 'admin' | 'coach';
-  membershipLevel: 'basic' | 'premium' | 'vip';
+  membershipLevel: 'basic' | 'vip';
+  membershipExpiry?: string;
   isActive: boolean;
   createdAt: string;
   lastLogin: string;
+  balance: number;
+  totalRecharged: number;
+  totalSpent: number;
+  recentTransactions?: Array<{
+    type: 'recharge' | 'spend' | 'refund';
+    amount: number;
+    description: string;
+    createdAt: string;
+  }>;
 }
 
 interface UserStats {
@@ -42,6 +55,19 @@ const UserManagement: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingField, setEditingField] = useState<'role' | 'membership' | 'status' | null>(null);
   const [newValue, setNewValue] = useState('');
+  const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [rechargePoints, setRechargePoints] = useState('');
+  const [rechargeReason, setRechargeReason] = useState('');
+  const [showBalanceHistory, setShowBalanceHistory] = useState(false);
+  const [balanceHistory, setBalanceHistory] = useState<any[]>([]);
+  const [showRechargeRecords, setShowRechargeRecords] = useState(false);
+  const [rechargeRecords, setRechargeRecords] = useState<any[]>([]);
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [selectedRecharge, setSelectedRecharge] = useState<any>(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [statusReason, setStatusReason] = useState('');
+  const [showMembershipModal, setShowMembershipModal] = useState(false);
+  const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
 
   useEffect(() => {
     fetchUsers();
@@ -129,6 +155,79 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  const handleRechargeUser = (user: User) => {
+    setSelectedUser(user);
+    setRechargePoints('');
+    setRechargeReason('');
+    setShowRechargeModal(true);
+  };
+
+  const handleSubmitRecharge = async () => {
+    if (!selectedUser || !rechargePoints || !rechargeReason) return;
+    
+    try {
+      await axios.post(`/users/${selectedUser._id}/manual-recharge`, {
+        points: parseInt(rechargePoints),
+        reason: rechargeReason
+      });
+      
+      setShowRechargeModal(false);
+      fetchUsers(); // 刷新用戶列表
+      alert('充值成功！');
+    } catch (error) {
+      console.error('充值失敗:', error);
+      alert('充值失敗，請稍後再試');
+    }
+  };
+
+  const handleViewBalanceHistory = async (user: User) => {
+    try {
+      const response = await axios.get(`/users/${user._id}/balance-history`);
+      setBalanceHistory(response.data.transactions);
+      setSelectedUser(user);
+      setShowBalanceHistory(true);
+    } catch (error) {
+      console.error('獲取積分歷史失敗:', error);
+    }
+  };
+
+  const handleViewRechargeRecords = async (user: User) => {
+    try {
+      const response = await axios.get(`/users/${user._id}/recharge-records`);
+      setRechargeRecords(response.data.rechargeRecords);
+      setSelectedUser(user);
+      setShowRechargeRecords(true);
+    } catch (error) {
+      console.error('獲取充值記錄失敗:', error);
+    }
+  };
+
+  const handleChangeRechargeStatus = (recharge: any) => {
+    setSelectedRecharge(recharge);
+    setNewStatus(recharge.status);
+    setStatusReason('');
+    setShowStatusModal(true);
+  };
+
+  const handleSubmitStatusChange = async () => {
+    if (!selectedRecharge || !selectedUser || !newStatus) return;
+    
+    try {
+      await axios.put(`/users/${selectedUser._id}/recharge-records/${selectedRecharge._id}/status`, {
+        status: newStatus,
+        reason: statusReason
+      });
+      
+      setShowStatusModal(false);
+      // 重新獲取充值記錄
+      handleViewRechargeRecords(selectedUser);
+      alert('狀態更新成功！');
+    } catch (error) {
+      console.error('更新狀態失敗:', error);
+      alert('更新狀態失敗，請稍後再試');
+    }
+  };
+
   const getRoleColor = (role: string) => {
     switch (role) {
       case 'admin': return 'bg-red-100 text-red-800';
@@ -140,8 +239,46 @@ const UserManagement: React.FC = () => {
   const getMembershipColor = (level: string) => {
     switch (level) {
       case 'vip': return 'bg-purple-100 text-purple-800';
-      case 'premium': return 'bg-yellow-100 text-yellow-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleChangeMembership = (user: User) => {
+    setSelectedUser(user);
+    setSelectedMembership(user.membershipLevel);
+    setShowMembershipModal(true);
+  };
+
+  const handleSubmitMembershipChange = async () => {
+    if (!selectedUser) return;
+    
+    try {
+      await axios.put(`/users/${selectedUser._id}/membership`, {
+        membershipLevel: selectedMembership
+      });
+      
+      setShowMembershipModal(false);
+      fetchUsers(); // 重新獲取用戶列表
+      alert(`會員等級已更新為 ${selectedMembership === 'vip' ? 'VIP會員' : '普通會員'}！`);
+    } catch (error) {
+      console.error('更新會員等級失敗:', error);
+      alert('更新會員等級失敗，請稍後再試');
+    }
+  };
+
+  const formatMembershipExpiry = (expiry: string | undefined) => {
+    if (!expiry) return '無限期';
+    const date = new Date(expiry);
+    const now = new Date();
+    const isExpired = date < now;
+    const daysLeft = Math.ceil((date.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+    
+    if (isExpired) {
+      return '已過期';
+    } else if (daysLeft <= 7) {
+      return `${daysLeft}天後過期`;
+    } else {
+      return date.toLocaleDateString('zh-TW');
     }
   };
 
@@ -230,6 +367,9 @@ const UserManagement: React.FC = () => {
                   會員等級
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  積分餘額
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   狀態
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -253,9 +393,26 @@ const UserManagement: React.FC = () => {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getMembershipColor(user.membershipLevel)}`}>
-                      {user.membershipLevel === 'vip' ? 'VIP' : user.membershipLevel === 'premium' ? '高級' : '基本'}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getMembershipColor(user.membershipLevel)}`}>
+                        {user.membershipLevel === 'vip' ? 'VIP會員' : '普通會員'}
+                      </span>
+                      {user.membershipLevel === 'vip' && user.membershipExpiry && (
+                        <span className="text-xs text-gray-500 mt-1">
+                          {formatMembershipExpiry(user.membershipExpiry)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center">
+                      <CurrencyDollarIcon className="w-4 h-4 text-green-600 mr-1" />
+                      <span className="text-sm font-medium text-gray-900">{user.balance || 0}</span>
+                      <div className="ml-2 text-xs text-gray-500">
+                        <div>充值: {user.totalRecharged || 0}</div>
+                        <div>消費: {user.totalSpent || 0}</div>
+                      </div>
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
@@ -274,7 +431,7 @@ const UserManagement: React.FC = () => {
                         <PencilIcon className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => handleEditUser(user, 'membership')}
+                        onClick={() => handleChangeMembership(user)}
                         className="text-yellow-600 hover:text-yellow-900"
                         title="修改會員等級"
                       >
@@ -286,6 +443,27 @@ const UserManagement: React.FC = () => {
                         title="修改狀態"
                       >
                         <ShieldCheckIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleRechargeUser(user)}
+                        className="text-purple-600 hover:text-purple-900"
+                        title="手動充值"
+                      >
+                        <PlusIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleViewBalanceHistory(user)}
+                        className="text-indigo-600 hover:text-indigo-900"
+                        title="查看積分歷史"
+                      >
+                        <ClockIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleViewRechargeRecords(user)}
+                        className="text-cyan-600 hover:text-cyan-900"
+                        title="查看充值記錄"
+                      >
+                        <CurrencyDollarIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteUser(user._id)}
@@ -375,6 +553,440 @@ const UserManagement: React.FC = () => {
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                   保存
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 充值模態框 */}
+      {showRechargeModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">手動充值</h3>
+              <button
+                onClick={() => setShowRechargeModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  為 <span className="font-medium">{selectedUser.name}</span> 充值積分
+                </p>
+                <p className="text-xs text-gray-500">當前餘額: {selectedUser.balance || 0} 分</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  充值積分
+                </label>
+                <input
+                  type="number"
+                  value={rechargePoints}
+                  onChange={(e) => setRechargePoints(e.target.value)}
+                  placeholder="輸入充值積分數量"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  min="1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  充值原因
+                </label>
+                <textarea
+                  value={rechargeReason}
+                  onChange={(e) => setRechargeReason(e.target.value)}
+                  placeholder="請輸入充值原因（如：補償用戶、活動獎勵等）"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  rows={3}
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowRechargeModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSubmitRecharge}
+                  disabled={!rechargePoints || !rechargeReason}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  確認充值
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 積分歷史模態框 */}
+      {showBalanceHistory && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {selectedUser.name} 的積分歷史
+              </h3>
+              <button
+                onClick={() => setShowBalanceHistory(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="mb-4 p-4 bg-gray-50 rounded-lg">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-sm text-gray-600">當前餘額</p>
+                  <p className="text-xl font-bold text-green-600">{selectedUser.balance || 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">總充值</p>
+                  <p className="text-xl font-bold text-blue-600">{selectedUser.totalRecharged || 0}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">總消費</p>
+                  <p className="text-xl font-bold text-red-600">{selectedUser.totalSpent || 0}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">類型</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">金額</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">描述</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">時間</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {balanceHistory.map((transaction, index) => (
+                    <tr key={index}>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          transaction.type === 'recharge' ? 'bg-green-100 text-green-800' :
+                          transaction.type === 'spend' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {transaction.type === 'recharge' ? '充值' :
+                           transaction.type === 'spend' ? '消費' : '退款'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`font-medium ${
+                          transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                        }`}>
+                          {transaction.amount > 0 ? '+' : ''}{transaction.amount}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-600">{transaction.description}</td>
+                      <td className="px-4 py-2 text-sm text-gray-500">
+                        {new Date(transaction.createdAt).toLocaleString('zh-TW')}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {balanceHistory.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                暫無積分交易記錄
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 充值記錄模態框 */}
+      {showRechargeRecords && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-6xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {selectedUser.name} 的充值記錄
+              </h3>
+              <button
+                onClick={() => setShowRechargeRecords(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">積分</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">金額</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">積分狀態</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">支付方式</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">描述</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">時間</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {rechargeRecords.map((record) => (
+                    <tr key={record._id}>
+                      <td className="px-4 py-2 text-sm text-gray-600">
+                        {record._id.substring(0, 8)}...
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="font-medium text-green-600">+{record.points}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className="font-medium">HK${record.amount}</span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                          record.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          record.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                          record.status === 'failed' ? 'bg-red-100 text-red-800' :
+                          'bg-gray-100 text-gray-800'
+                        }`}>
+                          {record.status === 'completed' ? '已完成' :
+                           record.status === 'pending' ? '待處理' :
+                           record.status === 'failed' ? '失敗' : '已取消'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex flex-col space-y-1">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            record.pointsAdded ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                          }`}>
+                            {record.pointsAdded ? '已添加' : '未添加'}
+                          </span>
+                          {record.pointsDeducted && (
+                            <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                              已扣除
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-600">
+                        {record.payment.method === 'manual' ? '手動充值' :
+                         record.payment.method === 'stripe' ? 'Stripe' :
+                         record.payment.method === 'alipay' ? '支付寶' : '微信支付'}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-600">{record.description}</td>
+                      <td className="px-4 py-2 text-sm text-gray-500">
+                        {new Date(record.createdAt).toLocaleString('zh-TW')}
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          onClick={() => handleChangeRechargeStatus(record)}
+                          className="text-blue-600 hover:text-blue-900 text-sm"
+                          title="修改狀態"
+                        >
+                          <PencilIcon className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {rechargeRecords.length === 0 && (
+              <div className="text-center py-8 text-gray-500">
+                暫無充值記錄
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 狀態修改模態框 */}
+      {showStatusModal && selectedRecharge && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">修改充值狀態</h3>
+              <button
+                onClick={() => setShowStatusModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  充值記錄: {selectedRecharge.points} 分 (HK${selectedRecharge.amount})
+                </p>
+                <p className="text-xs text-gray-500">當前狀態: {
+                  selectedRecharge.status === 'completed' ? '已完成' :
+                  selectedRecharge.status === 'pending' ? '待處理' :
+                  selectedRecharge.status === 'failed' ? '失敗' : '已取消'
+                }</p>
+                <div className="mt-2 flex space-x-2">
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                    selectedRecharge.pointsAdded ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    積分: {selectedRecharge.pointsAdded ? '已添加' : '未添加'}
+                  </span>
+                  {selectedRecharge.pointsDeducted && (
+                    <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                      已扣除
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  新狀態
+                </label>
+                <select
+                  value={newStatus}
+                  onChange={(e) => setNewStatus(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="pending">待處理</option>
+                  <option value="completed">已完成</option>
+                  <option value="failed">失敗</option>
+                  <option value="cancelled">已取消</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  修改原因
+                </label>
+                <textarea
+                  value={statusReason}
+                  onChange={(e) => setStatusReason(e.target.value)}
+                  placeholder="請輸入修改原因（可選）"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  rows={3}
+                />
+              </div>
+
+              <div className="bg-yellow-50 p-3 rounded-lg">
+                <p className="text-sm text-yellow-800">
+                  <strong>注意：</strong>
+                  {newStatus === 'completed' && ' 確認後將為用戶增加積分'}
+                  {newStatus === 'cancelled' && ' 取消後將扣除用戶積分'}
+                  {newStatus === 'failed' && ' 標記為失敗，不會影響用戶積分'}
+                </p>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowStatusModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSubmitStatusChange}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                  確認修改
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 會員等級管理模態框 */}
+      {showMembershipModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">修改會員等級</h3>
+              <button
+                onClick={() => setShowMembershipModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  用戶: {selectedUser.name} ({selectedUser.email})
+                </p>
+                <p className="text-xs text-gray-500">當前等級: {
+                  selectedUser.membershipLevel === 'vip' ? 'VIP會員' : '普通會員'
+                }</p>
+                {selectedUser.membershipLevel === 'vip' && selectedUser.membershipExpiry && (
+                  <p className="text-xs text-gray-500">
+                    到期時間: {formatMembershipExpiry(selectedUser.membershipExpiry)}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  選擇會員等級
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="membershipLevel"
+                      value="basic"
+                      checked={selectedMembership === 'basic'}
+                      onChange={(e) => setSelectedMembership(e.target.value as 'basic' | 'vip')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">普通會員</span>
+                  </label>
+                  <label className="flex items-center">
+                    <input
+                      type="radio"
+                      name="membershipLevel"
+                      value="vip"
+                      checked={selectedMembership === 'vip'}
+                      onChange={(e) => setSelectedMembership(e.target.value as 'basic' | 'vip')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">VIP會員 (180天有效期)</span>
+                  </label>
+                </div>
+              </div>
+
+              {selectedMembership === 'vip' && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <p className="text-sm text-yellow-800">
+                    <strong>注意：</strong>設置為VIP會員後，會籍將從今天開始計算，有效期為180天。
+                  </p>
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowMembershipModal(false)}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSubmitMembershipChange}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                  確認修改
                 </button>
               </div>
             </div>

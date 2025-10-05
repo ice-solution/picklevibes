@@ -6,7 +6,7 @@ interface Court {
   _id: string;
   name: string;
   number: number;
-  type: 'indoor' | 'outdoor' | 'dink';
+  type: 'competition' | 'training' | 'solo' | 'dink';
   description?: string;
   capacity: number;
   amenities: string[];
@@ -14,6 +14,12 @@ interface Court {
     peakHour: number;
     offPeak: number;
     memberDiscount: number;
+    timeSlots?: Array<{
+      startTime: string;
+      endTime: string;
+      price: number;
+      name: string;
+    }>;
   };
   operatingHours: {
     [key: string]: {
@@ -54,10 +60,13 @@ interface Booking {
   status: 'pending' | 'confirmed' | 'cancelled' | 'completed' | 'no_show';
   payment: {
     status: 'pending' | 'paid' | 'failed' | 'refunded';
-    method: 'stripe' | 'cash' | 'bank_transfer';
+    method: 'stripe' | 'cash' | 'bank_transfer' | 'points';
     transactionId?: string;
     paidAt?: string;
     refundedAt?: string;
+    pointsDeducted?: number;
+    originalPrice?: number;
+    discount?: number;
   };
   specialRequests?: string;
   createdAt: string;
@@ -71,6 +80,8 @@ interface BookingContextType {
   selectedDate: string;
   selectedTimeSlot: { start: string; end: string } | null;
   players: Player[];
+  includeSoloCourt: boolean;
+  soloCourtAvailable: boolean;
   loading: boolean;
   error: string | null;
   
@@ -79,12 +90,14 @@ interface BookingContextType {
   fetchBookings: () => Promise<void>;
   checkAvailability: (courtId: string, date: string, startTime: string, endTime: string) => Promise<any>;
   checkBatchAvailability: (courtId: string, date: string, timeSlots: Array<{startTime: string, endTime: string}>) => Promise<any>;
+  checkSoloCourtAvailability: (date: string, startTime: string, endTime: string) => Promise<boolean>;
   createBooking: (bookingData: CreateBookingData) => Promise<Booking>;
   cancelBooking: (bookingId: string, reason?: string) => Promise<void>;
   setSelectedCourt: (court: Court | null) => void;
   setSelectedDate: (date: string) => void;
   setSelectedTimeSlot: (timeSlot: { start: string; end: string } | null) => void;
   setPlayers: (players: Player[]) => void;
+  setIncludeSoloCourt: (include: boolean) => void;
   clearError: () => void;
 }
 
@@ -95,6 +108,7 @@ interface CreateBookingData {
   endTime: string;
   players: Player[];
   specialRequests?: string;
+  includeSoloCourt?: boolean;
 }
 
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
@@ -106,6 +120,8 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedTimeSlot, setSelectedTimeSlot] = useState<{ start: string; end: string } | null>(null);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [includeSoloCourt, setIncludeSoloCourt] = useState(false);
+  const [soloCourtAvailable, setSoloCourtAvailable] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -178,6 +194,29 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     }
   }, []);
 
+  const checkSoloCourtAvailability = useCallback(async (date: string, startTime: string, endTime: string) => {
+    try {
+      // 找到單人場
+      const soloCourt = courts.find(court => court.type === 'solo');
+      if (!soloCourt) {
+        setSoloCourtAvailable(false);
+        return false;
+      }
+
+      const response = await axios.get(`/courts/${soloCourt._id}/availability`, {
+        params: { date, startTime, endTime }
+      });
+      
+      const isAvailable = response.data.available;
+      setSoloCourtAvailable(isAvailable);
+      return isAvailable;
+    } catch (error: any) {
+      console.error('檢查單人場可用性失敗:', error);
+      setSoloCourtAvailable(false);
+      return false;
+    }
+  }, [courts]);
+
   const createBooking = useCallback(async (bookingData: CreateBookingData): Promise<Booking> => {
     try {
       setLoading(true);
@@ -219,18 +258,22 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     selectedDate,
     selectedTimeSlot,
     players,
+    includeSoloCourt,
+    soloCourtAvailable,
     loading,
     error,
     fetchCourts,
     fetchBookings,
     checkAvailability,
     checkBatchAvailability,
+    checkSoloCourtAvailability,
     createBooking,
     cancelBooking,
     setSelectedCourt,
     setSelectedDate,
     setSelectedTimeSlot,
     setPlayers,
+    setIncludeSoloCourt,
     clearError
   }), [
     courts,
@@ -239,14 +282,18 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     selectedDate,
     selectedTimeSlot,
     players,
+    includeSoloCourt,
+    soloCourtAvailable,
     loading,
     error,
     fetchCourts,
     fetchBookings,
     checkAvailability,
     checkBatchAvailability,
+    checkSoloCourtAvailability,
     createBooking,
     cancelBooking,
+    setIncludeSoloCourt,
     clearError
   ]);
 

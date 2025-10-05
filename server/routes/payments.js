@@ -3,263 +3,17 @@ const { body, validationResult } = require('express-validator');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Booking = require('../models/Booking');
 const StripeTransaction = require('../models/StripeTransaction');
+const Recharge = require('../models/Recharge');
+const UserBalance = require('../models/UserBalance');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
-// @route   POST /api/payments/create-checkout-session
-// @desc    創建 Stripe Checkout Session (Redirect 支付)
-// @access  Private
-router.post('/create-checkout-session', [
-  auth,
-  body('bookingId').isMongoId().withMessage('請提供有效的預約ID'),
-  body('amount').isFloat({ min: 0 }).withMessage('金額必須大於等於0')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        message: '輸入驗證失敗',
-        errors: errors.array()
-      });
-    }
+// 預約現在使用積分支付，不再需要 Stripe Checkout Session
 
-    const { bookingId, amount } = req.body;
+// 預約現在使用積分支付，不再需要 Stripe Payment Intent
 
-    // 驗證預約是否存在且屬於當前用戶
-    const booking = await Booking.findById(bookingId).populate('court', 'name number type');
-    if (!booking) {
-      return res.status(404).json({ message: '預約不存在' });
-    }
-
-    if (booking.user.toString() !== req.user.id) {
-      return res.status(403).json({ message: '無權限支付此預約' });
-    }
-
-    if (booking.payment.status === 'paid') {
-      return res.status(400).json({ message: '此預約已支付' });
-    }
-
-    // 如果金額為 0，直接標記為已支付
-    if (amount <= 0) {
-      booking.payment.status = 'paid';
-      booking.status = 'confirmed';
-      await booking.save();
-      
-      return res.json({
-        message: '預約已確認（無需支付）',
-        url: null,
-        amount: 0
-      });
-    }
-
-    // 創建 Stripe Checkout Session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card', 'alipay'], // 暫時移除 wechat_pay，因為需要額外配置
-      line_items: [
-        {
-          price_data: {
-            currency: 'hkd',
-            product_data: {
-              name: `場地預約 - ${booking.court.name}`,
-              description: `預約時間: ${booking.date} ${booking.startTime}-${booking.endTime}`,
-            },
-            unit_amount: Math.round(amount * 100), // 轉換為分
-          },
-          quantity: 1,
-        },
-      ],
-      mode: 'payment',
-      success_url: `${process.env.CLIENT_URL}/payment-result?session_id={CHECKOUT_SESSION_ID}&status=success`,
-      cancel_url: `${process.env.CLIENT_URL}/payment-result?status=cancelled`,
-      metadata: {
-        bookingId: bookingId,
-        userId: req.user.id
-      },
-      customer_email: req.user.email,
-    });
-
-    // 更新預約的支付信息
-    booking.payment.transactionId = session.id;
-    await booking.save();
-
-    // 保存 Stripe 交易記錄
-    const stripeTransaction = new StripeTransaction({
-      paymentIntentId: session.id,
-      booking: bookingId,
-      user: req.user.id,
-      amount: Math.round(amount * 100),
-      currency: 'hkd',
-      status: 'requires_payment_method',
-      description: `場地預約 - ${booking.court.name}`,
-      metadata: {
-        sessionId: session.id,
-        bookingId: bookingId
-      }
-    });
-    await stripeTransaction.save();
-
-    res.json({
-      message: 'Checkout Session 創建成功',
-      url: session.url
-    });
-
-  } catch (error) {
-    console.error('創建 Checkout Session 錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
-  }
-});
-
-// @route   POST /api/payments/create-payment-intent
-// @desc    創建支付意圖
-// @access  Private
-router.post('/create-payment-intent', [
-  auth,
-  body('bookingId').isMongoId().withMessage('請提供有效的預約ID'),
-  body('amount').isFloat({ min: 0 }).withMessage('金額必須大於等於0')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        message: '輸入驗證失敗',
-        errors: errors.array()
-      });
-    }
-
-    const { bookingId, amount } = req.body;
-
-    // 驗證預約是否存在且屬於當前用戶
-    const booking = await Booking.findById(bookingId);
-    if (!booking) {
-      return res.status(404).json({ message: '預約不存在' });
-    }
-
-    if (booking.user.toString() !== req.user.id) {
-      return res.status(403).json({ message: '無權限支付此預約' });
-    }
-
-    if (booking.payment.status === 'paid') {
-      return res.status(400).json({ message: '此預約已支付' });
-    }
-
-    // 如果金額為 0，直接標記為已支付
-    if (amount <= 0) {
-      booking.payment.status = 'paid';
-      booking.status = 'confirmed';
-      await booking.save();
-      
-      return res.json({
-        message: '預約已確認（無需支付）',
-        clientSecret: null,
-        amount: 0
-      });
-    }
-
-    // 創建Stripe支付意圖
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // 轉換為分
-      currency: 'hkd',
-      metadata: {
-        bookingId: bookingId,
-        userId: req.user.id
-      },
-      automatic_payment_methods: {
-        enabled: true,
-      },
-    });
-
-    // 更新預約的支付信息
-    booking.payment.transactionId = paymentIntent.id;
-    await booking.save();
-
-    // 保存 Stripe 交易記錄
-    const stripeTransaction = new StripeTransaction({
-      paymentIntentId: paymentIntent.id,
-      booking: bookingId,
-      user: req.user.id,
-      amount: paymentIntent.amount,
-      currency: paymentIntent.currency,
-      status: paymentIntent.status,
-      description: `預約場地: ${booking.court.name} - ${booking.date.toDateString()}`,
-      metadata: {
-        bookingId: bookingId,
-        userId: req.user.id,
-        courtName: booking.court.name
-      },
-      stripeResponse: paymentIntent
-    });
-    await stripeTransaction.save();
-
-    res.json({
-      clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
-    });
-  } catch (error) {
-    console.error('創建支付意圖錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
-  }
-});
-
-// @route   POST /api/payments/confirm
-// @desc    確認支付
-// @access  Private
-router.post('/confirm', [
-  auth,
-  body('paymentIntentId').notEmpty().withMessage('支付意圖ID為必填項目')
-], async (req, res) => {
-  try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ 
-        message: '輸入驗證失敗',
-        errors: errors.array()
-      });
-    }
-
-    const { paymentIntentId } = req.body;
-
-    // 驗證支付意圖
-    const paymentIntent = await stripe.paymentIntents.retrieve(paymentIntentId);
-    
-    if (paymentIntent.status !== 'succeeded') {
-      return res.status(400).json({ message: '支付未成功' });
-    }
-
-    // 查找對應的預約
-    const booking = await Booking.findOne({ 
-      'payment.transactionId': paymentIntentId 
-    });
-
-    if (!booking) {
-      return res.status(404).json({ message: '找不到對應的預約' });
-    }
-
-    // 更新預約狀態
-    booking.payment.status = 'paid';
-    booking.payment.paidAt = new Date();
-    booking.status = 'confirmed';
-    await booking.save();
-
-    // 更新 Stripe 交易記錄
-    await StripeTransaction.findOneAndUpdate(
-      { paymentIntentId: paymentIntentId },
-      { 
-        status: 'succeeded',
-        paidAt: new Date(),
-        stripeResponse: paymentIntent
-      }
-    );
-
-    res.json({
-      message: '支付確認成功',
-      booking
-    });
-  } catch (error) {
-    console.error('確認支付錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
-  }
-});
+// 預約現在使用積分支付，不再需要 Stripe 支付確認
 
 // @route   POST /api/payments/refund
 // @desc    處理退款
@@ -452,46 +206,7 @@ router.post('/test-callback', async (req, res) => {
   }
 });
 
-// @route   POST /api/payments/checkout-success
-// @desc    處理 Stripe Checkout 成功回調
-// @access  Public
-router.post('/checkout-success', async (req, res) => {
-  try {
-    const { sessionId, bookingId } = req.body;
-
-    if (!sessionId || !bookingId) {
-      return res.status(400).json({ message: '缺少必要參數' });
-    }
-
-    // 驗證 Stripe Session
-    const session = await stripe.checkout.sessions.retrieve(sessionId);
-    
-    if (session.payment_status === 'paid') {
-      // 更新預約狀態
-      const booking = await Booking.findById(bookingId);
-      if (booking) {
-        booking.payment.status = 'paid';
-        booking.status = 'confirmed';
-        await booking.save();
-
-        // 更新 Stripe 交易記錄
-        await StripeTransaction.findOneAndUpdate(
-          { paymentIntentId: sessionId },
-          { 
-            status: 'succeeded',
-            paidAt: new Date(),
-            stripeResponse: session
-          }
-        );
-      }
-    }
-
-    res.json({ message: '支付狀態更新成功' });
-  } catch (error) {
-    console.error('處理 Checkout 成功回調錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤' });
-  }
-});
+// 預約現在使用積分支付，不再需要 Stripe Checkout 成功回調
 
 // @route   POST /api/payments/webhook
 // @desc    Stripe webhook處理
@@ -514,49 +229,16 @@ router.post('/webhook', async (req, res) => {
       const paymentIntent = event.data.object;
       console.log('支付成功:', paymentIntent.id);
       
-      // 更新預約狀態
-      await Booking.findOneAndUpdate(
-        { 'payment.transactionId': paymentIntent.id },
-        { 
-          'payment.status': 'paid',
-          'payment.paidAt': new Date(),
-          status: 'confirmed'
-        }
-      );
-
-      // 更新 Stripe 交易記錄
-      await StripeTransaction.findOneAndUpdate(
-        { paymentIntentId: paymentIntent.id },
-        { 
-          status: 'succeeded',
-          paidAt: new Date(),
-          stripeResponse: paymentIntent
-        }
-      );
+      // 預約現在使用積分支付，不再需要 Stripe 處理
+      console.log('⚠️  收到 payment_intent.succeeded，但預約現在使用積分支付，跳過處理');
       break;
 
     case 'payment_intent.payment_failed':
       const failedPayment = event.data.object;
       console.log('支付失敗:', failedPayment.id);
       
-      // 更新預約狀態
-      await Booking.findOneAndUpdate(
-        { 'payment.transactionId': failedPayment.id },
-        { 
-          'payment.status': 'failed',
-          status: 'cancelled'
-        }
-      );
-
-      // 更新 Stripe 交易記錄
-      await StripeTransaction.findOneAndUpdate(
-        { paymentIntentId: failedPayment.id },
-        { 
-          status: 'canceled',
-          lastPaymentError: failedPayment.last_payment_error,
-          stripeResponse: failedPayment
-        }
-      );
+      // 預約現在使用積分支付，不再需要 Stripe 處理
+      console.log('⚠️  收到 payment_intent.payment_failed，但預約現在使用積分支付，跳過處理');
       break;
 
     case 'checkout.session.completed':
@@ -564,33 +246,49 @@ router.post('/webhook', async (req, res) => {
       console.log('Checkout Session 完成:', session.id);
       console.log('支付狀態:', session.payment_status);
       
-      // 從 metadata 獲取 bookingId
+      // 從 metadata 獲取訂單信息
       const bookingId = session.metadata?.bookingId;
-      
-      if (!bookingId) {
-        console.error('❌ Checkout Session 缺少 bookingId metadata');
-        break;
-      }
+      const rechargeId = session.metadata?.rechargeId;
       
       // 只有在支付成功時才更新
       if (session.payment_status === 'paid') {
-        console.log('✅ 支付已完成，更新預約狀態...');
+        console.log('✅ 支付已完成，處理訂單...');
         
-        const updatedBooking = await Booking.findByIdAndUpdate(
-          bookingId,
-          { 
-            'payment.status': 'paid',
-            'payment.paidAt': new Date(),
-            'payment.transactionId': session.id,
-            status: 'confirmed'
-          },
-          { new: true }
-        );
+        // 預約現在使用積分支付，不再需要 Stripe 處理
+        if (bookingId) {
+          console.log('⚠️  收到預約訂單 webhook，但預約現在使用積分支付，跳過處理');
+        }
         
-        if (updatedBooking) {
-          console.log('✅ 預約已確認:', updatedBooking._id);
-        } else {
-          console.error('❌ 找不到預約:', bookingId);
+        // 處理充值訂單
+        if (rechargeId) {
+          console.log('💰 處理充值訂單:', rechargeId);
+          
+          const recharge = await Recharge.findById(rechargeId);
+          if (recharge && recharge.status === 'pending') {
+            // 更新充值狀態
+            recharge.status = 'completed';
+            recharge.payment.status = 'paid';
+            recharge.payment.paidAt = new Date();
+            recharge.payment.transactionId = session.id;
+            await recharge.save();
+            
+            // 更新用戶餘額
+            let userBalance = await UserBalance.findOne({ user: recharge.user });
+            if (!userBalance) {
+              userBalance = new UserBalance({ user: recharge.user });
+            }
+            
+            await userBalance.addBalance(recharge.points, `充值 ${recharge.points} 分`);
+            
+            console.log('✅ 充值已完成，用戶餘額已更新');
+          } else {
+            console.error('❌ 找不到充值記錄或狀態不正確:', rechargeId);
+          }
+        }
+        
+        // 如果沒有找到任何訂單ID
+        if (!bookingId && !rechargeId) {
+          console.error('❌ Checkout Session 缺少訂單 metadata (bookingId 或 rechargeId)');
         }
 
         // 更新或創建 Stripe 交易記錄
@@ -598,7 +296,8 @@ router.post('/webhook', async (req, res) => {
           { paymentIntentId: session.id },
           { 
             paymentIntentId: session.id,
-            booking: bookingId,
+            booking: bookingId || null,
+            recharge: rechargeId || null,
             user: session.metadata?.userId,
             amount: session.amount_total,
             currency: session.currency,
