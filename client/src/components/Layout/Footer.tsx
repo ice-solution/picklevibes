@@ -33,15 +33,15 @@ const Footer: React.FC = () => {
       { name: '預約', href: '/booking' },
     ],
     support: [
-      { name: '幫助中心', href: '/help' },
+      // { name: '幫助中心', href: '/help' },
       { name: '常見問題', href: '/faq' },
-      { name: '聯繫我們', href: '/contact' },
+      // { name: '聯繫我們', href: '/contact' },
       { name: '隱私政策', href: '/privacy' },
     ],
     legal: [
-      { name: '服務條款', href: '/terms' },
-      { name: '退款政策', href: '/refund' },
-      { name: '會員條款', href: '/membership' },
+      { name: '服務條款', href: '/terms' }
+      // { name: '退款政策', href: '/refund' },
+      // { name: '會員條款', href: '/membership' },
     ]
   };
 

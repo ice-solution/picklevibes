@@ -21,7 +21,7 @@ const Terms: React.FC = () => {
             請仔細閱讀以下條款，使用我們的服務即表示您同意遵守這些條款
           </p>
           <div className="mt-4 text-sm text-gray-500">
-            最後更新：2024年1月
+            最後更新：2025年10月
           </div>
         </motion.div>
 
