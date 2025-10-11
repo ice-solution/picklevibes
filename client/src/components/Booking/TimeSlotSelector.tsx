@@ -22,11 +22,56 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number }>>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(60); // 默認1小時
+  const [currentTime, setCurrentTime] = useState(new Date()); // 添加當前時間狀態
+  const [forceUpdate, setForceUpdate] = useState(0); // 強制更新計數器
 
   const durations = [
     { value: 60, label: '1小時' },
     { value: 120, label: '2小時' }
   ];
+
+  // 定期更新當前時間
+  useEffect(() => {
+    // 立即更新一次
+    setCurrentTime(new Date());
+    setForceUpdate(prev => prev + 1);
+    
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+      setForceUpdate(prev => prev + 1);
+    }, 30000); // 每30秒更新一次
+
+    return () => clearInterval(timer);
+  }, []);
+
+  // 檢查時間是否已經過去
+  const isTimeInPast = useCallback((timeString: string, selectedDate: string) => {
+    const now = currentTime; // 使用狀態中的當前時間
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const selectedDateObj = new Date(selectedDate);
+    
+    // 使用日期字符串比較而不是時間戳比較
+    const todayString = today.toDateString();
+    const selectedDateString = selectedDateObj.toDateString();
+    const isToday = todayString === selectedDateString;
+    
+    // 如果選擇的不是今天，則不是過去時間
+    if (!isToday) {
+      return false;
+    }
+    
+    // 如果是今天，檢查時間是否已經過去
+    const [hour, minute] = timeString.split(':').map(Number);
+    const slotTime = new Date(today.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000);
+    
+    // 添加緩衝時間，提前15分鐘就不能預約
+    const bufferTime = 15 * 60 * 1000; // 15分鐘的毫秒數
+    const cutoffTime = new Date(now.getTime() + bufferTime);
+    
+    const isPast = slotTime <= cutoffTime;
+    
+    return isPast;
+  }, [currentTime]);
 
   const generateTimeSlots = useCallback(() => {
     const slots = [];
@@ -40,17 +85,19 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
       const endTime = `${endHour.toString().padStart(2, '0')}:00`;
       
       if (endHour <= 24) {
+        const isPast = isTimeInPast(startTime, date);
         slots.push({
           start: startTime,
           end: endTime,
-          available: true,
-          price: 0
+          available: !isPast, // 過去的時間設為不可用
+          price: 0,
+          isPast: isPast // 標記是否為過去時間
         });
       }
     }
     
     return slots;
-  }, [selectedDuration]);
+  }, [selectedDuration, date, isTimeInPast, currentTime, forceUpdate]);
 
   const checkSlotAvailability = useCallback(async (slot: { start: string; end: string }) => {
     if (!court || !date) return { available: false, price: 0 };
@@ -70,7 +117,28 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   useEffect(() => {
     if (court && date) {
       setLoading(true);
-      const slots = generateTimeSlots();
+      
+      // 直接在useEffect內部生成時間段，確保使用最新的currentTime
+      const slots: Array<{ start: string; end: string; available: boolean; price: number; isPast: boolean }> = [];
+      const startHour = 0;
+      const endHour = 24;
+      
+      for (let hour = startHour; hour < endHour; hour++) {
+        const startTime = `${hour.toString().padStart(2, '0')}:00`;
+        const endHour = hour + Math.floor(selectedDuration / 60);
+        const endTime = `${endHour.toString().padStart(2, '0')}:00`;
+        
+        if (endHour <= 24) {
+          const isPast = isTimeInPast(startTime, date);
+          slots.push({
+            start: startTime,
+            end: endTime,
+            available: !isPast, // 過去的時間設為不可用
+            price: 0,
+            isPast: isPast // 標記是否為過去時間
+          });
+        }
+      }
       
       // 使用批量 API 檢查所有時段的可用性
       const timeSlotData = slots.map(slot => ({
@@ -84,7 +152,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
             const availability = batchResult.timeSlots[index];
             return {
               ...slot,
-              available: availability.available,
+              available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
               price: availability.pricing?.totalPrice || 0
             };
           });
@@ -97,7 +165,11 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
           Promise.all(
             slots.map(async (slot) => {
               const availability = await checkSlotAvailability(slot);
-              return { ...slot, ...availability };
+              return { 
+                ...slot, 
+                available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
+                price: availability.price 
+              };
             })
           ).then((results) => {
             setTimeSlots(results);
@@ -105,7 +177,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
           });
         });
     }
-  }, [court, date, selectedDuration, checkBatchAvailability, checkAvailability, checkSlotAvailability, generateTimeSlots]);
+  }, [court, date, selectedDuration, forceUpdate, currentTime]);
 
   const handleSlotSelect = (slot: { start: string; end: string; available: boolean; price: number }) => {
     if (slot.available) {
@@ -167,6 +239,23 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
             </button>
           ))}
         </div>
+        
+        {/* 調試按鈕 */}
+        <div className="mt-4">
+          <button
+            onClick={() => {
+              setCurrentTime(new Date());
+              setForceUpdate(prev => prev + 1);
+              console.log('🔄 手動更新時間:', new Date().toLocaleTimeString());
+            }}
+            className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+          >
+            刷新時間檢查
+          </button>
+          <span className="ml-2 text-xs text-gray-500">
+            當前時間: {currentTime.toLocaleTimeString()}
+          </span>
+        </div>
       </div>
 
       {/* 時間段選擇 */}
@@ -190,7 +279,9 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
                   ? isSelected(slot)
                     ? 'bg-primary-600 text-white shadow-lg'
                     : 'bg-white border-2 border-gray-200 hover:border-primary-300 hover:shadow-md'
-                  : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                  : (slot as any).isPast
+                    ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                    : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
             >
               {isSelected(slot) && (
@@ -212,7 +303,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               
               {!slot.available && (
                 <div className="text-xs mt-1">
-                  已預約
+                  {(slot as any).isPast ? '已過期' : '已預約'}
                 </div>
               )}
             </motion.button>
@@ -238,8 +329,8 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
       {/* 說明文字 */}
       <div className="mt-6 text-sm text-gray-500">
-        <p>• 綠色時段表示可用</p>
-        <p>• 灰色時段表示已被預約</p>
+        <p>• 深灰色時段表示已過期（不能預約過去的時間）</p>
+        <p>• 淺灰色時段表示已被預約</p>
         <p>• 價格可能因高峰時段而有所不同</p>
       </div>
     </div>

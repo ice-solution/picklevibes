@@ -330,7 +330,7 @@ const Terms: React.FC = () => {
               </p>
               <div className="space-y-2 text-sm text-gray-600">
                 <p>📧 電子郵件：info@picklevibes.hk</p>
-                <p>📞 電話：+852 5600 4956</p>
+                <p>📞 電話：+852 6190 2761</p>
                 <p>📍 地址：荔枝角永康街37至39號福源廣場8樓B-D室</p>
               </div>
             </div>

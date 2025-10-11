@@ -188,9 +188,9 @@ const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate }) =
 
       {/* 說明文字 */}
       <div className="mt-6 text-sm text-gray-500">
-        <p>• 最多可預約30天後的場地</p>
+        <p>• 最多可預約7天後的場地</p>
         <p>• 灰色日期表示不可預約</p>
-        <p>• 藍色日期表示今天</p>
+        <p>• 粉紅色日期表示今天</p>
       </div>
     </div>
   );

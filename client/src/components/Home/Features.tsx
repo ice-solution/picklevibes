@@ -32,7 +32,7 @@ const Features: React.FC = () => {
     {
       icon: SunIcon,
       title: '防風雨運動',
-      description: '暴風雨、颱風、濕度？不，我想要空調。我們運營室內設施，所以我們談論的是氣候控制，還有那甜美、甜美的空調。',
+      description: '不想互外運動？我們提供空調。運營室內設施，確保。',
       color: 'text-primary-600'
     },
     {
