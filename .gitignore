@@ -105,3 +105,4 @@ client/build/
 *.cert
 .vercel
 
+db-backups/
