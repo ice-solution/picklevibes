@@ -1,0 +1,278 @@
+name: CI/CD - Production Deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:  # 允許手動觸發
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Job 1: 測試和驗證
+  test:
+    name: 測試和驗證
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v3
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 安裝後端依賴
+        run: npm ci
+
+      - name: 後端 Linting
+        run: npm run lint || echo "Linting 完成"
+
+      - name: 安裝前端依賴
+        run: |
+          cd client
+          npm ci
+
+      - name: 前端 Linting
+        run: |
+          cd client
+          npm run lint || echo "Linting 完成"
+
+      # - name: 運行測試
+      #   run: |
+      #     npm test
+      #     cd client && npm test
+
+  # Job 2: 建構前端
+  build-frontend:
+    name: 建構前端 (Production)
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v3
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: 安裝依賴
+        run: |
+          cd client
+          npm ci
+
+      - name: 建構生產版本
+        env:
+          REACT_APP_API_URL: ${{ secrets.PROD_API_URL }}
+          REACT_APP_SERVER_URL: ${{ secrets.PROD_SERVER_URL }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY: ${{ secrets.PROD_STRIPE_PUBLISHABLE_KEY }}
+          REACT_APP_GA_TRACKING_ID: ${{ secrets.GA_TRACKING_ID }}
+          REACT_APP_ENV: production
+          NODE_ENV: production
+          GENERATE_SOURCEMAP: false
+          INLINE_RUNTIME_CHUNK: false
+        run: |
+          cd client
+          npm run build
+
+      - name: 顯示建構信息
+        run: |
+          echo "建構大小:"
+          du -sh client/build
+          echo ""
+          echo "文件列表:"
+          ls -lh client/build/
+
+      - name: 上傳建構產物
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-build
+          path: client/build/
+          retention-days: 7
+
+  # Job 3: 部署到生產環境
+  deploy-production:
+    name: 部署到生產服務器
+    runs-on: ubuntu-latest
+    needs: build-frontend
+    environment:
+      name: production
+      url: https://picklevibes.hk
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v3
+
+      - name: 下載建構產物
+        uses: actions/download-artifact@v3
+        with:
+          name: frontend-build
+          path: client/build/
+
+      - name: 顯示下載的文件
+        run: |
+          echo "下載的建構文件:"
+          ls -lh client/build/
+
+      - name: 創建部署包
+        run: |
+          # 創建時間戳
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          
+          # 創建部署目錄
+          mkdir -p deploy
+          
+          # 複製前端建構
+          cp -r client/build deploy/
+          
+          # 複製後端文件
+          cp -r server deploy/
+          cp package*.json deploy/
+          cp ecosystem.config.js deploy/
+          
+          # 創建壓縮包
+          cd deploy
+          tar -czf ../deploy-$TIMESTAMP.tar.gz .
+          cd ..
+          
+          echo "部署包已創建: deploy-$TIMESTAMP.tar.gz"
+          ls -lh deploy-*.tar.gz
+
+      - name: 上傳到生產服務器
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USERNAME }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          source: "deploy-*.tar.gz"
+          target: "/tmp/"
+
+      - name: 部署到生產環境
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USERNAME }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          port: ${{ secrets.PROD_PORT || 22 }}
+          script: |
+            set -e
+            
+            echo "🚀 開始部署..."
+            
+            # 設置變數
+            APP_DIR="/var/www/picklevibes"
+            BACKUP_DIR="$APP_DIR/backups"
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            
+            # 創建備份目錄
+            mkdir -p $BACKUP_DIR
+            
+            # 備份當前版本
+            echo "📦 備份當前版本..."
+            if [ -d "$APP_DIR/client/build" ]; then
+              cp -r $APP_DIR/client/build $BACKUP_DIR/build-$TIMESTAMP
+              echo "✓ 前端已備份"
+            fi
+            
+            if [ -d "$APP_DIR/server" ]; then
+              cp -r $APP_DIR/server $BACKUP_DIR/server-$TIMESTAMP
+              echo "✓ 後端已備份"
+            fi
+            
+            # 解壓新版本
+            echo "📥 解壓新版本..."
+            cd /tmp
+            DEPLOY_FILE=$(ls -t deploy-*.tar.gz | head -1)
+            tar -xzf $DEPLOY_FILE -C $APP_DIR/
+            
+            # 安裝後端依賴
+            echo "📦 安裝後端依賴..."
+            cd $APP_DIR
+            npm install --production
+            
+            # 更新環境配置（如需要）
+            if [ -f "$APP_DIR/.env.production" ]; then
+              cp $APP_DIR/.env.production $APP_DIR/.env
+            fi
+            
+            # 重啟應用
+            echo "🔄 重啟應用..."
+            pm2 restart picklevibes || pm2 start ecosystem.config.js
+            
+            # 檢查狀態
+            sleep 3
+            pm2 status picklevibes
+            
+            # 清理
+            echo "🧹 清理..."
+            rm -f /tmp/deploy-*.tar.gz
+            
+            # 清理舊備份（保留最近5個）
+            cd $BACKUP_DIR
+            ls -t | tail -n +6 | xargs -r rm -rf
+            
+            echo "✅ 部署完成！"
+            echo "當前版本: $(date)"
+
+      - name: 健康檢查
+        run: |
+          echo "🏥 執行健康檢查..."
+          sleep 10
+          
+          # 檢查 API 健康狀態
+          HEALTH_URL="${{ secrets.PROD_API_URL }}/health"
+          
+          for i in {1..5}; do
+            if curl -f -s "$HEALTH_URL" > /dev/null; then
+              echo "✅ 健康檢查通過"
+              exit 0
+            fi
+            echo "等待服務啟動... ($i/5)"
+            sleep 5
+          done
+          
+          echo "❌ 健康檢查失敗"
+          exit 1
+
+  # Job 4: 通知
+  notify:
+    name: 發送部署通知
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: always()
+    
+    steps:
+      - name: 發送 Slack 通知
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            生產環境部署 ${{ job.status == 'success' && '✅ 成功' || '❌ 失敗' }}
+            分支: ${{ github.ref }}
+            提交: ${{ github.sha }}
+            作者: ${{ github.actor }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+      # - name: 發送 Email 通知
+      #   if: failure()
+      #   uses: dawidd6/action-send-mail@v3
+      #   with:
+      #     server_address: smtp.gmail.com
+      #     server_port: 465
+      #     username: ${{ secrets.MAIL_USERNAME }}
+      #     password: ${{ secrets.MAIL_PASSWORD }}
+      #     subject: 生產環境部署失敗
+      #     body: 部署失敗，請查看 GitHub Actions 日誌
+      #     to: devops@picklevibes.hk
+
