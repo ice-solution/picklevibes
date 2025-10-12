@@ -113,7 +113,7 @@ const Courts: React.FC = () => {
                   <div className="flex items-center gap-1">
                     <ClockIcon className="w-4 h-4" />
                     <span>
-                      {court.type === 'solo' ? '8am-11pm' : '24小時營業(預約制)'}
+                      {court.type === 'solo' ? '8am-11pm' : '24小時營業(需預約方可進場)'}
                     </span>
                   </div>
                 </div>

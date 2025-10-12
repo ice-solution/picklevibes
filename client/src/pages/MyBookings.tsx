@@ -117,6 +117,17 @@ const MyBookings: React.FC = () => {
     return time;
   };
 
+  const formatCreatedDate = (dateString: string) => {
+    if (!dateString) return '-';
+    const d = new Date(dateString);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
   const getStatusText = (status: string) => {
     switch (status) {
       case 'confirmed':
@@ -344,6 +355,9 @@ const MyBookings: React.FC = () => {
                           場地
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          訂單日期
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           日期時間
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -375,6 +389,9 @@ const MyBookings: React.FC = () => {
                                 </div>
                               </div>
                             </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {formatCreatedDate(booking.createdAt)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{formatDate(booking.date)}</div>
