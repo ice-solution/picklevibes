@@ -12,7 +12,6 @@ import {
   EyeSlashIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
-import apiConfig from '../../config/api';
 
 interface RechargeOffer {
   _id: string;
@@ -63,7 +62,7 @@ const RechargeOfferManagement: React.FC = () => {
   const fetchOffers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`${apiConfig.API_BASE_URL}/recharge-offers/admin`);
+      const response = await axios.get('/recharge-offers/admin');
       setOffers(response.data.offers);
     } catch (error) {
       console.error('獲取充值優惠失敗:', error);
@@ -127,7 +126,7 @@ const RechargeOfferManagement: React.FC = () => {
     }
 
     try {
-      await axios.post(`${apiConfig.API_BASE_URL}/recharge-offers`, formData);
+      await axios.post('/recharge-offers', formData);
       setShowCreateModal(false);
       setFormData({
         name: '',
@@ -171,7 +170,7 @@ const RechargeOfferManagement: React.FC = () => {
     }
 
     try {
-      await axios.put(`${apiConfig.API_BASE_URL}/recharge-offers/${editingOffer._id}`, formData);
+      await axios.put(`/recharge-offers/${editingOffer._id}`, formData);
       setShowEditModal(false);
       setEditingOffer(null);
       fetchOffers();
@@ -190,7 +189,7 @@ const RechargeOfferManagement: React.FC = () => {
   const handleDeleteOffer = async (offerId: string) => {
     if (window.confirm('確定要刪除此充值優惠嗎？')) {
       try {
-        await axios.delete(`${apiConfig.API_BASE_URL}/recharge-offers/${offerId}`);
+        await axios.delete(`/recharge-offers/${offerId}`);
         fetchOffers();
       } catch (error) {
         console.error('刪除充值優惠失敗:', error);
@@ -200,7 +199,7 @@ const RechargeOfferManagement: React.FC = () => {
 
   const handleToggleActive = async (offerId: string) => {
     try {
-      await axios.post(`${apiConfig.API_BASE_URL}/recharge-offers/${offerId}/toggle`);
+      await axios.post(`/recharge-offers/${offerId}/toggle`);
       fetchOffers();
     } catch (error) {
       console.error('切換優惠狀態失敗:', error);
