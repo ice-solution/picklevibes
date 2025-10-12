@@ -213,7 +213,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           {court.images && court.images.length > 0 && (
             <div className="mb-6">
               <img
-                src={`${apiConfig.SERVER_URL}${court.images[0].url}`}
+                src={`${apiConfig.API_BASE_URL}${court.images[0].url}`}
                 alt={court.images[0].alt || court.name}
                 className="w-full h-48 object-cover rounded-lg"
               />

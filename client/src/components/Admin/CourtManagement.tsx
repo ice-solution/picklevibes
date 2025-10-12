@@ -574,7 +574,7 @@ const CourtManagement: React.FC = () => {
                 <div key={image._id} className="relative group">
                   <div className="relative">
                     <img
-                      src={`${apiConfig.SERVER_URL}${image.url}`}
+                      src={`${apiConfig.API_BASE_URL}${image.url}`}
                       alt={image.alt}
                       className="w-full h-32 object-cover rounded-lg"
                     />

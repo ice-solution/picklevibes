@@ -46,13 +46,26 @@ const batchLimiter = rateLimit({
 app.use(limiter);
 
 // CORS配置
+const allowedOrigins = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'https://uat.picklevibes.hk',
+  'https://picklevibes.hk'
+];
+
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'http://localhost:3001',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:3001'
-  ],
+  origin: (origin, callback) => {
+    // 允許沒有 origin 的請求（如 Postman 或服務器端請求）
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with']
@@ -65,13 +78,26 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// 靜態文件服務 - 用於提供上傳的圖片（必須在路由之前）
-app.use('/uploads', (req, res, next) => {
+// 靜態文件服務 - 用於提供上傳的圖片（必須在 API 路由之前）
+// 支持兩種路徑：/uploads（本地開發）和 /api/uploads（生產/UAT環境）
+const staticFileMiddleware = (req, res, next) => {
   // 為靜態文件添加 CORS 標頭
-  res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+  const origin = req.headers.origin;
+  if (allowedOrigins.indexOf(origin) !== -1) {
+    res.header('Access-Control-Allow-Origin', origin);
+  } else {
+    // 如果沒有 origin 或不在允許列表中，允許直接訪問（用於服務器端或瀏覽器直接訪問）
+    res.header('Access-Control-Allow-Origin', '*');
+  }
   res.header('Access-Control-Allow-Credentials', 'true');
   next();
-}, express.static(path.join(__dirname, '../uploads')));
+};
+
+// 本地開發路徑
+app.use('/uploads', staticFileMiddleware, express.static(path.join(__dirname, '../uploads')));
+
+// 生產/UAT 環境路徑
+app.use('/api/uploads', staticFileMiddleware, express.static(path.join(__dirname, '../uploads')));
 
 // 數據庫連接
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/picklevibes', {

@@ -182,7 +182,7 @@ const CurrentBookings: React.FC<CurrentBookingsProps> = ({
                 {booking.court?.images && booking.court.images.length > 0 && (
                   <div className="mb-3">
                     <img
-                      src={`${apiConfig.SERVER_URL}${booking.court.images[0].url}`}
+                      src={`${apiConfig.API_BASE_URL}${booking.court.images[0].url}`}
                       alt={booking.court.images[0].alt || booking.court.name}
                       className="w-full h-32 object-cover rounded-lg"
                     />
