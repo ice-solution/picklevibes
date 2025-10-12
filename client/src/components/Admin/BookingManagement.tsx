@@ -3,14 +3,9 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import {
   CalendarDaysIcon,
-  ClockIcon,
-  UserIcon,
-  MapPinIcon,
-  CheckCircleIcon,
-  XCircleIcon,
-  ExclamationTriangleIcon,
   EyeIcon,
-  XMarkIcon
+  XMarkIcon,
+  XCircleIcon
 } from '@heroicons/react/24/outline';
 
 interface Booking {
@@ -36,6 +31,7 @@ interface Booking {
     email: string;
     phone: string;
   }>;
+  specialRequests?: string;
   pricing: {
     totalPrice: number;
     duration: number;
@@ -57,7 +53,6 @@ const BookingManagement: React.FC = () => {
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [filters, setFilters] = useState({
-    status: '',
     court: '',
     date: ''
   });
@@ -81,7 +76,6 @@ const BookingManagement: React.FC = () => {
         limit: '20'
       });
       
-      if (filters.status) params.append('status', filters.status);
       if (filters.court) params.append('court', filters.court);
       if (filters.date) params.append('date', filters.date);
       
@@ -96,16 +90,6 @@ const BookingManagement: React.FC = () => {
     }
   };
 
-  const handleStatusChange = async (bookingId: string, newStatus: string) => {
-    try {
-      await axios.put(`/bookings/${bookingId}/status`, { status: newStatus });
-      // 重新獲取預約列表
-      fetchBookings();
-    } catch (error: any) {
-      console.error('更新預約狀態失敗:', error);
-      setError(error.response?.data?.message || '更新預約狀態失敗');
-    }
-  };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
@@ -116,44 +100,6 @@ const BookingManagement: React.FC = () => {
     });
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return 'bg-green-100 text-green-800';
-      case 'pending':
-        return 'bg-yellow-100 text-yellow-800';
-      case 'cancelled':
-        return 'bg-red-100 text-red-800';
-      default:
-        return 'bg-gray-100 text-gray-800';
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return <CheckCircleIcon className="w-4 h-4" />;
-      case 'pending':
-        return <ExclamationTriangleIcon className="w-4 h-4" />;
-      case 'cancelled':
-        return <XCircleIcon className="w-4 h-4" />;
-      default:
-        return <ClockIcon className="w-4 h-4" />;
-    }
-  };
-
-  const getStatusText = (status: string) => {
-    switch (status) {
-      case 'confirmed':
-        return '已確認';
-      case 'pending':
-        return '待確認';
-      case 'cancelled':
-        return '已取消';
-      default:
-        return status;
-    }
-  };
 
   if (loading && bookings.length === 0) {
     return (
@@ -168,21 +114,6 @@ const BookingManagement: React.FC = () => {
       {/* 過濾器 */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              狀態
-            </label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-            >
-              <option value="">全部狀態</option>
-              <option value="pending">待確認</option>
-              <option value="confirmed">已確認</option>
-              <option value="cancelled">已取消</option>
-            </select>
-          </div>
           
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -198,7 +129,7 @@ const BookingManagement: React.FC = () => {
           
           <div className="flex items-end">
             <button
-              onClick={() => setFilters({ status: '', court: '', date: '' })}
+              onClick={() => setFilters({ court: '', date: '' })}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-500"
             >
               清除過濾器
@@ -247,7 +178,7 @@ const BookingManagement: React.FC = () => {
                     場地信息
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    狀態
+                    特殊要求
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     操作
@@ -297,11 +228,14 @@ const BookingManagement: React.FC = () => {
                       </div>
                     </td>
                     
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                        {getStatusIcon(booking.status)}
-                        <span className="ml-1">{getStatusText(booking.status)}</span>
-                      </span>
+                    <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
+                      {booking.specialRequests && booking.specialRequests.trim() ? (
+                        <div className="truncate" title={booking.specialRequests}>
+                          {booking.specialRequests}
+                        </div>
+                      ) : (
+                        <span className="text-gray-400">無</span>
+                      )}
                     </td>
                     
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -315,22 +249,6 @@ const BookingManagement: React.FC = () => {
                         <EyeIcon className="w-4 h-4" />
                       </button>
                       
-                      {booking.status === 'pending' && (
-                        <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleStatusChange(booking._id, 'confirmed')}
-                            className="text-green-600 hover:text-green-900 text-xs"
-                          >
-                            確認
-                          </button>
-                          <button
-                            onClick={() => handleStatusChange(booking._id, 'cancelled')}
-                            className="text-red-600 hover:text-red-900 text-xs"
-                          >
-                            取消
-                          </button>
-                        </div>
-                      )}
                     </td>
                   </motion.tr>
                 ))}
@@ -395,13 +313,6 @@ const BookingManagement: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">場地</label>
                   <p className="text-sm text-gray-900">{selectedBooking.court.name} ({selectedBooking.court.number}號場)</p>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">狀態</label>
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedBooking.status)}`}>
-                    {getStatusIcon(selectedBooking.status)}
-                    <span className="ml-1">{getStatusText(selectedBooking.status)}</span>
-                  </span>
                 </div>
               </div>
               

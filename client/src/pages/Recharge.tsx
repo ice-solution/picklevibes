@@ -12,8 +12,10 @@ import {
 import axios from 'axios';
 
 interface RechargeOption {
+  name: string;
   points: number;
   amount: number;
+  description: string;
   label: string;
 }
 
@@ -54,8 +56,10 @@ const Recharge: React.FC = () => {
       
       // 將 API 返回的優惠轉換為 RechargeOption 格式
       const offers = offersRes.data.offers.map((offer: any) => ({
+        name: offer.name,
         points: offer.points,
         amount: offer.amount,
+        description: offer.description,
         label: `${offer.points}分 (HK$${offer.amount})`
       }));
       
@@ -65,10 +69,10 @@ const Recharge: React.FC = () => {
       console.error('獲取數據失敗:', error);
       // 如果新的 API 失敗，使用備用選項
       const fallbackOptions = [
-        { points: 500, amount: 500, label: '500分 (HK$500)' },
-        { points: 1000, amount: 1000, label: '1000分 (HK$1000)' },
-        { points: 1200, amount: 1200, label: '1200分 (HK$1200)' },
-        { points: 2000, amount: 2000, label: '2000分 (HK$2000)' }
+        { name: '標準充值', points: 500, amount: 500, description: '1分 = 1元，充值後立即可用', label: '500分 (HK$500)' },
+        { name: '推薦充值', points: 1000, amount: 1000, description: '1分 = 1元，充值後立即可用', label: '1000分 (HK$1000)' },
+        { name: '超值充值', points: 1200, amount: 1200, description: '1分 = 1元，充值後立即可用', label: '1200分 (HK$1200)' },
+        { name: '大額充值', points: 2000, amount: 2000, description: '1分 = 1元，充值後立即可用', label: '2000分 (HK$2000)' }
       ];
       setOptions(fallbackOptions);
     } finally {
@@ -122,7 +126,13 @@ const Recharge: React.FC = () => {
 
     try {
       setProcessing(true);
-      const customOption = { points, amount, label: `${points}分 (HK$${amount})` };
+      const customOption = { 
+        name: '自定義充值',
+        points, 
+        amount, 
+        description: '1分 = 1元，充值後立即可用',
+        label: `${points}分 (HK$${amount})` 
+      };
       setSelectedOption(customOption);
 
       const response = await axios.post('/recharge/create-checkout-session', {
@@ -234,10 +244,13 @@ const Recharge: React.FC = () => {
                   <CreditCardIcon className="w-8 h-8 text-primary-600" />
                 </div>
                 <h3 className="text-xl font-bold text-gray-900 mb-2">
-                  {option.label}
+                  {option.name}
                 </h3>
+                <p className="text-sm text-gray-500 mb-1">
+                  {option.label}
+                </p>
                 <p className="text-gray-600 mb-6">
-                  1分 = 1元，充值後立即可用
+                  {option.description}
                 </p>
                 <button
                   onClick={() => handleRecharge(option)}
