@@ -6,6 +6,7 @@ const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
+const { auth } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -184,6 +185,36 @@ router.post('/login', authLimiter, [
 
   } catch (error) {
     console.error('登入錯誤:', error);
+    res.status(500).json({ 
+      message: '服務器錯誤' 
+    });
+  }
+});
+
+// @route   GET /api/auth/me
+// @desc    獲取當前用戶信息
+// @access  Private
+router.get('/me', auth, async (req, res) => {
+  try {
+    // req.user 是從 auth middleware 中設置的
+    const user = req.user;
+
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        membershipLevel: user.membershipLevel,
+        preferences: user.preferences,
+        lastLogin: user.lastLogin,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('獲取用戶信息錯誤:', error);
     res.status(500).json({ 
       message: '服務器錯誤' 
     });
