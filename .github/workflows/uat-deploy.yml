@@ -1,0 +1,76 @@
+name: UAT 環境部署
+
+on:
+  push:
+    branches:
+      - uat
+  workflow_dispatch:  # 允許手動觸發
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v3
+        with:
+          ref: uat
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: 安裝後端依賴
+        run: npm ci
+
+      - name: 安裝前端依賴
+        run: |
+          cd client
+          npm ci
+
+      - name: 構建前端
+        env:
+          REACT_APP_API_URL: ${{ secrets.UAT_API_URL }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY: ${{ secrets.UAT_STRIPE_PUBLISHABLE_KEY }}
+          REACT_APP_ENV: uat
+        run: |
+          cd client
+          npm run build
+
+      - name: 運行測試（可選）
+        run: |
+          # npm test
+          echo "跳過測試，可根據需要啟用"
+
+      - name: 部署到UAT服務器
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.UAT_HOST }}
+          username: ${{ secrets.UAT_USERNAME }}
+          key: ${{ secrets.UAT_SSH_KEY }}
+          port: ${{ secrets.UAT_PORT || 22 }}
+          script: |
+            cd /var/www/picklevibes-uat
+            git fetch origin
+            git checkout uat
+            git pull origin uat
+            npm install --production
+            cd client
+            npm install --production
+            npm run build
+            cd ..
+            pm2 restart picklevibes-uat || pm2 start ecosystem.config.uat.js
+            echo "UAT 環境部署完成"
+
+      - name: 通知部署結果
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'UAT 環境部署 ${{ job.status }}'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
