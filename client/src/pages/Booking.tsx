@@ -261,6 +261,7 @@ const Booking: React.FC = () => {
                     bookingData={bookingFormData}
                     availability={stableAvailability}
                     onReset={resetBooking}
+                    onPrevStep={prevStep}
                     onEditBooking={handleEditBooking}
                     includeSoloCourt={includeSoloCourt}
                     soloCourtAvailable={soloCourtAvailable}
@@ -269,20 +270,20 @@ const Booking: React.FC = () => {
                 )}
 
                 {/* Navigation Buttons */}
-                <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
-                  <button
-                    onClick={prevStep}
-                    disabled={currentStep === 1}
-                    className={`px-6 py-3 rounded-lg font-medium transition-colors duration-200 ${
-                      currentStep === 1
-                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                  >
-                    上一步
-                  </button>
+                {currentStep < 5 && (
+                  <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
+                    <button
+                      onClick={prevStep}
+                      disabled={currentStep === 1}
+                      className={`px-6 py-3 rounded-lg font-medium transition-colors duration-200 ${
+                        currentStep === 1
+                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                      }`}
+                    >
+                      上一步
+                    </button>
 
-                  {currentStep < 5 ? (
                     <button
                       onClick={nextStep}
                       disabled={!canProceed()}
@@ -294,15 +295,8 @@ const Booking: React.FC = () => {
                     >
                       下一步
                     </button>
-                  ) : (
-                    <button
-                      onClick={() => {/* Handle booking submission */}}
-                      className="bg-green-600 text-white px-6 py-3 rounded-lg font-medium hover:bg-green-700 transition-colors duration-200"
-                    >
-                      確認預約
-                    </button>
-                  )}
-                </div>
+                  </div>
+                )}
               </div>
             </div>
 

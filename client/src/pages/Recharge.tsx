@@ -47,15 +47,30 @@ const Recharge: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      const [optionsRes, balanceRes] = await Promise.all([
-        axios.get('/recharge/options'),
+      const [offersRes, balanceRes] = await Promise.all([
+        axios.get('/recharge-offers'),
         axios.get('/recharge/balance')
       ]);
       
-      setOptions(optionsRes.data.options);
+      // 將 API 返回的優惠轉換為 RechargeOption 格式
+      const offers = offersRes.data.offers.map((offer: any) => ({
+        points: offer.points,
+        amount: offer.amount,
+        label: `${offer.points}分 (HK$${offer.amount})`
+      }));
+      
+      setOptions(offers);
       setBalance(balanceRes.data);
     } catch (error) {
       console.error('獲取數據失敗:', error);
+      // 如果新的 API 失敗，使用備用選項
+      const fallbackOptions = [
+        { points: 500, amount: 500, label: '500分 (HK$500)' },
+        { points: 1000, amount: 1000, label: '1000分 (HK$1000)' },
+        { points: 1200, amount: 1200, label: '1200分 (HK$1200)' },
+        { points: 2000, amount: 2000, label: '2000分 (HK$2000)' }
+      ];
+      setOptions(fallbackOptions);
     } finally {
       setLoading(false);
     }

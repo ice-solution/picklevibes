@@ -147,16 +147,10 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
               <input
                 type="text"
                 value={formData.contactName}
-                onChange={(e) => handleInputChange('contactName', e.target.value)}
-                onBlur={(e) => validateField('contactName', e.target.value)}
-                className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                  errors.contactName ? 'border-red-500' : 'border-gray-300'
-                }`}
+                readOnly
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
                 placeholder="請輸入負責人姓名"
               />
-              {errors.contactName && (
-                <p className="mt-1 text-sm text-red-600">{errors.contactName}</p>
-              )}
             </div>
 
             <div>
@@ -168,17 +162,11 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
                 <input
                   type="email"
                   value={formData.contactEmail}
-                  onChange={(e) => handleInputChange('contactEmail', e.target.value)}
-                  onBlur={(e) => validateField('contactEmail', e.target.value)}
-                  className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                    errors.contactEmail ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  readOnly
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
                   placeholder="請輸入聯絡電子郵件"
                 />
               </div>
-              {errors.contactEmail && (
-                <p className="mt-1 text-sm text-red-600">{errors.contactEmail}</p>
-              )}
             </div>
 
             <div>
@@ -190,17 +178,11 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
                 <input
                   type="tel"
                   value={formData.contactPhone}
-                  onChange={(e) => handleInputChange('contactPhone', e.target.value)}
-                  onBlur={(e) => validateField('contactPhone', e.target.value)}
-                  className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
-                    errors.contactPhone ? 'border-red-500' : 'border-gray-300'
-                  }`}
+                  readOnly
+                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
                   placeholder="請輸入聯絡電話號碼"
                 />
               </div>
-              {errors.contactPhone && (
-                <p className="mt-1 text-sm text-red-600">{errors.contactPhone}</p>
-              )}
             </div>
           </div>
         </motion.div>
@@ -220,7 +202,8 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
 
       {/* 說明文字 */}
       <div className="mt-6 text-sm text-gray-500">
-        <p>• 負責人聯絡信息將用於預約確認和通知</p>
+        <p>• 負責人聯絡信息已從您的帳戶自動填入，無法修改</p>
+        <p>• 如需修改聯絡信息，請前往個人資料頁面更新</p>
         <p>• 我們會發送預約確認到您的電子郵件</p>
         <p>• 如有任何變更，我們會通過電話聯繫您</p>
       </div>

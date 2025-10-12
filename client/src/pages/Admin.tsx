@@ -9,13 +9,15 @@ import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
 import CourtManagement from '../components/Admin/CourtManagement';
+import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
 import { 
   CalendarDaysIcon, 
   UserGroupIcon,
   CurrencyDollarIcon,
   ChartBarIcon,
   UsersIcon,
-  TicketIcon
+  TicketIcon,
+  CreditCardIcon
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -27,7 +29,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -59,6 +61,7 @@ const Admin: React.FC = () => {
     { id: 'users', name: '用戶管理', icon: UsersIcon },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
+    { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon },
     { id: 'revenue', name: '收入統計', icon: CurrencyDollarIcon },
     { id: 'analytics', name: '數據分析', icon: ChartBarIcon }
   ];
@@ -213,6 +216,16 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <RedeemCodeManagement />
+              </motion.div>
+            )}
+
+            {activeTab === 'recharge-offers' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <RechargeOfferManagement />
               </motion.div>
             )}
 

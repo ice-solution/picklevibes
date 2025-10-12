@@ -594,4 +594,30 @@ router.get('/calendar/:courtId', [
   }
 });
 
+// @route   POST /api/bookings/:id/confirm
+// @desc    確認預約 (預留功能，待開發)
+// @access  Private
+router.post('/:id/confirm', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // TODO: 在此處實現確認預約的業務邏輯
+    // 例如：
+    // - 驗證預約狀態
+    // - 發送確認通知
+    // - 更新預約狀態
+    // - 記錄確認時間
+    
+    // 暫時返回成功訊息
+    res.json({ 
+      message: '確認預約功能開發中',
+      bookingId: id
+    });
+    
+  } catch (error) {
+    console.error('確認預約錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 module.exports = router;

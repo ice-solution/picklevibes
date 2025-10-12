@@ -91,6 +91,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
 app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
 app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
+app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes
 
 // 導出 batchLimiter 供路由使用
 app.set('batchLimiter', batchLimiter);

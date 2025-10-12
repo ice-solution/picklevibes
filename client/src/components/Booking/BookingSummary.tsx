@@ -30,6 +30,7 @@ interface BookingSummaryProps {
   availability: any;
   // 預約現在使用積分支付，不再需要支付相關參數
   onReset: () => void;
+  onPrevStep?: () => void;
   onEditBooking?: (field: keyof BookingData, value: any) => void;
   includeSoloCourt?: boolean;
   soloCourtAvailable?: boolean;
@@ -44,6 +45,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   availability,
   // 預約現在使用積分支付，不再需要支付相關參數
   onReset,
+  onPrevStep,
   onEditBooking,
   includeSoloCourt = false,
   soloCourtAvailable = false,
@@ -407,10 +409,10 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       {/* 提交按鈕 */}
       <div className="mt-8 flex gap-4">
         <button
-          onClick={onReset}
+          onClick={onPrevStep || onReset}
           className="flex-1 bg-gray-200 text-gray-700 hover:bg-gray-300 font-medium py-3 px-6 rounded-lg transition-colors duration-200"
         >
-          重新選擇
+          上一步
         </button>
         
         <button
