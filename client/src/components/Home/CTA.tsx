@@ -110,7 +110,7 @@ const CTA: React.FC = () => {
             <div>
               <h3 className="text-lg font-bold text-gray-900 mb-2">聯繫我們</h3>
               <p className="text-gray-700 mb-1">
-                電話：<a href="tel:+85263681655" className="text-blue-600 hover:text-blue-700">+852 5600 4956</a>
+                電話：<a href="tel:+85261902761" className="text-blue-600 hover:text-blue-700">+852 6190 2761</a>
               </p>
               <p className="text-gray-700">
                 郵箱：<a href="mailto:info@picklevibes.hk" className="text-blue-600 hover:text-blue-700">info@picklevibes.hk</a>
