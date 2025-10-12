@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
+import apiConfig from '../../config/api';
 import { 
   CalendarIcon, 
   ClockIcon, 
@@ -177,6 +178,17 @@ const CurrentBookings: React.FC<CurrentBookingsProps> = ({
           >
             <div className="flex items-start justify-between">
               <div className="flex-1">
+                {/* 場地圖片 */}
+                {booking.court?.images && booking.court.images.length > 0 && (
+                  <div className="mb-3">
+                    <img
+                      src={`${apiConfig.SERVER_URL}${booking.court.images[0].url}`}
+                      alt={booking.court.images[0].alt || booking.court.name}
+                      className="w-full h-32 object-cover rounded-lg"
+                    />
+                  </div>
+                )}
+                
                 <div className="flex items-center space-x-2 mb-2">
                   {getStatusIcon(booking.status)}
                   <span className="font-medium text-gray-900">
@@ -226,7 +238,7 @@ const CurrentBookings: React.FC<CurrentBookingsProps> = ({
                   </div>
                 )}
                 
-                {booking.specialRequests && (
+                {booking.specialRequests && booking.specialRequests.trim() && (
                   <div className="mt-2">
                     <p className="text-xs text-gray-500">特殊要求：</p>
                     <p className="text-sm text-gray-700">{booking.specialRequests}</p>

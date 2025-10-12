@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
+import apiConfig from '../../config/api';
 import {
   MapPinIcon,
   ClockIcon,
@@ -9,8 +10,18 @@ import {
   PowerIcon,
   CheckCircleIcon,
   XCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  PhotoIcon,
+  TrashIcon,
+  StarIcon
 } from '@heroicons/react/24/outline';
+
+interface CourtImage {
+  _id: string;
+  url: string;
+  alt: string;
+  isPrimary: boolean;
+}
 
 interface Court {
   _id: string;
@@ -20,6 +31,12 @@ interface Court {
   description: string;
   capacity: number;
   isActive: boolean;
+  maintenance: {
+    isUnderMaintenance: boolean;
+    maintenanceStart?: string;
+    maintenanceEnd?: string;
+    maintenanceReason?: string;
+  };
   pricing: {
     offPeak: number;
     peakHour: number;
@@ -29,6 +46,7 @@ interface Court {
   operatingHours: {
     [key: string]: string;
   };
+  images: CourtImage[];
   createdAt: string;
   updatedAt: string;
 }
@@ -38,6 +56,9 @@ const CourtManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [uploading, setUploading] = useState<string | null>(null);
+  const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
+  const [showImageModal, setShowImageModal] = useState(false);
 
   useEffect(() => {
     fetchCourts();
@@ -77,6 +98,37 @@ const CourtManagement: React.FC = () => {
     } catch (error: any) {
       console.error('更新場地狀態失敗:', error);
       setError(error.response?.data?.message || '更新場地狀態失敗');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const toggleMaintenanceMode = async (courtId: string, currentMaintenanceStatus: boolean) => {
+    try {
+      setUpdating(courtId);
+      setError(null);
+      
+      await axios.put(`/courts/${courtId}/maintenance`, {
+        isUnderMaintenance: !currentMaintenanceStatus
+      });
+      
+      // 更新本地狀態
+      setCourts(prevCourts =>
+        prevCourts.map(court =>
+          court._id === courtId
+            ? { 
+                ...court, 
+                maintenance: {
+                  ...court.maintenance,
+                  isUnderMaintenance: !currentMaintenanceStatus
+                }
+              }
+            : court
+        )
+      );
+    } catch (error: any) {
+      console.error('更新維護狀態失敗:', error);
+      setError(error.response?.data?.message || '更新維護狀態失敗');
     } finally {
       setUpdating(null);
     }
@@ -124,6 +176,93 @@ const CourtManagement: React.FC = () => {
       return '08:00-23:00';
     }
     return '營業時間';
+  };
+
+  const handleImageUpload = async (courtId: string, file: File) => {
+    try {
+      setUploading(courtId);
+      setError(null);
+
+      const formData = new FormData();
+      formData.append('image', file);
+
+      const response = await axios.post(`/courts/${courtId}/images`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      // 更新本地狀態
+      setCourts(prevCourts =>
+        prevCourts.map(court =>
+          court._id === courtId
+            ? { ...court, images: [...court.images, response.data.image] }
+            : court
+        )
+      );
+
+      alert('圖片上傳成功！');
+    } catch (error: any) {
+      console.error('上傳圖片失敗:', error);
+      setError(error.response?.data?.message || '上傳圖片失敗');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const handleDeleteImage = async (courtId: string, imageId: string) => {
+    if (!window.confirm('確定要刪除這張圖片嗎？')) return;
+
+    try {
+      setError(null);
+      await axios.delete(`/courts/${courtId}/images/${imageId}`);
+
+      // 更新本地狀態
+      setCourts(prevCourts =>
+        prevCourts.map(court =>
+          court._id === courtId
+            ? { ...court, images: court.images.filter(img => img._id !== imageId) }
+            : court
+        )
+      );
+
+      alert('圖片刪除成功！');
+    } catch (error: any) {
+      console.error('刪除圖片失敗:', error);
+      setError(error.response?.data?.message || '刪除圖片失敗');
+    }
+  };
+
+  const handleSetPrimaryImage = async (courtId: string, imageId: string) => {
+    try {
+      setError(null);
+      await axios.put(`/courts/${courtId}/images/${imageId}/primary`);
+
+      // 更新本地狀態
+      setCourts(prevCourts =>
+        prevCourts.map(court =>
+          court._id === courtId
+            ? {
+                ...court,
+                images: court.images.map(img => ({
+                  ...img,
+                  isPrimary: img._id === imageId
+                }))
+              }
+            : court
+        )
+      );
+
+      alert('主圖片設置成功！');
+    } catch (error: any) {
+      console.error('設置主圖片失敗:', error);
+      setError(error.response?.data?.message || '設置主圖片失敗');
+    }
+  };
+
+  const openImageModal = (court: Court) => {
+    setSelectedCourt(court);
+    setShowImageModal(true);
   };
 
   if (loading) {
@@ -231,24 +370,44 @@ const CourtManagement: React.FC = () => {
                     <p className="text-sm text-gray-500">{court.number}號場</p>
                   </div>
                 </div>
-                <button
-                  onClick={() => toggleCourtStatus(court._id, court.isActive)}
-                  disabled={updating === court._id}
-                  className={`flex items-center px-3 py-1 text-xs font-medium rounded-full transition-colors ${
-                    court.isActive
-                      ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                      : 'bg-red-100 text-red-800 hover:bg-red-200'
-                  } ${updating === court._id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                >
-                  {updating === court._id ? (
-                    <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1"></div>
-                  ) : court.isActive ? (
-                    <CheckCircleIcon className="w-3 h-3 mr-1" />
-                  ) : (
-                    <XCircleIcon className="w-3 h-3 mr-1" />
-                  )}
-                  {court.isActive ? '啟用中' : '已停用'}
-                </button>
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={() => toggleCourtStatus(court._id, court.isActive)}
+                    disabled={updating === court._id}
+                    className={`flex items-center px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                      court.isActive
+                        ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                        : 'bg-red-100 text-red-800 hover:bg-red-200'
+                    } ${updating === court._id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {updating === court._id ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1"></div>
+                    ) : court.isActive ? (
+                      <CheckCircleIcon className="w-3 h-3 mr-1" />
+                    ) : (
+                      <XCircleIcon className="w-3 h-3 mr-1" />
+                    )}
+                    {court.isActive ? '啟用中' : '已停用'}
+                  </button>
+                  <button
+                    onClick={() => toggleMaintenanceMode(court._id, court.maintenance?.isUnderMaintenance || false)}
+                    disabled={updating === court._id}
+                    className={`flex items-center px-3 py-1 text-xs font-medium rounded-full transition-colors ${
+                      court.maintenance?.isUnderMaintenance
+                        ? 'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                        : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                    } ${updating === court._id ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
+                    {updating === court._id ? (
+                      <div className="animate-spin rounded-full h-3 w-3 border-b border-current mr-1"></div>
+                    ) : court.maintenance?.isUnderMaintenance ? (
+                      <ExclamationTriangleIcon className="w-3 h-3 mr-1" />
+                    ) : (
+                      <PowerIcon className="w-3 h-3 mr-1" />
+                    )}
+                    {court.maintenance?.isUnderMaintenance ? '維護中' : '正常'}
+                  </button>
+                </div>
               </div>
 
               {/* 場地信息 */}
@@ -293,7 +452,7 @@ const CourtManagement: React.FC = () => {
               </div>
 
               {/* 操作按鈕 */}
-              <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
                 <button
                   onClick={() => toggleCourtStatus(court._id, court.isActive)}
                   disabled={updating === court._id}
@@ -320,6 +479,14 @@ const CourtManagement: React.FC = () => {
                     </>
                   )}
                 </button>
+                
+                <button
+                  onClick={() => openImageModal(court)}
+                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 transition-colors"
+                >
+                  <PhotoIcon className="w-4 h-4 mr-2" />
+                  管理圖片 ({court.images?.length || 0})
+                </button>
               </div>
             </motion.div>
           );
@@ -338,11 +505,117 @@ const CourtManagement: React.FC = () => {
                 <li>停用的場地將不會出現在預約選項中</li>
                 <li>已確認的預約不會因場地停用而自動取消</li>
                 <li>場地狀態變更會立即生效</li>
+                <li>圖片必須為 1920x1280 像素，支持 JPEG、PNG、WEBP 格式</li>
               </ul>
             </div>
           </div>
         </div>
       </div>
+
+      {/* 圖片管理模態框 */}
+      {showImageModal && selectedCourt && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-4xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                {selectedCourt.name} - 圖片管理
+              </h3>
+              <button
+                onClick={() => setShowImageModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XCircleIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* 圖片上傳區域 */}
+            <div className="mb-6">
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept="image/jpeg,image/jpg,image/png,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      handleImageUpload(selectedCourt._id, file);
+                    }
+                  }}
+                  disabled={uploading === selectedCourt._id}
+                  className="hidden"
+                  id={`upload-${selectedCourt._id}`}
+                />
+                <label
+                  htmlFor={`upload-${selectedCourt._id}`}
+                  className={`cursor-pointer inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-primary-600 hover:bg-primary-700 ${
+                    uploading === selectedCourt._id ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {uploading === selectedCourt._id ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b border-current mr-2"></div>
+                      上傳中...
+                    </>
+                  ) : (
+                    <>
+                      <PhotoIcon className="w-4 h-4 mr-2" />
+                      上傳圖片
+                    </>
+                  )}
+                </label>
+                <p className="text-sm text-gray-500 mt-2">
+                  支持 JPEG、PNG、WEBP 格式，尺寸必須為 1920x1280 像素
+                </p>
+              </div>
+            </div>
+
+            {/* 現有圖片列表 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {selectedCourt.images?.map((image) => (
+                <div key={image._id} className="relative group">
+                  <div className="relative">
+                    <img
+                      src={`${apiConfig.SERVER_URL}${image.url}`}
+                      alt={image.alt}
+                      className="w-full h-32 object-cover rounded-lg"
+                    />
+                    {image.isPrimary && (
+                      <div className="absolute top-2 left-2 bg-yellow-500 text-white px-2 py-1 rounded-full text-xs font-medium">
+                        主圖片
+                      </div>
+                    )}
+                  </div>
+                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                    <div className="opacity-0 group-hover:opacity-100 flex space-x-2">
+                      {!image.isPrimary && (
+                        <button
+                          onClick={() => handleSetPrimaryImage(selectedCourt._id, image._id)}
+                          className="p-2 bg-yellow-500 text-white rounded-full hover:bg-yellow-600 transition-colors"
+                          title="設為主圖片"
+                        >
+                          <StarIcon className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteImage(selectedCourt._id, image._id)}
+                        className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                        title="刪除圖片"
+                      >
+                        <TrashIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {(!selectedCourt.images || selectedCourt.images.length === 0) && (
+              <div className="text-center py-8 text-gray-500">
+                暫無圖片
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

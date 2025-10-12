@@ -75,8 +75,18 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
   const generateTimeSlots = useCallback(() => {
     const slots = [];
-    const startHour = 0; // 24小時營業
-    const endHour = 24;
+    
+    // 根據場地類型確定營業時間
+    let startHour, endHour;
+    if (court?.type === 'solo') {
+      // 單人場營業時間：08:00-23:00
+      startHour = 8;
+      endHour = 23;
+    } else {
+      // 其他場地24小時營業
+      startHour = 0;
+      endHour = 24;
+    }
     
     // 每1小時為一組，不提供半小時選項
     for (let hour = startHour; hour < endHour; hour++) {
@@ -97,7 +107,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
     }
     
     return slots;
-  }, [selectedDuration, date, isTimeInPast, currentTime, forceUpdate]);
+  }, [selectedDuration, date, isTimeInPast, currentTime, forceUpdate, court?.type]);
 
   const checkSlotAvailability = useCallback(async (slot: { start: string; end: string }) => {
     if (!court || !date) return { available: false, price: 0 };
@@ -156,6 +166,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               price: availability.pricing?.totalPrice || 0
             };
           });
+          
           setTimeSlots(results);
           setLoading(false);
         })

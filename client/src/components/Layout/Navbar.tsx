@@ -120,12 +120,12 @@ const Navbar: React.FC = () => {
                       >
                         <div className="py-1">
                           <Link
-                            to="/dashboard"
+                            to="/profile"
                             onClick={() => setIsUserDropdownOpen(false)}
                             className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                           >
                             <UserIcon className="w-4 h-4" />
-                            <span>儀表板</span>
+                            <span>編輯資料</span>
                           </Link>
                           <Link
                             to="/my-bookings"

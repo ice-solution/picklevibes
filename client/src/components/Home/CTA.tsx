@@ -100,7 +100,7 @@ const CTA: React.FC = () => {
             {/* 營業時間 */}
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-2">營業時間</h3>
-              <p className="text-gray-700">24小時營業</p>
+              <p className="text-gray-700">24小時營業(預約制)</p>
               <p className="text-gray-700">全年無休</p>
             </div>
             

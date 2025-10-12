@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useBooking } from '../contexts/BookingContext';
+import apiConfig from '../config/api';
 import { 
   MapPinIcon, 
   UsersIcon,
@@ -155,7 +156,7 @@ const Facilities: React.FC = () => {
                   <div className="h-48 bg-gradient-to-br from-primary-500 to-primary-700 relative">
                     {court.images && court.images.length > 0 ? (
                       <img
-                        src={court.images[0].url}
+                        src={`${apiConfig.SERVER_URL}${court.images[0].url}`}
                         alt={court.images[0].alt || court.name}
                         className="w-full h-full object-cover"
                       />
@@ -217,7 +218,7 @@ const Facilities: React.FC = () => {
                         <div className="flex items-center gap-1">
                           <ClockIcon className="w-4 h-4" />
                           <span>
-                            {court.type === 'solo' ? '每天 08:00-23:00' : '24小時營業'}
+                            {court.type === 'solo' ? '每天 08:00-23:00' : '24小時營業(預約制)'}
                           </span>
                         </div>
                       </div>

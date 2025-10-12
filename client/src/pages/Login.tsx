@@ -59,7 +59,7 @@ const Login: React.FC = () => {
     setIsLoading(true);
     try {
       await login(formData.email, formData.password);
-      navigate('/dashboard');
+      navigate('/my-bookings');
     } catch (error: any) {
       setErrors({ general: error.message });
     } finally {
@@ -186,12 +186,12 @@ const Login: React.FC = () => {
               </div>
 
               <div className="text-sm">
-                <a
-                  href="#"
+                <Link
+                  to="/forgot-password"
                   className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
                 >
                   忘記密碼？
-                </a>
+                </Link>
               </div>
             </div>
 

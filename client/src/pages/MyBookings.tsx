@@ -353,6 +353,9 @@ const MyBookings: React.FC = () => {
                           狀態
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          特殊要求
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           費用
                         </th>
                       </tr>
@@ -386,6 +389,15 @@ const MyBookings: React.FC = () => {
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
                               {getStatusText(booking.status)}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
+                            {booking.specialRequests && booking.specialRequests.trim() ? (
+                              <div className="truncate" title={booking.specialRequests}>
+                                {booking.specialRequests}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">無</span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                             {booking.pricing?.totalPrice || 0} 積分

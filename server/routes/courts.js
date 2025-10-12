@@ -1,6 +1,9 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult, query } = require('express-validator');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs').promises;
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
 const { auth, adminAuth } = require('../middleware/auth');
@@ -15,6 +18,41 @@ const batchLimiter = rateLimit({
 });
 
 const router = express.Router();
+
+// 確保上傳目錄存在
+const uploadDir = path.join(__dirname, '../../uploads/courts');
+fs.mkdir(uploadDir, { recursive: true }).catch(console.error);
+
+// Multer 配置
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, uploadDir);
+  },
+  filename: function (req, file, cb) {
+    // 生成唯一文件名：時間戳 + 隨機數 + 原擴展名
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `court-${uniqueSuffix}${path.extname(file.originalname)}`);
+  }
+});
+
+const upload = multer({
+  storage: storage,
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB 限制
+  },
+  fileFilter: function (req, file, cb) {
+    // 檢查文件類型
+    const allowedTypes = /jpeg|jpg|png|webp/;
+    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
+    const mimetype = allowedTypes.test(file.mimetype);
+
+    if (mimetype && extname) {
+      return cb(null, true);
+    } else {
+      cb(new Error('只允許上傳 JPEG、JPG、PNG、WEBP 格式的圖片'));
+    }
+  }
+});
 
 // 計算時間長度（分鐘）
 function calculateDuration(startTime, endTime) {
@@ -120,25 +158,40 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
       });
     }
     
-    // 檢查場地是否在營業時間內開放
+    // 檢查每個時間段是否在營業時間內開放
     const bookingDate = new Date(date);
-    if (!court.isOpenAt(bookingDate)) {
-      const unavailableSlots = timeSlots.map(slot => ({
-        startTime: slot.startTime,
-        endTime: slot.endTime,
-        available: false,
-        reason: '場地在該時間段不開放'
-      }));
+    const unavailableSlots = [];
+    const validTimeSlots = [];
+    
+    for (const slot of timeSlots) {
+      if (!court.isOpenAt(bookingDate, slot.startTime, slot.endTime)) {
+        unavailableSlots.push({
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          available: false,
+          reason: '場地在該時間段不開放'
+        });
+      } else {
+        validTimeSlots.push(slot);
+      }
+    }
+    
+    // 如果有時間段不在營業時間內，直接返回不可用
+    if (unavailableSlots.length > 0) {
       return res.json({ 
         date,
         courtId: req.params.id,
-        timeSlots: unavailableSlots
+        timeSlots: [...unavailableSlots, ...validTimeSlots.map(slot => ({
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          available: true // 這些會在後續檢查中確認
+        }))]
       });
     }
     
-    // 批量檢查時間衝突
+    // 批量檢查時間衝突（只檢查營業時間內的時間段）
     const availabilityResults = await Promise.all(
-      timeSlots.map(async (slot) => {
+      validTimeSlots.map(async (slot) => {
         try {
           const hasConflict = await Booking.checkTimeConflict(
             req.params.id, 
@@ -189,10 +242,13 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
       })
     );
     
+    // 合併營業時間外的不可用時間段和營業時間內的檢查結果
+    const allResults = [...unavailableSlots, ...availabilityResults];
+    
     res.json({
       date,
       courtId: req.params.id,
-      timeSlots: availabilityResults
+      timeSlots: allResults
     });
     
   } catch (error) {
@@ -462,6 +518,135 @@ router.put('/:id/maintenance', [
     });
   } catch (error) {
     console.error('更新場地維護狀態錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/courts/:id/images
+// @desc    上傳場地圖片（管理員）
+// @access  Private (Admin)
+router.post('/:id/images', [
+  auth,
+  adminAuth,
+  upload.single('image')
+], async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: '請選擇要上傳的圖片' });
+    }
+
+    const court = await Court.findById(req.params.id);
+    if (!court) {
+      // 刪除已上傳的文件
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(404).json({ message: '場地不存在' });
+    }
+
+    // 檢查圖片尺寸（1920x1280）
+    const sharp = require('sharp');
+    const metadata = await sharp(req.file.path).metadata();
+    
+    if (metadata.width !== 1920 || metadata.height !== 1280) {
+      // 刪除不符合尺寸的圖片
+      await fs.unlink(req.file.path).catch(console.error);
+      return res.status(400).json({ 
+        message: '圖片尺寸必須為 1920x1280 像素',
+        currentSize: `${metadata.width}x${metadata.height}`
+      });
+    }
+
+    // 構建圖片 URL
+    const imageUrl = `/uploads/courts/${req.file.filename}`;
+    
+    // 添加圖片到場地
+    const newImage = {
+      url: imageUrl,
+      alt: `${court.name} 場地圖片`,
+      isPrimary: court.images.length === 0 // 如果是第一張圖片，設為主圖片
+    };
+
+    court.images.push(newImage);
+    await court.save();
+
+    res.json({
+      message: '圖片上傳成功',
+      image: newImage
+    });
+  } catch (error) {
+    console.error('上傳圖片錯誤:', error);
+    
+    // 如果上傳了文件，刪除它
+    if (req.file) {
+      await fs.unlink(req.file.path).catch(console.error);
+    }
+    
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   DELETE /api/courts/:id/images/:imageId
+// @desc    刪除場地圖片（管理員）
+// @access  Private (Admin)
+router.delete('/:id/images/:imageId', [auth, adminAuth], async (req, res) => {
+  try {
+    const court = await Court.findById(req.params.id);
+    if (!court) {
+      return res.status(404).json({ message: '場地不存在' });
+    }
+
+    const imageIndex = court.images.findIndex(img => img._id.toString() === req.params.imageId);
+    if (imageIndex === -1) {
+      return res.status(404).json({ message: '圖片不存在' });
+    }
+
+    const image = court.images[imageIndex];
+    
+    // 刪除文件
+    const filePath = path.join(__dirname, '..', image.url);
+    await fs.unlink(filePath).catch(console.error);
+
+    // 從數據庫中移除圖片
+    court.images.splice(imageIndex, 1);
+    
+    // 如果刪除的是主圖片，將第一張圖片設為主圖片
+    if (image.isPrimary && court.images.length > 0) {
+      court.images[0].isPrimary = true;
+    }
+    
+    await court.save();
+
+    res.json({ message: '圖片刪除成功' });
+  } catch (error) {
+    console.error('刪除圖片錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PUT /api/courts/:id/images/:imageId/primary
+// @desc    設置主圖片（管理員）
+// @access  Private (Admin)
+router.put('/:id/images/:imageId/primary', [auth, adminAuth], async (req, res) => {
+  try {
+    const court = await Court.findById(req.params.id);
+    if (!court) {
+      return res.status(404).json({ message: '場地不存在' });
+    }
+
+    // 將所有圖片設為非主圖片
+    court.images.forEach(img => img.isPrimary = false);
+    
+    // 將指定圖片設為主圖片
+    const targetImage = court.images.find(img => img._id.toString() === req.params.imageId);
+    if (!targetImage) {
+      return res.status(404).json({ message: '圖片不存在' });
+    }
+    
+    targetImage.isPrimary = true;
+    await court.save();
+
+    res.json({ message: '主圖片設置成功' });
+  } catch (error) {
+    console.error('設置主圖片錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

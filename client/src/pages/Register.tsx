@@ -90,7 +90,7 @@ const Register: React.FC = () => {
         password: formData.password,
         phone: formData.phone.trim()
       });
-      navigate('/dashboard');
+      navigate('/my-bookings');
     } catch (error: any) {
       setErrors({ general: error.message });
     } finally {

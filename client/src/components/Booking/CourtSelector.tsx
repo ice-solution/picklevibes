@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useBooking } from '../../contexts/BookingContext';
+import apiConfig from '../../config/api';
 import { 
   MapPinIcon, 
   UsersIcon,
@@ -67,7 +68,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
             <div className="h-48 bg-gradient-to-br from-primary-500 to-primary-700 rounded-t-xl relative overflow-hidden">
               {court.images && court.images.length > 0 ? (
                 <img
-                  src={court.images[0].url}
+                  src={`${apiConfig.SERVER_URL}${court.images[0].url}`}
                   alt={court.images[0].alt || court.name}
                   className="w-full h-full object-cover"
                 />

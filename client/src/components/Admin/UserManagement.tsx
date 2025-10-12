@@ -10,7 +10,9 @@ import {
   CheckIcon,
   CurrencyDollarIcon,
   PlusIcon,
-  ClockIcon
+  ClockIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
@@ -68,17 +70,25 @@ const UserManagement: React.FC = () => {
   const [statusReason, setStatusReason] = useState('');
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
+  
+  // 分頁狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [pageSize, setPageSize] = useState(10);
 
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, []);
+  }, [currentPage, pageSize]);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/users');
+      const response = await axios.get(`/users?page=${currentPage}&limit=${pageSize}`);
       setUsers(response.data.users);
+      setTotalPages(response.data.pagination.pages);
+      setTotalUsers(response.data.pagination.total);
     } catch (error) {
       console.error('獲取用戶列表失敗:', error);
     } finally {
@@ -282,6 +292,122 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  // 分頁相關函數
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  const handlePageSizeChange = (size: number) => {
+    setPageSize(size);
+    setCurrentPage(1); // 重置到第一頁
+  };
+
+  // 生成分頁按鈕
+  const renderPaginationButtons = () => {
+    const buttons = [];
+    const maxVisiblePages = 5;
+    
+    // 計算開始和結束頁碼
+    let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2));
+    let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+    
+    // 如果結束頁碼接近總頁碼，調整開始頁碼
+    if (endPage - startPage + 1 < maxVisiblePages) {
+      startPage = Math.max(1, endPage - maxVisiblePages + 1);
+    }
+    
+    // 上一頁按鈕
+    buttons.push(
+      <button
+        key="prev"
+        onClick={() => handlePageChange(currentPage - 1)}
+        disabled={currentPage === 1}
+        className={`px-3 py-2 text-sm font-medium rounded-lg ${
+          currentPage === 1
+            ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+        }`}
+      >
+        <ChevronLeftIcon className="w-4 h-4" />
+      </button>
+    );
+    
+    // 第一頁和省略號
+    if (startPage > 1) {
+      buttons.push(
+        <button
+          key={1}
+          onClick={() => handlePageChange(1)}
+          className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+        >
+          1
+        </button>
+      );
+      if (startPage > 2) {
+        buttons.push(
+          <span key="ellipsis1" className="px-3 py-2 text-sm text-gray-500">
+            ...
+          </span>
+        );
+      }
+    }
+    
+    // 中間頁碼
+    for (let i = startPage; i <= endPage; i++) {
+      buttons.push(
+        <button
+          key={i}
+          onClick={() => handlePageChange(i)}
+          className={`px-3 py-2 text-sm font-medium rounded-lg ${
+            i === currentPage
+              ? 'text-white bg-primary-600 border border-primary-600'
+              : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          {i}
+        </button>
+      );
+    }
+    
+    // 省略號和最後一頁
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) {
+        buttons.push(
+          <span key="ellipsis2" className="px-3 py-2 text-sm text-gray-500">
+            ...
+          </span>
+        );
+      }
+      buttons.push(
+        <button
+          key={totalPages}
+          onClick={() => handlePageChange(totalPages)}
+          className="px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+        >
+          {totalPages}
+        </button>
+      );
+    }
+    
+    // 下一頁按鈕
+    buttons.push(
+      <button
+        key="next"
+        onClick={() => handlePageChange(currentPage + 1)}
+        disabled={currentPage === totalPages}
+        className={`px-3 py-2 text-sm font-medium rounded-lg ${
+          currentPage === totalPages
+            ? 'text-gray-400 bg-gray-100 cursor-not-allowed'
+            : 'text-gray-700 bg-white border border-gray-300 hover:bg-gray-50'
+        }`}
+      >
+        <ChevronRightIcon className="w-4 h-4" />
+      </button>
+    );
+    
+    return buttons;
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -351,6 +477,27 @@ const UserManagement: React.FC = () => {
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
           <p className="text-gray-600">管理用戶角色、會員等級和狀態</p>
+        </div>
+
+        {/* 分頁控制欄 */}
+        <div className="px-6 py-3 border-b border-gray-200 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-700">
+                顯示第 {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, totalUsers)} 項，共 {totalUsers} 項
+              </span>
+              <select
+                value={pageSize}
+                onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value={5}>每頁 5 項</option>
+                <option value={10}>每頁 10 項</option>
+                <option value={20}>每頁 20 項</option>
+                <option value={50}>每頁 50 項</option>
+              </select>
+            </div>
+          </div>
         </div>
 
         <div className="overflow-x-auto">
@@ -479,6 +626,20 @@ const UserManagement: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {/* 分頁導航 */}
+        {totalPages > 1 && (
+          <div className="px-6 py-4 border-t border-gray-200 bg-white">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-700">
+                第 {currentPage} 頁，共 {totalPages} 頁
+              </div>
+              <div className="flex items-center space-x-2">
+                {renderPaginationButtons()}
+              </div>
+            </div>
+          </div>
+        )}
       </motion.div>
 
       {/* 編輯模態框 */}

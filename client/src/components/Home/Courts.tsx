@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useBooking } from '../../contexts/BookingContext';
+import apiConfig from '../../config/api';
 import { 
   MapPinIcon, 
   ClockIcon, 
@@ -77,7 +78,7 @@ const Courts: React.FC = () => {
               <div className="h-48 bg-gradient-to-br from-primary-500 to-primary-700 relative">
                 {court.images && court.images.length > 0 ? (
                   <img
-                    src={court.images[0].url}
+                    src={`${apiConfig.SERVER_URL}${court.images[0].url}`}
                     alt={court.images[0].alt || court.name}
                     className="w-full h-full object-cover"
                   />
@@ -112,7 +113,7 @@ const Courts: React.FC = () => {
                   <div className="flex items-center gap-1">
                     <ClockIcon className="w-4 h-4" />
                     <span>
-                      {court.type === 'solo' ? '8am-11pm' : '24小時營業'}
+                      {court.type === 'solo' ? '8am-11pm' : '24小時營業(預約制)'}
                     </span>
                   </div>
                 </div>

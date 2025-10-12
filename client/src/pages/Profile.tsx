@@ -216,13 +216,11 @@ const Profile: React.FC = () => {
                       會員等級
                     </label>
                     <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium capitalize">
-                        {user?.membershipLevel || 'Basic'}
-                      </span>
-                      <span className="text-sm text-gray-500">
-                        {user?.membershipLevel === 'basic' && '基本會員'}
+                      <span className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">
+                        {user?.membershipLevel === 'basic' && '普通會員'}
                         {user?.membershipLevel === 'premium' && '高級會員'}
                         {user?.membershipLevel === 'vip' && 'VIP會員'}
+                        {!user?.membershipLevel && '普通會員'}
                       </span>
                     </div>
                   </div>
