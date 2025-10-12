@@ -147,7 +147,7 @@ const Footer: React.FC = () => {
               <div className="flex items-start space-x-3">
                 <ClockIcon className="w-5 h-5 text-primary-400 mt-1 flex-shrink-0" />
                 <div>
-                  <p className="text-gray-300">24小時營業</p>
+                  <p className="text-gray-300">24小時營業(需預約方可進場)</p>
                 </div>
               </div>
             </div>

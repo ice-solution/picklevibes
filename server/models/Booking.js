@@ -92,6 +92,11 @@ const bookingSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  bypassRestrictions: {
+    type: Boolean,
+    default: false,
+    description: '管理員是否繞過了所有系統限制'
+  },
   cancellation: {
     cancelledAt: Date,
     cancelledBy: {

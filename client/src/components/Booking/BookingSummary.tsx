@@ -207,6 +207,17 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">預約詳情</h3>
           
+          {/* 場地圖片 */}
+          {court.images && court.images.length > 0 && (
+            <div className="mb-6">
+              <img
+                src={`${apiConfig.SERVER_URL}${court.images[0].url}`}
+                alt={court.images[0].alt || court.name}
+                className="w-full h-48 object-cover rounded-lg"
+              />
+            </div>
+          )}
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="flex items-center gap-3">
               <MapPinIcon className="w-5 h-5 text-primary-600" />
@@ -254,19 +265,27 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
 
         {/* 聯絡信息 */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">負責人聯絡信息</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold text-gray-900">負責人聯絡信息</h3>
+            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+              已自動填入
+            </span>
+          </div>
           
           <div className="space-y-3">
-            <div className="flex items-center justify-between p-3 bg-primary-50 rounded-lg">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
               <div>
-                <p className="font-medium text-primary-900">{bookingData.contactName}</p>
-                <p className="text-sm text-primary-700">{bookingData.contactEmail}</p>
-                <p className="text-sm text-primary-700">{bookingData.contactPhone}</p>
+                <p className="font-medium text-gray-900">{bookingData.contactName}</p>
+                <p className="text-sm text-gray-600">{bookingData.contactEmail}</p>
+                <p className="text-sm text-gray-600">{bookingData.contactPhone}</p>
               </div>
-              <span className="text-sm text-primary-600">負責人</span>
+              <span className="text-sm text-gray-500">負責人</span>
             </div>
           </div>
           
+          <p className="text-xs text-gray-500 mt-3">
+            * 聯絡信息已從您的帳戶資料自動填入，如需修改請前往個人資料頁面
+          </p>
         </div>
 
         {/* 特殊要求 */}

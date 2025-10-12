@@ -54,7 +54,7 @@ router.post('/', [
       });
     }
 
-    let { court, date, startTime, endTime, players, specialRequests, includeSoloCourt = false } = req.body;
+    let { court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, bypassRestrictions = false } = req.body;
     
     // 調試：記錄接收到的參數
     console.log('🔍 預約創建請求參數:', {
@@ -63,6 +63,7 @@ router.post('/', [
       startTime,
       endTime,
       players: players?.length,
+      totalPlayers,
       specialRequests,
       includeSoloCourt
     });
@@ -81,20 +82,23 @@ router.post('/', [
       return res.status(404).json({ message: '場地不存在' });
     }
 
-    if (!courtDoc.isAvailable()) {
+    // 如果不是管理員 bypass，檢查場地可用性
+    if (!bypassRestrictions && !courtDoc.isAvailable()) {
       return res.status(400).json({ message: '場地目前不可用' });
     }
 
-    // 檢查場地是否在營業時間內開放
+    // 如果不是管理員 bypass，檢查場地是否在營業時間內開放
     const bookingDate = new Date(date);
-    if (!courtDoc.isOpenAt(bookingDate)) {
+    if (!bypassRestrictions && !courtDoc.isOpenAt(bookingDate, startTime, endTime)) {
       return res.status(400).json({ message: '場地在該時間段不開放' });
     }
 
-    // 檢查時間衝突
-    const hasConflict = await Booking.checkTimeConflict(court, date, startTime, endTime);
-    if (hasConflict) {
-      return res.status(400).json({ message: '該時間段已被預約' });
+    // 如果不是管理員 bypass，檢查時間衝突
+    if (!bypassRestrictions) {
+      const hasConflict = await Booking.checkTimeConflict(court, date, startTime, endTime);
+      if (hasConflict) {
+        return res.status(400).json({ message: '該時間段已被預約' });
+      }
     }
 
     // 計算持續時間
@@ -115,13 +119,15 @@ router.post('/', [
       return res.status(400).json({ message: '結束時間必須晚於開始時間' });
     }
 
-    // 檢查時長限制（最多2小時）
-    if (duration < 60) {
-      return res.status(400).json({ message: '預約時長至少1小時' });
-    }
-    
-    if (duration > 120) {
-      return res.status(400).json({ message: '預約時長最多2小時' });
+    // 如果不是管理員 bypass，檢查時長限制（最多2小時）
+    if (!bypassRestrictions) {
+      if (duration < 60) {
+        return res.status(400).json({ message: '預約時長至少1小時' });
+      }
+      
+      if (duration > 120) {
+        return res.status(400).json({ message: '預約時長最多2小時' });
+      }
     }
 
     // 計算結束日期（如果跨天，則為下一天）
@@ -144,7 +150,7 @@ router.post('/', [
       endTime,
       duration,
       players,
-      totalPlayers: players.length + 1,
+      totalPlayers: totalPlayers, // 直接使用前端發送的 totalPlayers
       specialRequests
     });
     
@@ -169,7 +175,8 @@ router.post('/', [
       userBalance = new UserBalance({ user: req.user.id });
     }
     
-    if (userBalance.balance < pointsToDeduct) {
+    // 如果不是管理員 bypass，檢查積分餘額
+    if (!bypassRestrictions && userBalance.balance < pointsToDeduct) {
       return res.status(400).json({ 
         message: '積分餘額不足',
         required: pointsToDeduct,
@@ -178,15 +185,17 @@ router.post('/', [
       });
     }
     
-    // 扣除積分
-    await userBalance.deductBalance(
-      pointsToDeduct, 
-      `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}`,
-      null // 稍後會更新為實際的預約ID
-    );
+    // 如果不是管理員 bypass，扣除積分
+    if (!bypassRestrictions) {
+      await userBalance.deductBalance(
+        pointsToDeduct, 
+        `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}`,
+        null // 稍後會更新為實際的預約ID
+      );
+    }
     
-    // 創建預約（直接確認，因為已扣積分）
-    const booking = new Booking({
+    // 創建預約數據對象
+    const bookingData = {
       user: req.user.id,
       court,
       date: bookingDate,
@@ -195,9 +204,10 @@ router.post('/', [
       endTime,
       duration,
       players,
-      totalPlayers: players.length + 1,
+      totalPlayers: totalPlayers, // 直接使用前端發送的 totalPlayers
       specialRequests,
       includeSoloCourt, // 添加單人場租用信息
+      bypassRestrictions, // 記錄是否繞過了限制
       status: 'confirmed', // 直接確認
       payment: {
         status: 'paid',
@@ -214,10 +224,22 @@ router.post('/', [
         pointsDeducted: pointsToDeduct,
         vipDiscount: isVip ? 20 : 0,
         soloCourtFee: includeSoloCourt ? 100 : 0 // 單人場費用
-      }
-    });
+      },
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
 
-    await booking.save();
+    let booking;
+
+    // 如果是管理員 bypass，直接插入數據庫繞過所有驗證
+    if (bypassRestrictions) {
+      const result = await Booking.collection.insertOne(bookingData);
+      booking = await Booking.findById(result.insertedId);
+    } else {
+      // 正常流程，使用 Mongoose 驗證
+      booking = new Booking(bookingData);
+      await booking.save();
+    }
     
     // 調試：記錄保存的預約信息
     console.log('🔍 預約保存成功:', {
@@ -239,8 +261,8 @@ router.post('/', [
         return res.status(500).json({ message: '找不到單人場' });
       }
       
-      // 創建單人場預約記錄
-      soloCourtBooking = new Booking({
+      // 創建單人場預約數據對象
+      const soloCourtBookingData = {
         user: req.user.id,
         court: soloCourt._id,
         date: bookingDate,
@@ -249,9 +271,10 @@ router.post('/', [
         endTime,
         duration,
         players: players, // 使用相同的玩家信息
-        totalPlayers: players.length + 1,
+        totalPlayers: totalPlayers, // 直接使用前端發送的 totalPlayers
         specialRequests: `單人場租用 - 與主場地同時段使用`,
         includeSoloCourt: false, // 單人場記錄本身不包含單人場
+        bypassRestrictions, // 記錄是否繞過了限制
         status: 'confirmed',
         payment: {
           status: 'paid',
@@ -268,10 +291,20 @@ router.post('/', [
           pointsDeducted: 0, // 費用已包含在主預約中
           vipDiscount: 0,
           soloCourtFee: 0
-        }
-      });
-      
-      await soloCourtBooking.save();
+        },
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      // 如果是管理員 bypass，直接插入數據庫繞過所有驗證
+      if (bypassRestrictions) {
+        const soloResult = await Booking.collection.insertOne(soloCourtBookingData);
+        soloCourtBooking = await Booking.findById(soloResult.insertedId);
+      } else {
+        // 正常流程，使用 Mongoose 驗證
+        soloCourtBooking = new Booking(soloCourtBookingData);
+        await soloCourtBooking.save();
+      }
       console.log('🔍 單人場預約記錄創建成功:', {
         soloBookingId: soloCourtBooking._id,
         soloCourt: soloCourt.name,

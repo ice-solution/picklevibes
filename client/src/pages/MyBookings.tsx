@@ -117,6 +117,17 @@ const MyBookings: React.FC = () => {
     return time;
   };
 
+  const formatCreatedDate = (dateString: string) => {
+    if (!dateString) return '-';
+    const d = new Date(dateString);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const hours = String(d.getHours()).padStart(2, '0');
+    const minutes = String(d.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  };
+
   const getStatusText = (status: string) => {
     switch (status) {
       case 'confirmed':
@@ -344,6 +355,9 @@ const MyBookings: React.FC = () => {
                           場地
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          訂單日期
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           日期時間
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -351,6 +365,9 @@ const MyBookings: React.FC = () => {
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           狀態
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          特殊要求
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           費用
@@ -373,6 +390,9 @@ const MyBookings: React.FC = () => {
                               </div>
                             </div>
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                            {formatCreatedDate(booking.createdAt)}
+                          </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-900">{formatDate(booking.date)}</div>
                             <div className="text-sm text-gray-500">
@@ -386,6 +406,15 @@ const MyBookings: React.FC = () => {
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
                               {getStatusText(booking.status)}
                             </span>
+                          </td>
+                          <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
+                            {booking.specialRequests && booking.specialRequests.trim() ? (
+                              <div className="truncate" title={booking.specialRequests}>
+                                {booking.specialRequests}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400">無</span>
+                            )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                             {booking.pricing?.totalPrice || 0} 積分

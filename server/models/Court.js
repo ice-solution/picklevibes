@@ -99,7 +99,7 @@ courtSchema.methods.isAvailable = function() {
 };
 
 // 檢查場地在指定時間是否開放
-courtSchema.methods.isOpenAt = function(date) {
+courtSchema.methods.isOpenAt = function(date, startTime = null, endTime = null) {
   // 確保 date 是 Date 對象
   const dateObj = new Date(date);
   
@@ -112,6 +112,19 @@ courtSchema.methods.isOpenAt = function(date) {
     return false;
   }
   
+  // 如果提供了具體的預約時間，檢查是否在營業時間範圍內
+  if (startTime && endTime) {
+    const startTimeStr = startTime.substring(0, 5); // 格式：HH:MM
+    const endTimeStr = endTime.substring(0, 5);
+    
+    // 檢查開始時間和結束時間是否都在營業時間範圍內
+    const isStartInRange = startTimeStr >= daySchedule.start && startTimeStr < daySchedule.end;
+    const isEndInRange = endTimeStr > daySchedule.start && endTimeStr <= daySchedule.end;
+    
+    return isStartInRange && isEndInRange;
+  }
+  
+  // 如果沒有提供具體時間，只檢查日期
   const time = dateObj.toTimeString().substring(0, 5);
   
   // 處理 24:00 的特殊情況

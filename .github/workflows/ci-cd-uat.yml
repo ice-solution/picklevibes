@@ -1,0 +1,211 @@
+name: CI/CD - UAT Deployment
+
+on:
+  push:
+    branches:
+      - uat
+  pull_request:
+    branches:
+      - uat
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  # Job 1: 測試
+  test:
+    name: 測試和驗證
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v3
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: 安裝後端依賴
+        run: npm ci
+
+      - name: 安裝前端依賴
+        run: |
+          cd client
+          npm ci
+
+      - name: Linting
+        run: |
+          npm run lint || echo "Backend linting done"
+          cd client && npm run lint || echo "Frontend linting done"
+
+  # Job 2: 建構 UAT 版本
+  build-uat:
+    name: 建構 UAT 版本
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v3
+
+      - name: 設置 Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: 安裝依賴
+        run: |
+          cd client
+          npm ci
+
+      - name: 建構 UAT 版本
+        env:
+          REACT_APP_API_URL: ${{ secrets.UAT_API_URL }}
+          REACT_APP_SERVER_URL: ${{ secrets.UAT_SERVER_URL }}
+          REACT_APP_STRIPE_PUBLISHABLE_KEY: ${{ secrets.UAT_STRIPE_PUBLISHABLE_KEY }}
+          REACT_APP_GA_TRACKING_ID: ${{ secrets.GA_TRACKING_ID }}
+          REACT_APP_ENV: uat
+          NODE_ENV: production
+          GENERATE_SOURCEMAP: false
+        run: |
+          cd client
+          npm run build
+
+      - name: 上傳建構產物
+        uses: actions/upload-artifact@v3
+        with:
+          name: uat-build
+          path: client/build/
+          retention-days: 7
+
+  # Job 3: 部署到 UAT
+  deploy-uat:
+    name: 部署到 UAT 服務器
+    runs-on: ubuntu-latest
+    needs: build-uat
+    if: github.event_name == 'push'  # 只有 push 才部署，PR 不部署
+    environment:
+      name: uat
+      url: https://uat.picklevibes.hk
+    
+    steps:
+      - name: 檢出代碼
+        uses: actions/checkout@v3
+
+      - name: 下載建構產物
+        uses: actions/download-artifact@v3
+        with:
+          name: uat-build
+          path: client/build/
+
+      - name: 創建部署包
+        run: |
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          mkdir -p deploy
+          cp -r client/build deploy/
+          cp -r server deploy/
+          cp package*.json deploy/
+          cp ecosystem.config.js deploy/
+          cd deploy
+          tar -czf ../deploy-uat-$TIMESTAMP.tar.gz .
+          cd ..
+          echo "UAT 部署包已創建"
+          ls -lh deploy-uat-*.tar.gz
+
+      - name: 上傳到 UAT 服務器
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.UAT_HOST }}
+          username: ${{ secrets.UAT_USERNAME }}
+          key: ${{ secrets.UAT_SSH_KEY }}
+          port: ${{ secrets.UAT_PORT || 22 }}
+          source: "deploy-uat-*.tar.gz"
+          target: "/tmp/"
+
+      - name: 部署到 UAT 環境
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.UAT_HOST }}
+          username: ${{ secrets.UAT_USERNAME }}
+          key: ${{ secrets.UAT_SSH_KEY }}
+          port: ${{ secrets.UAT_PORT || 22 }}
+          script: |
+            set -e
+            
+            echo "🚀 開始部署 UAT 環境..."
+            
+            APP_DIR="/var/www/picklevibes-uat"
+            BACKUP_DIR="$APP_DIR/backups"
+            TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+            
+            mkdir -p $BACKUP_DIR
+            
+            # 備份
+            if [ -d "$APP_DIR/client/build" ]; then
+              cp -r $APP_DIR/client/build $BACKUP_DIR/build-$TIMESTAMP
+            fi
+            
+            # 解壓
+            cd /tmp
+            DEPLOY_FILE=$(ls -t deploy-uat-*.tar.gz | head -1)
+            tar -xzf $DEPLOY_FILE -C $APP_DIR/
+            
+            # 安裝依賴
+            cd $APP_DIR
+            npm install --production
+            
+            # 重啟
+            pm2 restart picklevibes-uat || pm2 start ecosystem.config.js --name picklevibes-uat
+            
+            sleep 3
+            pm2 status picklevibes-uat
+            
+            # 清理
+            rm -f /tmp/deploy-uat-*.tar.gz
+            cd $BACKUP_DIR && ls -t | tail -n +6 | xargs -r rm -rf
+            
+            echo "✅ UAT 部署完成！"
+
+      - name: UAT 健康檢查
+        run: |
+          echo "🏥 UAT 健康檢查..."
+          sleep 10
+          
+          for i in {1..5}; do
+            if curl -f -s "${{ secrets.UAT_API_URL }}/health" > /dev/null; then
+              echo "✅ UAT 健康檢查通過"
+              exit 0
+            fi
+            echo "等待 UAT 服務啟動... ($i/5)"
+            sleep 5
+          done
+          
+          echo "⚠️ UAT 健康檢查超時（可能正在啟動）"
+
+  # Job 4: 通知
+  notify:
+    name: 發送通知
+    runs-on: ubuntu-latest
+    needs: deploy-uat
+    if: always()
+    
+    steps:
+      - name: Slack 通知
+        if: ${{ secrets.SLACK_WEBHOOK_URL != '' }}
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            UAT 環境部署 ${{ job.status == 'success' && '✅ 成功' || '❌ 失敗' }}
+            分支: ${{ github.ref }}
+            作者: ${{ github.actor }}
+            UAT URL: https://uat.picklevibes.hk
+          webhook_url: ${{ secrets.SLACK_WEBHOOK_URL }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+

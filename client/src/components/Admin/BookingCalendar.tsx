@@ -5,13 +5,15 @@ import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import axios from 'axios';
+import CreateBookingModal from './CreateBookingModal';
 import {
   CalendarDaysIcon,
   ClockIcon,
   UserIcon,
   MapPinIcon,
   EyeIcon,
-  XMarkIcon
+  XMarkIcon,
+  PlusIcon
 } from '@heroicons/react/24/outline';
 
 interface Booking {
@@ -47,6 +49,7 @@ interface Booking {
     status: string;
     amount: number;
   };
+  specialRequests?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -58,7 +61,11 @@ const BookingCalendar: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [view, setView] = useState<'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'>('dayGridMonth');
+  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedCourt, setSelectedCourt] = useState<string>('');
+  const [selectedTime, setSelectedTime] = useState<string>('');
 
   useEffect(() => {
     fetchBookings();
@@ -152,6 +159,15 @@ const BookingCalendar: React.FC = () => {
     setShowDetailModal(true);
   };
 
+  const handleDateClick = (info: any) => {
+    // 當點擊空白日期時，設置選中的日期並打開創建預約模態框
+    const clickedDate = info.dateStr;
+    setSelectedDate(clickedDate);
+    setSelectedCourt('');
+    setSelectedTime('');
+    setShowCreateModal(true);
+  };
+
   const handleViewChange = (newView: 'dayGridMonth' | 'timeGridWeek' | 'timeGridDay') => {
     setView(newView);
     if (calendarRef.current) {
@@ -170,6 +186,21 @@ const BookingCalendar: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {/* 頁面標題和操作按鈕 */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">預約日曆</h2>
+          <p className="text-gray-600 mt-1">查看和管理預約安排，支持點擊空白區域創建新預約</p>
+        </div>
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
+        >
+          <PlusIcon className="w-4 h-4" />
+          創建預約
+        </button>
+      </div>
+
       {/* 錯誤信息 */}
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-md p-4">
@@ -264,6 +295,7 @@ const BookingCalendar: React.FC = () => {
           }}
           events={events}
           eventClick={handleEventClick}
+          dateClick={handleDateClick}
           height="auto"
           locale="zh-tw"
           buttonText={{
@@ -357,6 +389,13 @@ const BookingCalendar: React.FC = () => {
                 </div>
               </div>
               
+              {selectedBooking.specialRequests && selectedBooking.specialRequests.trim() && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">特殊要求</label>
+                  <p className="text-sm text-gray-900 mt-1 p-3 bg-gray-50 rounded-lg">{selectedBooking.specialRequests}</p>
+                </div>
+              )}
+              
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">總價</label>
@@ -371,6 +410,19 @@ const BookingCalendar: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* 創建預約模態框 */}
+      <CreateBookingModal
+        isOpen={showCreateModal}
+        onClose={() => setShowCreateModal(false)}
+        onBookingCreated={() => {
+          fetchBookings();
+          setShowCreateModal(false);
+        }}
+        selectedDate={selectedDate}
+        selectedCourt={selectedCourt}
+        selectedTime={selectedTime}
+      />
     </div>
   );
 };

@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const path = require('path');
 require('dotenv').config();
 
 const app = express();
@@ -12,7 +13,9 @@ const app = express();
 app.set('trust proxy', true);
 
 // 安全中間件
-app.use(helmet());
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 
 // 速率限制 - 針對批量 API 調整
 const limiter = rateLimit({
@@ -21,14 +24,9 @@ const limiter = rateLimit({
   message: '請求過於頻繁，請稍後再試',
   standardHeaders: true,
   legacyHeaders: false,
-  // 明確告訴 rate limiter 我們在使用受信任的代理（Cloudflare）
-  validate: {
-    trustProxy: false, // 禁用 trust proxy 驗證警告
-    xForwardedForHeader: false // 禁用 X-Forwarded-For 驗證警告
-  },
+  // 在開發環境中禁用 trust proxy 驗證
   skip: (req) => {
-    // 在開發環境中跳過某些請求
-    return process.env.NODE_ENV === 'development' && req.path.includes('/api/health');
+    return process.env.NODE_ENV === 'development';
   }
 });
 
@@ -39,10 +37,9 @@ const batchLimiter = rateLimit({
   message: '批量請求過於頻繁，請稍後再試',
   standardHeaders: true,
   legacyHeaders: false,
-  // 明確告訴 rate limiter 我們在使用受信任的代理（Cloudflare）
-  validate: {
-    trustProxy: false, // 禁用 trust proxy 驗證警告
-    xForwardedForHeader: false // 禁用 X-Forwarded-For 驗證警告
+  // 在開發環境中禁用 trust proxy 驗證
+  skip: (req) => {
+    return process.env.NODE_ENV === 'development';
   }
 });
 
@@ -67,6 +64,14 @@ app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 // 解析JSON（其他路由）
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// 靜態文件服務 - 用於提供上傳的圖片（必須在路由之前）
+app.use('/uploads', (req, res, next) => {
+  // 為靜態文件添加 CORS 標頭
+  res.header('Access-Control-Allow-Origin', 'http://localhost:3000');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  next();
+}, express.static(path.join(__dirname, '../uploads')));
 
 // 數據庫連接
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/picklevibes', {
