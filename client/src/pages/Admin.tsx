@@ -6,6 +6,9 @@ import { useBooking } from '../contexts/BookingContext';
 import CurrentBookings from '../components/Booking/CurrentBookings';
 import UserManagement from '../components/Admin/UserManagement';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
+import BookingManagement from '../components/Admin/BookingManagement';
+import BookingCalendar from '../components/Admin/BookingCalendar';
+import CourtManagement from '../components/Admin/CourtManagement';
 import { 
   CalendarDaysIcon, 
   UserGroupIcon,
@@ -24,7 +27,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'users', 'redeem', 'courts', 'revenue', 'analytics'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -52,6 +55,7 @@ const Admin: React.FC = () => {
 
   const tabs = [
     { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon },
+    { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon },
     { id: 'users', name: '用戶管理', icon: UsersIcon },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
@@ -169,56 +173,33 @@ const Admin: React.FC = () => {
 
           <div className="p-6">
             {activeTab === 'bookings' && (
-              <div>
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl font-semibold text-gray-900">所有預約</h2>
-                  <div className="flex space-x-2">
-                    <button className="px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">
-                      已確認: {confirmedBookings}
-                    </button>
-                    <button className="px-3 py-1 text-sm bg-yellow-100 text-yellow-800 rounded-full">
-                      待確認: {pendingBookings}
-                    </button>
-                    <button className="px-3 py-1 text-sm bg-red-100 text-red-800 rounded-full">
-                      已取消: {cancelledBookings}
-                    </button>
-                  </div>
-                </div>
-                <CurrentBookings showAll={true} />
-              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <BookingManagement />
+              </motion.div>
+            )}
+
+            {activeTab === 'calendar' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <BookingCalendar />
+              </motion.div>
             )}
 
             {activeTab === 'courts' && (
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">場地管理</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {courts.map((court) => (
-                    <div key={court._id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-gray-900">{court.name}</h3>
-                        <span className={`px-2 py-1 text-xs rounded-full ${
-                          court.isActive 
-                            ? 'bg-green-100 text-green-800' 
-                            : 'bg-red-100 text-red-800'
-                        }`}>
-                          {court.isActive ? '啟用' : '停用'}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-2">{court.description}</p>
-                      <div className="text-sm text-gray-500">
-                        <p>容量: {court.capacity} 人</p>
-                        <p>類型: {
-                          court.type === 'competition' ? '比賽場' :
-                          court.type === 'training' ? '訓練場' :
-                          court.type === 'solo' ? '單人場' :
-                          court.type === 'dink' ? '練習場' : '場地'
-                        }</p>
-                        <p>價格: {court.pricing?.offPeak} - {court.pricing?.peakHour} 積分/小時</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <CourtManagement />
+              </motion.div>
             )}
 
             {activeTab === 'users' && (

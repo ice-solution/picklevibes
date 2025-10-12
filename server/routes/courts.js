@@ -37,9 +37,17 @@ function calculateDuration(startTime, endTime) {
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { type, available } = req.query;
+    const { type, available, all } = req.query;
     
-    let query = { isActive: true };
+    let query = {};
+    
+    // 如果是管理員請求所有場地（包括停用的）
+    if (all === 'true') {
+      // 不添加 isActive 篩選條件
+    } else {
+      // 默認只返回啟用的場地
+      query.isActive = true;
+    }
     
     if (type) {
       query.type = type;
@@ -368,6 +376,45 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
     res.json({ message: '場地刪除成功' });
   } catch (error) {
     console.error('刪除場地錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PUT /api/courts/:id/status
+// @desc    更新場地啟用/停用狀態（管理員）
+// @access  Private (Admin)
+router.put('/:id/status', [
+  auth,
+  adminAuth,
+  body('isActive').isBoolean().withMessage('場地狀態必須是布爾值')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: '輸入驗證失敗',
+        errors: errors.array()
+      });
+    }
+
+    const { isActive } = req.body;
+    
+    const court = await Court.findByIdAndUpdate(
+      req.params.id,
+      { isActive },
+      { new: true, runValidators: true }
+    );
+
+    if (!court) {
+      return res.status(404).json({ message: '場地不存在' });
+    }
+
+    res.json({
+      message: `場地已${isActive ? '啟用' : '停用'}`,
+      court
+    });
+  } catch (error) {
+    console.error('更新場地狀態錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
