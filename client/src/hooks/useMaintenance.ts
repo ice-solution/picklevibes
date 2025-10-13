@@ -17,7 +17,7 @@ export const useMaintenance = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get(`${apiConfig.API_BASE_URL}/maintenance/status`);
+      const response = await axios.get('/maintenance/status');
       setStatus(response.data);
     } catch (err: any) {
       setError(err.response?.data?.message || '檢查維護狀態失敗');
@@ -31,7 +31,7 @@ export const useMaintenance = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.post(`${apiConfig.API_BASE_URL}/maintenance/toggle`, {
+      const response = await axios.post('/maintenance/toggle', {
         message: message || undefined
       });
       setStatus(response.data);
@@ -48,7 +48,7 @@ export const useMaintenance = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.post(`${apiConfig.API_BASE_URL}/maintenance/set-message`, {
+      const response = await axios.post('/maintenance/set-message', {
         message
       });
       setStatus(response.data);
