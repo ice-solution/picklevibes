@@ -25,17 +25,20 @@ import PaymentResult from './pages/PaymentResult';
 import Recharge from './pages/Recharge';
 import RechargeSuccess from './pages/RechargeSuccess';
 import Balance from './pages/Balance';
+import Maintenance from './pages/Maintenance';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 
 function App() {
   return (
     <AuthProvider>
       <BookingProvider>
         <Router>
-          <div className="min-h-screen bg-gray-50">
-            <Navbar />
-            <main>
-              <Routes>
+          <MaintenanceCheck>
+            <div className="min-h-screen bg-gray-50">
+              <Navbar />
+              <main>
+                <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/faq" element={<FAQ />} />
@@ -108,10 +111,17 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
-              </Routes>
-            </main>
-            <Footer />
-          </div>
+                <Route path="/maintenance" element={<Maintenance />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+                <Route path="/forgot-password" element={<ForgotPassword />} />
+                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
+                </Routes>
+              </main>
+              <Footer />
+            </div>
+          </MaintenanceCheck>
         </Router>
       </BookingProvider>
     </AuthProvider>

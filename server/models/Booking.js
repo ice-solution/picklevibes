@@ -132,6 +132,9 @@ bookingSchema.index({ status: 1, date: 1 });
 bookingSchema.statics.checkTimeConflict = async function(courtId, date, startTime, endTime, excludeId = null) {
   const bookingDate = new Date(date);
   
+  // 確保 courtId 是 ObjectId 類型
+  const courtObjectId = typeof courtId === 'string' ? new mongoose.Types.ObjectId(courtId) : courtId;
+  
   // 計算新預約的結束日期
   const timeToMinutes = (time) => {
     const [hour, minute] = time.split(':').map(Number);
@@ -149,7 +152,7 @@ bookingSchema.statics.checkTimeConflict = async function(courtId, date, startTim
   
   // 查找可能衝突的預約：當天或下一天
   const query = {
-    court: courtId,
+    court: courtObjectId,
     status: { $in: ['confirmed', 'pending'] },
     $or: [
       { date: bookingDate }, // 當天的預約

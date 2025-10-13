@@ -37,6 +37,9 @@ const auth = async (req, res, next) => {
 
 // 管理員權限中間件
 const adminAuth = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
+  }
   if (req.user.role !== 'admin') {
     return res.status(403).json({ message: '訪問被拒絕，需要管理員權限' });
   }
@@ -45,6 +48,9 @@ const adminAuth = (req, res, next) => {
 
 // 教練或管理員權限中間件
 const coachOrAdminAuth = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
+  }
   if (!['admin', 'coach'].includes(req.user.role)) {
     return res.status(403).json({ message: '訪問被拒絕，需要教練或管理員權限' });
   }
@@ -52,4 +58,5 @@ const coachOrAdminAuth = (req, res, next) => {
 };
 
 module.exports = { auth, adminAuth, coachOrAdminAuth };
+
 

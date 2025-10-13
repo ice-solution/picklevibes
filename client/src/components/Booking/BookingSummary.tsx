@@ -354,6 +354,19 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 </div>
               )}
               
+              {/* VIP 會員折扣 */}
+              {user?.membershipLevel === 'vip' && (
+                <div className="flex justify-between text-green-600">
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">VIP</span>
+                    會員折扣 (8折)
+                  </span>
+                  <span className="font-medium">
+                    -{Math.round(((availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)) * 0.2)} 積分
+                  </span>
+                </div>
+              )}
+              
               <div className="flex justify-between">
                 <span className="text-gray-600">時長</span>
                 <span className="font-medium">{calculateDuration()} 分鐘</span>
@@ -363,9 +376,17 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 <div className="flex justify-between text-lg font-semibold">
                   <span>總計</span>
                   <span className="text-primary-600">
-                    {(availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)} 積分
+                    {user?.membershipLevel === 'vip' 
+                      ? Math.round(((availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)) * 0.8)
+                      : (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)
+                    } 積分
                   </span>
                 </div>
+                {user?.membershipLevel === 'vip' && (
+                  <div className="text-sm text-green-600 mt-1 text-right">
+                    已享受 VIP 會員 8 折優惠
+                  </div>
+                )}
               </div>
             </div>
           </div>

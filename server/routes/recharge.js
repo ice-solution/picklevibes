@@ -209,6 +209,7 @@ router.get('/history', auth, async (req, res) => {
 // @access  Private
 router.get('/balance', auth, async (req, res) => {
   try {
+    const { page = 1, limit = 10 } = req.query;
     let userBalance = await UserBalance.findOne({ user: req.user.id });
     
     if (!userBalance) {
@@ -216,11 +217,27 @@ router.get('/balance', auth, async (req, res) => {
       await userBalance.save();
     }
     
+    // 按時間倒序排序（最新的在前）
+    const sortedTransactions = userBalance.transactions.sort((a, b) => 
+      new Date(b.createdAt) - new Date(a.createdAt)
+    );
+    
+    // 分頁
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex);
+    
     res.json({ 
       balance: userBalance.balance,
       totalRecharged: userBalance.totalRecharged,
       totalSpent: userBalance.totalSpent,
-      transactions: userBalance.transactions.slice(-10) // 最近10筆交易
+      transactions: paginatedTransactions,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(sortedTransactions.length / limit),
+        total: sortedTransactions.length,
+        limit: parseInt(limit)
+      }
     });
   } catch (error) {
     console.error('獲取用戶餘額錯誤:', error);

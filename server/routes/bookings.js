@@ -1,7 +1,9 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { body, validationResult, query } = require('express-validator');
 const Booking = require('../models/Booking');
 const Court = require('../models/Court');
+const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
 const whatsappService = require('../services/whatsappService');
@@ -54,7 +56,11 @@ router.post('/', [
       });
     }
 
-    let { court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, bypassRestrictions = false } = req.body;
+    let { user, court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, bypassRestrictions = false } = req.body;
+    
+    // 如果沒有指定用戶（普通用戶創建），使用當前登錄用戶
+    // 如果指定了用戶（管理員創建），使用指定的用戶
+    const bookingUserId = user || req.user.id;
     
     // 調試：記錄接收到的參數
     console.log('🔍 預約創建請求參數:', {
@@ -137,8 +143,21 @@ router.post('/', [
     }
 
     // 計算價格
-    const isMember = req.user.membershipLevel !== 'basic';
-    const isVip = req.user.membershipLevel === 'vip';
+    // 獲取預約用戶的會員級別（如果是管理員創建，使用選擇的用戶；否則使用當前用戶）
+    let bookingUser;
+    if (user) {
+      // 管理員創建預約，獲取選擇的用戶信息
+      bookingUser = await User.findById(bookingUserId);
+      if (!bookingUser) {
+        return res.status(404).json({ message: '選擇的用戶不存在' });
+      }
+    } else {
+      // 普通用戶創建預約，使用當前登錄用戶
+      bookingUser = req.user;
+    }
+    
+    const isMember = bookingUser.membershipLevel !== 'basic';
+    const isVip = bookingUser.membershipLevel === 'vip';
     
     // 創建預約對象來計算價格
     const tempBooking = new Booking({
@@ -169,10 +188,10 @@ router.post('/', [
       pointsToDeduct = Math.round(pointsToDeduct * 0.8); // VIP會員8折
     }
     
-    // 檢查用戶餘額
-    let userBalance = await UserBalance.findOne({ user: req.user.id });
+    // 檢查用戶餘額（使用預約用戶的 ID，而不是當前登錄用戶）
+    let userBalance = await UserBalance.findOne({ user: bookingUserId });
     if (!userBalance) {
-      userBalance = new UserBalance({ user: req.user.id });
+      userBalance = new UserBalance({ user: bookingUserId });
     }
     
     // 如果不是管理員 bypass，檢查積分餘額
@@ -195,9 +214,13 @@ router.post('/', [
     }
     
     // 創建預約數據對象
+    // 確保 ObjectId 類型正確（特別是在 bypass 模式下）
+    const userObjectId = typeof bookingUserId === 'string' ? new mongoose.Types.ObjectId(bookingUserId) : bookingUserId;
+    const courtObjectId = typeof court === 'string' ? new mongoose.Types.ObjectId(court) : court;
+    
     const bookingData = {
-      user: req.user.id,
-      court,
+      user: userObjectId,
+      court: courtObjectId,
       date: bookingDate,
       endDate: calculatedEndDate,
       startTime,
@@ -220,9 +243,10 @@ router.post('/', [
       pricing: {
         basePrice: tempBooking.pricing.basePrice,
         memberDiscount: tempBooking.pricing.memberDiscount,
-        totalPrice: tempBooking.pricing.totalPrice,
+        totalPrice: pointsToDeduct, // 使用實際扣除的積分（已應用 VIP 折扣）
+        originalPrice: tempBooking.pricing.totalPrice, // 保存原價
         pointsDeducted: pointsToDeduct,
-        vipDiscount: isVip ? 20 : 0,
+        vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
         soloCourtFee: includeSoloCourt ? 100 : 0 // 單人場費用
       },
       createdAt: new Date(),
@@ -262,9 +286,33 @@ router.post('/', [
       }
       
       // 創建單人場預約數據對象
+      // 確保 ObjectId 類型正確（特別是在 bypass 模式下）
+      const soloUserObjectId = typeof bookingUserId === 'string' ? new mongoose.Types.ObjectId(bookingUserId) : bookingUserId;
+      const soloCourtObjectId = typeof soloCourt._id === 'string' ? new mongoose.Types.ObjectId(soloCourt._id) : soloCourt._id;
+      
+      // 創建單人場預約對象來計算價格
+      const tempSoloBooking = new Booking({
+        user: soloUserObjectId,
+        court: soloCourtObjectId,
+        date: bookingDate,
+        endDate: calculatedEndDate,
+        startTime,
+        endTime,
+        duration,
+        players: players,
+        totalPlayers: totalPlayers,
+        specialRequests: `單人場租用 - 與主場地同時段使用`,
+        includeSoloCourt: false,
+        bypassRestrictions,
+        status: 'confirmed'
+      });
+      
+      // 計算單人場價格
+      tempSoloBooking.calculatePrice(soloCourt, isMember);
+      
       const soloCourtBookingData = {
-        user: req.user.id,
-        court: soloCourt._id,
+        user: soloUserObjectId,
+        court: soloCourtObjectId,
         date: bookingDate,
         endDate: calculatedEndDate,
         startTime,
@@ -281,15 +329,16 @@ router.post('/', [
           method: 'points',
           paidAt: new Date(),
           pointsDeducted: 0, // 單人場費用已包含在主預約中
-          originalPrice: 100,
-          discount: 0
+          originalPrice: tempSoloBooking.pricing.totalPrice,
+          discount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.2) : 0
         },
         pricing: {
-          basePrice: 100,
-          memberDiscount: 0,
-          totalPrice: 100,
+          basePrice: tempSoloBooking.pricing.basePrice,
+          memberDiscount: tempSoloBooking.pricing.memberDiscount,
+          totalPrice: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.8) : tempSoloBooking.pricing.totalPrice, // 應用 VIP 折扣
+          originalPrice: tempSoloBooking.pricing.totalPrice, // 保存原價
           pointsDeducted: 0, // 費用已包含在主預約中
-          vipDiscount: 0,
+          vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.2) : 0,
           soloCourtFee: 0
         },
         createdAt: new Date(),

@@ -10,6 +10,7 @@ import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
 import CourtManagement from '../components/Admin/CourtManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
+import MaintenanceControl from '../components/Admin/MaintenanceControl';
 import { 
   CalendarDaysIcon, 
   UserGroupIcon,
@@ -17,22 +18,39 @@ import {
   ChartBarIcon,
   UsersIcon,
   TicketIcon,
-  CreditCardIcon
+  CreditCardIcon,
+  WrenchScrewdriverIcon
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
   const { user } = useAuth();
-  const { bookings, courts } = useBooking();
+  const { bookings, courts, fetchBookings, fetchCourts } = useBooking();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('bookings');
 
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
+
+  // 組件加載時自動獲取數據
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          fetchCourts(),
+          fetchBookings()
+        ]);
+      } catch (error) {
+        console.error('載入管理員數據失敗:', error);
+      }
+    };
+
+    loadData();
+  }, [fetchCourts, fetchBookings]);
 
   // 檢查是否為管理員
   if (user?.role !== 'admin') {
@@ -62,6 +80,7 @@ const Admin: React.FC = () => {
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon },
+    { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon },
     { id: 'revenue', name: '收入統計', icon: CurrencyDollarIcon },
     { id: 'analytics', name: '數據分析', icon: ChartBarIcon }
   ];
@@ -226,6 +245,16 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <RechargeOfferManagement />
+              </motion.div>
+            )}
+
+            {activeTab === 'maintenance' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <MaintenanceControl />
               </motion.div>
             )}
 

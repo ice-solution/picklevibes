@@ -130,8 +130,18 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
       
       // 直接在useEffect內部生成時間段，確保使用最新的currentTime
       const slots: Array<{ start: string; end: string; available: boolean; price: number; isPast: boolean }> = [];
-      const startHour = 0;
-      const endHour = 24;
+      
+      // 根據場地類型確定營業時間
+      let startHour, endHour;
+      if (court?.type === 'solo') {
+        // 單人場營業時間：08:00-23:00
+        startHour = 8;
+        endHour = 23;
+      } else {
+        // 其他場地24小時營業
+        startHour = 0;
+        endHour = 24;
+      }
       
       for (let hour = startHour; hour < endHour; hour++) {
         const startTime = `${hour.toString().padStart(2, '0')}:00`;

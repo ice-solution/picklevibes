@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
+const { maintenanceMiddleware, maintenanceAdminMiddleware } = require('./middleware/maintenance');
 require('dotenv').config();
 
 const app = express();
@@ -107,6 +108,9 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/picklevib
 .then(() => console.log('✅ 數據庫連接成功'))
 .catch(err => console.error('❌ 數據庫連接失敗:', err));
 
+// 維護模式中間件（必須在路由之前）
+app.use(maintenanceMiddleware);
+
 // 路由
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/bookings', require('./routes/bookings'));
@@ -118,6 +122,10 @@ app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
 app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
 app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
 app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes
+app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes
+
+// 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
+app.use(maintenanceAdminMiddleware);
 
 // 導出 batchLimiter 供路由使用
 app.set('batchLimiter', batchLimiter);

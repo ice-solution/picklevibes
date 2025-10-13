@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
+import { useMaintenance } from '../../hooks/useMaintenance';
 import LanguageSwitcher from '../Common/LanguageSwitcher';
 import { 
   Bars3Icon, 
@@ -18,7 +19,8 @@ import {
   ChevronDownIcon,
   UsersIcon,
   TicketIcon,
-  ChartBarIcon
+  ChartBarIcon,
+  WrenchScrewdriverIcon
 } from '@heroicons/react/24/outline';
 
 const Navbar: React.FC = () => {
@@ -26,6 +28,7 @@ const Navbar: React.FC = () => {
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isAdminDropdownOpen, setIsAdminDropdownOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { status: maintenanceStatus } = useMaintenance();
   const { t } = useTranslation();
   const location = useLocation();
   const userDropdownRef = useRef<HTMLDivElement>(null);
@@ -59,6 +62,15 @@ const Navbar: React.FC = () => {
   const isActive = (path: string) => {
     return location.pathname === path;
   };
+
+  // 維護模式檢查
+  const isMaintenanceMode = maintenanceStatus?.maintenanceMode;
+  const isAdmin = user?.role === 'admin';
+
+  // 如果在維護模式下且不是管理員，隱藏導航（包括維護頁面）
+  if (isMaintenanceMode && !isAdmin) {
+    return null;
+  }
 
   return (
     <nav className="bg-white shadow-lg sticky top-0 z-50">
@@ -188,6 +200,14 @@ const Navbar: React.FC = () => {
                               <span>預約管理</span>
                             </Link>
                             <Link
+                              to="/admin?tab=calendar"
+                              onClick={() => setIsAdminDropdownOpen(false)}
+                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <CalendarDaysIcon className="w-4 h-4" />
+                              <span>預約日曆</span>
+                            </Link>
+                            <Link
                               to="/admin?tab=users"
                               onClick={() => setIsAdminDropdownOpen(false)}
                               className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -212,12 +232,36 @@ const Navbar: React.FC = () => {
                               <span>場地管理</span>
                             </Link>
                             <Link
+                              to="/admin?tab=recharge-offers"
+                              onClick={() => setIsAdminDropdownOpen(false)}
+                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <CreditCardIcon className="w-4 h-4" />
+                              <span>充值優惠管理</span>
+                            </Link>
+                            <Link
+                              to="/admin?tab=maintenance"
+                              onClick={() => setIsAdminDropdownOpen(false)}
+                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <WrenchScrewdriverIcon className="w-4 h-4" />
+                              <span>系統維護</span>
+                            </Link>
+                            <Link
                               to="/admin?tab=revenue"
                               onClick={() => setIsAdminDropdownOpen(false)}
                               className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                             >
-                              <ChartBarIcon className="w-4 h-4" />
+                              <CurrencyDollarIcon className="w-4 h-4" />
                               <span>收入統計</span>
+                            </Link>
+                            <Link
+                              to="/admin?tab=analytics"
+                              onClick={() => setIsAdminDropdownOpen(false)}
+                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <ChartBarIcon className="w-4 h-4" />
+                              <span>數據分析</span>
                             </Link>
                           </div>
                         </motion.div>

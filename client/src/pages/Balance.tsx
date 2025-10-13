@@ -21,6 +21,12 @@ interface UserBalance {
     description: string;
     createdAt: string;
   }>;
+  pagination?: {
+    current: number;
+    pages: number;
+    total: number;
+    limit: number;
+  };
 }
 
 interface RechargeRecord {
@@ -43,25 +49,39 @@ const Balance: React.FC = () => {
   const [rechargeRecords, setRechargeRecords] = useState<RechargeRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'balance' | 'recharge'>('balance');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [loadingTransactions, setLoadingTransactions] = useState(false);
 
   useEffect(() => {
     fetchData();
   }, []);
 
-  const fetchData = async () => {
+  const fetchData = async (page = 1) => {
     try {
+      if (page === 1) {
+        setLoading(true);
+      } else {
+        setLoadingTransactions(true);
+      }
+      
       const [balanceRes, rechargeRes] = await Promise.all([
-        axios.get('/recharge/balance'),
+        axios.get(`/recharge/balance?page=${page}&limit=10`),
         axios.get('/recharge/history')
       ]);
       
       setBalance(balanceRes.data);
       setRechargeRecords(rechargeRes.data.recharges);
+      setCurrentPage(page);
     } catch (error) {
       console.error('獲取數據失敗:', error);
     } finally {
       setLoading(false);
+      setLoadingTransactions(false);
     }
+  };
+
+  const handlePageChange = (page: number) => {
+    fetchData(page);
   };
 
   const getTransactionIcon = (type: string) => {
@@ -212,12 +232,26 @@ const Balance: React.FC = () => {
               </div>
             </div>
 
-            {/* 最近交易記錄 */}
+            {/* 交易記錄 */}
             {balance.transactions.length > 0 && (
               <div className="bg-white rounded-lg shadow-md p-6">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                  最近交易記錄
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-semibold text-gray-900">
+                    交易記錄
+                  </h3>
+                  {balance.pagination && (
+                    <span className="text-sm text-gray-500">
+                      共 {balance.pagination.total} 筆交易
+                    </span>
+                  )}
+                </div>
+                
+                {loadingTransactions && (
+                  <div className="text-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary-600 mx-auto"></div>
+                  </div>
+                )}
+                
                 <div className="space-y-3">
                   {balance.transactions.map((transaction, index) => (
                     <div
@@ -243,6 +277,49 @@ const Balance: React.FC = () => {
                     </div>
                   ))}
                 </div>
+                
+                {/* 分頁組件 */}
+                {balance.pagination && balance.pagination.pages > 1 && (
+                  <div className="flex items-center justify-center mt-6 space-x-2">
+                    <button
+                      onClick={() => handlePageChange(currentPage - 1)}
+                      disabled={currentPage === 1 || loadingTransactions}
+                      className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      上一頁
+                    </button>
+                    
+                    <div className="flex space-x-1">
+                      {Array.from({ length: Math.min(5, balance.pagination.pages) }, (_, i) => {
+                        const pageNum = Math.max(1, currentPage - 2) + i;
+                        if (pageNum > balance.pagination!.pages) return null;
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum)}
+                            disabled={loadingTransactions}
+                            className={`px-3 py-2 text-sm font-medium rounded-md ${
+                              pageNum === currentPage
+                                ? 'bg-primary-600 text-white'
+                                : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                            } disabled:opacity-50 disabled:cursor-not-allowed`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    <button
+                      onClick={() => handlePageChange(currentPage + 1)}
+                      disabled={currentPage === balance.pagination.pages || loadingTransactions}
+                      className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      下一頁
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </motion.div>
