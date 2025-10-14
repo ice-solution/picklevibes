@@ -57,7 +57,7 @@ router.post('/register', authLimiter, [
   body('password')
     .isLength({ min: 8 }).withMessage('密碼至少需要8個字符')
     .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼必須包含至少一個字母和一個數字'),
-  body('phone').matches(/^[0-9+\-\s()]+$/).withMessage('請提供有效的電話號碼')
+  body('phone').matches(/^[0-9]+$/).withMessage('電話號碼只能包含數字')
 ], async (req, res) => {
   try {
     // 驗證輸入

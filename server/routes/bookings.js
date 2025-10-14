@@ -7,6 +7,7 @@ const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
 const whatsappService = require('../services/whatsappService');
+const accessControlService = require('../services/accessControlService');
 
 const router = express.Router();
 
@@ -43,7 +44,7 @@ router.post('/', [
   body('players').isArray({ min: 1, max: 7 }).withMessage('玩家信息必須是1-7個對象的數組'),
   body('players.*.name').trim().isLength({ min: 1, max: 50 }).withMessage('玩家姓名必須在1-50個字符之間'),
   body('players.*.email').isEmail().withMessage('玩家電子郵件格式無效'),
-  body('players.*.phone').matches(/^[0-9+\-\s()]+$/).withMessage('玩家電話號碼格式無效'),
+  body('players.*.phone').matches(/^[0-9]+$/).withMessage('玩家電話號碼只能包含數字'),
   body('specialRequests').optional().trim().isLength({ max: 500 }).withMessage('特殊要求不能超過500個字符'),
   body('includeSoloCourt').optional().isBoolean().withMessage('單人場租用選項必須是布爾值')
 ], async (req, res) => {
@@ -56,7 +57,10 @@ router.post('/', [
       });
     }
 
-    let { user, court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, bypassRestrictions = false } = req.body;
+    let { user, court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, redeemCodeId } = req.body;
+    
+    // 只有管理員才能 bypass 限制
+    const bypassRestrictions = req.user.role === 'admin' && req.body.bypassRestrictions === true;
     
     // 如果沒有指定用戶（普通用戶創建），使用當前登錄用戶
     // 如果指定了用戶（管理員創建），使用指定的用戶
@@ -188,6 +192,47 @@ router.post('/', [
       pointsToDeduct = Math.round(pointsToDeduct * 0.8); // VIP會員8折
     }
     
+    // 處理兌換碼折扣
+    let redeemCodeData = null;
+    if (redeemCodeId) {
+      try {
+        const RedeemCode = require('../models/RedeemCode');
+        const RedeemUsage = require('../models/RedeemUsage');
+        
+        const redeemCode = await RedeemCode.findById(redeemCodeId);
+        if (redeemCode && redeemCode.isValid()) {
+          // 檢查用戶是否可以使用
+          const canUse = await redeemCode.canUserUse(bookingUserId);
+          if (canUse) {
+            // 計算兌換碼折扣 - 基於原價計算，不是基於已應用 VIP 折扣的價格
+            let discountAmount = 0;
+            const originalPrice = tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0);
+            
+            if (redeemCode.type === 'fixed') {
+              discountAmount = redeemCode.value;
+            } else if (redeemCode.type === 'percentage') {
+              discountAmount = Math.round(originalPrice * (redeemCode.value / 100));
+              if (redeemCode.maxDiscount && discountAmount > redeemCode.maxDiscount) {
+                discountAmount = redeemCode.maxDiscount;
+              }
+            }
+            
+            // 應用兌換碼折扣
+            pointsToDeduct = Math.max(0, pointsToDeduct - discountAmount);
+            redeemCodeData = {
+              id: redeemCode._id,
+              name: redeemCode.name,
+              discountAmount: discountAmount,
+              finalAmount: pointsToDeduct
+            };
+          }
+        }
+      } catch (error) {
+        console.error('兌換碼處理錯誤:', error);
+        // 兌換碼處理失敗不影響預約創建
+      }
+    }
+    
     // 檢查用戶餘額（使用預約用戶的 ID，而不是當前登錄用戶）
     let userBalance = await UserBalance.findOne({ user: bookingUserId });
     if (!userBalance) {
@@ -232,6 +277,9 @@ router.post('/', [
       includeSoloCourt, // 添加單人場租用信息
       bypassRestrictions, // 記錄是否繞過了限制
       status: 'confirmed', // 直接確認
+      // 添加兌換碼信息
+      redeemCode: redeemCodeData ? redeemCodeData.id : undefined,
+      redeemDiscount: redeemCodeData ? redeemCodeData.discountAmount : 0,
       payment: {
         status: 'paid',
         method: 'points',
@@ -265,12 +313,47 @@ router.post('/', [
       await booking.save();
     }
     
+    // 記錄兌換碼使用
+    if (redeemCodeData) {
+      try {
+        const RedeemUsage = require('../models/RedeemUsage');
+        const RedeemCode = require('../models/RedeemCode');
+        
+        const redeemUsage = new RedeemUsage({
+          redeemCode: redeemCodeData.id,
+          user: bookingUserId,
+          orderType: 'booking',
+          orderId: booking._id,
+          originalAmount: tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0),
+          discountAmount: redeemCodeData.discountAmount,
+          finalAmount: pointsToDeduct,
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent')
+        });
+        
+        await redeemUsage.save();
+        
+        // 更新兌換碼統計
+        const redeemCode = await RedeemCode.findById(redeemCodeData.id);
+        if (redeemCode) {
+          redeemCode.totalUsed += 1;
+          redeemCode.totalDiscount += redeemCodeData.discountAmount;
+          await redeemCode.save();
+        }
+        
+        console.log('✅ 兌換碼使用記錄已保存');
+      } catch (error) {
+        console.error('❌ 兌換碼使用記錄保存失敗:', error);
+      }
+    }
+    
     // 調試：記錄保存的預約信息
     console.log('🔍 預約保存成功:', {
       bookingId: booking._id,
       includeSoloCourt: booking.includeSoloCourt,
       soloCourtFee: booking.pricing.soloCourtFee,
-      totalPointsDeducted: booking.pricing.pointsDeducted
+      totalPointsDeducted: booking.pricing.pointsDeducted,
+      redeemCodeUsed: !!redeemCodeData
     });
     
     // 如果包含單人場，創建單人場預約記錄
@@ -381,6 +464,30 @@ router.post('/', [
       }
     } catch (whatsappError) {
       console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
+      // 不影響預約創建，只記錄錯誤
+    }
+
+    // 處理開門系統流程
+    try {
+      const visitorData = {
+        name: booking.players[0]?.name || bookingUser.name,
+        email: booking.players[0]?.email || bookingUser.email,
+        phone: booking.players[0]?.phone || bookingUser.phone
+      };
+
+      const bookingData = {
+        bookingId: booking._id.toString(),
+        date: booking.date,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        courtName: courtDoc.name,
+        courtNumber: courtDoc.number
+      };
+
+      await accessControlService.processAccessControl(visitorData, bookingData);
+      console.log('✅ 開門系統流程處理完成');
+    } catch (accessControlError) {
+      console.error('❌ 開門系統流程處理失敗:', accessControlError);
       // 不影響預約創建，只記錄錯誤
     }
 
