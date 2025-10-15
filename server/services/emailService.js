@@ -193,11 +193,11 @@ class EmailService {
               ` : ''}
               
               ${password ? `
-              <div style="text-align: center; margin: 20px 0; padding: 20px; background-color: #e8f5e8; border-radius: 8px; border: 2px solid #4CAF50;">
+              <div style="text-align: center; margin: 20px 0; padding: 20px; background-color: #e8f5e8; border: 2px solid #4CAF50;">
                 <h4 style="color: #2e7d32; margin: 0 0 15px 0;">🔑 開門密碼</h4>
                 <p style="color: #666; font-size: 14px; margin: 0 0 15px 0;">如果二維碼無法使用，您也可以使用以下密碼：</p>
-                <div style="background-color: #fff; padding: 15px; border-radius: 5px; border: 2px dashed #4CAF50; margin: 10px 0;">
-                  <span style="font-size: 24px; font-weight: bold; color: #2e7d32; font-family: 'Courier New', monospace; letter-spacing: 2px;">${password}</span>
+                <div style="background-color: #fff; padding: 15px; border: 2px dashed #4CAF50; margin: 10px 0;">
+                  <span style="font-size: 24px; font-weight: bold; color: #2e7d32; font-family: monospace; letter-spacing: 2px;">${password}</span>
                 </div>
                 <p style="color: #666; font-size: 12px; margin: 10px 0 0 0;">請在門禁設備上輸入此密碼</p>
               </div>

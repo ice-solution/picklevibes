@@ -53,6 +53,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
     date: selectedDate || '',
     startTime: selectedTime || '',
     endTime: '',
+    totalPlayers: 1,
     playerName: '',
     playerEmail: '',
     playerPhone: '',
@@ -149,6 +150,10 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         throw new Error('請填寫所有必填字段');
       }
 
+      if (!formData.totalPlayers || formData.totalPlayers < 1) {
+        throw new Error('請選擇參與人數');
+      }
+
       if (!formData.playerName.trim()) {
         throw new Error('請填寫參與者姓名');
       }
@@ -160,6 +165,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         date: formData.date,
         startTime: formData.startTime,
         endTime: formData.endTime,
+        totalPlayers: formData.totalPlayers,
         players: [{
           name: formData.playerName.trim(),
           email: formData.playerEmail.trim(),
@@ -181,6 +187,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         date: selectedDate || '',
         startTime: selectedTime || '',
         endTime: '',
+        totalPlayers: 1,
         playerName: '',
         playerEmail: '',
         playerPhone: '',
@@ -326,6 +333,26 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* 參與人數 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              <UsersIcon className="w-4 h-4 inline mr-2" />
+              參與人數 *
+            </label>
+            <select
+              value={formData.totalPlayers}
+              onChange={(e) => handleInputChange('totalPlayers', parseInt(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              required
+            >
+              {[1, 2, 3, 4, 5, 6, 7, 8].map(num => (
+                <option key={num} value={num}>
+                  {num} 人
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* 參與者信息 */}

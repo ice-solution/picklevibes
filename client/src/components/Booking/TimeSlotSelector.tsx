@@ -145,10 +145,10 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
       
       for (let hour = startHour; hour < endHour; hour++) {
         const startTime = `${hour.toString().padStart(2, '0')}:00`;
-        const endHour = hour + Math.floor(selectedDuration / 60);
-        const endTime = `${endHour.toString().padStart(2, '0')}:00`;
+        const slotEndHour = hour + Math.floor(selectedDuration / 60);
+        const endTime = `${slotEndHour.toString().padStart(2, '0')}:00`;
         
-        if (endHour <= 24) {
+        if (slotEndHour <= 24) {
           const isPast = isTimeInPast(startTime, date);
           slots.push({
             start: startTime,
@@ -202,6 +202,21 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
   const handleSlotSelect = (slot: { start: string; end: string; available: boolean; price: number }) => {
     if (slot.available) {
+      // 檢查價格是否有效
+      if (slot.price === 0 || slot.price === undefined || slot.price === null) {
+        console.error('❌ 時間段價格無效:', {
+          start: slot.start,
+          end: slot.end,
+          price: slot.price,
+          court: court?.name,
+          courtType: court?.type
+        });
+        
+        // 顯示錯誤提示
+        alert(`錯誤：時間段 ${slot.start} - ${slot.end} 的價格信息缺失。請聯繫管理員或選擇其他時間段。`);
+        return;
+      }
+      
       onSelect({ start: slot.start, end: slot.end });
       onAvailabilityChange({
         available: true,
@@ -299,7 +314,9 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
                 slot.available
                   ? isSelected(slot)
                     ? 'bg-primary-600 text-white shadow-lg'
-                    : 'bg-white border-2 border-gray-200 hover:border-primary-300 hover:shadow-md'
+                    : (slot.price === 0 || slot.price === undefined || slot.price === null)
+                      ? 'bg-red-50 border-2 border-red-300 text-red-700 hover:border-red-400'
+                      : 'bg-white border-2 border-gray-200 hover:border-primary-300 hover:shadow-md'
                   : (slot as any).isPast
                     ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -318,7 +335,13 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               
               {slot.available && slot.price > 0 && (
                 <div className="text-xs font-semibold mt-1">
-                  ${slot.price}
+                  {slot.price} 積分
+                </div>
+              )}
+              
+              {slot.available && (slot.price === 0 || slot.price === undefined || slot.price === null) && (
+                <div className="text-xs font-semibold mt-1 text-red-600">
+                  ❌ 價格錯誤
                 </div>
               )}
               

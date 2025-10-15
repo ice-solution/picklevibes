@@ -7,6 +7,7 @@ import DateSelector from '../components/Booking/DateSelector';
 import TimeSlotSelector from '../components/Booking/TimeSlotSelector';
 import PlayerForm from '../components/Booking/PlayerForm';
 import BookingSummary from '../components/Booking/BookingSummary';
+import BackToTop from '../components/Common/BackToTop';
 import { CalendarDaysIcon, ClockIcon, UsersIcon } from '@heroicons/react/24/outline';
 
 const Booking: React.FC = () => {
@@ -94,12 +95,22 @@ const Booking: React.FC = () => {
   const nextStep = () => {
     if (canProceed() && currentStep < 5) {
       setCurrentStep(currentStep + 1);
+      // 滾動到頂部
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
     }
   };
 
   const prevStep = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
+      // 滾動到頂部
+      window.scrollTo({
+        top: 0,
+        behavior: 'smooth'
+      });
     }
   };
 
@@ -358,6 +369,9 @@ const Booking: React.FC = () => {
           </div>
         )}
       </div>
+      
+      {/* 返回頂部按鈕 */}
+      <BackToTop />
     </div>
   );
 };

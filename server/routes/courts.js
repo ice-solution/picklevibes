@@ -176,18 +176,7 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
       }
     }
     
-    // 如果有時間段不在營業時間內，直接返回不可用
-    if (unavailableSlots.length > 0) {
-      return res.json({ 
-        date,
-        courtId: req.params.id,
-        timeSlots: [...unavailableSlots, ...validTimeSlots.map(slot => ({
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          available: true // 這些會在後續檢查中確認
-        }))]
-      });
-    }
+    // 繼續處理營業時間內的時間段，即使有一些時間段不在營業時間內
     
     // 批量檢查時間衝突（只檢查營業時間內的時間段）
     const availabilityResults = await Promise.all(
