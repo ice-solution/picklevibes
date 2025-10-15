@@ -12,7 +12,8 @@ import {
   PlusIcon,
   ClockIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
@@ -76,16 +77,33 @@ const UserManagement: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  
+  // 搜索狀態
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchType, setSearchType] = useState<'name' | 'email'>('name');
 
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [currentPage, pageSize]);
+  }, [currentPage, pageSize, searchQuery, searchType]);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`/users?page=${currentPage}&limit=${pageSize}`);
+      
+      // 構建查詢參數
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString()
+      });
+      
+      // 如果有搜索查詢，添加搜索參數
+      if (searchQuery.trim()) {
+        params.append('search', searchQuery.trim());
+        params.append('searchType', searchType);
+      }
+      
+      const response = await axios.get(`/users?${params.toString()}`);
       setUsers(response.data.users);
       setTotalPages(response.data.pagination.pages);
       setTotalUsers(response.data.pagination.total);
@@ -302,6 +320,22 @@ const UserManagement: React.FC = () => {
     setCurrentPage(1); // 重置到第一頁
   };
 
+  // 搜索處理函數
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setCurrentPage(1); // 搜索時重置到第一頁
+  };
+
+  const handleSearchTypeChange = (type: 'name' | 'email') => {
+    setSearchType(type);
+    setCurrentPage(1); // 切換搜索類型時重置到第一頁
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setCurrentPage(1);
+  };
+
   // 生成分頁按鈕
   const renderPaginationButtons = () => {
     const buttons = [];
@@ -475,8 +509,57 @@ const UserManagement: React.FC = () => {
         className="bg-white rounded-xl shadow-lg"
       >
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
-          <p className="text-gray-600">管理用戶角色、會員等級和狀態</p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
+              <p className="text-gray-600">管理用戶角色、會員等級和狀態</p>
+            </div>
+          </div>
+          
+          {/* 搜索框 */}
+          <div className="flex items-center space-x-4">
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder={`按${searchType === 'name' ? '姓名' : '郵箱'}搜索用戶...`}
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <XMarkIcon className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-700">搜索類型:</label>
+              <select
+                value={searchType}
+                onChange={(e) => handleSearchTypeChange(e.target.value as 'name' | 'email')}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="name">姓名</option>
+                <option value="email">郵箱</option>
+              </select>
+            </div>
+          </div>
+          
+          {/* 搜索結果提示 */}
+          {searchQuery && (
+            <div className="mt-3 text-sm text-gray-600">
+              搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : '郵箱'}) - 找到 {totalUsers} 個結果
+            </div>
+          )}
         </div>
 
         {/* 分頁控制欄 */}

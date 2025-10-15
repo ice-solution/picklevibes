@@ -57,22 +57,55 @@ class AccessControlService {
   }
 
   /**
+   * 將時間提前15分鐘
+   */
+  subtractMinutes(timeString, minutes = 15) {
+    try {
+      // 解析時間字符串 (格式: HH:MM)
+      const [hours, mins] = timeString.split(':').map(Number);
+      
+      // 創建日期對象
+      const date = new Date();
+      date.setHours(hours, mins, 0, 0);
+      
+      // 減去指定分鐘數
+      date.setMinutes(date.getMinutes() - minutes);
+      
+      // 返回格式化的時間字符串
+      const newHours = date.getHours().toString().padStart(2, '0');
+      const newMins = date.getMinutes().toString().padStart(2, '0');
+      
+      const result = `${newHours}:${newMins}`;
+      console.log(`⏰ 時間調整: ${timeString} → ${result} (提前${minutes}分鐘)`);
+      
+      return result;
+    } catch (error) {
+      console.error('❌ 時間調整失敗:', error.message);
+      return timeString; // 如果調整失敗，返回原時間
+    }
+  }
+
+  /**
    * 創建臨時授權
    */
   async createTempAuth(visitorData, bookingData) {
     try {
       const token = await this.getToken();
       
+      // 將開始時間提前15分鐘，讓用戶可以提早進場
+      const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
+      
       console.log('👤 正在創建臨時授權...', {
         name: visitorData.name,
         phone: visitorData.phone,
         email: visitorData.email,
-        startTime: bookingData.startTime,
+        originalStartTime: bookingData.startTime,
+        earlyStartTime: earlyStartTime,
         endTime: bookingData.endTime
       });
 
       // 將時間轉換為 ISO 字符串格式
-      const startTime = this.convertToISOString(bookingData.date, bookingData.startTime);
+      const startTime = this.convertToISOString(bookingData.date, earlyStartTime);
       const endTime = this.convertToISOString(bookingData.date, bookingData.endTime);
 
       const requestBody = {

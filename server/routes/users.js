@@ -12,11 +12,20 @@ const router = express.Router();
 // @access  Private (Admin)
 router.get('/', [auth, adminAuth], async (req, res) => {
   try {
-    const { page = 1, limit = 10, role, membershipLevel } = req.query;
+    const { page = 1, limit = 10, role, membershipLevel, search, searchType } = req.query;
     
     const query = {};
     if (role) query.role = role;
     if (membershipLevel) query.membershipLevel = membershipLevel;
+    
+    // 添加搜索功能
+    if (search && searchType) {
+      if (searchType === 'name') {
+        query.name = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+      } else if (searchType === 'email') {
+        query.email = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+      }
+    }
     
     const users = await User.find(query)
       .select('-password') // 排除密碼
