@@ -140,16 +140,17 @@ class AccessControlService {
   /**
    * 發送開門通知郵件
    */
-  async sendAccessEmail(visitorData, bookingData, qrCodeData = null) {
+  async sendAccessEmail(visitorData, bookingData, qrCodeData = null, password = null) {
     try {
       console.log('📧 正在發送開門通知郵件...', {
         email: visitorData.email,
         bookingDate: bookingData.date,
         courtName: bookingData.courtName,
-        hasQRCode: !!qrCodeData
+        hasQRCode: !!qrCodeData,
+        hasPassword: !!password
       });
 
-      const result = await emailService.sendAccessEmail(visitorData, bookingData, qrCodeData);
+      const result = await emailService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
       console.log('✅ 開門通知郵件發送成功');
       return result;
     } catch (error) {
@@ -186,8 +187,8 @@ class AccessControlService {
         }
       }
       
-      // 4. 發送郵件
-      await this.sendAccessEmail(visitorData, bookingData, qrCodeData);
+      // 4. 發送郵件（包含二維碼和密碼）
+      await this.sendAccessEmail(visitorData, bookingData, qrCodeData, tempAuth.password);
       
       console.log('✅ 開門系統流程處理完成');
       return {

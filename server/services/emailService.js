@@ -47,7 +47,7 @@ class EmailService {
   /**
    * 生成開門通知郵件模板
    */
-  async generateAccessEmailTemplate(visitorData, bookingData, qrCodeData = null) {
+  async generateAccessEmailTemplate(visitorData, bookingData, qrCodeData = null, password = null) {
     const { name, email, phone } = visitorData;
     const { date, startTime, endTime, courtName, bookingId } = bookingData;
     
@@ -191,14 +191,24 @@ class EmailService {
                 <p style="color: #999; font-size: 12px; margin: 10px 0 0 0;">請在門禁設備前掃描此二維碼</p>
               </div>
               ` : ''}
+              
+              ${password ? `
+              <div style="text-align: center; margin: 20px 0; padding: 20px; background-color: #e8f5e8; border-radius: 8px; border: 2px solid #4CAF50;">
+                <h4 style="color: #2e7d32; margin: 0 0 15px 0;">🔑 開門密碼</h4>
+                <p style="color: #666; font-size: 14px; margin: 0 0 15px 0;">如果二維碼無法使用，您也可以使用以下密碼：</p>
+                <div style="background-color: #fff; padding: 15px; border-radius: 5px; border: 2px dashed #4CAF50; margin: 10px 0;">
+                  <span style="font-size: 24px; font-weight: bold; color: #2e7d32; font-family: 'Courier New', monospace; letter-spacing: 2px;">${password}</span>
+                </div>
+                <p style="color: #666; font-size: 12px; margin: 10px 0 0 0;">請在門禁設備上輸入此密碼</p>
+              </div>
+              ` : ''}
             </div>
 
             <div class="highlight">
               <strong>⚠️ 重要提醒：</strong>
               <ul>
-                <li>請準時到達，遲到超過 15 分鐘將視為取消預約</li>
                 <li>請保持場地整潔，使用完畢後請清理現場</li>
-                <li>如需取消或修改預約，請提前 48 小時聯繫我們</li>
+                <li>如需取消或修改預約，請提前 24 小時聯繫我們</li>
               </ul>
             </div>
 
@@ -232,6 +242,12 @@ class EmailService {
         2. 系統將自動為您開啟門禁
         3. 如有任何問題，請聯繫場地管理員 6190 2761
         
+        ${password ? `
+        開門方式：
+        - 二維碼：請查看郵件中的二維碼圖片
+        - 密碼：${password}（如果二維碼無法使用）
+        ` : ''}
+        
         重要提醒：
         - 請準時到達，遲到超過 15 分鐘將視為取消預約
         - 請保持場地整潔，使用完畢後請清理現場
@@ -249,13 +265,13 @@ class EmailService {
   /**
    * 發送開門通知郵件
    */
-  async sendAccessEmail(visitorData, bookingData, qrCodeData = null) {
+  async sendAccessEmail(visitorData, bookingData, qrCodeData = null, password = null) {
     try {
       if (!this.transporter) {
         throw new Error('郵件服務未初始化');
       }
 
-      const emailTemplate = await this.generateAccessEmailTemplate(visitorData, bookingData, qrCodeData);
+      const emailTemplate = await this.generateAccessEmailTemplate(visitorData, bookingData, qrCodeData, password);
       
       // 準備附件
       const attachments = [];
@@ -292,7 +308,9 @@ class EmailService {
       console.log('📧 正在發送開門通知郵件...', {
         to: visitorData.email,
         subject: emailTemplate.subject,
-        attachments: attachments.length
+        attachments: attachments.length,
+        hasQRCode: !!qrCodeData,
+        hasPassword: !!password
       });
 
       const result = await this.transporter.sendMail(mailOptions);
