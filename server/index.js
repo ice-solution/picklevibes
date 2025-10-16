@@ -64,6 +64,8 @@ app.use(cors({
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      console.log(`🚫 CORS 拒絕的 origin: ${origin}`);
+      console.log(`📋 允許的 origins: ${allowedOrigins.join(', ')}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
