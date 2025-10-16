@@ -297,7 +297,14 @@ const MyBookings: React.FC = () => {
                             
                             <div className="text-right">
                               <span className="font-medium text-green-600">
-                                {booking.pricing?.totalPrice || 0} 積分
+                                {(() => {
+                                  // 如果是單人場且備註包含"與主場地同時段使用"，顯示 --
+                                  if (booking.court?.type === 'solo' && 
+                                      booking.specialRequests?.includes('與主場地同時段使用')) {
+                                    return '--';
+                                  }
+                                  return `${booking.pricing?.totalPrice || 0} 積分`;
+                                })()}
                               </span>
                             </div>
                           </div>
@@ -417,7 +424,14 @@ const MyBookings: React.FC = () => {
                             )}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                            {booking.pricing?.totalPrice || 0} 積分
+                            {(() => {
+                              // 如果是單人場且備註包含"與主場地同時段使用"，顯示 --
+                              if (booking.court?.type === 'solo' && 
+                                  booking.specialRequests?.includes('與主場地同時段使用')) {
+                                return '--';
+                              }
+                              return `${booking.pricing?.totalPrice || 0} 積分`;
+                            })()}
                           </td>
                         </tr>
                       ))}

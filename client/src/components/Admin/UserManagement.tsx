@@ -12,7 +12,8 @@ import {
   PlusIcon,
   ClockIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
@@ -70,22 +71,50 @@ const UserManagement: React.FC = () => {
   const [statusReason, setStatusReason] = useState('');
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
+  const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalUsers, setTotalUsers] = useState(0);
   const [pageSize, setPageSize] = useState(10);
+  
+  // 搜索狀態
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchType, setSearchType] = useState<'name' | 'email'>('name');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  // 防抖搜索查詢
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms 延遲
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [currentPage, pageSize]);
+  }, [currentPage, pageSize, debouncedSearchQuery, searchType]);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get(`/users?page=${currentPage}&limit=${pageSize}`);
+      
+      // 構建查詢參數
+      const params = new URLSearchParams({
+        page: currentPage.toString(),
+        limit: pageSize.toString()
+      });
+      
+      // 如果有搜索查詢，添加搜索參數
+      if (debouncedSearchQuery.trim()) {
+        params.append('search', debouncedSearchQuery.trim());
+        params.append('searchType', searchType);
+      }
+      
+      const response = await axios.get(`/users?${params.toString()}`);
       setUsers(response.data.users);
       setTotalPages(response.data.pagination.pages);
       setTotalUsers(response.data.pagination.total);
@@ -263,13 +292,20 @@ const UserManagement: React.FC = () => {
     if (!selectedUser) return;
     
     try {
-      await axios.put(`/users/${selectedUser._id}/membership`, {
+      const requestData: any = {
         membershipLevel: selectedMembership
-      });
+      };
+      
+      // 如果設置為 VIP，添加期限
+      if (selectedMembership === 'vip') {
+        requestData.days = vipDuration;
+      }
+      
+      await axios.put(`/users/${selectedUser._id}/membership`, requestData);
       
       setShowMembershipModal(false);
       fetchUsers(); // 重新獲取用戶列表
-      alert(`會員等級已更新為 ${selectedMembership === 'vip' ? 'VIP會員' : '普通會員'}！`);
+      alert(`會員等級已更新為 ${selectedMembership === 'vip' ? `VIP會員 (${vipDuration}天)` : '普通會員'}！`);
     } catch (error) {
       console.error('更新會員等級失敗:', error);
       alert('更新會員等級失敗，請稍後再試');
@@ -300,6 +336,22 @@ const UserManagement: React.FC = () => {
   const handlePageSizeChange = (size: number) => {
     setPageSize(size);
     setCurrentPage(1); // 重置到第一頁
+  };
+
+  // 搜索處理函數
+  const handleSearch = (query: string) => {
+    setSearchQuery(query);
+    setCurrentPage(1); // 搜索時重置到第一頁
+  };
+
+  const handleSearchTypeChange = (type: 'name' | 'email') => {
+    setSearchType(type);
+    setCurrentPage(1); // 切換搜索類型時重置到第一頁
+  };
+
+  const clearSearch = () => {
+    setSearchQuery('');
+    setCurrentPage(1);
   };
 
   // 生成分頁按鈕
@@ -475,8 +527,57 @@ const UserManagement: React.FC = () => {
         className="bg-white rounded-xl shadow-lg"
       >
         <div className="p-6 border-b border-gray-200">
-          <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
-          <p className="text-gray-600">管理用戶角色、會員等級和狀態</p>
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
+              <p className="text-gray-600">管理用戶角色、會員等級和狀態</p>
+            </div>
+          </div>
+          
+          {/* 搜索框 */}
+          <div className="flex items-center space-x-4">
+            <div className="flex-1 max-w-md">
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                  <MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />
+                </div>
+                <input
+                  type="text"
+                  placeholder={`按${searchType === 'name' ? '姓名' : '郵箱'}搜索用戶...`}
+                  value={searchQuery}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={clearSearch}
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  >
+                    <XMarkIcon className="h-4 w-4 text-gray-400 hover:text-gray-600" />
+                  </button>
+                )}
+              </div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-700">搜索類型:</label>
+              <select
+                value={searchType}
+                onChange={(e) => handleSearchTypeChange(e.target.value as 'name' | 'email')}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="name">姓名</option>
+                <option value="email">郵箱</option>
+              </select>
+            </div>
+          </div>
+          
+          {/* 搜索結果提示 */}
+          {searchQuery && (
+            <div className="mt-3 text-sm text-gray-600">
+              搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : '郵箱'}) - 找到 {totalUsers} 個結果
+            </div>
+          )}
         </div>
 
         {/* 分頁控制欄 */}
@@ -1123,16 +1224,36 @@ const UserManagement: React.FC = () => {
                       onChange={(e) => setSelectedMembership(e.target.value as 'basic' | 'vip')}
                       className="mr-2"
                     />
-                    <span className="text-sm">VIP會員 (180天有效期)</span>
+                    <span className="text-sm">VIP會員</span>
                   </label>
                 </div>
               </div>
 
               {selectedMembership === 'vip' && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <p className="text-sm text-yellow-800">
-                    <strong>注意：</strong>設置為VIP會員後，會籍將從今天開始計算，有效期為180天。
-                  </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      VIP 會員期限（天數）
+                    </label>
+                    <select
+                      value={vipDuration}
+                      onChange={(e) => setVipDuration(Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value={7}>7 天</option>
+                      <option value={15}>15 天</option>
+                      <option value={30}>30 天</option>
+                      <option value={60}>60 天</option>
+                      <option value={90}>90 天</option>
+                      <option value={180}>180 天</option>
+                    </select>
+                  </div>
+                  
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="text-sm text-yellow-800">
+                      <strong>注意：</strong>設置為VIP會員後，會籍將從今天開始計算，有效期為 {vipDuration} 天。
+                    </p>
+                  </div>
                 </div>
               )}
 

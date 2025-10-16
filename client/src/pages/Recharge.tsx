@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
-import RedeemCodeInput from '../components/Common/RedeemCodeInput';
+// import RedeemCodeInput from '../components/Common/RedeemCodeInput'; // 兌換碼已移至預約確認頁面
 import { 
   CreditCardIcon, 
   CurrencyDollarIcon,
@@ -39,7 +39,7 @@ const Recharge: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [selectedOption, setSelectedOption] = useState<RechargeOption | null>(null);
-  const [redeemData, setRedeemData] = useState<any>(null);
+  // const [redeemData, setRedeemData] = useState<any>(null); // 兌換碼已移至預約確認頁面
   const [customAmount, setCustomAmount] = useState('');
   const [showCustomForm, setShowCustomForm] = useState(false);
 
@@ -87,8 +87,8 @@ const Recharge: React.FC = () => {
 
       const response = await axios.post('/recharge/create-checkout-session', {
         points: option.points,
-        amount: redeemData ? redeemData.finalAmount : option.amount,
-        redeemCodeId: redeemData?.id
+        amount: option.amount
+        // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
       });
 
       // 重定向到 Stripe Checkout
@@ -102,13 +102,7 @@ const Recharge: React.FC = () => {
     }
   };
 
-  const handleRedeemApplied = (redeem: any) => {
-    setRedeemData(redeem);
-  };
-
-  const handleRedeemRemoved = () => {
-    setRedeemData(null);
-  };
+  // 兌換碼處理函數已移除，兌換碼已移至預約確認頁面
 
   const handleCustomRecharge = async () => {
     const amount = parseFloat(customAmount);
@@ -137,8 +131,8 @@ const Recharge: React.FC = () => {
 
       const response = await axios.post('/recharge/create-checkout-session', {
         points: points,
-        amount: redeemData ? redeemData.finalAmount : amount,
-        redeemCodeId: redeemData?.id
+        amount: amount
+        // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
       });
 
       // 重定向到 Stripe Checkout
@@ -209,20 +203,7 @@ const Recharge: React.FC = () => {
           </motion.div>
         )}
 
-        {/* 兌換碼輸入 */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.2 }}
-          className="mb-8"
-        >
-          <RedeemCodeInput
-            amount={0} // 將在選擇充值選項後更新
-            orderType="recharge"
-            onRedeemApplied={handleRedeemApplied}
-            onRedeemRemoved={handleRedeemRemoved}
-          />
-        </motion.div>
+        {/* 兌換碼已移至預約確認頁面 */}
 
         {/* 充值選項 */}
         <motion.div

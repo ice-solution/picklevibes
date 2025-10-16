@@ -123,6 +123,7 @@ app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
 app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
 app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes
 app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes
+app.use('/api/bulk-upgrade', require('./routes/bulk-upgrade')); // Added bulk upgrade routes
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

@@ -1,17 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
-// 預約現在使用積分支付，不再需要 Stripe 支付組件
-import axios from 'axios';
+import RedeemCodeInput from '../Common/RedeemCodeInput';
 import apiConfig from '../../config/api';
 import { 
   CalendarDaysIcon, 
   ClockIcon, 
   UsersIcon,
   MapPinIcon,
-  CurrencyDollarIcon,
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
@@ -58,6 +55,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   const [specialRequests, setSpecialRequests] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState<BookingData>(bookingData);
+  
+  // 兌換碼相關狀態
+  const [redeemData, setRedeemData] = useState<any>(null);
 
   // 預約現在使用積分支付，不再需要支付狀態追蹤
   
@@ -92,6 +92,17 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       ...prev,
       [field]: value
     }));
+  };
+
+  // 兌換碼處理函數
+  const handleRedeemApplied = (redeemCodeData: any) => {
+    setRedeemData(redeemCodeData);
+    console.log('兌換碼已應用:', redeemCodeData);
+  };
+
+  const handleRedeemRemoved = () => {
+    setRedeemData(null);
+    console.log('兌換碼已移除');
   };
 
   const formatTime = (time: string) => {
@@ -154,7 +165,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         }],
         totalPlayers: bookingData.totalPlayers,
         specialRequests: specialRequests.trim() || undefined,
-        includeSoloCourt: includeSoloCourt || false
+        includeSoloCourt: includeSoloCourt || false,
+        // 添加兌換碼信息
+        redeemCodeId: redeemData?.id || undefined
       };
 
       // 調試：記錄預約載荷
@@ -336,6 +349,19 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           </div>
         )}
 
+        {/* 兌換碼輸入 */}
+        {availability && (
+          <div className="bg-white border border-gray-200 rounded-xl p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">兌換碼</h3>
+            <RedeemCodeInput
+              amount={(availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)}
+              orderType="booking"
+              onRedeemApplied={handleRedeemApplied}
+              onRedeemRemoved={handleRedeemRemoved}
+            />
+          </div>
+        )}
+
         {/* 價格詳情 */}
         {availability && (
           <div className="bg-white border border-gray-200 rounded-xl p-6">
@@ -367,6 +393,19 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 </div>
               )}
               
+              {/* 兌換碼折扣 */}
+              {redeemData && (
+                <div className="flex justify-between text-blue-600">
+                  <span className="flex items-center gap-2">
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">兌換碼</span>
+                    {redeemData.name}
+                  </span>
+                  <span className="font-medium">
+                    -{redeemData.discountAmount} 積分
+                  </span>
+                </div>
+              )}
+              
               <div className="flex justify-between">
                 <span className="text-gray-600">時長</span>
                 <span className="font-medium">{calculateDuration()} 分鐘</span>
@@ -376,17 +415,27 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 <div className="flex justify-between text-lg font-semibold">
                   <span>總計</span>
                   <span className="text-primary-600">
-                    {user?.membershipLevel === 'vip' 
-                      ? Math.round(((availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)) * 0.8)
-                      : (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)
-                    } 積分
+                    {(() => {
+                      let totalPrice = (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0);
+                      
+                      // 應用 VIP 折扣
+                      if (user?.membershipLevel === 'vip') {
+                        totalPrice = Math.round(totalPrice * 0.8);
+                      }
+                      
+                      // 應用兌換碼折扣
+                      if (redeemData) {
+                        totalPrice = totalPrice - redeemData.discountAmount;
+                      }
+                      
+                      return Math.max(0, totalPrice);
+                    })()} 積分
                   </span>
                 </div>
-                {user?.membershipLevel === 'vip' && (
-                  <div className="text-sm text-green-600 mt-1 text-right">
-                    已享受 VIP 會員 8 折優惠
-                  </div>
-                )}
+                <div className="text-sm text-gray-500 mt-1 text-right">
+                  {user?.membershipLevel === 'vip' && '已享受 VIP 會員 8 折優惠'}
+                  {redeemData && ' + 兌換碼折扣'}
+                </div>
               </div>
             </div>
           </div>
@@ -400,7 +449,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               <h4 className="font-semibold text-yellow-800 mb-2">重要提醒</h4>
               <ul className="text-sm text-yellow-700 space-y-1">
                 <li>• 請提前15分鐘到達場地</li>
-                <li>• 如需取消，請至少提前2小時通知</li>
+                <li>• 如需取消，請至少提前48小時通知</li>
                 <li>• 請攜帶有效的身份證明文件</li>
                 <li>• 場地內禁止吸煙和飲酒</li>
               </ul>

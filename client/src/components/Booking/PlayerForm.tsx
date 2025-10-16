@@ -63,11 +63,11 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
         newErrors[field] = '請輸入有效的電子郵件地址';
       }
     } else if (field === 'contactPhone') {
-      const phoneRegex = /^[0-9+\-\s()]+$/;
+      const phoneRegex = /^[0-9]+$/;
       if (!String(value).trim()) {
         newErrors[field] = '請輸入聯絡人電話號碼';
       } else if (!phoneRegex.test(String(value))) {
-        newErrors[field] = '請輸入有效的電話號碼';
+        newErrors[field] = '電話號碼只能包含數字';
       }
     } else if (field === 'totalPlayers') {
       const num = Number(value);

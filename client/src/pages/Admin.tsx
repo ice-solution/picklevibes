@@ -11,6 +11,7 @@ import BookingCalendar from '../components/Admin/BookingCalendar';
 import CourtManagement from '../components/Admin/CourtManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
 import MaintenanceControl from '../components/Admin/MaintenanceControl';
+import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import { 
   CalendarDaysIcon, 
   UserGroupIcon,
@@ -19,7 +20,8 @@ import {
   UsersIcon,
   TicketIcon,
   CreditCardIcon,
-  WrenchScrewdriverIcon
+  WrenchScrewdriverIcon,
+  ArrowTrendingUpIcon
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -31,7 +33,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -80,6 +82,7 @@ const Admin: React.FC = () => {
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon },
+    { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon },
     { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon },
     { id: 'revenue', name: '收入統計', icon: CurrencyDollarIcon },
     { id: 'analytics', name: '數據分析', icon: ChartBarIcon }
@@ -167,7 +170,7 @@ const Admin: React.FC = () => {
           className="bg-white rounded-xl shadow-lg mb-8"
         >
           <div className="border-b border-gray-200">
-            <nav className="flex space-x-8 px-6">
+            <nav className="flex flex-wrap gap-1 px-2 py-2">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
@@ -177,15 +180,16 @@ const Admin: React.FC = () => {
                       setActiveTab(tab.id);
                       setSearchParams({ tab: tab.id });
                     }}
-                    className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                    className={`py-2 px-3 border-b-2 font-medium text-xs sm:text-sm rounded-md transition-all duration-200 flex-shrink-0 ${
                       activeTab === tab.id
-                        ? 'border-primary-500 text-primary-600'
-                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                        ? 'border-primary-500 text-primary-600 bg-primary-50'
+                        : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
-                    <div className="flex items-center space-x-2">
-                      <Icon className="w-5 h-5" />
-                      <span>{tab.name}</span>
+                    <div className="flex items-center space-x-1 sm:space-x-2">
+                      <Icon className="w-3 h-3 sm:w-4 sm:h-4" />
+                      <span className="whitespace-nowrap hidden sm:inline">{tab.name}</span>
+                      <span className="whitespace-nowrap sm:hidden">{tab.name.split('').slice(0, 2).join('')}</span>
                     </div>
                   </button>
                 );
@@ -255,6 +259,16 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <MaintenanceControl />
+              </motion.div>
+            )}
+
+            {activeTab === 'bulk-upgrade' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <BulkUpgrade />
               </motion.div>
             )}
 

@@ -57,7 +57,7 @@ router.post('/register', authLimiter, [
   body('password')
     .isLength({ min: 8 }).withMessage('密碼至少需要8個字符')
     .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼必須包含至少一個字母和一個數字'),
-  body('phone').matches(/^[0-9+\-\s()]+$/).withMessage('請提供有效的電話號碼')
+  body('phone').matches(/^[0-9]+$/).withMessage('電話號碼只能包含數字')
 ], async (req, res) => {
   try {
     // 驗證輸入
@@ -78,12 +78,14 @@ router.post('/register', authLimiter, [
       });
     }
 
-    // 創建新用戶
+    // 創建新用戶，自動設置為 VIP 會員（短期促銷活動）
     const user = new User({
       name,
       email,
       password,
-      phone
+      phone,
+      membershipLevel: 'vip',
+      membershipExpiry: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)) // 30天後過期
     });
 
     await user.save();
