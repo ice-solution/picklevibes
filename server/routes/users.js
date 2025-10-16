@@ -624,11 +624,16 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
 router.put('/:id/membership', [auth, adminAuth], async (req, res) => {
   try {
     const userId = req.params.id;
-    const { membershipLevel } = req.body;
+    const { membershipLevel, days = 180 } = req.body; // 默認180天
     
     // 驗證會員等級
     if (!['basic', 'vip'].includes(membershipLevel)) {
       return res.status(400).json({ message: '無效的會員等級' });
+    }
+    
+    // 驗證 VIP 期限
+    if (membershipLevel === 'vip' && (!days || days < 1 || days > 365)) {
+      return res.status(400).json({ message: 'VIP 期限必須在 1-365 天之間' });
     }
     
     const user = await User.findById(userId);
@@ -639,19 +644,23 @@ router.put('/:id/membership', [auth, adminAuth], async (req, res) => {
     // 如果設置為VIP，計算到期日期
     if (membershipLevel === 'vip') {
       const now = new Date();
-      const expiryDate = new Date(now.getTime() + (180 * 24 * 60 * 60 * 1000)); // 180天後
+      const expiryDate = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
       
       user.membershipLevel = 'vip';
       user.membershipExpiry = expiryDate;
+      
+      console.log(`👤 管理員更新用戶 ${user.name} 為 VIP 會員，期限: ${days} 天`);
     } else {
       user.membershipLevel = 'basic';
       user.membershipExpiry = null;
+      
+      console.log(`👤 管理員更新用戶 ${user.name} 為普通會員`);
     }
     
     await user.save();
     
     res.json({
-      message: `用戶會員等級已更新為 ${membershipLevel === 'vip' ? 'VIP會員' : '普通會員'}`,
+      message: `用戶會員等級已更新為 ${membershipLevel === 'vip' ? `VIP會員 (${days}天)` : '普通會員'}`,
       user: {
         id: user._id,
         name: user.name,

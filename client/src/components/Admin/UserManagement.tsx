@@ -71,6 +71,7 @@ const UserManagement: React.FC = () => {
   const [statusReason, setStatusReason] = useState('');
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
+  const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,11 +82,21 @@ const UserManagement: React.FC = () => {
   // 搜索狀態
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<'name' | 'email'>('name');
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  // 防抖搜索查詢
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 500); // 500ms 延遲
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [currentPage, pageSize, searchQuery, searchType]);
+  }, [currentPage, pageSize, debouncedSearchQuery, searchType]);
 
   const fetchUsers = async () => {
     try {
@@ -98,8 +109,8 @@ const UserManagement: React.FC = () => {
       });
       
       // 如果有搜索查詢，添加搜索參數
-      if (searchQuery.trim()) {
-        params.append('search', searchQuery.trim());
+      if (debouncedSearchQuery.trim()) {
+        params.append('search', debouncedSearchQuery.trim());
         params.append('searchType', searchType);
       }
       
@@ -281,13 +292,20 @@ const UserManagement: React.FC = () => {
     if (!selectedUser) return;
     
     try {
-      await axios.put(`/users/${selectedUser._id}/membership`, {
+      const requestData: any = {
         membershipLevel: selectedMembership
-      });
+      };
+      
+      // 如果設置為 VIP，添加期限
+      if (selectedMembership === 'vip') {
+        requestData.days = vipDuration;
+      }
+      
+      await axios.put(`/users/${selectedUser._id}/membership`, requestData);
       
       setShowMembershipModal(false);
       fetchUsers(); // 重新獲取用戶列表
-      alert(`會員等級已更新為 ${selectedMembership === 'vip' ? 'VIP會員' : '普通會員'}！`);
+      alert(`會員等級已更新為 ${selectedMembership === 'vip' ? `VIP會員 (${vipDuration}天)` : '普通會員'}！`);
     } catch (error) {
       console.error('更新會員等級失敗:', error);
       alert('更新會員等級失敗，請稍後再試');
@@ -1206,16 +1224,36 @@ const UserManagement: React.FC = () => {
                       onChange={(e) => setSelectedMembership(e.target.value as 'basic' | 'vip')}
                       className="mr-2"
                     />
-                    <span className="text-sm">VIP會員 (180天有效期)</span>
+                    <span className="text-sm">VIP會員</span>
                   </label>
                 </div>
               </div>
 
               {selectedMembership === 'vip' && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <p className="text-sm text-yellow-800">
-                    <strong>注意：</strong>設置為VIP會員後，會籍將從今天開始計算，有效期為180天。
-                  </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      VIP 會員期限（天數）
+                    </label>
+                    <select
+                      value={vipDuration}
+                      onChange={(e) => setVipDuration(Number(e.target.value))}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value={7}>7 天</option>
+                      <option value={15}>15 天</option>
+                      <option value={30}>30 天</option>
+                      <option value={60}>60 天</option>
+                      <option value={90}>90 天</option>
+                      <option value={180}>180 天</option>
+                    </select>
+                  </div>
+                  
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                    <p className="text-sm text-yellow-800">
+                      <strong>注意：</strong>設置為VIP會員後，會籍將從今天開始計算，有效期為 {vipDuration} 天。
+                    </p>
+                  </div>
                 </div>
               )}
 

@@ -78,12 +78,14 @@ router.post('/register', authLimiter, [
       });
     }
 
-    // 創建新用戶
+    // 創建新用戶，自動設置為 VIP 會員（短期促銷活動）
     const user = new User({
       name,
       email,
       password,
-      phone
+      phone,
+      membershipLevel: 'vip',
+      membershipExpiry: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)) // 30天後過期
     });
 
     await user.save();
