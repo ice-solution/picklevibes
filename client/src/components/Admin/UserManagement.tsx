@@ -10,6 +10,7 @@ import {
   CheckIcon,
   CurrencyDollarIcon,
   PlusIcon,
+  MinusIcon,
   ClockIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -61,6 +62,9 @@ const UserManagement: React.FC = () => {
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [rechargePoints, setRechargePoints] = useState('');
   const [rechargeReason, setRechargeReason] = useState('');
+  const [showDeductModal, setShowDeductModal] = useState(false);
+  const [deductPoints, setDeductPoints] = useState('');
+  const [deductReason, setDeductReason] = useState('');
   const [showBalanceHistory, setShowBalanceHistory] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState<any[]>([]);
   const [showRechargeRecords, setShowRechargeRecords] = useState(false);
@@ -214,6 +218,13 @@ const UserManagement: React.FC = () => {
     setShowRechargeModal(true);
   };
 
+  const handleDeductUser = (user: User) => {
+    setSelectedUser(user);
+    setDeductPoints('');
+    setDeductReason('');
+    setShowDeductModal(true);
+  };
+
   const handleSubmitRecharge = async () => {
     if (!selectedUser || !rechargePoints || !rechargeReason) return;
     
@@ -229,6 +240,39 @@ const UserManagement: React.FC = () => {
     } catch (error) {
       console.error('充值失敗:', error);
       alert('充值失敗，請稍後再試');
+    }
+  };
+
+  const handleSubmitDeduct = async () => {
+    if (!selectedUser || !deductPoints || !deductReason) return;
+    
+    const pointsToDeduct = parseInt(deductPoints);
+    if (pointsToDeduct <= 0) {
+      alert('扣除積分必須大於0');
+      return;
+    }
+    
+    if (selectedUser.balance < pointsToDeduct) {
+      alert(`用戶餘額不足！當前餘額：${selectedUser.balance}，嘗試扣除：${pointsToDeduct}`);
+      return;
+    }
+    
+    if (!window.confirm(`確定要扣除 ${selectedUser.name} 的 ${pointsToDeduct} 積分嗎？\n原因：${deductReason}`)) {
+      return;
+    }
+    
+    try {
+      await axios.post(`/users/${selectedUser._id}/manual-deduct`, {
+        points: pointsToDeduct,
+        reason: deductReason
+      });
+      
+      setShowDeductModal(false);
+      fetchUsers(); // 刷新用戶列表
+      alert('扣除積分成功！');
+    } catch (error: any) {
+      console.error('扣除積分失敗:', error);
+      alert(error.response?.data?.message || '扣除積分失敗，請稍後再試');
     }
   };
 
@@ -776,6 +820,13 @@ const UserManagement: React.FC = () => {
                         <PlusIcon className="w-4 h-4" />
                       </button>
                       <button
+                        onClick={() => handleDeductUser(user)}
+                        className="text-red-600 hover:text-red-900"
+                        title="扣除積分"
+                      >
+                        <MinusIcon className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => handleViewBalanceHistory(user)}
                         className="text-indigo-600 hover:text-indigo-900"
                         title="查看積分歷史"
@@ -960,6 +1011,89 @@ const UserManagement: React.FC = () => {
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   確認充值
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 減分模態框 */}
+      {showDeductModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">扣除積分</h3>
+              <button
+                onClick={() => setShowDeductModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-gray-600 mb-2">
+                  為 <span className="font-medium">{selectedUser.name}</span> 扣除積分
+                </p>
+                <p className="text-xs text-gray-500">當前餘額: {selectedUser.balance || 0} 分</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  扣除積分
+                </label>
+                <input
+                  type="number"
+                  value={deductPoints}
+                  onChange={(e) => setDeductPoints(e.target.value)}
+                  placeholder="輸入扣除積分數量"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  min="1"
+                  max={selectedUser.balance || 0}
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  扣除原因
+                </label>
+                <textarea
+                  value={deductReason}
+                  onChange={(e) => setDeductReason(e.target.value)}
+                  placeholder="請輸入扣除原因（如：用戶直接付款、違規處罰等）"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  rows={3}
+                />
+              </div>
+
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                <div className="flex items-center">
+                  <div className="flex-shrink-0">
+                    <XMarkIcon className="h-5 w-5 text-red-400" />
+                  </div>
+                  <div className="ml-3">
+                    <p className="text-sm text-red-800">
+                      <strong>注意：</strong>此操作將直接從用戶餘額中扣除積分，請確認操作原因。
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3">
+                <button
+                  onClick={() => setShowDeductModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSubmitDeduct}
+                  disabled={!deductPoints || !deductReason}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  確認扣除
                 </button>
               </div>
             </div>

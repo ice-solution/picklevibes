@@ -378,6 +378,94 @@ router.post('/:id/manual-recharge', [
   }
 });
 
+// @route   POST /api/users/:id/manual-deduct
+// @desc    管理員手動扣除用戶積分 (僅管理員)
+// @access  Private (Admin)
+router.post('/:id/manual-deduct', [
+  auth,
+  adminAuth,
+  body('points').isInt({ min: 1 }).withMessage('扣除積分必須是正整數'),
+  body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('扣除原因必須在1-200個字符之間')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: '輸入驗證失敗',
+        errors: errors.array()
+      });
+    }
+    
+    const { points, reason } = req.body;
+    const userId = req.params.id;
+    
+    // 檢查用戶是否存在
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: '用戶不存在' });
+    }
+    
+    // 獲取用戶餘額記錄
+    let userBalance = await UserBalance.findOne({ user: userId });
+    if (!userBalance) {
+      return res.status(400).json({ message: '用戶沒有積分記錄' });
+    }
+    
+    // 檢查餘額是否足夠
+    if (userBalance.balance < points) {
+      return res.status(400).json({ 
+        message: `餘額不足！當前餘額：${userBalance.balance}，嘗試扣除：${points}` 
+      });
+    }
+    
+    // 扣除用戶積分
+    await userBalance.deductBalance(
+      points, 
+      `管理員手動扣除 - ${reason} (管理員: ${req.user.name})`
+    );
+    
+    // 創建扣除記錄（用於審計）
+    const deductRecord = new Recharge({
+      user: userId,
+      points: points,
+      amount: points, // 1積分 = 1港幣
+      status: 'completed', // 直接完成
+      paymentIntentId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
+      description: `管理員手動扣除 - ${reason}`,
+      payment: {
+        status: 'completed',
+        method: 'manual_deduct',
+        paidAt: new Date(),
+        transactionId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+      },
+      pointsAdded: false, // 扣除操作
+      pointsDeducted: true // 標記為扣除
+    });
+    await deductRecord.save();
+    
+    console.log(`🎯 管理員手動扣除積分: ${user.name} - ${points}分 (${reason})`);
+    
+    res.json({
+      message: '手動扣除成功',
+      deduct: {
+        id: deductRecord._id,
+        points: points,
+        reason: reason,
+        adminName: req.user.name,
+        completedAt: deductRecord.payment.paidAt
+      },
+      userBalance: {
+        balance: userBalance.balance,
+        totalRecharged: userBalance.totalRecharged,
+        totalSpent: userBalance.totalSpent
+      }
+    });
+  } catch (error) {
+    console.error('手動扣除錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/users/:id/balance-history
 // @desc    獲取用戶積分歷史記錄 (僅管理員)
 // @access  Private (Admin)
