@@ -701,4 +701,101 @@ router.get('/check-membership', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   POST /api/users/create
+// @desc    管理員創建新用戶
+// @access  Private (Admin)
+router.post('/create', [
+  auth, 
+  adminAuth,
+  body('name').trim().isLength({ min: 2, max: 50 }).withMessage('姓名必須在2-50個字符之間'),
+  body('email').isEmail().withMessage('請提供有效的電子郵件地址'),
+  body('password')
+    .isLength({ min: 8 }).withMessage('密碼至少需要8個字符')
+    .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼必須包含至少一個字母和一個數字'),
+  body('phone').matches(/^[0-9]+$/).withMessage('電話號碼只能包含數字'),
+  body('role').optional().isIn(['user', 'admin', 'coach']).withMessage('無效的角色'),
+  body('membershipLevel').optional().isIn(['basic', 'vip']).withMessage('無效的會員等級'),
+  body('vipDays').optional().isInt({ min: 1, max: 365 }).withMessage('VIP 期限必須在 1-365 天之間')
+], async (req, res) => {
+  try {
+    // 驗證輸入
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: errors.array()[0].msg 
+      });
+    }
+
+    const { 
+      name, 
+      email, 
+      password, 
+      phone, 
+      role = 'user', 
+      membershipLevel = 'basic',
+      vipDays = 30 
+    } = req.body;
+
+    // 檢查用戶是否已存在
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: '該電子郵件地址已被使用' 
+      });
+    }
+
+    // 創建新用戶
+    const userData = {
+      name,
+      email,
+      password,
+      phone,
+      role,
+      membershipLevel
+    };
+
+    // 如果設置為 VIP，計算到期日期
+    if (membershipLevel === 'vip') {
+      const now = new Date();
+      const expiryDate = new Date(now.getTime() + (vipDays * 24 * 60 * 60 * 1000));
+      userData.membershipExpiry = expiryDate;
+    }
+
+    const user = new User(userData);
+    await user.save();
+
+    // 為新用戶創建積分記錄
+    const userBalance = new UserBalance({
+      user: user._id,
+      balance: 0,
+      totalRecharged: 0,
+      totalSpent: 0
+    });
+    await userBalance.save();
+
+    console.log(`👤 管理員創建新用戶: ${user.name} (${user.email}), 角色: ${user.role}, 會員等級: ${user.membershipLevel}`);
+
+    res.status(201).json({
+      message: '用戶創建成功',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        role: user.role,
+        membershipLevel: user.membershipLevel,
+        membershipExpiry: user.membershipExpiry,
+        isActive: user.isActive,
+        createdAt: user.createdAt
+      }
+    });
+
+  } catch (error) {
+    console.error('創建用戶錯誤:', error);
+    res.status(500).json({ 
+      message: '服務器錯誤，請稍後再試' 
+    });
+  }
+});
+
 module.exports = router;

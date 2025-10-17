@@ -73,6 +73,18 @@ const UserManagement: React.FC = () => {
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
   const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
   
+  // 創建用戶狀態
+  const [showCreateUserModal, setShowCreateUserModal] = useState(false);
+  const [newUser, setNewUser] = useState({
+    name: '',
+    email: '',
+    password: '',
+    phone: '',
+    role: 'user' as 'user' | 'admin' | 'coach',
+    membershipLevel: 'basic' as 'basic' | 'vip',
+    vipDays: 30
+  });
+  
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -312,6 +324,59 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  // 創建用戶相關函數
+  const handleCreateUser = () => {
+    setNewUser({
+      name: '',
+      email: '',
+      password: '',
+      phone: '',
+      role: 'user',
+      membershipLevel: 'basic',
+      vipDays: 30
+    });
+    setShowCreateUserModal(true);
+  };
+
+  const handleSubmitCreateUser = async () => {
+    // 基本驗證
+    if (!newUser.name || !newUser.email || !newUser.password || !newUser.phone) {
+      alert('請填寫所有必填欄位');
+      return;
+    }
+
+    if (newUser.password.length < 8) {
+      alert('密碼至少需要8個字符');
+      return;
+    }
+
+    if (!/^[0-9]+$/.test(newUser.phone)) {
+      alert('電話號碼只能包含數字');
+      return;
+    }
+
+    try {
+      const requestData = {
+        name: newUser.name,
+        email: newUser.email,
+        password: newUser.password,
+        phone: newUser.phone,
+        role: newUser.role,
+        membershipLevel: newUser.membershipLevel,
+        vipDays: newUser.vipDays
+      };
+
+      await axios.post('/users/create', requestData);
+      
+      setShowCreateUserModal(false);
+      fetchUsers(); // 重新獲取用戶列表
+      alert('用戶創建成功！');
+    } catch (error: any) {
+      console.error('創建用戶失敗:', error);
+      alert(error.response?.data?.message || '創建用戶失敗，請稍後再試');
+    }
+  };
+
   const formatMembershipExpiry = (expiry: string | undefined) => {
     if (!expiry) return '無限期';
     const date = new Date(expiry);
@@ -532,6 +597,13 @@ const UserManagement: React.FC = () => {
               <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
               <p className="text-gray-600">管理用戶角色、會員等級和狀態</p>
             </div>
+            <button
+              onClick={handleCreateUser}
+              className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              創建用戶
+            </button>
           </div>
           
           {/* 搜索框 */}
@@ -1269,6 +1341,166 @@ const UserManagement: React.FC = () => {
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                   確認修改
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 創建用戶模態框 */}
+      {showCreateUserModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-lg font-semibold text-gray-900">創建新用戶</h3>
+                <button
+                  onClick={() => setShowCreateUserModal(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XMarkIcon className="h-6 w-6" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                {/* 姓名 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    姓名 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={newUser.name}
+                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="請輸入姓名"
+                  />
+                </div>
+
+                {/* 郵箱 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    郵箱 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    value={newUser.email}
+                    onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="請輸入郵箱"
+                  />
+                </div>
+
+                {/* 密碼 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    密碼 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="password"
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="至少8個字符，包含字母和數字"
+                  />
+                </div>
+
+                {/* 電話 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    電話 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={newUser.phone}
+                    onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    placeholder="請輸入電話號碼"
+                  />
+                </div>
+
+                {/* 角色 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    角色
+                  </label>
+                  <select
+                    value={newUser.role}
+                    onChange={(e) => setNewUser({ ...newUser, role: e.target.value as 'user' | 'admin' | 'coach' })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="user">普通用戶</option>
+                    <option value="coach">教練</option>
+                    <option value="admin">管理員</option>
+                  </select>
+                </div>
+
+                {/* 會員等級 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    會員等級
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="newUserMembershipLevel"
+                        value="basic"
+                        checked={newUser.membershipLevel === 'basic'}
+                        onChange={(e) => setNewUser({ ...newUser, membershipLevel: e.target.value as 'basic' | 'vip' })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">普通會員</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="newUserMembershipLevel"
+                        value="vip"
+                        checked={newUser.membershipLevel === 'vip'}
+                        onChange={(e) => setNewUser({ ...newUser, membershipLevel: e.target.value as 'basic' | 'vip' })}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">VIP會員</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* VIP 期限 */}
+                {newUser.membershipLevel === 'vip' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      VIP 會員期限（天數）
+                    </label>
+                    <select
+                      value={newUser.vipDays}
+                      onChange={(e) => setNewUser({ ...newUser, vipDays: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value={7}>7 天</option>
+                      <option value={15}>15 天</option>
+                      <option value={30}>30 天</option>
+                      <option value={60}>60 天</option>
+                      <option value={90}>90 天</option>
+                      <option value={180}>180 天</option>
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-end space-x-3 mt-6">
+                <button
+                  onClick={() => setShowCreateUserModal(false)}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSubmitCreateUser}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                  創建用戶
                 </button>
               </div>
             </div>
