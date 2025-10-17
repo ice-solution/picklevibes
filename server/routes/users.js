@@ -20,13 +20,22 @@ router.get('/', [auth, adminAuth], async (req, res) => {
     if (membershipLevel) query.membershipLevel = membershipLevel;
     
     // 添加搜索功能
-    if (search && searchType) {
-      if (searchType === 'name') {
-        query.name = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
-      } else if (searchType === 'email') {
-        query.email = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
-      } else if (searchType === 'phone') {
-        query.phone = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+    if (search) {
+      if (searchType) {
+        // 指定搜索類型
+        if (searchType === 'name') {
+          query.name = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+        } else if (searchType === 'email') {
+          query.email = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+        } else if (searchType === 'phone') {
+          query.phone = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+        }
+      } else {
+        // 沒有指定搜索類型時，同時搜索姓名和郵箱
+        query.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } }
+        ];
       }
     }
     
