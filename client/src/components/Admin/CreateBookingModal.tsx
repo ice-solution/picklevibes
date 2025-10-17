@@ -10,6 +10,7 @@ import {
   CalendarDaysIcon,
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
+import UserAutocomplete from '../Common/UserAutocomplete';
 
 interface User {
   _id: string;
@@ -61,14 +62,15 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
     bypassRestrictions: false
   });
 
+  // 選中的用戶
+  const [selectedUser, setSelectedUser] = useState<User | null>(null);
+
   // 數據選項
-  const [users, setUsers] = useState<User[]>([]);
   const [courts, setCourts] = useState<Court[]>([]);
 
   // 載入數據
   useEffect(() => {
     if (isOpen) {
-      fetchUsers();
       fetchCourts();
     }
   }, [isOpen]);
@@ -106,14 +108,6 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
     return endTimes;
   };
 
-  const fetchUsers = async () => {
-    try {
-      const response = await axios.get('/users?limit=100');
-      setUsers(response.data.users || response.data || []);
-    } catch (error) {
-      console.error('載入用戶失敗:', error);
-    }
-  };
 
   const fetchCourts = async () => {
     try {
@@ -137,6 +131,28 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       ...prev,
       [field]: checked
     }));
+  };
+
+  // 處理用戶選擇
+  const handleUserSelect = (user: User | null) => {
+    setSelectedUser(user);
+    if (user) {
+      setFormData(prev => ({
+        ...prev,
+        userId: user._id,
+        playerName: user.name,
+        playerEmail: user.email,
+        playerPhone: user.phone || ''
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        userId: '',
+        playerName: '',
+        playerEmail: '',
+        playerPhone: ''
+      }));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -194,6 +210,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         specialRequests: '',
         bypassRestrictions: false
       });
+      setSelectedUser(null);
 
       onBookingCreated();
       onClose();
@@ -240,19 +257,22 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               <UserIcon className="w-4 h-4 inline mr-2" />
               選擇用戶 *
             </label>
-            <select
-              value={formData.userId}
-              onChange={(e) => handleInputChange('userId', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-              required
-            >
-              <option value="">請選擇用戶</option>
-              {users.map(user => (
-                <option key={user._id} value={user._id}>
-                  {user.name} ({user.email})
-                </option>
-              ))}
-            </select>
+            <UserAutocomplete
+              value={selectedUser ? `${selectedUser.name} (${selectedUser.email})` : ''}
+              onChange={handleUserSelect}
+              placeholder="輸入用戶姓名或郵箱搜索..."
+              className="w-full"
+            />
+            {selectedUser && (
+              <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <div className="flex items-center">
+                  <CheckIcon className="w-4 h-4 text-green-600 mr-2" />
+                  <span className="text-sm text-green-800">
+                    已選擇用戶：{selectedUser.name} ({selectedUser.email})
+                  </span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* 場地選擇 */}
@@ -360,6 +380,11 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-3">
               <UsersIcon className="w-4 h-4 inline mr-2" />
               參與者信息
+              {selectedUser && (
+                <span className="text-xs text-gray-500 ml-2">
+                  (已自動填入選中用戶的信息，可手動修改)
+                </span>
+              )}
             </label>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
