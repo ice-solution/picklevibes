@@ -53,7 +53,13 @@ const allowedOrigins = [
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'https://uat.picklevibes.hk',
-  'https://picklevibes.hk'
+  'https://picklevibes.hk',
+  'https://www.picklevibes.hk', // 添加 www 子域名
+  'http://picklevibes.hk', // 添加 HTTP 版本（用於開發或重定向）
+  'http://www.picklevibes.hk', // 添加 HTTP www 版本
+  'https://www.picklevibes.hk', // 添加 www 子域名
+  'http://picklevibes.hk', // 添加 HTTP 版本（用於開發或重定向）
+  'http://www.picklevibes.hk' // 添加 HTTP www 版本
 ];
 
 app.use(cors({
@@ -61,9 +67,11 @@ app.use(cors({
     // 允許沒有 origin 的請求（如 Postman 或服務器端請求）
     if (!origin) return callback(null, true);
     
+    // 檢查是否在允許列表中
     if (allowedOrigins.indexOf(origin) !== -1) {
       callback(null, true);
     } else {
+      // 記錄被拒絕的 origin 以便調試
       console.log(`🚫 CORS 拒絕的 origin: ${origin}`);
       console.log(`📋 允許的 origins: ${allowedOrigins.join(', ')}`);
       callback(new Error('Not allowed by CORS'));
