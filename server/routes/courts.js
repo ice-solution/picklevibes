@@ -1,12 +1,12 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult, query } = require('express-validator');
-const multer = require('multer');
 const path = require('path');
 const fs = require('fs').promises;
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
 const { auth, adminAuth } = require('../middleware/auth');
+const { courtUpload, processCourtImage, deleteFile } = require('../middleware/upload');
 
 // 為批量 API 創建專門的速率限制
 const batchLimiter = rateLimit({
@@ -19,40 +19,7 @@ const batchLimiter = rateLimit({
 
 const router = express.Router();
 
-// 確保上傳目錄存在
-const uploadDir = path.join(__dirname, '../../uploads/courts');
-fs.mkdir(uploadDir, { recursive: true }).catch(console.error);
-
-// Multer 配置
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    // 生成唯一文件名：時間戳 + 隨機數 + 原擴展名
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, `court-${uniqueSuffix}${path.extname(file.originalname)}`);
-  }
-});
-
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB 限制
-  },
-  fileFilter: function (req, file, cb) {
-    // 檢查文件類型
-    const allowedTypes = /jpeg|jpg|png|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('只允許上傳 JPEG、JPG、PNG、WEBP 格式的圖片'));
-    }
-  }
-});
+// 上傳配置已移至通用中間件
 
 // 計算時間長度（分鐘）
 function calculateDuration(startTime, endTime) {
@@ -517,7 +484,8 @@ router.put('/:id/maintenance', [
 router.post('/:id/images', [
   auth,
   adminAuth,
-  upload.single('image')
+  courtUpload.single('image'),
+  processCourtImage
 ], async (req, res) => {
   try {
     if (!req.file) {
@@ -527,21 +495,8 @@ router.post('/:id/images', [
     const court = await Court.findById(req.params.id);
     if (!court) {
       // 刪除已上傳的文件
-      await fs.unlink(req.file.path).catch(console.error);
+      await deleteFile(req.file.path);
       return res.status(404).json({ message: '場地不存在' });
-    }
-
-    // 檢查圖片尺寸（1920x1280）
-    const sharp = require('sharp');
-    const metadata = await sharp(req.file.path).metadata();
-    
-    if (metadata.width !== 1920 || metadata.height !== 1280) {
-      // 刪除不符合尺寸的圖片
-      await fs.unlink(req.file.path).catch(console.error);
-      return res.status(400).json({ 
-        message: '圖片尺寸必須為 1920x1280 像素',
-        currentSize: `${metadata.width}x${metadata.height}`
-      });
     }
 
     // 構建圖片 URL

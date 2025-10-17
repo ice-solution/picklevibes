@@ -12,6 +12,7 @@ import CourtManagement from '../components/Admin/CourtManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
 import MaintenanceControl from '../components/Admin/MaintenanceControl';
 import BulkUpgrade from '../components/Admin/BulkUpgrade';
+import ActivityManagement from '../components/Admin/ActivityManagement';
 import { 
   CalendarDaysIcon, 
   UserGroupIcon,
@@ -21,7 +22,8 @@ import {
   TicketIcon,
   CreditCardIcon,
   WrenchScrewdriverIcon,
-  ArrowTrendingUpIcon
+  ArrowTrendingUpIcon,
+  CalendarIcon
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -33,7 +35,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -81,6 +83,7 @@ const Admin: React.FC = () => {
     { id: 'users', name: '用戶管理', icon: UsersIcon },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
+    { id: 'activities', name: '活動管理', icon: CalendarIcon },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon },
     { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon },
     { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon },
@@ -259,6 +262,16 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <MaintenanceControl />
+              </motion.div>
+            )}
+
+            {activeTab === 'activities' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ActivityManagement />
               </motion.div>
             )}
 

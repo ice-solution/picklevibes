@@ -57,6 +57,7 @@ const Navbar: React.FC = () => {
     { name: t('nav.facilities'), href: '/facilities', icon: BuildingOfficeIcon },
     { name: t('nav.pricing'), href: '/pricing', icon: CurrencyDollarIcon },
     { name: t('nav.booking'), href: '/booking', icon: CalendarDaysIcon },
+    { name: '活動中心', href: '/activities', icon: UsersIcon },
   ];
 
   const isActive = (path: string) => {
@@ -146,6 +147,14 @@ const Navbar: React.FC = () => {
                           >
                             <CalendarDaysIcon className="w-4 h-4" />
                             <span>我的預約</span>
+                          </Link>
+                          <Link
+                            to="/my-activities"
+                            onClick={() => setIsUserDropdownOpen(false)}
+                            className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          >
+                            <UsersIcon className="w-4 h-4" />
+                            <span>我的活動</span>
                           </Link>
                           <Link
                             to="/recharge"
@@ -361,6 +370,14 @@ const Navbar: React.FC = () => {
                     >
                       <CalendarDaysIcon className="w-5 h-5" />
                       <span>我的預約</span>
+                    </Link>
+                    <Link
+                      to="/my-activities"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                    >
+                      <UsersIcon className="w-5 h-5" />
+                      <span>我的活動</span>
                     </Link>
                     <Link
                       to="/recharge"

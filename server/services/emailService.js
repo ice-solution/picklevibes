@@ -326,6 +326,366 @@ class EmailService {
       throw new Error(`發送開門通知郵件失敗: ${error.message}`);
     }
   }
+
+  /**
+   * 生成歡迎郵件模板
+   */
+  async generateWelcomeEmailTemplate(userData) {
+    const { name, email, password, role, membershipLevel, membershipExpiry } = userData;
+    
+    // 格式化會員等級顯示
+    const membershipDisplay = membershipLevel === 'vip' ? 'VIP會員' : '普通會員';
+    const membershipInfo = membershipLevel === 'vip' && membershipExpiry 
+      ? `，有效期至 ${new Date(membershipExpiry).toLocaleDateString('zh-TW')}`
+      : '';
+
+    const subject = `🎉 歡迎加入 PickleVibes！您的帳戶已創建成功`;
+
+    const html = `
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>歡迎加入 PickleVibes</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f8f9fa;
+            }
+            .container {
+                background-color: white;
+                border-radius: 12px;
+                padding: 40px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .header {
+                text-align: center;
+                margin-bottom: 30px;
+            }
+            .logo {
+                width: 80px;
+                height: 80px;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 20px;
+                display: inline-flex;
+                align-items: center;
+                justify-content: center;
+                margin-bottom: 20px;
+            }
+            .logo-text {
+                color: white;
+                font-size: 32px;
+                font-weight: bold;
+            }
+            .title {
+                color: #2d3748;
+                font-size: 28px;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+            .subtitle {
+                color: #718096;
+                font-size: 16px;
+            }
+            .content {
+                margin-bottom: 30px;
+            }
+            .welcome-text {
+                font-size: 18px;
+                color: #2d3748;
+                margin-bottom: 20px;
+            }
+            .account-info {
+                background-color: #f7fafc;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                border-left: 4px solid #667eea;
+            }
+            .info-item {
+                margin-bottom: 10px;
+                display: flex;
+                align-items: center;
+            }
+            .info-label {
+                font-weight: bold;
+                color: #4a5568;
+                min-width: 100px;
+            }
+            .info-value {
+                color: #2d3748;
+                font-family: monospace;
+                background-color: #e2e8f0;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-size: 14px;
+            }
+            .login-section {
+                background-color: #e6fffa;
+                border-radius: 8px;
+                padding: 20px;
+                margin: 20px 0;
+                border-left: 4px solid #38b2ac;
+            }
+            .login-button {
+                display: inline-block;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white !important;
+                text-decoration: none;
+                padding: 12px 24px;
+                border-radius: 8px;
+                font-weight: bold;
+                margin: 10px 0;
+                transition: transform 0.2s;
+            }
+            .login-button:hover {
+                transform: translateY(-2px);
+            }
+            .security-note {
+                background-color: #fff5f5;
+                border-radius: 8px;
+                padding: 15px;
+                margin: 20px 0;
+                border-left: 4px solid #f56565;
+            }
+            .security-note h4 {
+                color: #c53030;
+                margin: 0 0 10px 0;
+            }
+            .security-note p {
+                color: #742a2a;
+                margin: 0;
+                font-size: 14px;
+            }
+            .footer {
+                text-align: center;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #e2e8f0;
+                color: #718096;
+                font-size: 14px;
+            }
+            .features {
+                margin: 20px 0;
+            }
+            .feature-item {
+                display: flex;
+                align-items: center;
+                margin-bottom: 10px;
+                color: #4a5568;
+            }
+            .feature-icon {
+                color: #48bb78;
+                margin-right: 10px;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <div class="logo">
+                    <span class="logo-text">P</span>
+                </div>
+                <h1 class="title">歡迎加入 PickleVibes！</h1>
+                <p class="subtitle">您的帳戶已成功創建</p>
+            </div>
+
+            <div class="content">
+                <p class="welcome-text">
+                    親愛的 <strong>${name}</strong>，<br>
+                    歡迎加入 PickleVibes 大家庭！我們很高興為您提供優質的場地預約服務。
+                </p>
+
+                <div class="account-info">
+                    <h3 style="margin-top: 0; color: #2d3748;">您的帳戶信息</h3>
+                    <div class="info-item">
+                        <span class="info-label">姓名：</span>
+                        <span class="info-value">${name}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">郵箱：</span>
+                        <span class="info-value">${email}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">角色：</span>
+                        <span class="info-value">${role === 'admin' ? '管理員' : role === 'coach' ? '教練' : '普通用戶'}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">會員等級：</span>
+                        <span class="info-value">${membershipDisplay}${membershipInfo}</span>
+                    </div>
+                </div>
+
+                <div class="login-section">
+                    <h3 style="margin-top: 0; color: #2d3748;">立即開始使用</h3>
+                    <p>您可以使用以下信息登入您的帳戶：</p>
+                    <div class="info-item">
+                        <span class="info-label">登入網址：</span>
+                        <span class="info-value">${process.env.CLIENT_URL || 'https://picklevibes.hk'}/login</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">郵箱：</span>
+                        <span class="info-value">${email}</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">密碼：</span>
+                        <span class="info-value">${password}</span>
+                    </div>
+                    <br>
+                    <a href="${process.env.CLIENT_URL || 'https://picklevibes.hk'}/login" class="login-button">
+                        🚀 立即登入
+                    </a>
+                </div>
+
+                <div class="features">
+                    <h3 style="color: #2d3748;">您可以使用以下功能：</h3>
+                    <div class="feature-item">
+                        <span class="feature-icon">🏟️</span>
+                        <span>預約場地</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">📅</span>
+                        <span>管理預約</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">💳</span>
+                        <span>在線支付</span>
+                    </div>
+                    <div class="feature-item">
+                        <span class="feature-icon">📱</span>
+                        <span>WhatsApp 通知</span>
+                    </div>
+                    ${membershipLevel === 'vip' ? `
+                    <div class="feature-item">
+                        <span class="feature-icon">⭐</span>
+                        <span>VIP 專享優惠</span>
+                    </div>
+                    ` : ''}
+                </div>
+
+                <div class="security-note">
+                    <h4>🔒 安全提醒</h4>
+                    <p>
+                        為了您的帳戶安全，建議您首次登入後立即修改密碼。
+                        請妥善保管您的登入信息，不要與他人分享。
+                    </p>
+                </div>
+            </div>
+
+            <div class="footer">
+                <p>
+                    如有任何問題，請聯繫我們的客服團隊。<br>
+                    <strong>PickleVibes</strong> - 讓運動更精彩！
+                </p>
+                <p style="margin-top: 15px; font-size: 12px; color: #a0aec0;">
+                    此郵件由系統自動發送，請勿回覆。
+                </p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    const text = `
+歡迎加入 PickleVibes！
+
+親愛的 ${name}，
+
+歡迎加入 PickleVibes 大家庭！我們很高興為您提供優質的場地預約服務。
+
+您的帳戶信息：
+- 姓名：${name}
+- 郵箱：${email}
+- 角色：${role === 'admin' ? '管理員' : role === 'coach' ? '教練' : '普通用戶'}
+- 會員等級：${membershipDisplay}${membershipInfo}
+
+登入信息：
+- 登入網址：${process.env.CLIENT_URL || 'https://picklevibes.hk'}/login
+- 郵箱：${email}
+- 密碼：${password}
+
+功能特色：
+- 🏟️ 預約場地
+- 📅 管理預約
+- 💳 充值支援(積分)
+${membershipLevel === 'vip' ? '- ⭐ VIP 專享優惠' : ''}
+
+安全提醒：
+為了您的帳戶安全，建議您首次登入後立即修改密碼。
+請妥善保管您的登入信息，不要與他人分享。
+
+如有任何問題，請聯繫我們的客服團隊。
+PickleVibes - 讓匹克球24小時隨時預約！
+
+此郵件由系統自動發送，請勿回覆。
+    `;
+
+    return {
+      subject,
+      html,
+      text
+    };
+  }
+
+  /**
+   * 發送歡迎郵件
+   */
+  async sendWelcomeEmail(userData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      const emailTemplate = await this.generateWelcomeEmailTemplate(userData);
+      
+      // 準備附件
+      const attachments = [];
+      
+      // 添加 Logo 作為附件
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo' // Content ID for referencing in HTML
+        });
+      }
+      
+      const mailOptions = {
+        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: emailTemplate.subject,
+        html: emailTemplate.html,
+        text: emailTemplate.text,
+        attachments: attachments
+      };
+
+      console.log('📧 正在發送歡迎郵件...', {
+        to: userData.email,
+        subject: emailTemplate.subject,
+        attachments: attachments.length
+      });
+
+      const result = await this.transporter.sendMail(mailOptions);
+      
+      console.log('✅ 歡迎郵件發送成功:', result.messageId);
+      return {
+        success: true,
+        messageId: result.messageId,
+        message: '歡迎郵件發送成功'
+      };
+    } catch (error) {
+      console.error('❌ 發送歡迎郵件失敗:', error.message);
+      throw new Error(`發送歡迎郵件失敗: ${error.message}`);
+    }
+  }
 }
 
 module.exports = new EmailService();

@@ -26,6 +26,10 @@ import Recharge from './pages/Recharge';
 import RechargeSuccess from './pages/RechargeSuccess';
 import Balance from './pages/Balance';
 import Maintenance from './pages/Maintenance';
+import Activities from './pages/Activities';
+import ActivityDetail from './pages/ActivityDetail';
+import ActivityRegister from './pages/ActivityRegister';
+import MyActivities from './pages/MyActivities';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 
@@ -112,10 +116,24 @@ function App() {
                   } 
                 />
                 <Route path="/maintenance" element={<Maintenance />} />
-                <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
-                <Route path="/forgot-password" element={<ForgotPassword />} />
-                <Route path="/reset-password" element={<ResetPassword />} />
+                <Route path="/activities" element={<Activities />} />
+                <Route path="/activities/:id" element={<ActivityDetail />} />
+                <Route 
+                  path="/activities/:id/register" 
+                  element={
+                    <ProtectedRoute>
+                      <ActivityRegister />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/my-activities" 
+                  element={
+                    <ProtectedRoute>
+                      <MyActivities />
+                    </ProtectedRoute>
+                  } 
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </main>
