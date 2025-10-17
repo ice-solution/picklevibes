@@ -4,6 +4,7 @@ const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const Recharge = require('../models/Recharge');
 const { auth, adminAuth } = require('../middleware/auth');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
 
@@ -340,7 +341,9 @@ router.post('/:id/manual-recharge', [
     
     // 更新充值記錄的關聯
     const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
-    latestTransaction.relatedBooking = null; // 手動充值不關聯預約
+    if (latestTransaction) {
+      latestTransaction.relatedBooking = null; // 手動充值不關聯預約
+    }
     
     res.json({
       message: '手動充值成功',
@@ -733,7 +736,8 @@ router.post('/create', [
       phone, 
       role = 'user', 
       membershipLevel = 'basic',
-      vipDays = 30 
+      vipDays = 30,
+      sendWelcomeEmail = true
     } = req.body;
 
     // 檢查用戶是否已存在
@@ -774,6 +778,28 @@ router.post('/create', [
     await userBalance.save();
 
     console.log(`👤 管理員創建新用戶: ${user.name} (${user.email}), 角色: ${user.role}, 會員等級: ${user.membershipLevel}`);
+
+    // 發送歡迎郵件（如果選擇發送）
+    if (sendWelcomeEmail) {
+      try {
+        const welcomeEmailData = {
+          name: user.name,
+          email: user.email,
+          password: password, // 使用原始密碼（未加密）
+          role: user.role,
+          membershipLevel: user.membershipLevel,
+          membershipExpiry: user.membershipExpiry
+        };
+        
+        await emailService.sendWelcomeEmail(welcomeEmailData);
+        console.log(`📧 歡迎郵件已發送給新用戶: ${user.email}`);
+      } catch (emailError) {
+        console.error('❌ 發送歡迎郵件失敗:', emailError.message);
+        // 不影響用戶創建，只記錄錯誤
+      }
+    } else {
+      console.log(`📧 管理員選擇不發送歡迎郵件給新用戶: ${user.email}`);
+    }
 
     res.status(201).json({
       message: '用戶創建成功',

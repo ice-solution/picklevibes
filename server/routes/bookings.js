@@ -447,8 +447,10 @@ router.post('/', [
     
     // 更新用戶餘額記錄中的預約ID
     const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
-    latestTransaction.relatedBooking = booking._id;
-    await userBalance.save();
+    if (latestTransaction) {
+      latestTransaction.relatedBooking = booking._id;
+      await userBalance.save();
+    }
 
     // 填充場地信息
     await booking.populate('court', 'name number type amenities');
