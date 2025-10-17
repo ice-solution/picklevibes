@@ -8,7 +8,8 @@ import {
   ClockIcon,
   UsersIcon,
   CalendarDaysIcon,
-  CheckCircleIcon
+  CheckCircleIcon,
+  CheckIcon
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
 
