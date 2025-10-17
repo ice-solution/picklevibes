@@ -56,9 +56,6 @@ const allowedOrigins = [
   'https://picklevibes.hk',
   'https://www.picklevibes.hk', // 添加 www 子域名
   'http://picklevibes.hk', // 添加 HTTP 版本（用於開發或重定向）
-  'http://www.picklevibes.hk', // 添加 HTTP www 版本
-  'https://www.picklevibes.hk', // 添加 www 子域名
-  'http://picklevibes.hk', // 添加 HTTP 版本（用於開發或重定向）
   'http://www.picklevibes.hk' // 添加 HTTP www 版本
 ];
 
