@@ -84,6 +84,7 @@ const UserManagement: React.FC = () => {
     membershipLevel: 'basic' as 'basic' | 'vip',
     vipDays: 30
   });
+  const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
   
   // 分頁狀態
   const [currentPage, setCurrentPage] = useState(1);
@@ -93,7 +94,7 @@ const UserManagement: React.FC = () => {
   
   // 搜索狀態
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchType, setSearchType] = useState<'name' | 'email'>('name');
+  const [searchType, setSearchType] = useState<'name' | 'email' | 'phone'>('name');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
 
   // 防抖搜索查詢
@@ -335,6 +336,7 @@ const UserManagement: React.FC = () => {
       membershipLevel: 'basic',
       vipDays: 30
     });
+    setSendWelcomeEmail(true);
     setShowCreateUserModal(true);
   };
 
@@ -363,7 +365,8 @@ const UserManagement: React.FC = () => {
         phone: newUser.phone,
         role: newUser.role,
         membershipLevel: newUser.membershipLevel,
-        vipDays: newUser.vipDays
+        vipDays: newUser.vipDays,
+        sendWelcomeEmail: sendWelcomeEmail
       };
 
       await axios.post('/users/create', requestData);
@@ -409,7 +412,7 @@ const UserManagement: React.FC = () => {
     setCurrentPage(1); // 搜索時重置到第一頁
   };
 
-  const handleSearchTypeChange = (type: 'name' | 'email') => {
+  const handleSearchTypeChange = (type: 'name' | 'email' | 'phone') => {
     setSearchType(type);
     setCurrentPage(1); // 切換搜索類型時重置到第一頁
   };
@@ -615,7 +618,7 @@ const UserManagement: React.FC = () => {
                 </div>
                 <input
                   type="text"
-                  placeholder={`按${searchType === 'name' ? '姓名' : '郵箱'}搜索用戶...`}
+                  placeholder={`按${searchType === 'name' ? '姓名' : searchType === 'email' ? '郵箱' : '電話'}搜索用戶...`}
                   value={searchQuery}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg leading-5 bg-white placeholder-gray-500 focus:outline-none focus:placeholder-gray-400 focus:ring-1 focus:ring-primary-500 focus:border-primary-500 sm:text-sm"
@@ -635,11 +638,12 @@ const UserManagement: React.FC = () => {
               <label className="text-sm text-gray-700">搜索類型:</label>
               <select
                 value={searchType}
-                onChange={(e) => handleSearchTypeChange(e.target.value as 'name' | 'email')}
+                onChange={(e) => handleSearchTypeChange(e.target.value as 'name' | 'email' | 'phone')}
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value="name">姓名</option>
                 <option value="email">郵箱</option>
+                <option value="phone">電話</option>
               </select>
             </div>
           </div>
@@ -647,7 +651,7 @@ const UserManagement: React.FC = () => {
           {/* 搜索結果提示 */}
           {searchQuery && (
             <div className="mt-3 text-sm text-gray-600">
-              搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : '郵箱'}) - 找到 {totalUsers} 個結果
+              搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : searchType === 'email' ? '郵箱' : '電話'}) - 找到 {totalUsers} 個結果
             </div>
           )}
         </div>
@@ -1487,6 +1491,28 @@ const UserManagement: React.FC = () => {
                     </select>
                   </div>
                 )}
+
+                {/* 發送歡迎郵件選項 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    郵件通知
+                  </label>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="sendWelcomeEmail"
+                      checked={sendWelcomeEmail}
+                      onChange={(e) => setSendWelcomeEmail(e.target.checked)}
+                      className="mr-2 h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="sendWelcomeEmail" className="text-sm text-gray-700">
+                      發送歡迎郵件給新用戶
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    包含登入信息和帳戶詳情的歡迎郵件
+                  </p>
+                </div>
               </div>
 
               <div className="flex justify-end space-x-3 mt-6">

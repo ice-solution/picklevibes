@@ -25,6 +25,8 @@ router.get('/', [auth, adminAuth], async (req, res) => {
         query.name = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
       } else if (searchType === 'email') {
         query.email = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+      } else if (searchType === 'phone') {
+        query.phone = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
       }
     }
     
