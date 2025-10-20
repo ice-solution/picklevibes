@@ -191,7 +191,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       console.log('🔍 步驟 2: 預約已使用積分支付完成');
       
       // 顯示成功消息並跳轉
-      alert('預約成功！已扣除積分。');
+      alert('預約成功！已扣除積分。請留意您的郵箱，已發送預約碼到您的郵箱。');
       window.location.href = '/my-bookings';
     } catch (error: any) {
       console.error('❌ 支付流程錯誤:', error);
