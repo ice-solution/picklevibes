@@ -121,8 +121,8 @@ const MyActivities: React.FC = () => {
     if (imagePath.startsWith('http')) return imagePath;
     
     const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-    const baseUrl = apiUrl.replace(/\/?api\/?$/, '');
-    return `${baseUrl}${imagePath}`;
+    const base = apiUrl.replace(/\/$/, '');
+    return `${base}${imagePath}`;
   };
 
   const getStatusColor = (status: string) => {
