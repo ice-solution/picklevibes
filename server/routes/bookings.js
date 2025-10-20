@@ -600,8 +600,8 @@ router.put('/:id/cancel', [
       return res.status(403).json({ message: '無權限取消此預約' });
     }
 
-    // 檢查是否可以取消
-    if (!booking.canBeCancelled()) {
+    // 檢查是否可以取消（管理員可繞過時間限制）
+    if (req.user.role !== 'admin' && !booking.canBeCancelled()) {
       return res.status(400).json({ 
         message: '預約無法取消，請至少提前2小時取消或聯繫客服' 
       });
@@ -617,22 +617,28 @@ router.put('/:id/cancel', [
 
     // 如為積分支付或管理員建立且已扣分，則退回積分
     try {
-      const pointsToRefund = Number(booking.pricing?.pointsDeducted || 0);
+      const pointsToRefund = Number(
+        booking.pricing?.pointsDeducted ??
+        booking.payment?.pointsDeducted ??
+        Math.round(booking.pricing?.totalPrice ?? 0)
+      );
       const paidByPoints = booking.payment?.method === 'points' || booking.payment?.method === 'admin_created';
       const notRefundedYet = booking.payment?.status !== 'refunded';
       if (paidByPoints && notRefundedYet && pointsToRefund > 0) {
-        const userBalance = await UserBalance.findOne({ user: booking.user });
-        if (userBalance) {
-          await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
-          booking.payment.status = 'refunded';
-          booking.payment.refundedAt = new Date();
+        let userBalance = await UserBalance.findOne({ user: booking.user });
+        if (!userBalance) {
+          userBalance = new UserBalance({ user: booking.user, balance: 0, totalRecharged: 0, totalSpent: 0, transactions: [] });
         }
+        await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
+        booking.payment.status = 'refunded';
+        booking.payment.refundedAt = new Date();
       }
     } catch (refundError) {
       console.error('退款失敗（不影響取消）:', refundError);
     }
 
-    await booking.save();
+    // 使用關閉驗證的保存方式，避免舊資料因缺欄位而無法更新
+    await booking.save({ validateBeforeSave: false });
 
     // 發送 WhatsApp 取消通知
     try {
