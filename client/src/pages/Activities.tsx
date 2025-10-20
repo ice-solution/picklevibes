@@ -118,9 +118,8 @@ const Activities: React.FC = () => {
     if (!imagePath) return '';
     if (imagePath.startsWith('http')) return imagePath;
     
-    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001';
-    const baseUrl = apiUrl.replace('/api', '');
-    return `${baseUrl}${imagePath}`;
+    const serverUrl = process.env.REACT_APP_SERVER_URL || 'http://localhost:5001';
+    return `${serverUrl}${imagePath}`;
   };
 
   const canRegister = (activity: Activity) => {
