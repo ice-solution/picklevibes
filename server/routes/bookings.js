@@ -615,6 +615,23 @@ router.put('/:id/cancel', [
       reason
     };
 
+    // 如為積分支付或管理員建立且已扣分，則退回積分
+    try {
+      const pointsToRefund = Number(booking.pricing?.pointsDeducted || 0);
+      const paidByPoints = booking.payment?.method === 'points' || booking.payment?.method === 'admin_created';
+      const notRefundedYet = booking.payment?.status !== 'refunded';
+      if (paidByPoints && notRefundedYet && pointsToRefund > 0) {
+        const userBalance = await UserBalance.findOne({ user: booking.user });
+        if (userBalance) {
+          await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
+          booking.payment.status = 'refunded';
+          booking.payment.refundedAt = new Date();
+        }
+      }
+    } catch (refundError) {
+      console.error('退款失敗（不影響取消）:', refundError);
+    }
+
     await booking.save();
 
     // 發送 WhatsApp 取消通知

@@ -406,6 +406,28 @@ const BookingCalendar: React.FC = () => {
                   <p className="text-sm text-gray-900">{selectedBooking.payment.method}</p>
                 </div>
               </div>
+
+              {/* 管理動作 */}
+              <div className="mt-4 flex justify-end space-x-3">
+                {selectedBooking.status !== 'cancelled' && (
+                  <button
+                    onClick={async () => {
+                      if (!window.confirm('確認要取消此預約並退回積分嗎？')) return;
+                      try {
+                        await axios.put(`/bookings/${selectedBooking._id}/cancel`, { reason: 'Admin cancel via calendar' });
+                        alert('預約已取消，積分已退回');
+                        setShowDetailModal(false);
+                        fetchBookings();
+                      } catch (e: any) {
+                        alert(e?.response?.data?.message || '取消失敗');
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded"
+                  >
+                    取消預約並退款
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>
