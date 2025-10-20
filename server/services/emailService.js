@@ -686,6 +686,261 @@ PickleVibes - 讓匹克球24小時隨時預約！
       throw new Error(`發送歡迎郵件失敗: ${error.message}`);
     }
   }
+
+  /**
+   * 發送充值發票郵件
+   * @param {Object} userData - 用戶數據
+   * @param {Object} rechargeData - 充值數據
+   */
+  async sendRechargeInvoiceEmail(userData, rechargeData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      const emailTemplate = await this.generateRechargeInvoiceTemplate(userData, rechargeData);
+      
+      // 準備附件
+      const attachments = [];
+      
+      // 添加 Logo 作為附件
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo' // Content ID for referencing in HTML
+        });
+      }
+      
+      const mailOptions = {
+        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: emailTemplate.subject,
+        html: emailTemplate.html,
+        text: emailTemplate.text,
+        attachments: attachments
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log('📧 充值發票郵件發送成功:', result.messageId);
+      return result;
+
+    } catch (error) {
+      console.error('❌ 發送充值發票郵件失敗:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 生成充值發票郵件模板
+   * @param {Object} userData - 用戶數據
+   * @param {Object} rechargeData - 充值數據
+   */
+  async generateRechargeInvoiceTemplate(userData, rechargeData) {
+    const invoiceNumber = `INV-${rechargeData._id.toString().slice(-8).toUpperCase()}`;
+    const transactionDate = new Date(rechargeData.payment.paidAt).toLocaleDateString('zh-TW', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    const subject = `PickleVibes 充值發票 - ${invoiceNumber}`;
+
+    const html = `
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>充值發票</title>
+        <style>
+            body {
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                line-height: 1.6;
+                color: #333;
+                max-width: 600px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f8f9fa;
+            }
+            .container {
+                background: white;
+                border-radius: 10px;
+                padding: 30px;
+                box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .header {
+                text-align: center;
+                border-bottom: 2px solid #e9ecef;
+                padding-bottom: 20px;
+                margin-bottom: 30px;
+            }
+            .logo {
+                max-width: 150px;
+                height: auto;
+                margin-bottom: 15px;
+            }
+            .invoice-title {
+                color: #2c3e50;
+                font-size: 24px;
+                font-weight: bold;
+                margin: 0;
+            }
+            .invoice-number {
+                color: #7f8c8d;
+                font-size: 14px;
+                margin-top: 5px;
+            }
+            .invoice-details {
+                background: #f8f9fa;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+            }
+            .detail-row {
+                display: flex;
+                justify-content: space-between;
+                margin-bottom: 10px;
+                padding: 5px 0;
+            }
+            .detail-label {
+                font-weight: 600;
+                color: #495057;
+            }
+            .detail-value {
+                color: #212529;
+            }
+            .amount-section {
+                background: #e8f5e8;
+                padding: 20px;
+                border-radius: 8px;
+                margin: 20px 0;
+                text-align: center;
+            }
+            .amount-label {
+                font-size: 16px;
+                color: #28a745;
+                margin-bottom: 5px;
+            }
+            .amount-value {
+                font-size: 28px;
+                font-weight: bold;
+                color: #28a745;
+            }
+            .points-info {
+                background: #fff3cd;
+                border: 1px solid #ffeaa7;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 20px 0;
+            }
+            .points-label {
+                font-weight: 600;
+                color: #856404;
+                margin-bottom: 5px;
+            }
+            .points-value {
+                font-size: 18px;
+                color: #856404;
+            }
+            .footer {
+                text-align: center;
+                margin-top: 30px;
+                padding-top: 20px;
+                border-top: 1px solid #e9ecef;
+                color: #6c757d;
+                font-size: 14px;
+            }
+            .thank-you {
+                background: #d1ecf1;
+                border: 1px solid #bee5eb;
+                padding: 15px;
+                border-radius: 8px;
+                margin: 20px 0;
+                text-align: center;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <img src="cid:logo" alt="PickleVibes Logo" class="logo">
+                <h1 class="invoice-title">充值發票</h1>
+                <p class="invoice-number">發票編號: ${invoiceNumber}</p>
+            </div>
+
+            <div class="invoice-details">
+                <div class="detail-row">
+                    <span class="detail-label">客戶姓名:</span>
+                    <span class="detail-value">${userData.name}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">客戶郵箱:</span>
+                    <span class="detail-value">${userData.email}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">交易時間:</span>
+                    <span class="detail-value">${transactionDate}</span>
+                </div>
+                <div class="detail-row">
+                    <span class="detail-label">交易ID:</span>
+                    <span class="detail-value">${rechargeData.payment.transactionId}</span>
+                </div>
+            </div>
+
+            <div class="amount-section">
+                <div class="amount-label">充值金額</div>
+                <div class="amount-value">HK$${rechargeData.amount}</div>
+            </div>
+
+            <div class="points-info">
+                <div class="points-label">獲得積分</div>
+                <div class="points-value">${rechargeData.points} 分</div>
+            </div>
+
+            <div class="thank-you">
+                <h3 style="color: #0c5460; margin: 0 0 10px 0;">🎉 充值成功！</h3>
+                <p style="margin: 0; color: #0c5460;">感謝您的充值，積分已成功添加到您的帳戶中。</p>
+            </div>
+
+            <div class="footer">
+                <p>此發票由 PickleVibes 系統自動生成</p>
+                <p>如有疑問，請聯繫客服</p>
+                <p>© 2024 PickleVibes. All rights reserved.</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    `;
+
+    const text = `
+PickleVibes 充值發票
+
+發票編號: ${invoiceNumber}
+
+客戶信息:
+- 姓名: ${userData.name}
+- 郵箱: ${userData.email}
+- 交易時間: ${transactionDate}
+- 交易ID: ${rechargeData.payment.transactionId}
+
+充值詳情:
+- 充值金額: HK$${rechargeData.amount}
+- 獲得積分: ${rechargeData.points} 分
+
+感謝您的充值，積分已成功添加到您的帳戶中。
+
+此發票由 PickleVibes 系統自動生成
+如有疑問，請聯繫客服
+
+© 2024 PickleVibes. All rights reserved.
+    `;
+
+    return { subject, html, text };
+  }
 }
 
 module.exports = new EmailService();

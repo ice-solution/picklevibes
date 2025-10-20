@@ -386,4 +386,59 @@ router.put('/admin/:id/status', [
   }
 });
 
+// @route   GET /api/redeem/admin/stats
+// @desc    獲取兌換碼統計數據 (僅管理員)
+// @access  Private (Admin)
+router.get('/admin/stats', [auth, adminAuth], async (req, res) => {
+  try {
+    const now = new Date();
+    
+    // 總兌換碼數量
+    const totalCodes = await RedeemCode.countDocuments();
+    
+    // 有效兌換碼數量
+    const activeCodes = await RedeemCode.countDocuments({
+      isActive: true,
+      validFrom: { $lte: now },
+      validUntil: { $gte: now }
+    });
+    
+    // 總使用次數
+    const totalUsageResult = await RedeemCode.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalUsage: { $sum: '$totalUsed' }
+        }
+      }
+    ]);
+    const totalUsage = totalUsageResult.length > 0 ? totalUsageResult[0].totalUsage : 0;
+    
+    // 總折扣金額
+    const totalDiscountResult = await RedeemCode.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalDiscount: { $sum: '$totalDiscount' }
+        }
+      }
+    ]);
+    const totalDiscount = totalDiscountResult.length > 0 ? totalDiscountResult[0].totalDiscount : 0;
+    
+    res.json({
+      success: true,
+      stats: {
+        totalCodes,
+        activeCodes,
+        totalUsage,
+        totalDiscount
+      }
+    });
+
+  } catch (error) {
+    console.error('獲取兌換碼統計錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 module.exports = router;

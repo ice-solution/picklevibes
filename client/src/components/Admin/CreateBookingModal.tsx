@@ -9,7 +9,8 @@ import {
   UsersIcon,
   CalendarDaysIcon,
   CheckCircleIcon,
-  CheckIcon
+  CheckIcon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
 
@@ -60,14 +61,27 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
     playerEmail: '',
     playerPhone: '',
     specialRequests: '',
-    bypassRestrictions: false
+    bypassRestrictions: false,
+    isCustomPoints: false,
+    customPoints: 0
   });
 
   // 選中的用戶
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
 
+  // 包場確認狀態
+  const [showFullVenueConfirm, setShowFullVenueConfirm] = useState(false);
+  const [fullVenueStep, setFullVenueStep] = useState('price'); // 'price', 'confirm', 'points'
+  const [fullVenueDeduction, setFullVenueDeduction] = useState(0);
+  
+
   // 數據選項
   const [courts, setCourts] = useState<Court[]>([]);
+  
+  // 監控包場步驟變化
+  useEffect(() => {
+    console.log('包場步驟變化:', fullVenueStep);
+  }, [fullVenueStep]);
 
   // 載入數據
   useEffect(() => {
@@ -156,6 +170,89 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
     }
   };
 
+  const handleFullVenueBooking = async () => {
+    setLoading(true);
+    setError(null);
+    setShowFullVenueConfirm(false);
+    // 不要重置 fullVenueStep，讓它保持當前狀態直到完成
+
+    try {
+      // 獲取所有場地
+      console.log('🔍 可用場地:', courts);
+      const soloCourt = courts.find(court => court.type === 'solo');
+      const trainingCourt = courts.find(court => court.type === 'training');
+      const competitionCourt = courts.find(court => court.type === 'competition');
+
+      console.log('🔍 找到的場地:', { soloCourt, trainingCourt, competitionCourt });
+
+      if (!soloCourt || !trainingCourt || !competitionCourt) {
+        throw new Error('找不到所有必要的場地');
+      }
+
+      // 創建3個預約
+      const bookings = [
+        { courtId: soloCourt._id, type: 'solo' },
+        { courtId: trainingCourt._id, type: 'training' },
+        { courtId: competitionCourt._id, type: 'competition' }
+      ];
+
+      // 先扣除積分（如果設置了積分扣除）
+      if (fullVenueDeduction > 0) {
+        try {
+          await axios.post(`/users/${formData.userId}/manual-deduct`, {
+            points: fullVenueDeduction,
+            reason: '包場預約積分扣除',
+            bypassRestrictions: formData.bypassRestrictions
+          });
+        } catch (error) {
+          console.error('積分扣除失敗:', error);
+          throw new Error('積分扣除失敗，請檢查用戶積分餘額');
+        }
+      }
+
+      // 使用專門的包場API，只創建一個預約記錄和一個QR碼
+      const fullVenueData = {
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: formData.endTime,
+        duration: 60, // 默認1小時，可以根據需要調整
+        totalPlayers: formData.totalPlayers,
+        players: [{
+          name: formData.playerName,
+          email: formData.playerEmail,
+          phone: formData.playerPhone
+        }],
+        notes: `包場預約 - 所有場地${fullVenueDeduction > 0 ? ` (已扣除${fullVenueDeduction}積分)` : ''}`,
+        userId: formData.userId, // 管理員為指定用戶創建
+        pointsDeduction: fullVenueDeduction, // 傳遞積分扣除數量
+        bypassRestrictions: formData.bypassRestrictions
+      };
+
+      console.log('🔍 創建包場預約:', fullVenueData);
+      const response = await axios.post('/full-venue/create', fullVenueData);
+      console.log('✅ 包場預約成功:', response.data);
+      
+      const createdBookings = response.data.data.bookings;
+
+      // 成功創建所有預約
+      onBookingCreated();
+      onClose();
+      
+      // 重置狀態
+      setFullVenueStep('price');
+      
+      // 顯示成功消息
+      const successMessage = `包場預約創建成功！\n已創建 ${createdBookings.length} 個預約記錄。${fullVenueDeduction > 0 ? `\n已扣除 ${fullVenueDeduction} 積分。` : ''}`;
+      alert(successMessage);
+      
+    } catch (error: any) {
+      console.error('包場預約創建失敗:', error);
+      setError(error.response?.data?.message || error.message || '包場預約創建失敗');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -175,6 +272,18 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         throw new Error('請填寫參與者姓名');
       }
 
+      // 如果選擇了包場，顯示確認對話框
+      if (formData.courtId === 'full_venue') {
+        // 確保所有必填字段都已填寫
+        if (!formData.endTime) {
+          throw new Error('請選擇結束時間');
+        }
+        setShowFullVenueConfirm(true);
+        setFullVenueStep('price');
+        setLoading(false);
+        return;
+      }
+
       // 創建預約
       await axios.post('/bookings', {
         user: formData.userId,
@@ -190,6 +299,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         }],
         specialRequests: formData.specialRequests,
         bypassRestrictions: formData.bypassRestrictions, // 管理員 bypass 所有限制
+        isCustomPoints: formData.isCustomPoints, // 自訂積分選項
+        customPoints: formData.customPoints, // 自訂積分數量
         payment: {
           method: 'admin_created',
           status: 'completed',
@@ -209,7 +320,9 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         playerEmail: '',
         playerPhone: '',
         specialRequests: '',
-        bypassRestrictions: false
+        bypassRestrictions: false,
+        isCustomPoints: false,
+        customPoints: 0
       });
       setSelectedUser(null);
 
@@ -289,11 +402,14 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               required
             >
               <option value="">請選擇場地</option>
-              {courts.map(court => (
-                <option key={court._id} value={court._id}>
-                  {court.name} ({court.number}號場) - {court.type}
-                </option>
-              ))}
+              {courts
+                .filter(court => court.type !== 'full_venue') // 過濾掉包場場地
+                .map(court => (
+                  <option key={court._id} value={court._id}>
+                    {court.name} ({court.number}號場) - {court.type}
+                  </option>
+                ))}
+              <option value="full_venue">🏢 包場 (所有場地)</option>
             </select>
           </div>
 
@@ -448,6 +564,148 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               請謹慎使用此功能。
             </p>
           </div>
+
+          {/* 自訂積分選項 */}
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                id="isCustomPoints"
+                checked={formData.isCustomPoints}
+                onChange={(e) => handleCheckboxChange('isCustomPoints', e.target.checked)}
+                className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+              />
+              <label htmlFor="isCustomPoints" className="ml-3 text-sm font-medium text-gray-900">
+                <span className="text-blue-800 font-semibold">自訂積分扣除：</span>
+                使用自訂積分數量而非系統計算的價格
+              </label>
+            </div>
+            {formData.isCustomPoints && (
+              <div className="mt-3">
+                <label htmlFor="customPoints" className="block text-sm font-medium text-gray-700 mb-1">
+                  自訂積分數量
+                </label>
+                <input
+                  type="number"
+                  id="customPoints"
+                  value={formData.customPoints}
+                  onChange={(e) => handleInputChange('customPoints', parseInt(e.target.value) || 0)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="輸入自訂積分數量"
+                  min="0"
+                />
+                <p className="mt-1 text-xs text-blue-700">
+                  💡 系統將使用此積分數量進行扣除，而非根據場地和時段計算的標準價格
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* 包場確認對話框 */}
+          {showFullVenueConfirm && (
+            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl p-6 max-w-md w-full mx-4">
+                <div className="text-center">
+                  <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                    <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
+                  </div>
+                  
+                  {fullVenueStep === 'price' && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        包場價格提醒
+                      </h3>
+                      
+                      {/* 價格提醒 */}
+                      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                        <h4 className="text-sm font-medium text-blue-900 mb-2">💰 包場價格參考</h4>
+                        <div className="text-xs text-blue-800 space-y-1">
+                          <div>• 非繁忙時間: $504/小時</div>
+                          <div>• 繁忙時間: $780/小時</div>
+                          <div>• 貓頭鷹時間: $456/小時</div>
+                        </div>
+                      </div>
+                      
+                      <p className="text-sm text-gray-500 mb-6">
+                        包場將同時預約所有場地（單人場、訓練場、比賽場）
+                      </p>
+                    </div>
+                  )}
+                  
+                  {fullVenueStep === 'confirm' && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        確認包場
+                      </h3>
+                      <p className="text-sm text-gray-500 mb-4">
+                        您確定要包場嗎？這將創建3個場地的預約。
+                      </p>
+                    </div>
+                  )}
+                  
+                  {fullVenueStep === 'points' && (
+                    <div>
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        扣除積分
+                      </h3>
+                      
+                      {/* 積分扣除選項 */}
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+                        <h4 className="text-sm font-medium text-yellow-900 mb-2">💳 扣除積分數量</h4>
+                        <div className="space-y-2">
+                          <input
+                            type="number"
+                            value={fullVenueDeduction}
+                            onChange={(e) => setFullVenueDeduction(Number(e.target.value))}
+                            className="w-full px-3 py-2 border border-yellow-300 rounded-lg text-sm focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                            placeholder="請輸入扣除積分數量"
+                            min="0"
+                          />
+                        </div>
+                      </div>
+                      
+                      <p className="text-sm text-gray-500 mb-6">
+                        請輸入要扣除的積分數量
+                      </p>
+                    </div>
+                  )}
+                  
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => {
+                        setShowFullVenueConfirm(false);
+                        setFullVenueStep('price');
+                        setFormData(prev => ({ ...prev, courtId: '' }));
+                      }}
+                      className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        console.log('按鈕點擊，當前步驟:', fullVenueStep);
+                        if (fullVenueStep === 'price') {
+                          console.log('進入確認步驟');
+                          setFullVenueStep('confirm');
+                        } else if (fullVenueStep === 'confirm') {
+                          console.log('進入積分步驟');
+                          setFullVenueStep('points');
+                        } else if (fullVenueStep === 'points') {
+                          console.log('執行包場預約');
+                          handleFullVenueBooking();
+                        }
+                      }}
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      {fullVenueStep === 'price' ? '繼續' : fullVenueStep === 'confirm' ? '繼續' : '確認包場'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* 按鈕 */}
           <div className="flex gap-3 pt-4">

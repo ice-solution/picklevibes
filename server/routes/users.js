@@ -385,7 +385,8 @@ router.post('/:id/manual-deduct', [
   auth,
   adminAuth,
   body('points').isInt({ min: 1 }).withMessage('扣除積分必須是正整數'),
-  body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('扣除原因必須在1-200個字符之間')
+  body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('扣除原因必須在1-200個字符之間'),
+  body('bypassRestrictions').optional().isBoolean().withMessage('bypassRestrictions必須是布爾值')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -396,7 +397,7 @@ router.post('/:id/manual-deduct', [
       });
     }
     
-    const { points, reason } = req.body;
+    const { points, reason, bypassRestrictions = false } = req.body;
     const userId = req.params.id;
     
     // 檢查用戶是否存在
@@ -405,56 +406,65 @@ router.post('/:id/manual-deduct', [
       return res.status(404).json({ message: '用戶不存在' });
     }
     
-    // 獲取用戶餘額記錄
-    let userBalance = await UserBalance.findOne({ user: userId });
-    if (!userBalance) {
-      return res.status(400).json({ message: '用戶沒有積分記錄' });
+    // 如果不是管理員 bypass，才檢查用戶積分記錄
+    if (!bypassRestrictions) {
+      // 獲取用戶餘額記錄
+      let userBalance = await UserBalance.findOne({ user: userId });
+      if (!userBalance) {
+        return res.status(400).json({ message: '用戶沒有積分記錄' });
+      }
+      
+      // 檢查餘額是否足夠
+      if (userBalance.balance < points) {
+        return res.status(400).json({ 
+          message: `餘額不足！當前餘額：${userBalance.balance}，嘗試扣除：${points}` 
+        });
+      }
     }
     
-    // 檢查餘額是否足夠
-    if (userBalance.balance < points) {
-      return res.status(400).json({ 
-        message: `餘額不足！當前餘額：${userBalance.balance}，嘗試扣除：${points}` 
+    // 如果不是管理員 bypass，才實際扣除積分
+    if (!bypassRestrictions) {
+      // 扣除用戶積分
+      await userBalance.deductBalance(
+        points, 
+        `管理員手動扣除 - ${reason} (管理員: ${req.user.name})`
+      );
+      
+      // 創建扣除記錄（用於審計）
+      const deductRecord = new Recharge({
+        user: userId,
+        points: points,
+        amount: points, // 1積分 = 1港幣
+        status: 'completed', // 直接完成
+        paymentIntentId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
+        description: `管理員手動扣除 - ${reason}`,
+        payment: {
+          status: 'completed',
+          method: 'manual_deduct',
+          paidAt: new Date(),
+          transactionId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        },
+        pointsAdded: false, // 扣除操作
+        pointsDeducted: true // 標記為扣除
       });
+      await deductRecord.save();
+    } else {
+      // 管理員 bypass 模式：只記錄但不實際扣除積分
+      console.log(`🎯 管理員繞過積分扣除: ${user.name} - ${points}分 (${reason}) [BYPASS模式]`);
     }
-    
-    // 扣除用戶積分
-    await userBalance.deductBalance(
-      points, 
-      `管理員手動扣除 - ${reason} (管理員: ${req.user.name})`
-    );
-    
-    // 創建扣除記錄（用於審計）
-    const deductRecord = new Recharge({
-      user: userId,
-      points: points,
-      amount: points, // 1積分 = 1港幣
-      status: 'completed', // 直接完成
-      paymentIntentId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
-      description: `管理員手動扣除 - ${reason}`,
-      payment: {
-        status: 'completed',
-        method: 'manual_deduct',
-        paidAt: new Date(),
-        transactionId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
-      },
-      pointsAdded: false, // 扣除操作
-      pointsDeducted: true // 標記為扣除
-    });
-    await deductRecord.save();
     
     console.log(`🎯 管理員手動扣除積分: ${user.name} - ${points}分 (${reason})`);
     
     res.json({
-      message: '手動扣除成功',
+      message: bypassRestrictions ? '手動扣除成功 (已繞過積分檢查)' : '手動扣除成功',
       deduct: {
-        id: deductRecord._id,
+        id: bypassRestrictions ? null : deductRecord._id,
         points: points,
         reason: reason,
         adminName: req.user.name,
-        completedAt: deductRecord.payment.paidAt
+        completedAt: bypassRestrictions ? new Date() : deductRecord.payment.paidAt
       },
-      userBalance: {
+      userBalance: bypassRestrictions ? null : {
         balance: userBalance.balance,
         totalRecharged: userBalance.totalRecharged,
         totalSpent: userBalance.totalSpent

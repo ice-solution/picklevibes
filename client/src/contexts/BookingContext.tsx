@@ -6,7 +6,7 @@ interface Court {
   _id: string;
   name: string;
   number: number;
-  type: 'competition' | 'training' | 'solo' | 'dink';
+  type: 'competition' | 'training' | 'solo' | 'dink' | 'full_venue';
   description?: string;
   capacity: number;
   amenities: string[];
@@ -139,13 +139,17 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       fetchingCourts.current = true;
       setLoading(true);
+      console.log('開始獲取場地信息...');
       const response = await axios.get('/courts');
+      console.log('場地信息獲取成功:', response.data.courts.length, '個場地');
       setCourts(response.data.courts);
     } catch (error: any) {
+      console.error('獲取場地信息失敗:', error);
       setError(error.response?.data?.message || '獲取場地信息失敗');
     } finally {
       setLoading(false);
       fetchingCourts.current = false;
+      console.log('fetchCourts 完成，重置標誌');
     }
   }, []);
 
@@ -159,15 +163,19 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     try {
       fetchingBookings.current = true;
       setLoading(true);
+      console.log('開始獲取預約信息...');
       
       // 獲取所有預約（不分頁）
       const response = await axios.get('/bookings?limit=100');
+      console.log('預約信息獲取成功:', response.data.bookings.length, '個預約');
       setBookings(response.data.bookings);
     } catch (error: any) {
+      console.error('獲取預約信息失敗:', error);
       setError(error.response?.data?.message || '獲取預約信息失敗');
     } finally {
       setLoading(false);
       fetchingBookings.current = false;
+      console.log('fetchBookings 完成，重置標誌');
     }
   }, []);
 

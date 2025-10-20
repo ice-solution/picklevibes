@@ -11,6 +11,16 @@ const bookingSchema = new mongoose.Schema({
     ref: 'Court',
     required: [true, '場地為必填項目']
   },
+  isFullVenue: {
+    type: Boolean,
+    default: false,
+    description: '是否為包場預約'
+  },
+  fullVenueBookings: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Booking',
+    description: '包場時關聯的其他場地預約'
+  }],
   date: {
     type: Date,
     required: [true, '預約日期為必填項目']
@@ -49,12 +59,43 @@ const bookingSchema = new mongoose.Schema({
   pricing: {
     basePrice: { type: Number, required: true },
     memberDiscount: { type: Number, default: 0 },
-    totalPrice: { type: Number, required: true }
+    totalPrice: { type: Number, required: true },
+    customPoints: { 
+      type: Number, 
+      required: false,
+      description: '自訂積分扣除數量（管理員設定）'
+    },
+    isCustomPoints: { 
+      type: Boolean, 
+      default: false,
+      description: '是否使用自訂積分扣除'
+    }
   },
   status: {
     type: String,
     enum: ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'],
     default: 'pending'
+  },
+  googleEventId: {
+    type: String,
+    required: false,
+    description: 'Google Calendar公開事件ID，用於同步到Google Calendar'
+  },
+  googlePrivateEventId: {
+    type: String,
+    required: false,
+    description: 'Google Calendar私人事件ID，包含詳細信息'
+  },
+  googleSyncStatus: {
+    type: String,
+    enum: ['pending', 'synced', 'failed'],
+    default: 'pending',
+    description: 'Google Calendar同步狀態：pending=待同步，synced=已同步，failed=同步失敗'
+  },
+  googleSyncAt: {
+    type: Date,
+    required: false,
+    description: 'Google Calendar最後同步時間'
   },
   payment: {
     status: {

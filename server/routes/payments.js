@@ -5,6 +5,8 @@ const Booking = require('../models/Booking');
 const StripeTransaction = require('../models/StripeTransaction');
 const Recharge = require('../models/Recharge');
 const UserBalance = require('../models/UserBalance');
+const User = require('../models/User');
+const emailService = require('../services/emailService');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -279,6 +281,20 @@ router.post('/webhook', async (req, res) => {
             }
             
             await userBalance.addBalance(recharge.points, `充值 ${recharge.points} 分`);
+            
+            // 發送充值發票郵件
+            try {
+              const user = await User.findById(recharge.user);
+              if (user) {
+                await emailService.sendRechargeInvoiceEmail(user, recharge);
+                console.log('📧 充值發票郵件發送成功');
+              } else {
+                console.error('❌ 找不到用戶信息，無法發送發票郵件');
+              }
+            } catch (emailError) {
+              console.error('❌ 發送充值發票郵件失敗:', emailError);
+              // 不影響充值流程，只記錄錯誤
+            }
             
             console.log('✅ 充值已完成，用戶餘額已更新');
           } else {

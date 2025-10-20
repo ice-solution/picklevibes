@@ -46,7 +46,9 @@ router.post('/', [
   body('players.*.email').isEmail().withMessage('玩家電子郵件格式無效'),
   body('players.*.phone').matches(/^[0-9]+$/).withMessage('玩家電話號碼只能包含數字'),
   body('specialRequests').optional().trim().isLength({ max: 500 }).withMessage('特殊要求不能超過500個字符'),
-  body('includeSoloCourt').optional().isBoolean().withMessage('單人場租用選項必須是布爾值')
+  body('includeSoloCourt').optional().isBoolean().withMessage('單人場租用選項必須是布爾值'),
+  body('customPoints').optional().isInt({ min: 0 }).withMessage('自訂積分必須是非負整數'),
+  body('isCustomPoints').optional().isBoolean().withMessage('自訂積分選項必須是布爾值')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -57,7 +59,7 @@ router.post('/', [
       });
     }
 
-    let { user, court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, redeemCodeId } = req.body;
+    let { user, court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, redeemCodeId, customPoints, isCustomPoints = false } = req.body;
     
     // 只有管理員才能 bypass 限制
     const bypassRestrictions = req.user.role === 'admin' && req.body.bypassRestrictions === true;
@@ -251,9 +253,10 @@ router.post('/', [
     
     // 如果不是管理員 bypass，扣除積分
     if (!bypassRestrictions) {
+      const finalPointsToDeduct = isCustomPoints ? customPoints : pointsToDeduct;
       await userBalance.deductBalance(
-        pointsToDeduct, 
-        `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}`,
+        finalPointsToDeduct, 
+        `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}${isCustomPoints ? ' (自訂積分)' : ''}`,
         null // 稍後會更新為實際的預約ID
       );
     }
@@ -291,11 +294,13 @@ router.post('/', [
       pricing: {
         basePrice: tempBooking.pricing.basePrice,
         memberDiscount: tempBooking.pricing.memberDiscount,
-        totalPrice: pointsToDeduct, // 使用實際扣除的積分（已應用 VIP 折扣）
+        totalPrice: isCustomPoints ? customPoints : pointsToDeduct, // 使用自訂積分或實際扣除的積分
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
-        pointsDeducted: pointsToDeduct,
+        pointsDeducted: isCustomPoints ? customPoints : pointsToDeduct,
         vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
-        soloCourtFee: includeSoloCourt ? 100 : 0 // 單人場費用
+        soloCourtFee: includeSoloCourt ? 100 : 0, // 單人場費用
+        customPoints: isCustomPoints ? customPoints : undefined, // 自訂積分
+        isCustomPoints: isCustomPoints // 是否使用自訂積分
       },
       createdAt: new Date(),
       updatedAt: new Date()

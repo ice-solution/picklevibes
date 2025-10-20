@@ -22,6 +22,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
       case 'training': return '訓練場';
       case 'solo': return '單人場';
       case 'dink': return '練習場';
+      case 'full_venue': return '包場';
       default: return '場地';
     }
   };
@@ -32,6 +33,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
       case 'training': return 'bg-purple-100 text-purple-800';
       case 'solo': return 'bg-orange-100 text-orange-800';
       case 'dink': return 'bg-yellow-100 text-yellow-800';
+      case 'full_venue': return 'bg-blue-100 text-blue-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -51,7 +53,9 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
       <p className="text-gray-600 mb-8">請選擇您想要預約的場地</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {courts.map((court, index) => (
+        {courts
+          .filter(court => court.type !== 'full_venue') // 過濾掉包場場地
+          .map((court, index) => (
           <motion.div
             key={court._id}
             initial={{ opacity: 0, y: 20 }}

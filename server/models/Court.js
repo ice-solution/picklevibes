@@ -15,7 +15,7 @@ const courtSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['competition', 'training', 'solo', 'dink'],
+    enum: ['competition', 'training', 'solo', 'dink', 'full_venue'],
     required: [true, '場地類型為必填項目']
   },
   description: {

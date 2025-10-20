@@ -132,6 +132,7 @@ app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added re
 app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes
 app.use('/api/bulk-upgrade', require('./routes/bulk-upgrade')); // Added bulk upgrade routes
 app.use('/api/activities', require('./routes/activities')); // Added activities routes
+app.use('/api/full-venue', require('./routes/fullVenue')); // Added full venue routes
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);
@@ -179,6 +180,15 @@ setTimeout(async () => {
     console.error('❌ 啟動時檢查過期會員失敗:', error);
   }
 }, 10000); // 延遲10秒執行，確保MongoDB連接已建立
+
+// 啟動Google Calendar定時任務
+const calendarScheduler = require('./scheduler/calendarScheduler');
+calendarScheduler.start();
+
+// 啟動智能Google Calendar同步
+const ScheduledSync = require('./scripts/scheduledSync');
+const scheduledSync = new ScheduledSync();
+scheduledSync.initialize();
 
 const PORT = process.env.PORT || 5009;
 app.listen(PORT, () => {

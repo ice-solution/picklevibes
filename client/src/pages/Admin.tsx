@@ -23,7 +23,7 @@ import {
   CreditCardIcon,
   WrenchScrewdriverIcon,
   ArrowTrendingUpIcon,
-  CalendarIcon
+  CalendarIcon,
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -274,6 +274,7 @@ const Admin: React.FC = () => {
                 <ActivityManagement />
               </motion.div>
             )}
+
 
             {activeTab === 'bulk-upgrade' && (
               <motion.div

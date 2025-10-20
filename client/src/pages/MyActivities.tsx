@@ -120,17 +120,8 @@ const MyActivities: React.FC = () => {
     if (!imagePath) return '';
     if (imagePath.startsWith('http')) return imagePath;
     
-    // 在生產環境中，如果沒有設置 REACT_APP_SERVER_URL，使用當前域名
-    let baseUrl = process.env.REACT_APP_SERVER_URL;
-    if (!baseUrl) {
-      // 在生產環境中，使用當前域名
-      if (process.env.NODE_ENV === 'production') {
-        baseUrl = window.location.origin;
-      } else {
-        baseUrl = 'http://localhost:5001';
-      }
-    }
-    
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+    const baseUrl = apiUrl.replace('/api', '');
     return `${baseUrl}${imagePath}`;
   };
 

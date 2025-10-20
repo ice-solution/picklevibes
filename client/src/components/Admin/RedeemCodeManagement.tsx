@@ -38,6 +38,20 @@ const RedeemCodeManagement: React.FC = () => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingCode, setEditingCode] = useState<RedeemCode | null>(null);
   const [createLoading, setCreateLoading] = useState(false);
+  
+  // 分頁狀態
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  
+  // 統計數據狀態
+  const [stats, setStats] = useState({
+    totalCodes: 0,
+    activeCodes: 0,
+    totalUsage: 0,
+    totalDiscount: 0
+  });
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -55,16 +69,40 @@ const RedeemCodeManagement: React.FC = () => {
 
   useEffect(() => {
     fetchRedeemCodes();
+    fetchStats();
   }, []);
 
-  const fetchRedeemCodes = async () => {
+  const fetchRedeemCodes = async (page = currentPage, status = statusFilter) => {
     try {
-      const response = await axios.get('/redeem/admin/list');
+      setLoading(true);
+      const params = new URLSearchParams({
+        page: page.toString(),
+        limit: '10'
+      });
+      
+      if (status) {
+        params.append('status', status);
+      }
+      
+      const response = await axios.get(`/redeem/admin/list?${params}`);
       setRedeemCodes(response.data.redeemCodes);
+      setCurrentPage(response.data.pagination.current);
+      setTotalPages(response.data.pagination.pages);
+      setTotalRecords(response.data.pagination.total);
     } catch (error) {
       console.error('獲取兌換碼列表失敗:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 獲取統計數據
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get('/redeem/admin/stats');
+      setStats(response.data.stats);
+    } catch (error) {
+      console.error('獲取統計數據失敗:', error);
     }
   };
 
@@ -75,6 +113,19 @@ const RedeemCodeManagement: React.FC = () => {
     } catch (error) {
       console.error('更新狀態失敗:', error);
     }
+  };
+
+  // 分頁處理函數
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    fetchRedeemCodes(page, statusFilter);
+  };
+
+  // 狀態過濾器處理
+  const handleStatusFilter = (status: string) => {
+    setStatusFilter(status);
+    setCurrentPage(1);
+    fetchRedeemCodes(1, status);
   };
 
   const handleEdit = (code: RedeemCode) => {
@@ -235,7 +286,7 @@ const RedeemCodeManagement: React.FC = () => {
             <TicketIcon className="w-8 h-8 text-blue-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">總兌換碼</p>
-              <p className="text-2xl font-bold text-gray-900">{redeemCodes.length}</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalCodes}</p>
             </div>
           </div>
         </div>
@@ -245,14 +296,7 @@ const RedeemCodeManagement: React.FC = () => {
             <CalendarIcon className="w-8 h-8 text-green-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">有效兌換碼</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {redeemCodes.filter(code => {
-                  const now = new Date();
-                  return code.isActive && 
-                         now >= new Date(code.validFrom) && 
-                         now <= new Date(code.validUntil);
-                }).length}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{stats.activeCodes}</p>
             </div>
           </div>
         </div>
@@ -262,9 +306,7 @@ const RedeemCodeManagement: React.FC = () => {
             <UserGroupIcon className="w-8 h-8 text-purple-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">總使用次數</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {redeemCodes.reduce((sum, code) => sum + code.totalUsed, 0)}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">{stats.totalUsage}</p>
             </div>
           </div>
         </div>
@@ -274,10 +316,60 @@ const RedeemCodeManagement: React.FC = () => {
             <CurrencyDollarIcon className="w-8 h-8 text-yellow-600" />
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">總折扣金額</p>
-              <p className="text-2xl font-bold text-gray-900">
-                HK${redeemCodes.reduce((sum, code) => sum + code.totalDiscount, 0)}
-              </p>
+              <p className="text-2xl font-bold text-gray-900">HK${stats.totalDiscount}</p>
             </div>
+          </div>
+        </div>
+      </div>
+
+      {/* 狀態過濾器 */}
+      <div className="bg-white rounded-lg shadow p-4">
+        <div className="flex items-center space-x-4">
+          <span className="text-sm font-medium text-gray-700">篩選狀態:</span>
+          <div className="flex space-x-2">
+            <button
+              onClick={() => handleStatusFilter('')}
+              className={`px-3 py-1 rounded-full text-sm ${
+                statusFilter === '' 
+                  ? 'bg-primary-100 text-primary-700 border border-primary-300' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              全部
+            </button>
+            <button
+              onClick={() => handleStatusFilter('active')}
+              className={`px-3 py-1 rounded-full text-sm ${
+                statusFilter === 'active' 
+                  ? 'bg-primary-100 text-primary-700 border border-primary-300' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              有效
+            </button>
+            <button
+              onClick={() => handleStatusFilter('expired')}
+              className={`px-3 py-1 rounded-full text-sm ${
+                statusFilter === 'expired' 
+                  ? 'bg-primary-100 text-primary-700 border border-primary-300' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              已過期
+            </button>
+            <button
+              onClick={() => handleStatusFilter('inactive')}
+              className={`px-3 py-1 rounded-full text-sm ${
+                statusFilter === 'inactive' 
+                  ? 'bg-primary-100 text-primary-700 border border-primary-300' 
+                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+              }`}
+            >
+              已禁用
+            </button>
+          </div>
+          <div className="ml-auto text-sm text-gray-600">
+            共 {totalRecords} 個兌換碼
           </div>
         </div>
       </div>
@@ -567,6 +659,64 @@ const RedeemCodeManagement: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 分頁組件 */}
+      {totalPages > 1 && (
+        <div className="bg-white rounded-lg shadow p-4">
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              顯示第 {((currentPage - 1) * 10) + 1} - {Math.min(currentPage * 10, totalRecords)} 個，共 {totalRecords} 個兌換碼
+            </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => handlePageChange(currentPage - 1)}
+                disabled={currentPage === 1}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                上一頁
+              </button>
+              
+              {/* 頁碼按鈕 */}
+              <div className="flex space-x-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum: number;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  
+                  return (
+                    <button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      className={`px-3 py-1 text-sm border rounded-md ${
+                        currentPage === pageNum
+                          ? 'bg-primary-600 text-white border-primary-600'
+                          : 'border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {pageNum}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              <button
+                onClick={() => handlePageChange(currentPage + 1)}
+                disabled={currentPage === totalPages}
+                className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                下一頁
+              </button>
+            </div>
           </div>
         </div>
       )}
