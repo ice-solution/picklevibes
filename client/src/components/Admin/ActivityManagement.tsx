@@ -10,8 +10,10 @@ import {
   UsersIcon,
   CurrencyDollarIcon,
   ClockIcon,
-  XMarkIcon
+  XMarkIcon,
+  AcademicCapIcon
 } from '@heroicons/react/24/outline';
+import CoachAutocomplete from '../Common/CoachAutocomplete';
 
 interface Activity {
   _id: string;
@@ -31,6 +33,11 @@ interface Activity {
     name: string;
     email: string;
   };
+  coaches?: Array<{
+    _id: string;
+    name: string;
+    email: string;
+  }>;
   requirements?: string;
   isActive: boolean;
   createdAt: string;
@@ -57,7 +64,8 @@ const ActivityManagement: React.FC = () => {
     endDate: '',
     registrationDeadline: '',
     location: '',
-    requirements: ''
+    requirements: '',
+    coaches: [] as any[]
   });
 
   // 圖片上傳狀態
@@ -107,7 +115,8 @@ const ActivityManagement: React.FC = () => {
       endDate: '',
       registrationDeadline: '',
       location: '',
-      requirements: ''
+      requirements: '',
+      coaches: []
     });
     setSelectedFile(null);
     setImagePreview('');
@@ -151,7 +160,8 @@ const ActivityManagement: React.FC = () => {
       endDate: new Date(activity.endDate).toISOString().slice(0, 16),
       registrationDeadline: new Date(activity.registrationDeadline).toISOString().slice(0, 16),
       location: activity.location,
-      requirements: activity.requirements || ''
+      requirements: activity.requirements || '',
+      coaches: activity.coaches || []
     });
     setSelectedFile(null);
     setImagePreview(activity.poster ? getImageUrl(activity.poster) : '');
@@ -173,8 +183,17 @@ const ActivityManagement: React.FC = () => {
       // 添加表單數據
       Object.keys(formData).forEach(key => {
         const value = formData[key as keyof typeof formData];
-        if (value !== '') {
-          formDataToSend.append(key, String(value));
+        if (value !== '' && value !== null) {
+          // 特殊處理 coaches 陣列
+          if (key === 'coaches' && Array.isArray(value)) {
+            value.forEach((coach, index) => {
+              if (coach && typeof coach === 'object' && coach._id) {
+                formDataToSend.append(`coaches[${index}]`, coach._id);
+              }
+            });
+          } else {
+            formDataToSend.append(key, String(value));
+          }
         }
       });
       
@@ -425,6 +444,12 @@ const ActivityManagement: React.FC = () => {
                     <CurrencyDollarIcon className="h-4 w-4 mr-2" />
                     <span>{activity.price} 積分/人</span>
                   </div>
+                  {activity.coaches && activity.coaches.length > 0 && (
+                    <div className="flex items-center text-sm text-gray-600">
+                      <AcademicCapIcon className="h-4 w-4 mr-2" />
+                      <span>教練: {activity.coaches.map(coach => coach.name).join(', ')}</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Progress Bar */}
@@ -653,6 +678,49 @@ const ActivityManagement: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                     placeholder="請輸入活動要求（可選）"
                   />
+                </div>
+
+                {/* 教練選擇 */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <div className="flex items-center space-x-2">
+                      <AcademicCapIcon className="w-4 h-4" />
+                      <span>負責教練</span>
+                    </div>
+                  </label>
+                  <div className="space-y-2">
+                    {formData.coaches.map((coach, index) => (
+                      <div key={index} className="flex items-center space-x-2">
+                        <div className="flex-1 bg-gray-50 px-3 py-2 rounded-md">
+                          <span className="text-sm font-medium">{coach.name}</span>
+                          <span className="text-sm text-gray-500 ml-2">({coach.email})</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const newCoaches = formData.coaches.filter((_, i) => i !== index);
+                            setFormData({ ...formData, coaches: newCoaches });
+                          }}
+                          className="text-red-500 hover:text-red-700 p-1"
+                        >
+                          <XMarkIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                    <CoachAutocomplete
+                      value=""
+                      onChange={(coach) => {
+                        if (coach && !formData.coaches.find(c => c._id === coach._id)) {
+                          setFormData({ ...formData, coaches: [...formData.coaches, coach] });
+                        }
+                      }}
+                      placeholder="搜索並添加教練（可選）"
+                      className="w-full"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    選擇負責此活動的教練，教練將在「我的課程預約」頁面看到此活動
+                  </p>
                 </div>
 
                 {/* 活動海報 */}

@@ -30,6 +30,7 @@ import Activities from './pages/Activities';
 import ActivityDetail from './pages/ActivityDetail';
 import ActivityRegister from './pages/ActivityRegister';
 import MyActivities from './pages/MyActivities';
+import CoachCourses from './pages/CoachCourses';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 
@@ -116,6 +117,14 @@ function App() {
                   } 
                 />
                 <Route path="/maintenance" element={<Maintenance />} />
+                <Route 
+                  path="/coach-courses" 
+                  element={
+                    <ProtectedRoute>
+                      <CoachCourses />
+                    </ProtectedRoute>
+                  } 
+                />
                 <Route path="/activities" element={<Activities />} />
                 <Route path="/activities/:id" element={<ActivityDetail />} />
                 <Route 

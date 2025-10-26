@@ -210,7 +210,9 @@ router.get('/history', auth, async (req, res) => {
 router.get('/balance', auth, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    let userBalance = await UserBalance.findOne({ user: req.user.id });
+    let userBalance = await UserBalance.findOne({ user: req.user.id })
+      .populate('transactions.relatedBooking', 'date startTime endTime court')
+      .populate('transactions.relatedBooking.court', 'name number type');
     
     if (!userBalance) {
       userBalance = new UserBalance({ user: req.user.id });

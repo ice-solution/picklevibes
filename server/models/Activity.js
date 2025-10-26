@@ -59,6 +59,10 @@ const activitySchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  coaches: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }],
   requirements: {
     type: String,
     trim: true,
@@ -101,12 +105,14 @@ activitySchema.virtual('isFull').get(function() {
 activitySchema.pre('save', function(next) {
   const now = new Date();
   
+  // 只有當活動真正結束時才標記為 completed
   if (now > this.endDate) {
     this.status = 'completed';
   } else if (now >= this.startDate && now <= this.endDate) {
     this.status = 'ongoing';
-  } else if (now > this.registrationDeadline) {
-    this.status = 'upcoming'; // 保持 upcoming，但不能報名
+  } else {
+    // 其他情況都保持為 upcoming
+    this.status = 'upcoming';
   }
   
   next();

@@ -47,15 +47,17 @@ const MyBookings: React.FC = () => {
         }
       });
 
-      // 按日期和時間排序
+      // 按日期和時間排序（最新的在前面）
       userBookings.sort((a, b) => {
         try {
           const dateA = new Date(a.date);
           const dateB = new Date(b.date);
           if (dateA.getTime() === dateB.getTime()) {
-            return a.startTime.localeCompare(b.startTime);
+            // 同一天的話，按開始時間降序排序（最新的時間在前面）
+            return b.startTime.localeCompare(a.startTime);
           }
-          return dateA.getTime() - dateB.getTime();
+          // 按日期降序排序（最新的日期在前面）
+          return dateB.getTime() - dateA.getTime();
         } catch (error) {
           console.warn('Error sorting bookings:', error);
           return 0;
@@ -295,7 +297,8 @@ const MyBookings: React.FC = () => {
                               <span>{booking.totalPlayers} 人</span>
                             </div>
                             
-                            <div className="text-right">
+                            {/* 隱藏積分顯示，避免與充值功能混淆 */}
+                            {/* <div className="text-right">
                               <span className="font-medium text-green-600">
                                 {(() => {
                                   // 如果是單人場且備註包含"與主場地同時段使用"，顯示 --
@@ -306,7 +309,7 @@ const MyBookings: React.FC = () => {
                                   return `${booking.pricing?.totalPrice || 0} 積分`;
                                 })()}
                               </span>
-                            </div>
+                            </div> */}
                           </div>
                         </div>
                       </div>
@@ -376,9 +379,10 @@ const MyBookings: React.FC = () => {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           特殊要求
                         </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        {/* 隱藏費用欄位，避免與充值功能混淆 */}
+                        {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           費用
-                        </th>
+                        </th> */}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -423,7 +427,8 @@ const MyBookings: React.FC = () => {
                               <span className="text-gray-400">無</span>
                             )}
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                          {/* 隱藏積分顯示，避免與充值功能混淆 */}
+                          {/* <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                             {(() => {
                               // 如果是單人場且備註包含"與主場地同時段使用"，顯示 --
                               if (booking.court?.type === 'solo' && 
@@ -432,7 +437,7 @@ const MyBookings: React.FC = () => {
                               }
                               return `${booking.pricing?.totalPrice || 0} 積分`;
                             })()}
-                          </td>
+                          </td> */}
                         </tr>
                       ))}
                     </tbody>

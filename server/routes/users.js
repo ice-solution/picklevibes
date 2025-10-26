@@ -406,10 +406,13 @@ router.post('/:id/manual-deduct', [
       return res.status(404).json({ message: '用戶不存在' });
     }
     
+    let userBalance = null;
+    let deductRecord = null;
+
     // 如果不是管理員 bypass，才檢查用戶積分記錄
     if (!bypassRestrictions) {
       // 獲取用戶餘額記錄
-      let userBalance = await UserBalance.findOne({ user: userId });
+      userBalance = await UserBalance.findOne({ user: userId });
       if (!userBalance) {
         return res.status(400).json({ message: '用戶沒有積分記錄' });
       }
@@ -420,10 +423,7 @@ router.post('/:id/manual-deduct', [
           message: `餘額不足！當前餘額：${userBalance.balance}，嘗試扣除：${points}` 
         });
       }
-    }
-    
-    // 如果不是管理員 bypass，才實際扣除積分
-    if (!bypassRestrictions) {
+      
       // 扣除用戶積分
       await userBalance.deductBalance(
         points, 
@@ -431,7 +431,7 @@ router.post('/:id/manual-deduct', [
       );
       
       // 創建扣除記錄（用於審計）
-      const deductRecord = new Recharge({
+      deductRecord = new Recharge({
         user: userId,
         points: points,
         amount: points, // 1積分 = 1港幣
@@ -439,8 +439,8 @@ router.post('/:id/manual-deduct', [
         paymentIntentId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
         description: `管理員手動扣除 - ${reason}`,
         payment: {
-          status: 'completed',
-          method: 'manual_deduct',
+          status: 'paid',
+          method: 'manual',
           paidAt: new Date(),
           transactionId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
         },

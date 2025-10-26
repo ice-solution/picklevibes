@@ -320,6 +320,14 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         </div>
 
         {/* 單人場租用選項 - 僅在選擇比賽場時顯示 */}
+        {(() => {
+          console.log('🔍 單人場按鍵顯示條件檢查:');
+          console.log('- court?.type === "competition":', court?.type === 'competition');
+          console.log('- soloCourtAvailable:', soloCourtAvailable);
+          console.log('- onToggleSoloCourt:', !!onToggleSoloCourt);
+          console.log('- 所有條件:', court?.type === 'competition' && soloCourtAvailable && onToggleSoloCourt);
+          return null;
+        })()}
         {court?.type === 'competition' && soloCourtAvailable && onToggleSoloCourt && (
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">額外服務</h3>

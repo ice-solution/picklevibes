@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>測試前端認證</title>
+</head>
+<body>
+    <h1>前端認證測試</h1>
+    <div id="auth-status"></div>
+    <div id="api-test"></div>
+
+    <script>
+        // 檢查認證狀態
+        function checkAuthStatus() {
+            const token = localStorage.getItem('token');
+            const user = localStorage.getItem('user');
+            
+            const authStatus = document.getElementById('auth-status');
+            
+            if (token && user) {
+                authStatus.innerHTML = `
+                    <h2>✅ 認證狀態</h2>
+                    <p><strong>Token:</strong> ${token.substring(0, 20)}...</p>
+                    <p><strong>用戶:</strong> ${user}</p>
+                `;
+                
+                // 解析用戶信息
+                try {
+                    const userData = JSON.parse(user);
+                    authStatus.innerHTML += `
+                        <p><strong>角色:</strong> ${userData.role}</p>
+                        <p><strong>管理員權限:</strong> ${userData.role === 'admin' ? '✅ 是' : '❌ 否'}</p>
+                    `;
+                } catch (e) {
+                    authStatus.innerHTML += `<p><strong>用戶數據解析失敗:</strong> ${e.message}</p>`;
+                }
+            } else {
+                authStatus.innerHTML = `
+                    <h2>❌ 未認證</h2>
+                    <p>請先登入</p>
+                `;
+            }
+        }
+
+        // 測試 API
+        async function testAPI() {
+            const apiTest = document.getElementById('api-test');
+            apiTest.innerHTML = '<h2>🧪 API 測試</h2><p>測試中...</p>';
+            
+            try {
+                const response = await fetch('/api/weekend/config', {
+                    headers: {
+                        'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    }
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    apiTest.innerHTML = `
+                        <h2>✅ API 測試成功</h2>
+                        <pre>${JSON.stringify(data, null, 2)}</pre>
+                    `;
+                } else {
+                    const error = await response.text();
+                    apiTest.innerHTML = `
+                        <h2>❌ API 測試失敗</h2>
+                        <p><strong>狀態碼:</strong> ${response.status}</p>
+                        <p><strong>錯誤:</strong> ${error}</p>
+                    `;
+                }
+            } catch (error) {
+                apiTest.innerHTML = `
+                    <h2>❌ API 測試失敗</h2>
+                    <p><strong>錯誤:</strong> ${error.message}</p>
+                `;
+            }
+        }
+
+        // 頁面加載時執行
+        window.onload = function() {
+            checkAuthStatus();
+            testAPI();
+        };
+    </script>
+</body>
+</html>

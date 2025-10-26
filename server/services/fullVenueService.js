@@ -62,7 +62,7 @@ class FullVenueService {
             finalPrice: courtPrice,
             pointsDeducted: pointsDeducted // 每個預約都記錄積分扣除
           },
-          notes: `包場預約 - ${court.name}${bookingData.notes ? ` (${bookingData.notes})` : ''}`,
+          notes: `🏢 包場預約 - ${court.name}\n📅 預約日期: ${bookingData.date.toLocaleDateString('zh-TW')}\n⏰ 時間: ${bookingData.startTime}-${bookingData.endTime}\n👥 參與人數: ${bookingData.totalPlayers}人\n💰 場地費用: ${courtPrice}積分${bookingData.notes ? `\n📝 備註: ${bookingData.notes}` : ''}`,
           createdBy: 'admin'
         });
 
@@ -72,6 +72,26 @@ class FullVenueService {
 
       // 保存所有預約
       const savedBookings = await Booking.insertMany(courtBookings);
+
+      // 如果有積分扣除，創建積分扣除記錄
+      if (pointsDeducted > 0) {
+        const UserBalance = require('../models/UserBalance');
+        let userBalance = await UserBalance.findOne({ user: user._id });
+        
+        if (!userBalance) {
+          userBalance = new UserBalance({ user: user._id });
+          await userBalance.save();
+        }
+
+        // 扣除積分並關聯到第一個預約記錄
+        await userBalance.deductBalance(
+          pointsDeducted,
+          `包場預約積分扣除 - ${savedBookings.length}個場地`,
+          savedBookings[0]._id // 關聯到第一個預約記錄
+        );
+        
+        console.log(`💰 包場積分扣除: ${pointsDeducted} 分`);
+      }
 
       console.log(`✅ 包場預約創建成功: ${savedBookings.length} 個場地`);
       console.log(`💰 總價格: $${totalPrice}`);

@@ -40,7 +40,7 @@ router.post('/', [
   body('court').isMongoId().withMessage('請提供有效的場地ID'),
   body('date').isISO8601().withMessage('請提供有效的日期格式'),
   body('startTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的開始時間'),
-  body('endTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的結束時間'),
+  body('endTime').matches(/^([0-1]?[0-9]|2[0-4]):[0-5][0-9]$/).withMessage('請提供有效的結束時間'),
   body('players').isArray({ min: 1, max: 7 }).withMessage('玩家信息必須是1-7個對象的數組'),
   body('players.*.name').trim().isLength({ min: 1, max: 50 }).withMessage('玩家姓名必須在1-50個字符之間'),
   body('players.*.email').isEmail().withMessage('玩家電子郵件格式無效'),
@@ -116,6 +116,11 @@ router.post('/', [
     // 計算持續時間
     const startMinutes = parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]);
     let endMinutes = parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1]);
+    
+    // 處理 24:00 的情況（應該視為隔天的 00:00）
+    if (endTime === '24:00') {
+      endMinutes = 24 * 60; // 1440 分鐘
+    }
     
     // 判斷是否跨天
     const isOvernight = endMinutes <= startMinutes;
@@ -615,7 +620,10 @@ router.put('/:id/cancel', [
       reason
     };
 
-    // 如為積分支付或管理員建立且已扣分，則退回積分
+    // 檢查是否為包場預約，如果是包場則不自動退款
+    const isFullVenueBooking = booking.notes?.includes('包場預約') || booking.notes?.includes('🏢 包場預約');
+    
+    // 如為積分支付或管理員建立且已扣分，則退回積分（包場預約除外）
     try {
       const pointsToRefund = Number(
         booking.pricing?.pointsDeducted ??
@@ -624,17 +632,26 @@ router.put('/:id/cancel', [
       );
       const paidByPoints = booking.payment?.method === 'points' || booking.payment?.method === 'admin_created';
       const notRefundedYet = booking.payment?.status !== 'refunded';
+      
       if (paidByPoints && notRefundedYet && pointsToRefund > 0) {
-        let userBalance = await UserBalance.findOne({ user: booking.user });
-        if (!userBalance) {
-          userBalance = new UserBalance({ user: booking.user, balance: 0, totalRecharged: 0, totalSpent: 0, transactions: [] });
+        if (isFullVenueBooking) {
+          // 包場預約不自動退款，需要管理員手動處理
+          console.log(`🏢 包場預約取消 - 不自動退款，需要管理員手動處理: ${booking._id}`);
+          booking.payment.status = 'pending_refund'; // 標記為待退款
+          booking.payment.requiresManualRefund = true; // 需要手動退款
+        } else {
+          // 普通預約自動退款
+          let userBalance = await UserBalance.findOne({ user: booking.user });
+          if (!userBalance) {
+            userBalance = new UserBalance({ user: booking.user, balance: 0, totalRecharged: 0, totalSpent: 0, transactions: [] });
+          }
+          await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
+          booking.payment.status = 'refunded';
+          booking.payment.refundedAt = new Date();
         }
-        await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
-        booking.payment.status = 'refunded';
-        booking.payment.refundedAt = new Date();
       }
     } catch (refundError) {
-      console.error('退款失敗（不影響取消）:', refundError);
+      console.error('退款處理失敗（不影響取消）:', refundError);
     }
 
     // 使用關閉驗證的保存方式，避免舊資料因缺欄位而無法更新

@@ -178,6 +178,10 @@ bookingSchema.statics.checkTimeConflict = async function(courtId, date, startTim
   
   // 計算新預約的結束日期
   const timeToMinutes = (time) => {
+    // 處理 24:00 的情況
+    if (time === '24:00') {
+      return 24 * 60; // 1440 分鐘
+    }
     const [hour, minute] = time.split(':').map(Number);
     return hour * 60 + minute;
   };
@@ -234,6 +238,11 @@ bookingSchema.methods.calculatePrice = function(court, isMember = false) {
   // 計算實際時長（小時）
   const startMinutes = parseInt(this.startTime.split(':')[0]) * 60 + parseInt(this.startTime.split(':')[1]);
   let endMinutes = parseInt(this.endTime.split(':')[0]) * 60 + parseInt(this.endTime.split(':')[1]);
+  
+  // 處理 24:00 的情況
+  if (this.endTime === '24:00') {
+    endMinutes = 24 * 60; // 1440 分鐘
+  }
   
   // 如果結束時間小於開始時間，表示跨天（例如 22:00 到 00:00）
   if (endMinutes <= startMinutes) {

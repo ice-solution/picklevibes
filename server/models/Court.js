@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const weekendService = require('../services/weekendService');
 
 const courtSchema = new mongoose.Schema({
   name: {
@@ -115,11 +116,40 @@ courtSchema.methods.isOpenAt = function(date, startTime = null, endTime = null) 
   // 如果提供了具體的預約時間，檢查是否在營業時間範圍內
   if (startTime && endTime) {
     const startTimeStr = startTime.substring(0, 5); // 格式：HH:MM
-    const endTimeStr = endTime.substring(0, 5);
+    let endTimeStr = endTime.substring(0, 5);
     
-    // 檢查開始時間和結束時間是否都在營業時間範圍內
+    // 檢查開始時間是否在營業時間範圍內
     const isStartInRange = startTimeStr >= daySchedule.start && startTimeStr < daySchedule.end;
-    const isEndInRange = endTimeStr > daySchedule.start && endTimeStr <= daySchedule.end;
+    
+    // 檢查結束時間是否在營業時間範圍內
+    let isEndInRange;
+    
+    // 處理 24:00 的特殊情況
+    if (endTime === '24:00') {
+      // 24:00 應該被視為當天的結束時間，檢查是否在營業時間內
+      isEndInRange = '24:00' <= daySchedule.end;
+    } else {
+      // 判斷是否跨天：結束時間小於開始時間
+      const isOvernight = endTimeStr < startTimeStr;
+      
+      if (isOvernight) {
+        // 跨天情況：檢查隔天的營業時間
+        const nextDay = new Date(dateObj);
+        nextDay.setDate(nextDay.getDate() + 1);
+        const nextDayOfWeek = dayNames[nextDay.getDay()];
+        const nextDaySchedule = this.operatingHours[nextDayOfWeek];
+        
+        if (!nextDaySchedule || !nextDaySchedule.isOpen) {
+          isEndInRange = false;
+        } else {
+          // 隔天的結束時間應該在隔天的營業時間內
+          isEndInRange = endTimeStr >= nextDaySchedule.start && endTimeStr <= nextDaySchedule.end;
+        }
+      } else {
+        // 非跨天情況：正常檢查當天的營業時間
+        isEndInRange = endTimeStr > daySchedule.start && endTimeStr <= daySchedule.end;
+      }
+    }
     
     return isStartInRange && isEndInRange;
   }
@@ -150,8 +180,8 @@ courtSchema.methods.getPriceForTime = function(startTime, date = null) {
     return 0;
   }
   
-  // 檢查是否為週末
-  const isWeekend = date ? (date.getDay() === 0 || date.getDay() === 6) : false;
+  // 檢查是否為週末 - 使用自定義判定方法
+  const isWeekend = date ? this.isWeekend(date) : false;
   
   // 如果是週末，08:00-24:00 使用繁忙時間價格
   if (isWeekend) {
@@ -182,8 +212,8 @@ courtSchema.methods.getTimeSlotName = function(startTime, date = null) {
     return '標準時段';
   }
   
-  // 檢查是否為週末
-  const isWeekend = date ? (date.getDay() === 0 || date.getDay() === 6) : false;
+  // 檢查是否為週末 - 使用自定義判定方法
+  const isWeekend = date ? this.isWeekend(date) : false;
   
   // 如果是週末，08:00-24:00 顯示為繁忙時間
   if (isWeekend) {
@@ -200,6 +230,11 @@ courtSchema.methods.getTimeSlotName = function(startTime, date = null) {
   }
   
   return '標準時段';
+};
+
+// 自定義週末判定方法 - 使用週末服務
+courtSchema.methods.isWeekend = function(date) {
+  return weekendService.isWeekend(date);
 };
 
 module.exports = mongoose.model('Court', courtSchema);

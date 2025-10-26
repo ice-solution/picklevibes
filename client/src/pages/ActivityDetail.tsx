@@ -31,12 +31,23 @@ interface Activity {
     name: string;
     email: string;
   };
+  coaches?: Array<{
+    _id: string;
+    name: string;
+    email: string;
+  }>;
   requirements?: string;
   canRegister: boolean;
   isExpired: boolean;
   isFull: boolean;
   totalRegistered: number;
   availableSpots: number;
+  userRegistration?: {
+    id: string;
+    participantCount: number;
+    totalCost: number;
+    createdAt: string;
+  } | null;
 }
 
 const ActivityDetail: React.FC = () => {
@@ -123,11 +134,13 @@ const ActivityDetail: React.FC = () => {
   const canRegister = () => {
     if (!user) return false;
     if (!activity) return false;
+    if (activity.userRegistration) return false; // 已報名
     return activity.canRegister && activity.availableSpots > 0;
   };
 
   const getRegisterButtonText = () => {
     if (!activity) return '';
+    if (activity.userRegistration) return '你已報名';
     if (activity.isExpired) return '報名已截止';
     if (activity.isFull) return '人數已滿';
     if (activity.availableSpots <= 0) return '人數已到上限';
@@ -273,6 +286,23 @@ const ActivityDetail: React.FC = () => {
                     <p className="text-gray-600">{activity.organizer.name}</p>
                   </div>
                 </div>
+
+                {activity.coaches && activity.coaches.length > 0 && (
+                  <div className="flex items-start">
+                    <UsersIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
+                    <div>
+                      <h3 className="font-semibold text-gray-900">負責教練</h3>
+                      <div className="text-gray-600">
+                        {activity.coaches.map((coach, index) => (
+                          <span key={coach._id}>
+                            {coach.name}
+                            {index < (activity.coaches?.length || 0) - 1 && ', '}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -314,6 +344,14 @@ const ActivityDetail: React.FC = () => {
                   <UserPlusIcon className="h-5 w-5 mr-2" />
                   立即報名
                 </Link>
+              ) : activity.userRegistration ? (
+                <button
+                  disabled
+                  className="flex-1 flex items-center justify-center px-6 py-3 bg-green-100 text-green-800 rounded-lg cursor-not-allowed font-medium border border-green-200"
+                >
+                  <UserPlusIcon className="h-5 w-5 mr-2" />
+                  {getRegisterButtonText()}
+                </button>
               ) : (
                 <button
                   disabled

@@ -219,7 +219,7 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
 router.get('/:id/availability', [
   query('date').isISO8601().withMessage('請提供有效的日期格式'),
   query('startTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的開始時間'),
-  query('endTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的結束時間')
+  query('endTime').matches(/^([0-1]?[0-9]|2[0-4]):[0-5][0-9]$/).withMessage('請提供有效的結束時間')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

@@ -20,6 +20,18 @@ interface UserBalance {
     amount: number;
     description: string;
     createdAt: string;
+    relatedBooking?: {
+      _id: string;
+      date: string;
+      startTime: string;
+      endTime: string;
+      court: {
+        _id: string;
+        name: string;
+        number: number;
+        type: string;
+      };
+    };
   }>;
   pagination?: {
     current: number;
@@ -264,6 +276,12 @@ const Balance: React.FC = () => {
                           <p className="text-sm font-medium text-gray-900">
                             {transaction.description}
                           </p>
+                          {transaction.relatedBooking && (
+                            <p className="text-xs text-blue-600 font-medium">
+                              預約場地日期：{new Date(transaction.relatedBooking.date).toLocaleDateString('zh-TW')} {transaction.relatedBooking.startTime}-{transaction.relatedBooking.endTime} 
+                              {transaction.relatedBooking.court?.name}
+                            </p>
+                          )}
                           <p className="text-xs text-gray-500">
                             {new Date(transaction.createdAt).toLocaleString()}
                           </p>

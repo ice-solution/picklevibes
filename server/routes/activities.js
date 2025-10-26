@@ -22,6 +22,86 @@ router.get('/', async (req, res) => {
     
     const activities = await Activity.find(query)
       .populate('organizer', 'name email')
+      .populate('coaches', 'name email')
+      .sort({ startDate: 1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+    
+    const total = await Activity.countDocuments(query);
+    
+    // 為每個活動添加用戶報名狀態
+    const activitiesWithRegistration = await Promise.all(
+      activities.map(async (activity) => {
+        // 獲取該活動的報名記錄
+        const registrations = await ActivityRegistration.find({ 
+          activity: activity._id, 
+          status: 'registered' 
+        });
+        
+        const totalRegistered = registrations.reduce((sum, reg) => sum + reg.participantCount, 0);
+        
+        // 檢查當前用戶是否已報名
+        let userRegistration = null;
+        if (req.user) {
+          const userReg = registrations.find(reg => reg.user.toString() === req.user.id);
+          if (userReg) {
+            userRegistration = {
+              id: userReg._id,
+              participantCount: userReg.participantCount,
+              totalCost: userReg.totalCost,
+              createdAt: userReg.createdAt
+            };
+          }
+        }
+        
+        return {
+          ...activity.toObject(),
+          totalRegistered,
+          availableSpots: activity.maxParticipants - totalRegistered,
+          userRegistration,
+          canRegister: activity.canRegister,
+          isExpired: activity.isExpired,
+          isFull: activity.isFull
+        };
+      })
+    );
+    
+    res.json({
+      activities: activitiesWithRegistration,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      total
+    });
+  } catch (error) {
+    console.error('獲取活動列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   GET /api/activities/coach
+// @desc    獲取教練負責的活動列表
+// @access  Private (Coach only)
+router.get('/coach', auth, async (req, res) => {
+  try {
+    // 檢查用戶是否為教練
+    if (req.user.role !== 'coach') {
+      return res.status(403).json({ message: '只有教練可以訪問此功能' });
+    }
+
+    const { status, page = 1, limit = 10 } = req.query;
+    
+    const query = { 
+      isActive: true,
+      coach: req.user.id 
+    };
+    
+    if (status) {
+      query.status = status;
+    }
+    
+    const activities = await Activity.find(query)
+      .populate('organizer', 'name email')
+      .populate('coach', 'name email')
       .sort({ startDate: 1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -35,18 +115,57 @@ router.get('/', async (req, res) => {
       total
     });
   } catch (error) {
-    console.error('獲取活動列表錯誤:', error);
+    console.error('獲取教練活動列表錯誤:', error);
     res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   GET /api/activities/coach-courses
+// @desc    獲取教練課程 - 只返回當前用戶作為教練的活動
+// @access  Private (Coach only)
+router.get('/coach-courses', auth, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // 查找當前用戶作為教練的活動
+    const activities = await Activity.find({
+      coaches: userId
+    })
+    .populate('coaches', 'name email')
+    .sort({ startDate: 1 });
+
+    // 計算每個活動的報名人數
+    const activitiesWithStats = await Promise.all(
+      activities.map(async (activity) => {
+        const totalRegistered = await ActivityRegistration.countDocuments({
+          activity: activity._id
+        });
+
+        return {
+          ...activity.toObject(),
+          totalRegistered,
+          availableSpots: activity.maxParticipants - totalRegistered
+        };
+      })
+    );
+
+    res.json(activitiesWithStats);
+  } catch (error) {
+    console.error('獲取教練課程錯誤:', error);
+    res.status(500).json({ 
+      message: '服務器錯誤，請稍後再試' 
+    });
   }
 });
 
 // @route   GET /api/activities/:id
 // @desc    獲取單個活動詳情
-// @access  Public
+// @access  Public (with optional auth)
 router.get('/:id', async (req, res) => {
   try {
     const activity = await Activity.findById(req.params.id)
-      .populate('organizer', 'name email phone');
+      .populate('organizer', 'name email phone')
+      .populate('coaches', 'name email');
     
     if (!activity) {
       return res.status(404).json({ message: '活動不存在' });
@@ -60,10 +179,34 @@ router.get('/:id', async (req, res) => {
     
     const totalRegistered = registrations.reduce((sum, reg) => sum + reg.participantCount, 0);
     
+    // 檢查當前用戶是否已報名 - 使用參加者列表對比
+    let userRegistration = null;
+    if (req.user) {
+      // 從參加者列表中查找當前用戶
+      const userReg = registrations.find(reg => reg.user.toString() === req.user.id);
+      if (userReg) {
+        userRegistration = {
+          id: userReg._id,
+          participantCount: userReg.participantCount,
+          totalCost: userReg.totalCost,
+          createdAt: userReg.createdAt
+        };
+      }
+    }
+    
     res.json({
       ...activity.toObject(),
       totalRegistered,
-      availableSpots: activity.maxParticipants - totalRegistered
+      availableSpots: activity.maxParticipants - totalRegistered,
+      userRegistration: userRegistration ? {
+        id: userRegistration._id,
+        participantCount: userRegistration.participantCount,
+        totalCost: userRegistration.totalCost,
+        createdAt: userRegistration.createdAt
+      } : null,
+      canRegister: activity.canRegister,
+      isExpired: activity.isExpired,
+      isFull: activity.isFull
     });
   } catch (error) {
     console.error('獲取活動詳情錯誤:', error);
@@ -105,8 +248,32 @@ router.post('/', [
       endDate,
       registrationDeadline,
       location,
-      requirements
+      requirements,
+      coaches
     } = req.body;
+
+    // 處理教練 ID 陣列 - 支援 FormData 陣列格式
+    let coachIds = [];
+    if (coaches) {
+      if (Array.isArray(coaches)) {
+        coachIds = coaches.map(coach => {
+          if (typeof coach === 'string') {
+            return coach;
+          } else if (typeof coach === 'object' && coach._id) {
+            return coach._id;
+          }
+          return null;
+        }).filter(id => id !== null);
+      } else if (typeof coaches === 'string') {
+        coachIds = [coaches];
+      }
+    }
+    
+    // 處理 FormData 中的 coaches[0], coaches[1] 等格式
+    const coachKeys = Object.keys(req.body).filter(key => key.startsWith('coaches['));
+    if (coachKeys.length > 0) {
+      coachIds = coachKeys.map(key => req.body[key]).filter(id => id);
+    }
 
     // 使用上傳的圖片路徑，如果沒有上傳則使用默認值
     const posterPath = req.file ? `/uploads/activities/${req.file.filename}` : (poster || '');
@@ -140,7 +307,8 @@ router.post('/', [
       registrationDeadline: deadline,
       location,
       requirements,
-      organizer: req.user.id
+      organizer: req.user.id,
+      coaches: coachIds
     });
 
     await activity.save();
@@ -398,6 +566,28 @@ router.put('/:id', [
     // 如果有新上傳的圖片，使用新圖片路徑
     if (req.file) {
       updates.poster = `/uploads/activities/${req.file.filename}`;
+    }
+    
+    // 處理教練 ID 陣列 - 支援 FormData 陣列格式
+    if (updates.coaches) {
+      if (Array.isArray(updates.coaches)) {
+        updates.coaches = updates.coaches.map(coach => {
+          if (typeof coach === 'string') {
+            return coach;
+          } else if (typeof coach === 'object' && coach._id) {
+            return coach._id;
+          }
+          return null;
+        }).filter(id => id !== null);
+      } else if (typeof updates.coaches === 'string') {
+        updates.coaches = [updates.coaches];
+      }
+    }
+    
+    // 處理 FormData 中的 coaches[0], coaches[1] 等格式
+    const coachKeys = Object.keys(req.body).filter(key => key.startsWith('coaches['));
+    if (coachKeys.length > 0) {
+      updates.coaches = coachKeys.map(key => req.body[key]).filter(id => id);
     }
     
     Object.keys(updates).forEach(key => {

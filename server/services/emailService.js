@@ -12,6 +12,16 @@ class EmailService {
   }
 
   /**
+   * 確保 Logo 已加載
+   */
+  async ensureLogoLoaded() {
+    if (!this.logoBase64) {
+      await this.loadLogo();
+    }
+    return this.logoBase64;
+  }
+
+  /**
    * 初始化郵件傳輸器
    */
   initializeTransporter() {
@@ -42,6 +52,263 @@ class EmailService {
       console.error('❌ Logo 加載失敗:', error.message);
       this.logoBase64 = null;
     }
+  }
+
+  /**
+   * 生成活動報名確認郵件模板
+   */
+  async generateActivityRegistrationEmailTemplate(activityData, userData, registrationData) {
+    // 確保 logo 已加載
+    await this.ensureLogoLoaded();
+    
+    const formatDate = (dateString) => {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('zh-TW', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'long'
+      });
+    };
+
+    const formatTime = (dateString) => {
+      const date = new Date(dateString);
+      return date.toLocaleTimeString('zh-TW', {
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    };
+
+    const startDate = formatDate(activityData.startDate);
+    const endTime = formatTime(activityData.endDate);
+    const registrationDeadline = formatDate(activityData.registrationDeadline);
+
+    return `
+      <!DOCTYPE html>
+      <html lang="zh-TW">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>活動報名確認 - PickleVibes</title>
+        <style>
+          body {
+            font-family: 'Microsoft JhengHei', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f8f9fa;
+          }
+          .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+          }
+          .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 30px 20px;
+            text-align: center;
+            color: white;
+          }
+          .logo {
+            max-width: 120px;
+            height: auto;
+            margin-bottom: 20px;
+          }
+          .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: bold;
+          }
+          .content {
+            padding: 40px 30px;
+          }
+          .greeting {
+            font-size: 18px;
+            color: #2c3e50;
+            margin-bottom: 30px;
+          }
+          .activity-banner {
+            width: 100%;
+            max-width: 500px;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+          }
+          .activity-info {
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            padding: 25px;
+            margin: 25px 0;
+            border-left: 4px solid #667eea;
+          }
+          .activity-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+          }
+          .activity-description {
+            color: #555;
+            margin-bottom: 20px;
+            line-height: 1.6;
+          }
+          .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+          }
+          .info-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+          }
+          .info-icon {
+            width: 20px;
+            height: 20px;
+            margin-right: 10px;
+            color: #667eea;
+          }
+          .info-label {
+            font-weight: bold;
+            color: #2c3e50;
+            margin-right: 5px;
+          }
+          .info-value {
+            color: #555;
+          }
+          .registration-details {
+            background-color: #e8f5e8;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 25px 0;
+            border-left: 4px solid #28a745;
+          }
+          .footer {
+            background-color: #2c3e50;
+            color: white;
+            padding: 30px;
+            text-align: center;
+          }
+          .footer p {
+            margin: 5px 0;
+          }
+          .contact-info {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #bdc3c7;
+          }
+          @media (max-width: 600px) {
+            .info-grid {
+              grid-template-columns: 1fr;
+            }
+            .content {
+              padding: 20px 15px;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes Logo" class="logo">` : '<div class="logo">🏓 PickleVibes</div>'}
+            <h1>活動報名確認</h1>
+          </div>
+          
+          <div class="content">
+            <div class="greeting">
+              親愛的 ${userData.name}，<br>
+              感謝您參加 <strong>${activityData.title}</strong> 的活動！
+            </div>
+            
+            ${activityData.poster ? `
+              <img src="${activityData.poster.startsWith('http') ? activityData.poster : `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}${activityData.poster}`}" 
+                   alt="活動海報" class="activity-banner">
+            ` : ''}
+            
+            <div class="activity-info">
+              <div class="activity-title">${activityData.title}</div>
+              <div class="activity-description">${activityData.description}</div>
+              
+              <div class="info-grid">
+                <div class="info-item">
+                  <span class="info-icon">📅</span>
+                  <span class="info-label">活動日期：</span>
+                  <span class="info-value">${startDate}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-icon">⏰</span>
+                  <span class="info-label">結束時間：</span>
+                  <span class="info-value">${endTime}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-icon">📍</span>
+                  <span class="info-label">活動地點：</span>
+                  <span class="info-value">${activityData.location}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-icon">💰</span>
+                  <span class="info-label">活動費用：</span>
+                  <span class="info-value">${activityData.price} 積分/人</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-icon">👥</span>
+                  <span class="info-label">報名截止：</span>
+                  <span class="info-value">${registrationDeadline}</span>
+                </div>
+                <div class="info-item">
+                  <span class="info-icon">📋</span>
+                  <span class="info-label">活動要求：</span>
+                  <span class="info-value">${activityData.requirements || '無特殊要求'}</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="registration-details">
+              <h3 style="margin-top: 0; color: #28a745;">📝 您的報名詳情</h3>
+              <p><strong>報名人數：</strong> ${registrationData.participantCount} 人</p>
+              <p><strong>總費用：</strong> ${registrationData.totalCost} 積分</p>
+              <p><strong>報名時間：</strong> ${new Date(registrationData.createdAt).toLocaleString('zh-TW')}</p>
+            </div>
+            
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 8px; padding: 20px; margin: 25px 0;">
+              <h3 style="margin-top: 0; color: #856404;">⚠️ 重要提醒</h3>
+              <ul style="margin: 10px 0; padding-left: 20px; color: #856404;">
+                <li>請準時出席活動，遲到可能影響活動體驗</li>
+                <li>如有任何問題，請提前聯繫我們</li>
+                <li>活動當天請攜帶有效身份證明</li>
+                ${activityData.requirements ? `<li>${activityData.requirements}</li>` : ''}
+              </ul>
+            </div>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <p style="font-size: 18px; color: #2c3e50; margin: 0;">
+                期待與您在活動中見面！🎾
+              </p>
+            </div>
+          </div>
+          
+          <div class="footer">
+            <p><strong>PickleVibes 匹克球場</strong></p>
+            <p>專業匹克球場地服務</p>
+            <div class="contact-info">
+              <p>如有任何疑問，請聯繫我們</p>
+              <p>電話：+852 1234 5678 | 電郵：info@picklevibes.hk</p>
+            </div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
   }
 
   /**
@@ -940,6 +1207,47 @@ PickleVibes 充值發票
     `;
 
     return { subject, html, text };
+  }
+
+  /**
+   * 發送活動報名確認郵件
+   */
+  async sendActivityRegistrationEmail(userData, activityData, registrationData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      const emailTemplate = await this.generateActivityRegistrationEmailTemplate(activityData, userData, registrationData);
+      
+      // 準備附件
+      const attachments = [];
+      
+      // 添加 Logo 作為附件
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo' // Content ID for referencing in HTML
+        });
+      }
+      
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: `🎾 活動報名確認 - ${activityData.title}`,
+        html: emailTemplate,
+        attachments: attachments
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 活動報名確認郵件已發送給 ${userData.email}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送活動報名確認郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
   }
 }
 

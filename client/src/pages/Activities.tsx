@@ -36,6 +36,12 @@ interface Activity {
   isFull: boolean;
   totalRegistered: number;
   availableSpots: number;
+  userRegistration?: {
+    id: string;
+    participantCount: number;
+    totalCost: number;
+    createdAt: string;
+  } | null;
 }
 
 const Activities: React.FC = () => {
@@ -125,10 +131,12 @@ const Activities: React.FC = () => {
 
   const canRegister = (activity: Activity) => {
     if (!user) return false;
+    if (activity.userRegistration) return false; // 已報名
     return activity.canRegister && activity.availableSpots > 0;
   };
 
   const getRegisterButtonText = (activity: Activity) => {
+    if (activity.userRegistration) return '你已報名';
     if (activity.isExpired) return '報名已截止';
     if (activity.isFull) return '人數已滿';
     if (activity.availableSpots <= 0) return '人數已到上限';
@@ -307,6 +315,14 @@ const Activities: React.FC = () => {
                         <UserPlusIcon className="h-4 w-4 mr-2" />
                         立即報名
                       </Link>
+                    ) : activity.userRegistration ? (
+                      <button
+                        disabled
+                        className="flex-1 flex items-center justify-center px-4 py-2 bg-green-100 text-green-800 rounded-lg cursor-not-allowed border border-green-200"
+                      >
+                        <UserPlusIcon className="h-4 w-4 mr-2" />
+                        {getRegisterButtonText(activity)}
+                      </button>
                     ) : (
                       <button
                         disabled
