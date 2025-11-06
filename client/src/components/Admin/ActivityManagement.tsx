@@ -149,6 +149,20 @@ const ActivityManagement: React.FC = () => {
     }
   };
 
+  /**
+   * 將 UTC 時間轉換為本地時間字符串（用於 datetime-local 輸入框）
+   */
+  const formatDateTimeLocal = (dateString: string): string => {
+    const date = new Date(dateString);
+    // 獲取本地時間的年月日時分
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  };
+
   const handleEditActivity = (activity: Activity) => {
     setFormData({
       title: activity.title,
@@ -156,9 +170,9 @@ const ActivityManagement: React.FC = () => {
       poster: activity.poster || '',
       maxParticipants: activity.maxParticipants,
       price: activity.price,
-      startDate: new Date(activity.startDate).toISOString().slice(0, 16),
-      endDate: new Date(activity.endDate).toISOString().slice(0, 16),
-      registrationDeadline: new Date(activity.registrationDeadline).toISOString().slice(0, 16),
+      startDate: formatDateTimeLocal(activity.startDate),
+      endDate: formatDateTimeLocal(activity.endDate),
+      registrationDeadline: formatDateTimeLocal(activity.registrationDeadline),
       location: activity.location,
       requirements: activity.requirements || '',
       coaches: activity.coaches || []

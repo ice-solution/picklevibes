@@ -8,6 +8,31 @@ const { activityUpload, processActivityImage, deleteFile } = require('../middlew
 
 const router = express.Router();
 
+/**
+ * 將 datetime-local 格式的字符串轉換為正確的 Date 對象
+ * datetime-local 格式: "2024-11-15T15:00" (本地時間，無時區)
+ * 問題：datetime-local 提交的是本地時間字符串，但可能被當作 UTC 處理
+ * 解決：將字符串明確解析為香港時區（UTC+8）的本地時間
+ */
+function parseLocalDateTime(dateTimeString) {
+  if (!dateTimeString) return null;
+  
+  // 如果已經是完整的 ISO 格式（包含時區），直接解析
+  if (dateTimeString.includes('Z') || dateTimeString.match(/[+-]\d{2}:\d{2}$/)) {
+    return new Date(dateTimeString);
+  }
+  
+  // datetime-local 格式: "2024-11-15T15:00"
+  // 這個字符串沒有時區信息，會被 JavaScript 解釋為本地時區
+  // 為了確保正確，我們需要明確指定這是香港時區（UTC+8）的時間
+  // 然後轉換為 UTC 存儲
+  
+  // 方法：將 "2024-11-15T15:00" 轉換為 "2024-11-15T15:00+08:00"（香港時區）
+  // 然後讓 JavaScript 正確解析
+  const hkTimeString = dateTimeString + '+08:00';
+  return new Date(hkTimeString);
+}
+
 // @route   GET /api/activities
 // @desc    獲取所有活動列表
 // @access  Public
@@ -278,11 +303,11 @@ router.post('/', [
     // 使用上傳的圖片路徑，如果沒有上傳則使用默認值
     const posterPath = req.file ? `/uploads/activities/${req.file.filename}` : (poster || '');
 
-    // 驗證時間邏輯
+    // 驗證時間邏輯 - 使用 parseLocalDateTime 正確處理時區
     const now = new Date();
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const deadline = new Date(registrationDeadline);
+    const start = parseLocalDateTime(startDate);
+    const end = parseLocalDateTime(endDate);
+    const deadline = parseLocalDateTime(registrationDeadline);
 
     if (deadline >= start) {
       return res.status(400).json({ 
@@ -589,6 +614,14 @@ router.put('/:id', [
     if (coachKeys.length > 0) {
       updates.coaches = coachKeys.map(key => req.body[key]).filter(id => id);
     }
+    
+    // 處理日期時間字段 - 使用 parseLocalDateTime 正確處理時區
+    const dateTimeFields = ['startDate', 'endDate', 'registrationDeadline'];
+    dateTimeFields.forEach(field => {
+      if (updates[field] !== undefined) {
+        updates[field] = parseLocalDateTime(updates[field]);
+      }
+    });
     
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {

@@ -647,6 +647,21 @@ router.put('/:id/recharge-records/:rechargeId/status', [
       );
       recharge.pointsAdded = true;
       recharge.pointsDeducted = false; // 重置扣除標記
+      
+      // 發送充值發票郵件
+      try {
+        const emailService = require('../services/emailService');
+        const user = await User.findById(userId);
+        if (user) {
+          await emailService.sendRechargeInvoiceEmail(user, recharge);
+          console.log('📧 手動確認充值發票郵件發送成功');
+        } else {
+          console.error('❌ 找不到用戶信息，無法發送發票郵件');
+        }
+      } catch (emailError) {
+        console.error('❌ 發送手動確認充值發票郵件失敗:', emailError);
+        // 不影響充值流程，只記錄錯誤
+      }
     }
     // 如果從完成狀態變為取消狀態，且尚未扣除過積分
     else if (status === 'cancelled' && oldStatus === 'completed' && !recharge.pointsDeducted) {
@@ -665,6 +680,21 @@ router.put('/:id/recharge-records/:rechargeId/status', [
       );
       recharge.pointsAdded = true;
       recharge.pointsDeducted = false; // 重置扣除標記
+      
+      // 發送充值發票郵件
+      try {
+        const emailService = require('../services/emailService');
+        const user = await User.findById(userId);
+        if (user) {
+          await emailService.sendRechargeInvoiceEmail(user, recharge);
+          console.log('📧 重新確認充值發票郵件發送成功');
+        } else {
+          console.error('❌ 找不到用戶信息，無法發送發票郵件');
+        }
+      } catch (emailError) {
+        console.error('❌ 發送重新確認充值發票郵件失敗:', emailError);
+        // 不影響充值流程，只記錄錯誤
+      }
     }
     // 如果變為失敗狀態，重置所有標記
     else if (status === 'failed') {

@@ -1,0 +1,516 @@
+doctype html
+html(lang="zh-TW")
+  head
+    meta(charset="UTF-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1.0")
+    title PickleVibes 發票
+    style.
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        background-color: #f8f9fa;
+        padding: 20px;
+      }
+      
+      .invoice-container {
+        max-width: 800px;
+        margin: 0 auto;
+        background: white;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+      }
+      
+      /* Header Section */
+      .header {
+        position: relative;
+        height: 120px;
+        background: linear-gradient(135deg, #20B2AA 0%, #FF69B4 50%, #FFD700 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px 40px;
+        overflow: hidden;
+        border-radius: 15px 15px 0 0;
+      }
+      
+      .header::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+        animation: shimmer 3s infinite;
+      }
+      
+      @keyframes shimmer {
+        0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
+        100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
+      }
+      
+      .banner-content {
+        display: flex;
+        align-items: center;
+        gap: 20px;
+        z-index: 2;
+        position: relative;
+      }
+      
+      .logo {
+        width: 50px;
+        height: 50px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      
+      .logo img {
+        width: 50px;
+        height: 50px;
+        object-fit: contain;
+      }
+      
+      .company-name {
+        color: white;
+        font-size: 24px;
+        font-weight: bold;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+      }
+      
+      .separator {
+        width: 2px;
+        height: 40px;
+        background: white;
+        opacity: 0.8;
+      }
+      
+      .invoice-title {
+        color: white;
+        font-size: 36px;
+        font-weight: 900;
+        text-shadow: 3px 3px 6px rgba(0, 0, 0, 0.3);
+      }
+      
+      /* Invoice Details Section */
+      .invoice-details {
+        padding: 40px;
+        background: white;
+      }
+      
+      .details-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 40px;
+        margin-bottom: 40px;
+      }
+      
+      .detail-section h3 {
+        font-size: 18px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 15px;
+        border-bottom: 2px solid #20B2AA;
+        padding-bottom: 5px;
+      }
+      
+      .detail-item {
+        margin-bottom: 10px;
+        font-size: 16px;
+      }
+      
+      .detail-label {
+        font-weight: bold;
+        color: #666;
+        display: inline-block;
+        width: 120px;
+      }
+      
+      .detail-value {
+        color: #333;
+      }
+      
+      /* Items Table */
+      .items-section {
+        margin: 40px 0;
+      }
+      
+      .section-title {
+        font-size: 24px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 20px;
+        text-align: center;
+        position: relative;
+      }
+      
+      .section-title::after {
+        content: '';
+        position: absolute;
+        bottom: -10px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100px;
+        height: 3px;
+        background: linear-gradient(90deg, #20B2AA, #FF69B4, #FFD700);
+        border-radius: 2px;
+      }
+      
+      .items-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        background: white;
+        border-radius: 10px;
+        overflow: hidden;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+      }
+      
+      .items-table th {
+        background: linear-gradient(135deg, #20B2AA, #FF69B4);
+        color: white;
+        padding: 20px;
+        text-align: left;
+        font-weight: bold;
+        font-size: 16px;
+      }
+      
+      .items-table th:nth-child(2),
+      .items-table th:nth-child(3),
+      .items-table th:nth-child(4) {
+        text-align: center;
+      }
+      
+      .items-table th:nth-child(4) {
+        text-align: right;
+      }
+      
+      .items-table td {
+        padding: 20px;
+        border-bottom: 1px solid #eee;
+        font-size: 16px;
+      }
+      
+      .items-table tr:nth-child(even) {
+        background: #f8f9fa;
+      }
+      
+      .items-table tr:last-child td {
+        border-bottom: none;
+      }
+      
+      .items-table td:nth-child(2),
+      .items-table td:nth-child(3),
+      .items-table td:nth-child(4) {
+        text-align: center;
+      }
+      
+      .items-table td:nth-child(4) {
+        text-align: right;
+        font-weight: bold;
+        color: #20B2AA;
+      }
+      
+      /* Summary Section */
+      .summary-section {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        padding: 30px;
+        border-radius: 15px;
+        margin: 30px 0;
+      }
+      
+      .summary-title {
+        font-size: 20px;
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      
+      .summary-row {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 15px;
+        font-size: 16px;
+      }
+      
+      .summary-row.total {
+        font-size: 24px;
+        font-weight: bold;
+        color: #20B2AA;
+        border-top: 3px solid #20B2AA;
+        padding-top: 15px;
+        margin-top: 15px;
+      }
+      
+      /* Payment Method Section */
+      .payment-section {
+        background: #e8f5e8;
+        padding: 25px;
+        border-radius: 10px;
+        margin: 30px 0;
+        border-left: 5px solid #28a745;
+      }
+      
+      .payment-title {
+        font-size: 18px;
+        font-weight: bold;
+        color: #28a745;
+        margin-bottom: 10px;
+      }
+      
+      .payment-method {
+        font-size: 16px;
+        color: #333;
+      }
+      
+      /* Footer Section */
+      .footer {
+        background: linear-gradient(135deg, #FFD700 0%, #FF69B4 50%, #20B2AA 100%);
+        padding: 40px;
+        color: white;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+      }
+      
+      .footer::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(-45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%);
+        animation: shimmer 3s infinite reverse;
+      }
+      
+      .thank-you {
+        font-size: 28px;
+        font-weight: bold;
+        margin-bottom: 20px;
+        text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.3);
+        z-index: 2;
+        position: relative;
+      }
+      
+      .contact-info {
+        display: flex;
+        justify-content: center;
+        gap: 30px;
+        margin-top: 20px;
+        z-index: 2;
+        position: relative;
+      }
+      
+      .contact-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 16px;
+      }
+      
+      .contact-icon {
+        width: 20px;
+        height: 20px;
+        background: rgba(255, 255, 255, 0.3);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+      }
+      
+      .signature-section {
+        margin-top: 30px;
+        text-align: right;
+        z-index: 2;
+        position: relative;
+      }
+      
+      .signature-line {
+        border-bottom: 2px solid white;
+        width: 200px;
+        margin-left: auto;
+        margin-bottom: 5px;
+      }
+      
+      .signature-label {
+        font-size: 14px;
+        color: rgba(255, 255, 255, 0.9);
+      }
+      
+      /* Responsive Design */
+      @media (max-width: 768px) {
+        .header {
+          flex-direction: column;
+          height: auto;
+          padding: 30px 20px;
+          text-align: center;
+        }
+        
+        .logo-section {
+          margin-bottom: 20px;
+        }
+        
+        .invoice-title {
+          font-size: 36px;
+        }
+        
+        .details-grid {
+          grid-template-columns: 1fr;
+          gap: 20px;
+        }
+        
+        .items-table {
+          font-size: 14px;
+        }
+        
+        .items-table th,
+        .items-table td {
+          padding: 15px 10px;
+        }
+        
+        .contact-info {
+          flex-direction: column;
+          gap: 15px;
+        }
+      }
+      
+      /* Print Styles */
+      @media print {
+        body {
+          background: white;
+          padding: 0;
+        }
+        
+        .invoice-container {
+          box-shadow: none;
+          border-radius: 0;
+        }
+        
+        .header::before,
+        .footer::before {
+          display: none;
+        }
+      }
+
+  body
+    .invoice-container
+      // Header Section
+      .header
+        .banner-content
+          .logo
+            img(src="cid:logo", alt="PickleVibes Logo")
+          .company-name PickleVibes
+          .separator
+          .invoice-title INVOICE
+      
+      // Invoice Details Section
+      .invoice-details
+        .details-grid
+          .detail-section
+            h3 發票收件人
+            .detail-item
+              .detail-label 姓名:
+              .detail-value #{userData.name || '客戶'}
+            .detail-item
+              .detail-label 電郵:
+              .detail-value #{userData.email}
+            .detail-item
+              .detail-label 電話:
+              .detail-value #{userData.phone || '未提供'}
+            .detail-item
+              .detail-label 地址:
+              .detail-value #{userData.address || '未提供'}
+          
+          .detail-section
+            h3 發票資訊
+            .detail-item
+              .detail-label 發票號碼:
+              .detail-value #{invoiceData.invoiceNumber}
+            .detail-item
+              .detail-label 發票日期:
+              .detail-value #{issueDate}
+            .detail-item
+              .detail-label 到期日期:
+              .detail-value #{dueDate}
+            .detail-item
+              .detail-label 付款狀態:
+              .detail-value 已付款
+      
+      // Items Section
+      .items-section
+        .section-title 服務項目
+        table.items-table
+          thead
+            tr
+              th 項目描述
+              th 數量
+              th 單價
+              th 小計
+          tbody
+            each item in invoiceData.items
+              tr
+                td
+                  strong #{item.description}
+                  if item.details
+                    br
+                    small(style="color: #666;") #{item.details}
+                td #{item.quantity}
+                td #{formatCurrency(item.unitPrice)}
+                td #{formatCurrency(item.total)}
+      
+      // Summary Section
+      .summary-section
+        .summary-title 費用總結
+        .summary-row
+          span 小計:
+          span #{formatCurrency(invoiceData.subtotal)}
+        .summary-row
+          span 稅項 (0%):
+          span #{formatCurrency(0)}
+        .summary-row.total
+          span 總計:
+          span #{formatCurrency(invoiceData.total)}
+      
+      // Payment Method Section
+      .payment-section
+        .payment-title 💳 付款方式
+        .payment-method
+          strong 付款方式: 
+          | #{paymentData.method === 'stripe' ? '信用卡' : paymentData.method === 'alipay' ? '支付寶' : paymentData.method === 'wechat' ? '微信支付' : '手動付款'}
+          br
+          strong 交易編號: 
+          | #{paymentData.transactionId}
+          br
+          strong 付款時間: 
+          | #{formatDate(paymentData.paidAt)}
+          br
+          strong 付款金額: 
+          | #{formatCurrency(paymentData.amount)}
+      
+      // Footer Section
+      .footer
+        .thank-you 感謝您選擇 PickleVibes！
+        .contact-info
+          .contact-item
+            .contact-icon 📞
+            span +852 1234-5678
+          .contact-item
+            .contact-icon 📧
+            span info@picklevibes.hk
+          .contact-item
+            .contact-icon 📍
+            span 香港九龍旺角道123號
+        .signature-section
+          .signature-line
+          .signature-label Authorized Signature

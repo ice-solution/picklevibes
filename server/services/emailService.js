@@ -2,6 +2,7 @@ const nodemailer = require('nodemailer');
 const QRCode = require('qrcode');
 const fs = require('fs').promises;
 const path = require('path');
+const pdfService = require('./pdfService');
 
 class EmailService {
   constructor() {
@@ -19,6 +20,16 @@ class EmailService {
       await this.loadLogo();
     }
     return this.logoBase64;
+  }
+
+  /**
+   * 格式化貨幣
+   */
+  formatCurrency(amount) {
+    return new Intl.NumberFormat('zh-TW', {
+      style: 'currency',
+      currency: 'HKD'
+    }).format(amount);
   }
 
   /**
@@ -941,7 +952,6 @@ PickleVibes - 讓匹克球24小時隨時預約！
       });
 
       const result = await this.transporter.sendMail(mailOptions);
-      
       console.log('✅ 歡迎郵件發送成功:', result.messageId);
       return {
         success: true,
@@ -1246,6 +1256,147 @@ PickleVibes 充值發票
       return { success: true, messageId: result.messageId };
     } catch (error) {
       console.error('❌ 發送活動報名確認郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * 生成發票電郵模板
+   */
+  async generateInvoiceEmailTemplate(invoiceData, userData, paymentData) {
+    // 確保 logo 已加載
+    await this.ensureLogoLoaded();
+    
+    try {
+      // 使用 PDF 服務生成 HTML
+      const html = await pdfService.generateInvoiceHTML(userData, invoiceData, paymentData);
+      
+      const invoiceNumber = invoiceData.invoiceNumber || `INV-${Date.now()}`;
+      
+      return {
+        subject: `🧾 發票確認 - ${invoiceNumber} | PickleVibes`,
+        html: html,
+        text: `發票確認 - ${invoiceNumber}\n\n感謝您選擇 PickleVibes！\n\n發票詳情：\n- 發票號碼: ${invoiceNumber}\n- 總金額: ${this.formatCurrency(invoiceData.total)}\n- 付款狀態: 已付款\n\n如有任何疑問，請聯繫我們。`
+      };
+    } catch (error) {
+      console.error('❌ 生成發票模板失敗:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * 發送發票電郵 (PDF 附件版本)
+   */
+  async sendInvoiceEmail(userData, invoiceData, paymentData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      const invoiceNumber = invoiceData.invoiceNumber || `INV-${Date.now()}`;
+      
+      // 生成 PDF 發票
+      console.log('📄 正在生成 PDF 發票...');
+      const pdfBuffer = await pdfService.generateInvoicePDF(userData, invoiceData, paymentData);
+      
+      // 準備附件
+      const attachments = [];
+      
+      // 添加 PDF 發票作為附件
+      attachments.push({
+        filename: `發票_${invoiceNumber}.pdf`,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      });
+      
+      // 添加 Logo 作為附件 (用於 PDF 中的顯示)
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo' // Content ID for referencing in PDF
+        });
+      }
+      
+      // 創建簡單的電郵內容
+      const currentDate = new Date().toLocaleDateString('zh-TW', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'long'
+      });
+      
+      const emailSubject = `🧾 發票確認 - ${invoiceNumber} | PickleVibes`;
+      const emailText = `
+親愛的 ${userData.name || '客戶'}，
+
+感謝您選擇 PickleVibes！
+
+您的發票已準備就緒，詳情如下：
+- 發票號碼：${invoiceNumber}
+- 發票日期：${currentDate}
+- 總金額：${this.formatCurrency(invoiceData.total)}
+- 付款狀態：已付款
+
+發票 PDF 已作為附件發送給您，請查收。
+
+如有任何疑問，請隨時聯繫我們。
+
+此致
+PickleVibes 團隊
+      `;
+      
+      const emailHtml = `
+        <div style="font-family: 'Microsoft JhengHei', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="text-align: center; margin-bottom: 30px;">
+            <h2 style="color: #20B2AA; margin-bottom: 10px;">🧾 發票確認</h2>
+            <p style="color: #666; font-size: 16px;">感謝您選擇 PickleVibes！</p>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
+            <h3 style="color: #333; margin-bottom: 15px;">發票詳情</h3>
+            <p><strong>發票號碼：</strong>${invoiceNumber}</p>
+            <p><strong>發票日期：</strong>${currentDate}</p>
+            <p><strong>總金額：</strong>${this.formatCurrency(invoiceData.total)}</p>
+            <p><strong>付款狀態：</strong><span style="color: #28a745; font-weight: bold;">已付款</span></p>
+          </div>
+          
+          <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; border-left: 4px solid #28a745; margin-bottom: 20px;">
+            <p style="margin: 0; color: #333;">
+              <strong>📄 發票 PDF 已作為附件發送給您，請查收。</strong>
+            </p>
+          </div>
+          
+          <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+            <p style="color: #666; font-size: 14px;">
+              如有任何疑問，請隨時聯繫我們：<br>
+              📧 info@picklevibes.hk | 📞 +852 1234-5678
+            </p>
+            <p style="color: #999; font-size: 12px; margin-top: 15px;">
+              此致<br>
+              PickleVibes 團隊
+            </p>
+          </div>
+        </div>
+      `;
+      
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+        attachments: attachments
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ PDF 發票電郵已發送給 ${userData.email}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送 PDF 發票電郵失敗:', error.message);
       return { success: false, error: error.message };
     }
   }
