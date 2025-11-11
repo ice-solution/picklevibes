@@ -5,6 +5,7 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { maintenanceMiddleware, maintenanceAdminMiddleware } = require('./middleware/maintenance');
+const weekendService = require('./services/weekendService');
 require('dotenv').config();
 
 const app = express();
@@ -75,7 +76,7 @@ app.use(cors({
     }
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with']
 }));
 
@@ -112,7 +113,15 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/picklevib
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('✅ 數據庫連接成功'))
+.then(async () => {
+  console.log('✅ 數據庫連接成功');
+  try {
+    await weekendService.initialize();
+    console.log('📅 假期資料載入完成');
+  } catch (error) {
+    console.error('❌ 載入假期資料失敗:', error);
+  }
+})
 .catch(err => console.error('❌ 數據庫連接失敗:', err));
 
 // 維護模式中間件（必須在路由之前）

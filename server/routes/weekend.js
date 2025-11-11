@@ -8,8 +8,9 @@ const router = express.Router();
 // @route   GET /api/weekend/config
 // @desc    獲取週末設定
 // @access  Private (Admin)
-router.get('/config', [auth, adminAuth], (req, res) => {
+router.get('/config', [auth, adminAuth], async (req, res) => {
   try {
+    await weekendService.initialize();
     res.json({
       success: true,
       config: weekendService.config
@@ -29,7 +30,7 @@ router.put('/config', [
   body('weekendDays').optional().isArray().withMessage('週末天數必須是陣列'),
   body('includeFridayEvening').optional().isBoolean().withMessage('包含星期五晚上必須是布爾值'),
   body('fridayEveningHour').optional().isInt({ min: 0, max: 23 }).withMessage('星期五晚上開始時間必須在0-23之間')
-], (req, res) => {
+], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -46,6 +47,7 @@ router.put('/config', [
     if (fridayEveningHour !== undefined) newConfig.fridayEveningHour = fridayEveningHour;
 
     weekendService.updateConfig(newConfig);
+    await weekendService.initialize();
 
     res.json({
       success: true,
@@ -66,7 +68,7 @@ router.post('/holidays', [
   adminAuth,
   body('dates').isArray().withMessage('日期必須是陣列'),
   body('dates.*').isISO8601().withMessage('日期格式必須正確')
-], (req, res) => {
+], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -82,12 +84,12 @@ router.post('/holidays', [
       return new Date(date).toISOString().split('T')[0];
     });
 
-    weekendService.addHolidays(formattedDates);
+    const holidays = await weekendService.addHolidays(formattedDates);
 
     res.json({
       success: true,
       message: '國定假日添加成功',
-      holidays: weekendService.config.holidays
+      holidays
     });
   } catch (error) {
     console.error('添加國定假日錯誤:', error);
@@ -102,7 +104,7 @@ router.delete('/holidays', [
   auth,
   adminAuth,
   body('dates').isArray().withMessage('日期必須是陣列')
-], (req, res) => {
+], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -113,12 +115,12 @@ router.delete('/holidays', [
 
     const { dates } = req.body;
     
-    weekendService.removeHolidays(dates);
+    const holidays = await weekendService.removeHolidays(dates);
 
     res.json({
       success: true,
       message: '國定假日移除成功',
-      holidays: weekendService.config.holidays
+      holidays
     });
   } catch (error) {
     console.error('移除國定假日錯誤:', error);
@@ -133,7 +135,7 @@ router.post('/check', [
   auth,
   adminAuth,
   body('date').isISO8601().withMessage('日期格式必須正確')
-], (req, res) => {
+], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
@@ -144,6 +146,7 @@ router.post('/check', [
 
     const { date } = req.body;
     const checkDate = new Date(date);
+    await weekendService.initialize();
     
     const isWeekend = weekendService.isWeekend(checkDate);
     const weekendType = weekendService.getWeekendType(checkDate);

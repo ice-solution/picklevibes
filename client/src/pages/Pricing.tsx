@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import PricingIntro from '../components/Pricing/PricingIntro';
 
 const Pricing: React.FC = () => {
   const membershipPlans = [
@@ -98,6 +99,8 @@ const Pricing: React.FC = () => {
       {/* 會員方案 */}
       <section className="py-20 bg-gray-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <PricingIntro />
+
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
