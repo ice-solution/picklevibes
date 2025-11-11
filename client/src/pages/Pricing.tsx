@@ -1,9 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { Link } from 'react-router-dom';
 import PricingIntro from '../components/Pricing/PricingIntro';
+import { useAuth } from '../contexts/AuthContext';
 
 const Pricing: React.FC = () => {
+  const { user } = useAuth();
+
   const membershipPlans = [
     {
       name: '基本會員',
@@ -322,18 +326,18 @@ const Pricing: React.FC = () => {
               選擇適合您的方案，開始您的匹克球之旅
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <a
-                href="/booking"
+              <Link
+                to={user ? '/profile' : '/register'}
                 className="bg-white text-primary-600 hover:bg-gray-100 font-bold py-4 px-8 rounded-full text-lg transition-colors duration-200"
               >
-                立即預約
-              </a>
-              <a
-                href="/register"
+                立即註冊
+              </Link>
+              <Link
+                to="/booking"
                 className="border-2 border-white text-white hover:bg-white hover:text-primary-600 font-bold py-4 px-8 rounded-full text-lg transition-colors duration-200"
               >
-                註冊會員
-              </a>
+                預約場地
+              </Link>
             </div>
           </motion.div>
         </div>

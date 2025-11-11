@@ -40,8 +40,6 @@ const Footer: React.FC = () => {
     ],
     legal: [
       { name: '服務條款', href: '/terms' }
-      // { name: '退款政策', href: '/refund' },
-      // { name: '會員條款', href: '/membership' },
     ]
   };
 
