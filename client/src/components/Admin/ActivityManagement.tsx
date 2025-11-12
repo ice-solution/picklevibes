@@ -115,6 +115,7 @@ const ActivityManagement: React.FC = () => {
   const [addingParticipant, setAddingParticipant] = useState(false);
   const [removingParticipantId, setRemovingParticipantId] = useState<string | null>(null);
   const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
+  const [sendingBatchReminders, setSendingBatchReminders] = useState(false);
 
   // 表單狀態
   const [formData, setFormData] = useState({
@@ -611,6 +612,49 @@ const ActivityManagement: React.FC = () => {
     }
   };
 
+  const handleSendBatchReminder = async () => {
+    if (!selectedParticipantActivity) {
+      return;
+    }
+    if (participants.length === 0) {
+      alert('目前沒有已報名的參加者');
+      return;
+    }
+
+    const confirmSend = window.confirm('確定要向所有已報名參加者發送通知電郵嗎？');
+    if (!confirmSend) {
+      return;
+    }
+
+    try {
+      setSendingBatchReminders(true);
+      const response = await fetch(
+        `${apiBaseUrl}/activities/${selectedParticipantActivity._id}/admin/registrations/notify-all`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || '批量發送通知電郵失敗');
+      }
+
+      const summaryMessage = data.failed && data.failed.length > 0
+        ? `${data.message}\n未成功的參加者：\n${data.failed.map((item: any) => `- ${item.registrationId}: ${item.reason}`).join('\n')}`
+        : data.message;
+      alert(summaryMessage);
+    } catch (error) {
+      console.error('批量發送活動提醒電郵失敗:', error);
+      alert((error as Error).message || '批量發送通知電郵失敗');
+    } finally {
+      setSendingBatchReminders(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -977,7 +1021,24 @@ const ActivityManagement: React.FC = () => {
               </div>
 
               <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-3">已報名名單</h4>
+                <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-3 gap-3">
+                  <h4 className="text-sm font-semibold text-gray-700">已報名名單</h4>
+                  <button
+                    onClick={handleSendBatchReminder}
+                    disabled={
+                      sendingBatchReminders ||
+                      participantsLoading ||
+                      participants.length === 0
+                    }
+                    className={`inline-flex items-center justify-center px-4 py-2 text-sm rounded-lg border ${
+                      sendingBatchReminders || participantsLoading || participants.length === 0
+                        ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'border-primary-300 text-primary-600 hover:bg-primary-50'
+                    }`}
+                  >
+                    {sendingBatchReminders ? '發送中...' : '批量發送通知電郵'}
+                  </button>
+                </div>
                 {participantsLoading ? (
                   <div className="py-10 text-center text-gray-500">載入中...</div>
                 ) : participants.length === 0 ? (

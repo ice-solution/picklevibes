@@ -1103,4 +1103,86 @@ router.post('/:activityId/admin/registrations/:registrationId/notify', [
   }
 });
 
+// @route   POST /api/activities/:id/admin/registrations/notify-all
+// @desc    管理員向活動所有參加者批量發送提醒電郵
+// @access  Private (Admin)
+router.post('/:id/admin/registrations/notify-all', [
+  auth,
+  adminAuth
+], async (req, res) => {
+  try {
+    const activityId = req.params.id;
+
+    const activity = await Activity.findById(activityId)
+      .populate('coaches', 'name email')
+      .lean();
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const registrations = await ActivityRegistration.find({
+      activity: activityId,
+      status: 'registered'
+    }).populate('user', 'name email phone');
+
+    if (registrations.length === 0) {
+      return res.status(400).json({ message: '目前沒有已報名的參加者' });
+    }
+
+    let successCount = 0;
+    const failedRecipients = [];
+
+    for (const registration of registrations) {
+      const finalEmail = registration.contactInfo?.email || registration.user?.email;
+      if (!finalEmail) {
+        failedRecipients.push({
+          registrationId: registration._id,
+          reason: '缺少聯絡電郵'
+        });
+        continue;
+      }
+
+      const finalPhone = registration.contactInfo?.phone || registration.user?.phone || '';
+
+      try {
+        await emailService.sendActivityReminderEmail(
+          {
+            name: registration.user?.name || '尊貴的用戶',
+            email: finalEmail,
+            phone: finalPhone
+          },
+          activity,
+          {
+            _id: registration._id,
+            participantCount: registration.participantCount,
+            totalCost: registration.totalCost,
+            notes: registration.notes,
+            createdAt: registration.createdAt,
+            contactInfo: {
+              email: finalEmail,
+              phone: finalPhone
+            }
+          }
+        );
+        successCount += 1;
+      } catch (emailError) {
+        console.error(`發送活動提醒電郵失敗 (${registration._id}):`, emailError);
+        failedRecipients.push({
+          registrationId: registration._id,
+          reason: emailError.message || '未知錯誤'
+        });
+      }
+    }
+
+    res.json({
+      message: `提醒電郵已發送完成。成功 ${successCount} 位，失敗 ${failedRecipients.length} 位。`,
+      successCount,
+      failed: failedRecipients
+    });
+  } catch (error) {
+    console.error('管理員批量發送活動提醒電郵錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 module.exports = router;
