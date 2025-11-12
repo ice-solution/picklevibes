@@ -4,6 +4,7 @@ const Activity = require('../models/Activity');
 const ActivityRegistration = require('../models/ActivityRegistration');
 const UserBalance = require('../models/UserBalance');
 const User = require('../models/User');
+const emailService = require('../services/emailService');
 const { auth, adminAuth } = require('../middleware/auth');
 const { activityUpload, processActivityImage, deleteFile } = require('../middleware/upload');
 
@@ -512,6 +513,31 @@ router.post('/:id/register', [
     activity.currentParticipants = totalRegistered + participantCount;
     await activity.save();
 
+    // 發送報名確認電郵
+    try {
+      const activityData = activity.toObject ? activity.toObject() : activity;
+      const registrationData = {
+        _id: registration._id,
+        participantCount,
+        totalCost,
+        contactInfo,
+        notes,
+        createdAt: registration.createdAt
+      };
+
+      await emailService.sendActivityRegistrationEmail(
+        {
+          name: req.user.name,
+          email: req.user.email,
+          phone: req.user.phone
+        },
+        activityData,
+        registrationData
+      );
+    } catch (emailError) {
+      console.error('發送活動報名確認電郵失敗:', emailError);
+    }
+
     console.log(`🎯 用戶報名活動: ${req.user.name} 報名 ${activity.title}，人數: ${participantCount}，費用: ${totalCost}積分`);
 
     res.status(201).json({
@@ -576,11 +602,10 @@ router.post('/:id/admin/registrations', [
 
     const existingRegistration = await ActivityRegistration.findOne({
       activity: activityId,
-      user: userId,
-      status: 'registered'
+      user: userId
     });
 
-    if (existingRegistration) {
+    if (existingRegistration && existingRegistration.status === 'registered') {
       return res.status(400).json({ message: '該用戶已是此活動的參加者' });
     }
 
@@ -622,23 +647,67 @@ router.post('/:id/admin/registrations', [
       return res.status(400).json({ message: '請提供聯絡電話' });
     }
 
-    const registration = new ActivityRegistration({
-      activity: activityId,
-      user: userId,
+    let registration;
+    if (existingRegistration && existingRegistration.status !== 'registered') {
+      existingRegistration.participantCount = participantCount;
+      existingRegistration.totalCost = totalCost;
+      existingRegistration.contactInfo = {
+        email: finalEmail,
+        phone: finalPhone
+      };
+      existingRegistration.notes = notes || '管理員手動重新添加';
+      existingRegistration.status = 'registered';
+      existingRegistration.paymentStatus = deductPoints ? 'paid' : 'pending';
+      existingRegistration.cancelledAt = null;
+      existingRegistration.cancellationReason = null;
+      registration = await existingRegistration.save();
+    } else {
+      registration = new ActivityRegistration({
+        activity: activityId,
+        user: userId,
+        participantCount,
+        totalCost,
+        contactInfo: {
+          email: finalEmail,
+          phone: finalPhone
+        },
+        notes: notes || '管理員手動添加',
+        paymentStatus: deductPoints ? 'paid' : 'pending'
+      });
+
+      await registration.save();
+    }
+
+    const updatedTotal = await recalcActivityParticipantCount(activityId);
+    const availableAfter = Math.max(0, activity.maxParticipants - updatedTotal);
+
+  // 發送報名確認電郵
+  try {
+    const activityData = activity.toObject ? activity.toObject() : activity;
+    const registrationData = {
+      _id: registration._id,
       participantCount,
       totalCost,
       contactInfo: {
         email: finalEmail,
         phone: finalPhone
       },
-      notes: notes || '管理員手動添加',
-      paymentStatus: deductPoints ? 'paid' : 'pending'
-    });
+      notes: registration.notes,
+      createdAt: registration.createdAt
+    };
 
-    await registration.save();
-
-    const updatedTotal = await recalcActivityParticipantCount(activityId);
-    const availableAfter = Math.max(0, activity.maxParticipants - updatedTotal);
+    await emailService.sendActivityRegistrationEmail(
+      {
+        name: user.name,
+        email: finalEmail,
+        phone: finalPhone
+      },
+      activityData,
+      registrationData
+    );
+  } catch (emailError) {
+    console.error('管理員新增參加者後發送確認電郵失敗:', emailError);
+  }
 
     await registration.populate('user', 'name email phone');
 
@@ -962,6 +1031,75 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
     res.status(500).json({ 
       message: '服務器錯誤，請稍後再試' 
     });
+  }
+});
+
+// @route   POST /api/activities/:activityId/admin/registrations/:registrationId/notify
+// @desc    管理員向活動參加者發送提醒電郵
+// @access  Private (Admin)
+router.post('/:activityId/admin/registrations/:registrationId/notify', [
+  auth,
+  adminAuth
+], async (req, res) => {
+  try {
+    const { activityId, registrationId } = req.params;
+
+    const activity = await Activity.findById(activityId)
+      .populate('coaches', 'name email')
+      .lean();
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const registration = await ActivityRegistration.findOne({
+      _id: registrationId,
+      activity: activityId
+    }).populate('user', 'name email phone');
+
+    if (!registration) {
+      return res.status(404).json({ message: '報名記錄不存在' });
+    }
+
+    if (registration.status !== 'registered') {
+      return res.status(400).json({ message: '僅可向已報名的參加者發送提醒' });
+    }
+
+    const finalEmail = registration.contactInfo?.email || registration.user?.email;
+    if (!finalEmail) {
+      return res.status(400).json({ message: '找不到聯絡電郵，無法發送提醒' });
+    }
+
+    const finalPhone = registration.contactInfo?.phone || registration.user?.phone || '';
+
+    try {
+      await emailService.sendActivityReminderEmail(
+        {
+          name: registration.user?.name || '尊貴的用戶',
+          email: finalEmail,
+          phone: finalPhone
+        },
+        activity,
+        {
+          _id: registration._id,
+          participantCount: registration.participantCount,
+          totalCost: registration.totalCost,
+          notes: registration.notes,
+          createdAt: registration.createdAt,
+          contactInfo: {
+            email: finalEmail,
+            phone: finalPhone
+          }
+        }
+      );
+    } catch (emailError) {
+      console.error('發送活動提醒電郵失敗:', emailError);
+      return res.status(500).json({ message: '提醒電郵發送失敗' });
+    }
+
+    res.json({ message: '提醒電郵已發送給參加者' });
+  } catch (error) {
+    console.error('管理員發送活動提醒電郵錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
 

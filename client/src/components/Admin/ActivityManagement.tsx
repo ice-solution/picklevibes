@@ -114,6 +114,7 @@ const ActivityManagement: React.FC = () => {
   });
   const [addingParticipant, setAddingParticipant] = useState(false);
   const [removingParticipantId, setRemovingParticipantId] = useState<string | null>(null);
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
 
   // 表單狀態
   const [formData, setFormData] = useState({
@@ -329,8 +330,15 @@ const ActivityManagement: React.FC = () => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-TW', {
+  const formatDate = (dateString?: string) => {
+    if (!dateString) {
+      return '未知時間';
+    }
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) {
+      return '未知時間';
+    }
+    return date.toLocaleString('zh-TW', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -569,6 +577,37 @@ const ActivityManagement: React.FC = () => {
       alert((error as Error).message || '移除活動參加者失敗');
     } finally {
       setRemovingParticipantId(null);
+    }
+  };
+
+  const handleSendReminder = async (registrationId: string) => {
+    if (!selectedParticipantActivity) {
+      return;
+    }
+
+    try {
+      setSendingReminderId(registrationId);
+      const response = await fetch(
+        `${apiBaseUrl}/activities/${selectedParticipantActivity._id}/admin/registrations/${registrationId}/notify`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        }
+      );
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || '發送提醒電郵失敗');
+      }
+
+      alert('提醒電郵已發送給參加者');
+    } catch (error) {
+      console.error('發送活動提醒電郵失敗:', error);
+      alert((error as Error).message || '發送提醒電郵失敗');
+    } finally {
+      setSendingReminderId(null);
     }
   };
 
@@ -987,17 +1026,30 @@ const ActivityManagement: React.FC = () => {
                           </p>
                         </div>
                         {reg.status === 'registered' && (
-                          <button
-                            onClick={() => handleRemoveParticipant(reg._id)}
-                            disabled={removingParticipantId === reg._id}
-                            className={`mt-4 md:mt-0 px-4 py-2 text-sm rounded-lg border ${
-                              removingParticipantId === reg._id
-                                ? 'border-gray-200 text-gray-400'
-                                : 'border-red-300 text-red-600 hover:bg-red-50'
-                            }`}
-                          >
-                            {removingParticipantId === reg._id ? '處理中...' : '移除'}
-                          </button>
+                          <div className="mt-4 md:mt-0 flex flex-col md:flex-row md:items-center md:space-x-3 space-y-2 md:space-y-0">
+                            <button
+                              onClick={() => handleSendReminder(reg._id)}
+                              disabled={sendingReminderId === reg._id}
+                              className={`px-4 py-2 text-sm rounded-lg border ${
+                                sendingReminderId === reg._id
+                                  ? 'border-gray-200 text-gray-400 cursor-not-allowed'
+                                  : 'border-primary-300 text-primary-600 hover:bg-primary-50'
+                              }`}
+                            >
+                              {sendingReminderId === reg._id ? '發送中...' : '發送通知電郵'}
+                            </button>
+                            <button
+                              onClick={() => handleRemoveParticipant(reg._id)}
+                              disabled={removingParticipantId === reg._id}
+                              className={`px-4 py-2 text-sm rounded-lg border ${
+                                removingParticipantId === reg._id
+                                  ? 'border-gray-200 text-gray-400'
+                                  : 'border-red-300 text-red-600 hover:bg-red-50'
+                              }`}
+                            >
+                              {removingParticipantId === reg._id ? '處理中...' : '移除'}
+                            </button>
+                          </div>
                         )}
                       </div>
                     ))}

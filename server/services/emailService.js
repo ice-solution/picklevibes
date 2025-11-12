@@ -313,7 +313,7 @@ class EmailService {
             <p>專業匹克球場地服務</p>
             <div class="contact-info">
               <p>如有任何疑問，請聯繫我們</p>
-              <p>電話：+852 1234 5678 | 電郵：info@picklevibes.hk</p>
+              <p>電話：+852 6190 2761 | 電郵：info@picklevibes.hk</p>
             </div>
           </div>
         </div>
@@ -1220,6 +1220,185 @@ PickleVibes 充值發票
   }
 
   /**
+   * 生成活動提醒郵件模板
+   */
+  async generateActivityReminderEmailTemplate(activityData, userData, registrationData) {
+    await this.ensureLogoLoaded();
+
+    const formatDateTime = (dateString) => {
+      if (!dateString) return '待定';
+      const date = new Date(dateString);
+      if (Number.isNaN(date.getTime())) {
+        return '待定';
+      }
+      return date.toLocaleString('zh-TW', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        weekday: 'long'
+      });
+    };
+
+    const startDate = formatDateTime(activityData.startDate);
+    const endDate = formatDateTime(activityData.endDate);
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="zh-TW">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>活動提醒 - ${activityData.title}</title>
+          <style>
+            body {
+              font-family: 'Microsoft JhengHei', Arial, sans-serif;
+              background-color: #f5f7fb;
+              color: #2c3e50;
+              margin: 0;
+              padding: 0;
+            }
+            .container {
+              max-width: 620px;
+              margin: 0 auto;
+              background-color: #ffffff;
+              border-radius: 12px;
+              box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+              overflow: hidden;
+            }
+            .header {
+              background: linear-gradient(135deg, #20B2AA 0%, #3CB371 100%);
+              color: #ffffff;
+              text-align: center;
+              padding: 32px 20px;
+            }
+            .header img {
+              max-width: 110px;
+              height: auto;
+              margin-bottom: 18px;
+            }
+            .header h1 {
+              margin: 0;
+              font-size: 24px;
+              letter-spacing: 1px;
+            }
+            .content {
+              padding: 36px 32px;
+            }
+            .greeting {
+              font-size: 18px;
+              margin-bottom: 20px;
+            }
+            .highlight {
+              background-color: #e8f8f6;
+              border-left: 4px solid #20B2AA;
+              padding: 18px 20px;
+              border-radius: 10px;
+              margin-bottom: 24px;
+            }
+            .info-grid {
+              display: grid;
+              grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+              gap: 16px;
+              margin-bottom: 24px;
+            }
+            .info-card {
+              background-color: #f8fafc;
+              border-radius: 10px;
+              padding: 16px;
+              border: 1px solid #eef2f7;
+            }
+            .info-title {
+              font-weight: 600;
+              color: #1f2937;
+              margin-bottom: 6px;
+            }
+            .footer {
+              text-align: center;
+              padding: 24px 20px;
+              background-color: #f1f5f9;
+              color: #64748b;
+              font-size: 14px;
+            }
+            .footer p {
+              margin: 6px 0;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes Logo" />` : ''}
+              <h1>活動提醒</h1>
+              <p style="margin-top: 6px;">${activityData.title}</p>
+            </div>
+            <div class="content">
+              <p class="greeting">親愛的 ${userData.name} 您好，</p>
+              <div class="highlight">
+                <p style="margin: 0; font-size: 16px;">
+                  這是一個友善提醒，PickleVibes 的活動 <strong>${activityData.title}</strong> 即將開始。<br />
+                  請預留足夠時間到達場地辦理報到，期待與您見面！
+                </p>
+              </div>
+              <div class="info-grid">
+                <div class="info-card">
+                  <div class="info-title">活動時間</div>
+                  <div>${startDate}</div>
+                  ${activityData.endDate ? `<div style="margin-top:8px;">至 ${endDate}</div>` : ''}
+                </div>
+                <div class="info-card">
+                  <div class="info-title">活動地點</div>
+                  <div>${activityData.location || 'PickleVibes 匹克球場'}</div>
+                </div>
+                <div class="info-card">
+                  <div class="info-title">報名資訊</div>
+                  <div>報名人數：${registrationData.participantCount} 人</div>
+                  <div>聯絡電郵：${registrationData.contactInfo?.email || userData.email}</div>
+                  ${registrationData.contactInfo?.phone ? `<div>聯絡電話：${registrationData.contactInfo.phone}</div>` : ''}
+                </div>
+              </div>
+              ${activityData.requirements ? `
+                <div class="info-card" style="margin-bottom: 24px;">
+                  <div class="info-title">活動注意事項</div>
+                  <div>${activityData.requirements}</div>
+                </div>
+              ` : ''}
+              <p style="font-size: 15px; color: #334155; margin-bottom: 0;">
+                如需更改或取消參加，請盡早與我們聯絡，以便安排。<br />
+                感謝您的支持，PickleVibes 團隊期待與您在活動中見面！
+              </p>
+            </div>
+            <div class="footer">
+              <p>如有任何疑問，請隨時聯繫我們</p>
+              <p>📧 info@picklevibes.hk | 📞 +852 6190 2761</p>
+              <p>© ${new Date().getFullYear()} PickleVibes. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    const text = `
+PickleVibes 活動提醒 - ${activityData.title}
+
+親愛的 ${userData.name} 您好，
+
+這是一個提醒，PickleVibes 的活動「${activityData.title}」即將開始。請準時出席：
+- 活動時間：${startDate}${activityData.endDate ? ` - ${endDate}` : ''}
+- 活動地點：${activityData.location || 'PickleVibes 匹克球場'}
+- 報名人數：${registrationData.participantCount} 人
+- 聯絡資訊：${registrationData.contactInfo?.email || userData.email}${registrationData.contactInfo?.phone ? ` / ${registrationData.contactInfo.phone}` : ''}
+
+${activityData.requirements ? `活動注意事項：${activityData.requirements}\n\n` : ''}如需協助，請聯絡我們：info@picklevibes.hk 或 +852 6190 2761。
+
+PickleVibes 團隊
+    `;
+
+    return { html, text };
+  }
+
+  /**
    * 發送活動報名確認郵件
    */
   async sendActivityRegistrationEmail(userData, activityData, registrationData) {
@@ -1256,6 +1435,45 @@ PickleVibes 充值發票
       return { success: true, messageId: result.messageId };
     } catch (error) {
       console.error('❌ 發送活動報名確認郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * 發送活動提醒郵件
+   */
+  async sendActivityReminderEmail(userData, activityData, registrationData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      const { html, text } = await this.generateActivityReminderEmailTemplate(activityData, userData, registrationData);
+
+      const attachments = [];
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo'
+        });
+      }
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: `⏰ 活動提醒 - ${activityData.title}`,
+        html,
+        text,
+        attachments
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 活動提醒郵件已發送給 ${userData.email}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送活動提醒郵件失敗:', error.message);
       return { success: false, error: error.message };
     }
   }
@@ -1373,7 +1591,7 @@ PickleVibes 團隊
           <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
             <p style="color: #666; font-size: 14px;">
               如有任何疑問，請隨時聯繫我們：<br>
-              📧 info@picklevibes.hk | 📞 +852 1234-5678
+              📧 info@picklevibes.hk | 📞 +852 6190-2761
             </p>
             <p style="color: #999; font-size: 12px; margin-top: 15px;">
               此致<br>
