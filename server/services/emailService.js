@@ -33,6 +33,28 @@ class EmailService {
   }
 
   /**
+   * 取得伺服器對外可訪問的基底 URL
+   */
+  getServerBaseUrl() {
+    const candidates = [
+      process.env.SERVER_PUBLIC_URL,
+      process.env.SERVER_URL,
+      process.env.API_BASE_URL,
+      process.env.REACT_APP_SERVER_URL,
+      process.env.REACT_APP_API_URL ? process.env.REACT_APP_API_URL.replace(/\/api$/, '') : null,
+      process.env.CLIENT_URL
+    ];
+
+    for (const url of candidates) {
+      if (url && typeof url === 'string' && url.trim()) {
+        return url.replace(/\/$/, '');
+      }
+    }
+
+    return 'http://localhost:5001';
+  }
+
+  /**
    * 初始化郵件傳輸器
    */
   initializeTransporter() {
@@ -242,7 +264,7 @@ class EmailService {
             </div>
             
             ${activityData.poster ? `
-              <img src="${activityData.poster.startsWith('http') ? activityData.poster : `${process.env.REACT_APP_API_URL || 'http://localhost:5001'}${activityData.poster}`}" 
+              <img src="${activityData.poster.startsWith('http') ? activityData.poster : `${this.getServerBaseUrl()}${activityData.poster.startsWith('/') ? activityData.poster : `/${activityData.poster}`}`}" 
                    alt="活動海報" class="activity-banner">
             ` : ''}
             
