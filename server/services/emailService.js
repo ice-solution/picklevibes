@@ -55,6 +55,47 @@ class EmailService {
   }
 
   /**
+   * 建立活動圖片附件 (inline CID)
+   */
+  async buildActivityImageAttachment(posterPathOrUrl, cid) {
+    try {
+      if (!posterPathOrUrl) {
+        return null;
+      }
+
+      if (posterPathOrUrl.startsWith('http')) {
+        let filename = 'activity-banner';
+        try {
+          const url = new URL(posterPathOrUrl);
+          filename = path.basename(url.pathname) || filename;
+        } catch (error) {
+          filename = `activity-banner-${Date.now()}`;
+        }
+
+        return {
+          filename,
+          path: posterPathOrUrl,
+          cid
+        };
+      }
+
+      const normalizedPath = posterPathOrUrl.startsWith('/')
+        ? posterPathOrUrl
+        : `/${posterPathOrUrl}`;
+      const absolutePath = path.join(__dirname, '..', '..', normalizedPath);
+
+      return {
+        filename: path.basename(absolutePath) || 'activity-banner',
+        path: absolutePath,
+        cid
+      };
+    } catch (error) {
+      console.error('❌ 建立活動圖片附件失敗:', error.message);
+      return null;
+    }
+  }
+
+  /**
    * 初始化郵件傳輸器
    */
   initializeTransporter() {
@@ -90,7 +131,7 @@ class EmailService {
   /**
    * 生成活動報名確認郵件模板
    */
-  async generateActivityRegistrationEmailTemplate(activityData, userData, registrationData) {
+  async generateActivityRegistrationEmailTemplate(activityData, userData, registrationData, options = {}) {
     // 確保 logo 已加載
     await this.ensureLogoLoaded();
     
@@ -263,8 +304,8 @@ class EmailService {
               感謝您參加 <strong>${activityData.title}</strong> 的活動！
             </div>
             
-            ${activityData.poster ? `
-              <img src="${activityData.poster.startsWith('http') ? activityData.poster : `${this.getServerBaseUrl()}${activityData.poster.startsWith('/') ? activityData.poster : `/${activityData.poster}`}`}" 
+            ${activityData.poster && options.activityImageCid ? `
+              <img src="cid:${options.activityImageCid}" 
                    alt="活動海報" class="activity-banner">
             ` : ''}
             
@@ -1244,7 +1285,7 @@ PickleVibes 充值發票
   /**
    * 生成活動提醒郵件模板
    */
-  async generateActivityReminderEmailTemplate(activityData, userData, registrationData) {
+  async generateActivityReminderEmailTemplate(activityData, userData, registrationData, options = {}) {
     await this.ensureLogoLoaded();
 
     const formatDateTime = (dateString) => {
@@ -1357,6 +1398,13 @@ PickleVibes 充值發票
             </div>
             <div class="content">
               <p class="greeting">親愛的 ${userData.name} 您好，</p>
+              ${activityData.poster && options.activityImageCid ? `
+                <div style="text-align: center; margin-bottom: 24px;">
+                  <img src="cid:${options.activityImageCid}"
+                       alt="活動海報"
+                       style="width: 100%; max-width: 480px; height: auto; border-radius: 12px; box-shadow: 0 6px 16px rgba(15, 23, 42, 0.15);">
+                </div>
+              ` : ''}
               <div class="highlight">
                 <p style="margin: 0; font-size: 16px;">
                   這是一個友善提醒，PickleVibes 的活動 <strong>${activityData.title}</strong> 即將開始。<br />
@@ -1429,20 +1477,36 @@ PickleVibes 團隊
         throw new Error('郵件服務未初始化');
       }
 
-      const emailTemplate = await this.generateActivityRegistrationEmailTemplate(activityData, userData, registrationData);
-      
+      await this.ensureLogoLoaded();
+
       // 準備附件
       const attachments = [];
-      
-      // 添加 Logo 作為附件
+      let activityImageCid = null;
+
       if (this.logoBase64) {
         attachments.push({
           filename: 'picklevibes-logo.png',
           content: this.logoBase64.replace('data:image/png;base64,', ''),
           encoding: 'base64',
-          cid: 'logo' // Content ID for referencing in HTML
+          cid: 'logo'
         });
       }
+
+      if (activityData.poster) {
+        const posterCid = `activity-banner-${registrationData?._id || Date.now()}`;
+        const posterAttachment = await this.buildActivityImageAttachment(activityData.poster, posterCid);
+        if (posterAttachment) {
+          attachments.push(posterAttachment);
+          activityImageCid = posterCid;
+        }
+      }
+
+      const emailTemplate = await this.generateActivityRegistrationEmailTemplate(
+        activityData,
+        userData,
+        registrationData,
+        { activityImageCid }
+      );
       
       const mailOptions = {
         from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
@@ -1470,7 +1534,7 @@ PickleVibes 團隊
         throw new Error('郵件服務未初始化');
       }
 
-      const { html, text } = await this.generateActivityReminderEmailTemplate(activityData, userData, registrationData);
+      await this.ensureLogoLoaded();
 
       const attachments = [];
       if (this.logoBase64) {
@@ -1481,6 +1545,23 @@ PickleVibes 團隊
           cid: 'logo'
         });
       }
+
+      let activityImageCid = null;
+      if (activityData.poster) {
+        const posterCid = `activity-reminder-banner-${registrationData?._id || Date.now()}`;
+        const posterAttachment = await this.buildActivityImageAttachment(activityData.poster, posterCid);
+        if (posterAttachment) {
+          attachments.push(posterAttachment);
+          activityImageCid = posterCid;
+        }
+      }
+
+      const { html, text } = await this.generateActivityReminderEmailTemplate(
+        activityData,
+        userData,
+        registrationData,
+        { activityImageCid }
+      );
 
       const mailOptions = {
         from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
