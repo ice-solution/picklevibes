@@ -210,6 +210,8 @@ router.get('/history', auth, async (req, res) => {
 router.get('/balance', auth, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 10);
     let userBalance = await UserBalance.findOne({ user: req.user.id })
       .populate('transactions.relatedBooking', 'date startTime endTime court')
       .populate('transactions.relatedBooking.court', 'name number type');
@@ -220,13 +222,13 @@ router.get('/balance', auth, async (req, res) => {
     }
     
     // 按時間倒序排序（最新的在前）
-    const sortedTransactions = userBalance.transactions.sort((a, b) => 
-      new Date(b.createdAt) - new Date(a.createdAt)
+    const sortedTransactions = [...userBalance.transactions].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
     
     // 分頁
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + parseInt(limit);
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
     const paginatedTransactions = sortedTransactions.slice(startIndex, endIndex);
     
     res.json({ 
@@ -235,10 +237,10 @@ router.get('/balance', auth, async (req, res) => {
       totalSpent: userBalance.totalSpent,
       transactions: paginatedTransactions,
       pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(sortedTransactions.length / limit),
+        current: pageNum,
+        pages: Math.ceil(sortedTransactions.length / limitNum),
         total: sortedTransactions.length,
-        limit: parseInt(limit)
+        limit: limitNum
       }
     });
   } catch (error) {

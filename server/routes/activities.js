@@ -492,10 +492,12 @@ router.post('/:id/register', [
       });
     }
 
-    // 扣除積分
-    userBalance.balance -= totalCost;
-    userBalance.totalSpent += totalCost;
-    await userBalance.save();
+    // 扣除積分並記錄交易
+    await userBalance.deductBalance(
+      totalCost,
+      `活動報名 - ${activity.title}`,
+      null
+    );
 
     // 創建報名記錄
     const registration = new ActivityRegistration({
@@ -631,9 +633,11 @@ router.post('/:id/admin/registrations', [
       if (!userBalance || userBalance.balance < totalCost) {
         return res.status(400).json({ message: '用戶積分不足，無法扣除積分' });
       }
-      userBalance.balance -= totalCost;
-      userBalance.totalSpent += totalCost;
-      await userBalance.save();
+      await userBalance.deductBalance(
+        totalCost,
+        `活動報名 - ${activity.title}（管理員手動添加）`,
+        null
+      );
     }
 
     const finalEmail = contactInfo.email || user.email;
@@ -786,9 +790,11 @@ router.patch('/:activityId/admin/registrations/:registrationId/cancel', [
       if (!userBalance) {
         userBalance = new UserBalance({ user: registrationUserId });
       }
-      userBalance.balance += registration.totalCost;
-      userBalance.totalRecharged += registration.totalCost;
-      await userBalance.save();
+      await userBalance.refund(
+        registration.totalCost,
+        `活動報名退款 - ${activity.title}`,
+        null
+      );
       registration.paymentStatus = 'refunded';
       refundedAmount = registration.totalCost;
     }

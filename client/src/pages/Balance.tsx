@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
@@ -121,6 +121,13 @@ const Balance: React.FC = () => {
         return <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">未知</span>;
     }
   };
+
+  const sortedTransactions = useMemo(() => {
+    if (!balance) return [];
+    return [...balance.transactions].sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [balance]);
 
   if (loading) {
     return (
@@ -245,7 +252,7 @@ const Balance: React.FC = () => {
             </div>
 
             {/* 交易記錄 */}
-            {balance.transactions.length > 0 && (
+            {sortedTransactions.length > 0 && (
               <div className="bg-white rounded-lg shadow-md p-6">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-lg font-semibold text-gray-900">
@@ -265,7 +272,7 @@ const Balance: React.FC = () => {
                 )}
                 
                 <div className="space-y-3">
-                  {balance.transactions.map((transaction, index) => (
+                  {sortedTransactions.map((transaction, index) => (
                     <div
                       key={index}
                       className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0"

@@ -75,6 +75,9 @@ userBalanceSchema.methods.deductBalance = function(amount, description = '消費
 // 退款
 userBalanceSchema.methods.refund = function(amount, description = '退款', relatedBooking = null) {
   this.balance += amount;
+  if (this.totalSpent > 0) {
+    this.totalSpent = Math.max(0, this.totalSpent - amount);
+  }
   this.transactions.push({
     type: 'refund',
     amount: amount,
