@@ -120,6 +120,19 @@ const Activities: React.FC = () => {
     }
   };
 
+  // 前端依現在時間動態判斷顯示狀態
+  const getDerivedStatus = (a: Activity) => {
+    try {
+      const now = new Date();
+      const start = new Date(a.startDate);
+      const end = new Date(a.endDate);
+      if (now >= end) return 'completed';
+      if (now >= start && now < end) return 'ongoing';
+      return 'upcoming';
+    } catch {
+      return a.status;
+    }
+  };
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '';
     if (imagePath.startsWith('http')) return imagePath;
@@ -132,11 +145,16 @@ const Activities: React.FC = () => {
   const canRegister = (activity: Activity) => {
     if (!user) return false;
     if (activity.userRegistration) return false; // 已報名
-    return activity.canRegister && activity.availableSpots > 0;
+    const derived = getDerivedStatus(activity);
+    if (derived !== 'upcoming') return false;
+    return activity.canRegister && activity.availableSpots > 0 && !activity.isExpired;
   };
 
   const getRegisterButtonText = (activity: Activity) => {
     if (activity.userRegistration) return '你已報名';
+    const derived = getDerivedStatus(activity);
+    if (derived === 'completed') return '已完結';
+    if (derived === 'ongoing') return '進行中';
     if (activity.isExpired) return '報名已截止';
     if (activity.isFull) return '人數已滿';
     if (activity.availableSpots <= 0) return '人數已到上限';
@@ -231,21 +249,21 @@ const Activities: React.FC = () => {
                 className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow"
               >
                 {/* Poster */}
-                {activity.poster && (
-                  <div className="h-48 bg-gray-200 overflow-hidden">
+                {(activity as any).posterThumb || activity.poster ? (
+                  <div className="h-48 bg-gray-200 overflow-hidden flex items-center justify-center">
                     <img
-                      src={getImageUrl(activity.poster)}
+                      src={getImageUrl(((activity as any).posterThumb || activity.poster) as string)}
                       alt={activity.title}
                       className="w-full h-full object-cover"
                     />
                   </div>
-                )}
+                ) : null}
 
                 <div className="p-6">
                   {/* Status Badge */}
                   <div className="flex items-center justify-between mb-3">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(activity.status)}`}>
-                      {getStatusText(activity.status)}
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(getDerivedStatus(activity))}`}>
+                      {getStatusText(getDerivedStatus(activity))}
                     </span>
                     <span className="text-sm text-gray-500">
                       {formatDate(activity.registrationDeadline)} 截止

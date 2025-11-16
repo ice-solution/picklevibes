@@ -101,9 +101,74 @@ const processImage = (targetWidth, targetHeight) => {
 const courtUpload = createUploadConfig('courts', 'court');
 const processCourtImage = processImage(1920, 1280);
 
-// 活動上傳配置 (800x600)
+// 活動上傳配置（保留原始比例，不裁切；限制最大寬度避免過大檔案）
 const activityUpload = createUploadConfig('activities', 'activity');
-const processActivityImage = processImage(800, 600);
+const processActivityImage = async (req, res, next) => {
+  try {
+    if (!req.file) return next();
+
+    const inputPath = req.file.path;
+    const inputExt = path.extname(inputPath).toLowerCase();
+    const outputPath = inputPath.replace(/\.[^/.]+$/, '.jpg');
+    const dir = path.dirname(outputPath);
+    const base = path.basename(outputPath);
+    const thumbPath = path.join(dir, `thumb-${base}`);
+
+    let tempPath = inputPath;
+    if (inputExt === '.jpg' || inputExt === '.jpeg') {
+      tempPath = inputPath.replace(/\.(jpg|jpeg)$/i, '_temp.jpg');
+      fs.renameSync(inputPath, tempPath);
+    }
+
+    // 1) 產出「原圖優化版」（保留比例，不放大，控制最大寬度）
+    await sharp(tempPath)
+      .resize({
+        width: 1600, // 控制最大寬度，降低體積
+        withoutEnlargement: true,
+        fit: 'inside'
+      })
+      .jpeg({
+        quality: 80,
+        progressive: true
+      })
+      .toFile(outputPath);
+
+    // 2) 產出「縮略圖」（列表/卡片顯示，裁切成固定比例）
+    await sharp(tempPath)
+      .resize(800, 600, {
+        fit: 'cover',
+        position: 'center'
+      })
+      .jpeg({
+        quality: 80,
+        progressive: true
+      })
+      .toFile(thumbPath);
+
+    if (tempPath !== outputPath) {
+      fs.unlinkSync(tempPath);
+    }
+
+    req.file.path = outputPath;
+    req.file.filename = path.basename(outputPath);
+    // 將生成的兩個路徑提供給路由層
+    req.activityImages = {
+      fullFilename: path.basename(outputPath),
+      fullPath: outputPath,
+      thumbFilename: path.basename(thumbPath),
+      thumbPath
+    };
+
+    next();
+  } catch (error) {
+    console.error('圖片處理錯誤:', error);
+    res.status(500).json({
+      success: false,
+      message: '圖片處理失敗',
+      error: error.message
+    });
+  }
+};
 
 // 刪除文件的中間件
 const deleteFile = async (filePath) => {

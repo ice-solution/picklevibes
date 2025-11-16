@@ -316,11 +316,11 @@ const MyActivities: React.FC = () => {
                       </p>
                     </div>
                     {registration.activity.poster && (
-                      <div className="ml-4 w-20 h-20 bg-gray-200 rounded-lg overflow-hidden">
+                      <div className="ml-4 w-20 h-20 bg-gray-200 rounded-lg overflow-hidden flex items-center justify-center">
                         <img
                           src={getImageUrl(registration.activity.poster)}
                           alt={registration.activity.title}
-                          className="w-full h-full object-cover"
+                          className="max-w-full max-h-full object-contain"
                         />
                       </div>
                     )}

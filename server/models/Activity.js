@@ -17,6 +17,11 @@ const activitySchema = new mongoose.Schema({
     type: String, // 海報圖片URL
     default: null
   },
+  // 用於卡片/列表顯示的裁切縮略圖（cover）
+  posterThumb: {
+    type: String,
+    default: null
+  },
   maxParticipants: {
     type: Number,
     required: [true, '人數限制為必填項目'],

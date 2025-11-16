@@ -57,6 +57,21 @@ const ActivityDetail: React.FC = () => {
   const [activity, setActivity] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setShowImagePreview(false);
+      }
+    };
+    if (showImagePreview) {
+      window.addEventListener('keydown', onKeyDown);
+    }
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+    };
+  }, [showImagePreview]);
 
   useEffect(() => {
     if (id) {
@@ -131,16 +146,37 @@ const ActivityDetail: React.FC = () => {
     }
   };
 
+  // 以前端時間動態判斷顯示狀態：現在 >= endDate -> 已完結；start <= 現在 < end -> 進行中；否則即將開始
+  const getDerivedStatus = (a: Activity) => {
+    try {
+      const now = new Date();
+      const start = new Date(a.startDate);
+      const end = new Date(a.endDate);
+      if (now >= end) return 'completed';
+      if (now >= start && now < end) return 'ongoing';
+      return 'upcoming';
+    } catch {
+      return a.status;
+    }
+  };
+
   const canRegister = () => {
     if (!user) return false;
     if (!activity) return false;
     if (activity.userRegistration) return false; // 已報名
-    return activity.canRegister && activity.availableSpots > 0;
+    // 以前端時間動態判斷：非 upcoming 一律不可報名
+    const derived = getDerivedStatus(activity);
+    if (derived !== 'upcoming') return false;
+    // 同時保留後端虛擬欄位條件
+    return activity.canRegister && activity.availableSpots > 0 && !activity.isExpired;
   };
 
   const getRegisterButtonText = () => {
     if (!activity) return '';
     if (activity.userRegistration) return '你已報名';
+    const derived = getDerivedStatus(activity);
+    if (derived === 'completed') return '已完結';
+    if (derived === 'ongoing') return '進行中';
     if (activity.isExpired) return '報名已截止';
     if (activity.isFull) return '人數已滿';
     if (activity.availableSpots <= 0) return '人數已到上限';
@@ -190,8 +226,8 @@ const ActivityDetail: React.FC = () => {
               <ArrowLeftIcon className="h-5 w-5 mr-2" />
               返回活動列表
             </Link>
-            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(activity.status)}`}>
-              {getStatusText(activity.status)}
+            <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(getDerivedStatus(activity))}`}>
+              {getStatusText(getDerivedStatus(activity))}
             </span>
           </div>
         </div>
@@ -204,15 +240,59 @@ const ActivityDetail: React.FC = () => {
           className="bg-white rounded-xl shadow-lg overflow-hidden"
         >
           {/* Poster */}
-          {activity.poster && (
-            <div className="h-64 md:h-80 bg-gray-200 overflow-hidden">
-              <img
-                src={getImageUrl(activity.poster)}
-                alt={activity.title}
-                className="w-full h-full object-cover"
-              />
+          {(activity as any).posterThumb || activity.poster ? (
+            <div className="relative">
+              <button
+                type="button"
+                className="block w-full h-64 md:h-80 overflow-hidden focus:outline-none focus:ring-2 focus:ring-primary-600 rounded"
+                onClick={() => setShowImagePreview(true)}
+                aria-label="放大檢視活動圖片"
+                title="點擊放大"
+              >
+                <img
+                  src={getImageUrl(((activity as any).posterThumb || activity.poster || '') as string)}
+                  alt={activity.title}
+                  className="w-full h-full object-cover"
+                />
+              </button>
+              {showImagePreview && (
+                <div
+                  className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-80 p-4 overflow-auto"
+                  role="dialog"
+                  aria-modal="true"
+                  onClick={() => setShowImagePreview(false)}
+                >
+                  <div className="relative w-full flex items-center justify-center">
+                    <img
+                      src={getImageUrl((activity.poster || (activity as any).posterThumb || '') as string)}
+                      alt={activity.title}
+                      className="max-w-[90vw] max-h-[90vh] object-contain rounded shadow-2xl"
+                    />
+                    <button
+                      type="button"
+                      aria-label="關閉預覽"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowImagePreview(false);
+                      }}
+                      className="absolute top-3 right-3 inline-flex items-center justify-center rounded-full bg-white/90 hover:bg-white text-gray-700 w-9 h-9 shadow"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        className="h-5 w-5"
+                        aria-hidden="true"
+                      >
+                        <path d="M6 18L18 6M6 6l12 12" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
 
           <div className="p-6 md:p-8">
             {/* Title */}
