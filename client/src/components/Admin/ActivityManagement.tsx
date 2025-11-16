@@ -747,15 +747,15 @@ const ActivityManagement: React.FC = () => {
               className="bg-white rounded-xl shadow-lg overflow-hidden"
             >
               {/* Poster */}
-              {activity.poster && (
+              {(activity as any).posterThumb || activity.poster ? (
                 <div className="h-48 bg-gray-200 overflow-hidden">
                   <img
-                    src={getImageUrl(activity.poster)}
+                    src={getImageUrl(((activity as any).posterThumb || activity.poster) as string)}
                     alt={activity.title}
                     className="w-full h-full object-cover"
                   />
                 </div>
-              )}
+              ) : null}
 
               <div className="p-6">
                 {/* Status Badge */}

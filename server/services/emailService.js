@@ -143,7 +143,9 @@ class EmailService {
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        weekday: 'long'
+        weekday: 'long',
+        timeZone: 'Asia/Hong_Kong',
+        hour12: false
       });
     };
 
@@ -151,7 +153,9 @@ class EmailService {
       const date = new Date(dateString);
       return date.toLocaleTimeString('zh-TW', {
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZone: 'Asia/Hong_Kong',
+        hour12: false
       });
     };
 
@@ -1300,7 +1304,9 @@ PickleVibes 充值發票
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
-        weekday: 'long'
+        weekday: 'long',
+        timeZone: 'Asia/Hong_Kong',
+        hour12: false
       });
     };
 

@@ -365,8 +365,13 @@ router.post('/', [
       coachIds = coachKeys.map(key => req.body[key]).filter(id => id);
     }
 
-    // 使用上傳的圖片路徑，如果沒有上傳則使用默認值
-    const posterPath = req.file ? `/uploads/activities/${req.file.filename}` : (poster || '');
+    // 使用上傳的圖片路徑（同時包含縮略圖）
+    const posterPath = req.activityImages
+      ? `/uploads/activities/${req.activityImages.fullFilename}`
+      : (req.file ? `/uploads/activities/${req.file.filename}` : (poster || ''));
+    const posterThumbPath = req.activityImages
+      ? `/uploads/activities/${req.activityImages.thumbFilename}`
+      : null;
 
     // 驗證時間邏輯 - 使用 parseLocalDateTime 正確處理時區
     const now = new Date();
@@ -390,6 +395,7 @@ router.post('/', [
       title,
       description,
       poster: posterPath,
+      posterThumb: posterThumbPath,
       maxParticipants,
       price,
       startDate: start,
@@ -952,8 +958,11 @@ router.put('/:id', [
 
     const updates = req.body;
     
-    // 如果有新上傳的圖片，使用新圖片路徑
-    if (req.file) {
+    // 如果有新上傳的圖片，使用新圖片與縮略圖路徑
+    if (req.activityImages) {
+      updates.poster = `/uploads/activities/${req.activityImages.fullFilename}`;
+      updates.posterThumb = `/uploads/activities/${req.activityImages.thumbFilename}`;
+    } else if (req.file) {
       updates.poster = `/uploads/activities/${req.file.filename}`;
     }
     
