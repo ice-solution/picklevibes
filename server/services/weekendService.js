@@ -3,6 +3,8 @@
  * 提供靈活的週末判定邏輯
  */
 
+const Holiday = require('../models/Holiday');
+
 class WeekendService {
   constructor() {
     // 可以從環境變數或資料庫讀取設定
@@ -17,6 +19,41 @@ class WeekendService {
       // 國定假日列表 (從空陣列開始，由管理員手動添加)
       holidays: []
     };
+
+    this.initialized = false;
+    this.initPromise = null;
+  }
+
+  async initialize() {
+    if (this.initialized) {
+      return this.config;
+    }
+
+    if (!this.initPromise) {
+      this.initPromise = this.loadHolidaysFromDatabase();
+    }
+
+    await this.initPromise;
+    return this.config;
+  }
+
+  async loadHolidaysFromDatabase() {
+    try {
+      const holidays = await Holiday.find({}).sort({ date: 1 }).lean();
+      this.config.holidays = holidays.map(holiday => holiday.date);
+      this.initialized = true;
+      return this.config;
+    } catch (error) {
+      console.error('載入假期資料失敗:', error);
+      this.initialized = true; // 避免重複嘗試導致死循環
+      return this.config;
+    }
+  }
+
+  async refreshHolidays() {
+    this.initialized = false;
+    this.initPromise = null;
+    return this.initialize();
   }
 
   /**
@@ -98,25 +135,41 @@ class WeekendService {
    * 添加國定假日
    * @param {string|Array} dates - 日期或日期陣列
    */
-  addHolidays(dates) {
+  async addHolidays(dates) {
+    await this.initialize();
     const dateArray = Array.isArray(dates) ? dates : [dates];
-    this.config.holidays = [...new Set([...this.config.holidays, ...dateArray])];
+    const formattedDates = dateArray.map(date => new Date(date).toISOString().split('T')[0]);
+    const uniqueDates = [...new Set(formattedDates)];
+
+    await Promise.all(uniqueDates.map(date =>
+      Holiday.updateOne({ date }, { date }, { upsert: true, setDefaultsOnInsert: true })
+    ));
+
+    this.config.holidays = [...new Set([...this.config.holidays, ...uniqueDates])].sort();
+    return this.config.holidays;
   }
 
   /**
    * 移除國定假日
    * @param {string|Array} dates - 日期或日期陣列
    */
-  removeHolidays(dates) {
+  async removeHolidays(dates) {
+    await this.initialize();
     const dateArray = Array.isArray(dates) ? dates : [dates];
-    this.config.holidays = this.config.holidays.filter(date => !dateArray.includes(date));
+    const formattedDates = dateArray.map(date => new Date(date).toISOString().split('T')[0]);
+    await Holiday.deleteMany({ date: { $in: formattedDates } });
+
+    const removeSet = new Set(formattedDates);
+    this.config.holidays = this.config.holidays.filter(date => !removeSet.has(date));
+    return this.config.holidays;
   }
 
   /**
    * 獲取當前設定
    * @returns {Object} 當前設定
    */
-  getConfig() {
+  async getConfig() {
+    await this.initialize();
     return this.config;
   }
 
@@ -124,7 +177,8 @@ class WeekendService {
    * 獲取國定假日列表
    * @returns {Array} 國定假日列表
    */
-  getHolidays() {
+  async getHolidays() {
+    await this.initialize();
     return this.config.holidays;
   }
 }

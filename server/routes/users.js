@@ -482,6 +482,8 @@ router.post('/:id/manual-deduct', [
 router.get('/:id/balance-history', [auth, adminAuth], async (req, res) => {
   try {
     const { page = 1, limit = 20, type } = req.query;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.max(1, parseInt(limit, 10) || 20);
     const userId = req.params.id;
     
     // 檢查用戶是否存在
@@ -498,19 +500,20 @@ router.get('/:id/balance-history', [auth, adminAuth], async (req, res) => {
         totalRecharged: 0,
         totalSpent: 0,
         transactions: [],
-        pagination: { current: 1, pages: 0, total: 0 }
+        pagination: { current: 1, pages: 0, total: 0, limit: limitNum }
       });
     }
     
     // 過濾交易類型
-    let transactions = userBalance.transactions;
+    let transactions = userBalance.transactions.slice();
     if (type) {
       transactions = transactions.filter(t => t.type === type);
     }
+    transactions.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     
     // 分頁
-    const startIndex = (page - 1) * limit;
-    const endIndex = startIndex + limit;
+    const startIndex = (pageNum - 1) * limitNum;
+    const endIndex = startIndex + limitNum;
     const paginatedTransactions = transactions.slice(startIndex, endIndex);
     
     res.json({
@@ -519,9 +522,10 @@ router.get('/:id/balance-history', [auth, adminAuth], async (req, res) => {
       totalSpent: userBalance.totalSpent,
       transactions: paginatedTransactions,
       pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(transactions.length / limit),
-        total: transactions.length
+        current: pageNum,
+        pages: Math.ceil(transactions.length / limitNum),
+        total: transactions.length,
+        limit: limitNum
       }
     });
   } catch (error) {

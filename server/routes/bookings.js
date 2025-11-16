@@ -496,8 +496,21 @@ router.post('/', [
         courtNumber: courtDoc.number
       };
 
-      await accessControlService.processAccessControl(visitorData, bookingData);
+      const accessControlResult = await accessControlService.processAccessControl(visitorData, bookingData);
       console.log('✅ 開門系統流程處理完成');
+      
+      // 保存 tempAuth 數據到 Booking
+      if (accessControlResult && accessControlResult.tempAuth) {
+        booking.tempAuth = {
+          code: accessControlResult.tempAuth.code || null,
+          password: accessControlResult.tempAuth.password || null,
+          startTime: accessControlResult.tempAuth.startTime || null,
+          endTime: accessControlResult.tempAuth.endTime || null,
+          createdAt: new Date()
+        };
+        await booking.save();
+        console.log('✅ 臨時授權數據已保存到預約記錄');
+      }
     } catch (accessControlError) {
       console.error('❌ 開門系統流程處理失敗:', accessControlError);
       // 不影響預約創建，只記錄錯誤
@@ -820,6 +833,66 @@ router.post('/:id/confirm', auth, async (req, res) => {
   } catch (error) {
     console.error('確認預約錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/bookings/:id/resend-access-email
+// @desc    重發預約開門通知郵件
+// @access  Private (Admin only)
+router.post('/:id/resend-access-email', adminAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // 查找預約記錄
+    const booking = await Booking.findById(id)
+      .populate('user', 'name email phone')
+      .populate('court', 'name number type');
+    
+    if (!booking) {
+      return res.status(404).json({ message: '預約記錄不存在' });
+    }
+    
+    // 檢查是否有 tempAuth 數據
+    if (!booking.tempAuth || !booking.tempAuth.code) {
+      return res.status(400).json({ 
+        message: '此預約沒有臨時授權數據，無法重發郵件。請先創建臨時授權。' 
+      });
+    }
+    
+    // 準備訪問者數據
+    const visitorData = {
+      name: booking.players[0]?.name || booking.user.name,
+      email: booking.players[0]?.email || booking.user.email,
+      phone: booking.players[0]?.phone || booking.user.phone
+    };
+    
+    // 準備預約數據
+    const bookingData = {
+      bookingId: booking._id.toString(),
+      date: booking.date,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
+      courtName: booking.court.name,
+      courtNumber: booking.court.number
+    };
+    
+    // 使用已保存的 tempAuth 數據重發郵件
+    const qrCodeData = booking.tempAuth.code;
+    const password = booking.tempAuth.password;
+    
+    await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
+    
+    res.json({ 
+      message: '開門通知郵件已重新發送',
+      email: visitorData.email
+    });
+    
+  } catch (error) {
+    console.error('重發開門通知郵件錯誤:', error);
+    res.status(500).json({ 
+      message: '重發郵件失敗，請稍後再試',
+      error: error.message 
+    });
   }
 });
 

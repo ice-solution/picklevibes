@@ -159,7 +159,34 @@ const bookingSchema = new mongoose.Schema({
       enum: ['sent', 'failed', 'pending'],
       default: 'pending'
     }
-  }]
+  }],
+  tempAuth: {
+    code: {
+      type: String,
+      required: false,
+      description: '臨時授權二維碼 (base64)'
+    },
+    password: {
+      type: String,
+      required: false,
+      description: '臨時授權密碼'
+    },
+    startTime: {
+      type: String,
+      required: false,
+      description: '授權開始時間 (ISO string)'
+    },
+    endTime: {
+      type: String,
+      required: false,
+      description: '授權結束時間 (ISO string)'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      description: '臨時授權創建時間'
+    }
+  }
 }, {
   timestamps: true
 });

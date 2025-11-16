@@ -3,10 +3,52 @@ const { body, validationResult } = require('express-validator');
 const Activity = require('../models/Activity');
 const ActivityRegistration = require('../models/ActivityRegistration');
 const UserBalance = require('../models/UserBalance');
+const User = require('../models/User');
+const emailService = require('../services/emailService');
 const { auth, adminAuth } = require('../middleware/auth');
 const { activityUpload, processActivityImage, deleteFile } = require('../middleware/upload');
 
 const router = express.Router();
+
+/**
+ * 將 datetime-local 格式的字符串轉換為正確的 Date 對象
+ * datetime-local 格式: "2024-11-15T15:00" (本地時間，無時區)
+ * 問題：datetime-local 提交的是本地時間字符串，但可能被當作 UTC 處理
+ * 解決：將字符串明確解析為香港時區（UTC+8）的本地時間
+ */
+function parseLocalDateTime(dateTimeString) {
+  if (!dateTimeString) return null;
+  
+  // 如果已經是完整的 ISO 格式（包含時區），直接解析
+  if (dateTimeString.includes('Z') || dateTimeString.match(/[+-]\d{2}:\d{2}$/)) {
+    return new Date(dateTimeString);
+  }
+  
+  // datetime-local 格式: "2024-11-15T15:00"
+  // 這個字符串沒有時區信息，會被 JavaScript 解釋為本地時區
+  // 為了確保正確，我們需要明確指定這是香港時區（UTC+8）的時間
+  // 然後轉換為 UTC 存儲
+  
+  // 方法：將 "2024-11-15T15:00" 轉換為 "2024-11-15T15:00+08:00"（香港時區）
+  // 然後讓 JavaScript 正確解析
+  const hkTimeString = dateTimeString + '+08:00';
+  return new Date(hkTimeString);
+}
+
+async function recalcActivityParticipantCount(activityId) {
+  const registrations = await ActivityRegistration.find({
+    activity: activityId,
+    status: 'registered'
+  }).select('participantCount');
+
+  const totalRegistered = registrations.reduce((sum, reg) => sum + reg.participantCount, 0);
+
+  await Activity.findByIdAndUpdate(activityId, {
+    currentParticipants: totalRegistered
+  });
+
+  return totalRegistered;
+}
 
 // @route   GET /api/activities
 // @desc    獲取所有活動列表
@@ -161,6 +203,54 @@ router.get('/coach-courses', auth, async (req, res) => {
 // @route   GET /api/activities/:id
 // @desc    獲取單個活動詳情
 // @access  Public (with optional auth)
+router.get('/:id/registrations', [auth, adminAuth], async (req, res) => {
+  try {
+    const activityId = req.params.id;
+    const activity = await Activity.findById(activityId).select('title maxParticipants currentParticipants');
+
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const registrations = await ActivityRegistration.find({ activity: activityId })
+      .populate('user', 'name email phone')
+      .sort({ createdAt: -1 });
+
+    const totalRegistered = registrations
+      .filter(reg => reg.status === 'registered')
+      .reduce((sum, reg) => sum + reg.participantCount, 0);
+
+    res.json({
+      registrations: registrations.map(reg => ({
+        _id: reg._id,
+        user: reg.user ? {
+          _id: reg.user._id,
+          name: reg.user.name,
+          email: reg.user.email,
+          phone: reg.user.phone
+        } : null,
+        participantCount: reg.participantCount,
+        totalCost: reg.totalCost,
+        status: reg.status,
+        paymentStatus: reg.paymentStatus,
+        contactInfo: reg.contactInfo,
+        notes: reg.notes,
+        createdAt: reg.createdAt,
+        updatedAt: reg.updatedAt
+      })),
+      stats: {
+        totalRegistered,
+        availableSpots: Math.max(0, activity.maxParticipants - totalRegistered),
+        maxParticipants: activity.maxParticipants,
+        currentParticipants: activity.currentParticipants || totalRegistered
+      }
+    });
+  } catch (error) {
+    console.error('獲取活動報名列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
 router.get('/:id', async (req, res) => {
   try {
     const activity = await Activity.findById(req.params.id)
@@ -278,11 +368,11 @@ router.post('/', [
     // 使用上傳的圖片路徑，如果沒有上傳則使用默認值
     const posterPath = req.file ? `/uploads/activities/${req.file.filename}` : (poster || '');
 
-    // 驗證時間邏輯
+    // 驗證時間邏輯 - 使用 parseLocalDateTime 正確處理時區
     const now = new Date();
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const deadline = new Date(registrationDeadline);
+    const start = parseLocalDateTime(startDate);
+    const end = parseLocalDateTime(endDate);
+    const deadline = parseLocalDateTime(registrationDeadline);
 
     if (deadline >= start) {
       return res.status(400).json({ 
@@ -402,10 +492,12 @@ router.post('/:id/register', [
       });
     }
 
-    // 扣除積分
-    userBalance.balance -= totalCost;
-    userBalance.totalSpent += totalCost;
-    await userBalance.save();
+    // 扣除積分並記錄交易
+    await userBalance.deductBalance(
+      totalCost,
+      `活動報名 - ${activity.title}`,
+      null
+    );
 
     // 創建報名記錄
     const registration = new ActivityRegistration({
@@ -422,6 +514,31 @@ router.post('/:id/register', [
     // 更新活動當前報名人數
     activity.currentParticipants = totalRegistered + participantCount;
     await activity.save();
+
+    // 發送報名確認電郵
+    try {
+      const activityData = activity.toObject ? activity.toObject() : activity;
+      const registrationData = {
+        _id: registration._id,
+        participantCount,
+        totalCost,
+        contactInfo,
+        notes,
+        createdAt: registration.createdAt
+      };
+
+      await emailService.sendActivityRegistrationEmail(
+        {
+          name: req.user.name,
+          email: req.user.email,
+          phone: req.user.phone
+        },
+        activityData,
+        registrationData
+      );
+    } catch (emailError) {
+      console.error('發送活動報名確認電郵失敗:', emailError);
+    }
 
     console.log(`🎯 用戶報名活動: ${req.user.name} 報名 ${activity.title}，人數: ${participantCount}，費用: ${totalCost}積分`);
 
@@ -442,6 +559,278 @@ router.post('/:id/register', [
     res.status(500).json({ 
       message: '服務器錯誤，請稍後再試' 
     });
+  }
+});
+
+// @route   POST /api/activities/:id/admin/registrations
+// @desc    管理員為活動新增參加者
+// @access  Private (Admin)
+router.post('/:id/admin/registrations', [
+  auth,
+  adminAuth,
+  body('userId').trim().notEmpty().withMessage('請選擇用戶'),
+  body('participantCount').isInt({ min: 1, max: 10 }).withMessage('參加人數必須在1-10之間'),
+  body('contactInfo.email').optional().isEmail().withMessage('請提供有效的電子郵件地址'),
+  body('contactInfo.phone').optional().matches(/^[0-9+\-\s()]+$/).withMessage('請提供有效的電話號碼'),
+  body('deductPoints').optional().isBoolean(),
+  body('notes').optional().isLength({ max: 200 }).withMessage('備註不能超過200個字符')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: errors.array()[0].msg
+      });
+    }
+
+    const activityId = req.params.id;
+    const {
+      userId,
+      participantCount,
+      contactInfo = {},
+      notes,
+      deductPoints = false
+    } = req.body;
+
+    const activity = await Activity.findById(activityId);
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: '用戶不存在' });
+    }
+
+    const existingRegistration = await ActivityRegistration.findOne({
+      activity: activityId,
+      user: userId
+    });
+
+    if (existingRegistration && existingRegistration.status === 'registered') {
+      return res.status(400).json({ message: '該用戶已是此活動的參加者' });
+    }
+
+    const currentRegistrations = await ActivityRegistration.find({
+      activity: activityId,
+      status: 'registered'
+    });
+
+    const totalRegistered = currentRegistrations.reduce((sum, reg) => sum + reg.participantCount, 0);
+    const availableSpots = activity.maxParticipants - totalRegistered;
+
+    if (participantCount > availableSpots) {
+      return res.status(400).json({
+        message: `人數已到上限，剩餘名額：${availableSpots}人`
+      });
+    }
+
+    const totalCost = activity.price * participantCount;
+
+    let userBalance = null;
+    if (deductPoints) {
+      userBalance = await UserBalance.findOne({ user: userId });
+      if (!userBalance || userBalance.balance < totalCost) {
+        return res.status(400).json({ message: '用戶積分不足，無法扣除積分' });
+      }
+      await userBalance.deductBalance(
+        totalCost,
+        `活動報名 - ${activity.title}（管理員手動添加）`,
+        null
+      );
+    }
+
+    const finalEmail = contactInfo.email || user.email;
+    const finalPhone = contactInfo.phone || user.phone;
+
+    if (!finalEmail) {
+      return res.status(400).json({ message: '請提供聯絡郵箱' });
+    }
+
+    if (!finalPhone) {
+      return res.status(400).json({ message: '請提供聯絡電話' });
+    }
+
+    let registration;
+    if (existingRegistration && existingRegistration.status !== 'registered') {
+      existingRegistration.participantCount = participantCount;
+      existingRegistration.totalCost = totalCost;
+      existingRegistration.contactInfo = {
+        email: finalEmail,
+        phone: finalPhone
+      };
+      existingRegistration.notes = notes || '管理員手動重新添加';
+      existingRegistration.status = 'registered';
+      existingRegistration.paymentStatus = deductPoints ? 'paid' : 'pending';
+      existingRegistration.cancelledAt = null;
+      existingRegistration.cancellationReason = null;
+      registration = await existingRegistration.save();
+    } else {
+      registration = new ActivityRegistration({
+        activity: activityId,
+        user: userId,
+        participantCount,
+        totalCost,
+        contactInfo: {
+          email: finalEmail,
+          phone: finalPhone
+        },
+        notes: notes || '管理員手動添加',
+        paymentStatus: deductPoints ? 'paid' : 'pending'
+      });
+
+      await registration.save();
+    }
+
+    const updatedTotal = await recalcActivityParticipantCount(activityId);
+    const availableAfter = Math.max(0, activity.maxParticipants - updatedTotal);
+
+  // 發送報名確認電郵
+  try {
+    const activityData = activity.toObject ? activity.toObject() : activity;
+    const registrationData = {
+      _id: registration._id,
+      participantCount,
+      totalCost,
+      contactInfo: {
+        email: finalEmail,
+        phone: finalPhone
+      },
+      notes: registration.notes,
+      createdAt: registration.createdAt
+    };
+
+    await emailService.sendActivityRegistrationEmail(
+      {
+        name: user.name,
+        email: finalEmail,
+        phone: finalPhone
+      },
+      activityData,
+      registrationData
+    );
+  } catch (emailError) {
+    console.error('管理員新增參加者後發送確認電郵失敗:', emailError);
+  }
+
+    await registration.populate('user', 'name email phone');
+
+    res.status(201).json({
+      message: '已新增活動參加者',
+      registration: {
+        _id: registration._id,
+        user: registration.user,
+        participantCount: registration.participantCount,
+        totalCost: registration.totalCost,
+        status: registration.status,
+        paymentStatus: registration.paymentStatus,
+        contactInfo: registration.contactInfo,
+        notes: registration.notes,
+        createdAt: registration.createdAt,
+        updatedAt: registration.updatedAt
+      },
+      stats: {
+        totalRegistered: updatedTotal,
+        availableSpots: availableAfter,
+        maxParticipants: activity.maxParticipants
+      }
+    });
+  } catch (error) {
+    console.error('管理員新增活動參加者錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PATCH /api/activities/:activityId/admin/registrations/:registrationId/cancel
+// @desc    管理員移除活動參加者
+// @access  Private (Admin)
+router.patch('/:activityId/admin/registrations/:registrationId/cancel', [
+  auth,
+  adminAuth,
+  body('reason').optional().isLength({ max: 200 }).withMessage('原因不能超過200個字符'),
+  body('refundPoints').optional().isBoolean()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: errors.array()[0].msg
+      });
+    }
+
+    const { activityId, registrationId } = req.params;
+    const { reason, refundPoints = false } = req.body;
+
+    const activity = await Activity.findById(activityId);
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const registration = await ActivityRegistration.findOne({
+      _id: registrationId,
+      activity: activityId
+    }).populate('user', 'name email phone');
+
+    if (!registration) {
+      return res.status(404).json({ message: '報名記錄不存在' });
+    }
+
+    if (registration.status !== 'registered') {
+      return res.status(400).json({ message: '該報名記錄已處理' });
+    }
+
+    let refundedAmount = 0;
+    if (refundPoints && registration.paymentStatus === 'paid') {
+      const registrationUserId = registration.user?._id || registration.user;
+      if (!registrationUserId) {
+        return res.status(400).json({ message: '找不到用戶，無法退款' });
+      }
+
+      let userBalance = await UserBalance.findOne({ user: registrationUserId });
+      if (!userBalance) {
+        userBalance = new UserBalance({ user: registrationUserId });
+      }
+      await userBalance.refund(
+        registration.totalCost,
+        `活動報名退款 - ${activity.title}`,
+        null
+      );
+      registration.paymentStatus = 'refunded';
+      refundedAmount = registration.totalCost;
+    }
+
+    registration.status = 'cancelled';
+    registration.cancelledAt = new Date();
+    registration.cancellationReason = reason || '管理員手動移除';
+    await registration.save();
+
+    const updatedTotal = await recalcActivityParticipantCount(activityId);
+    const availableAfter = Math.max(0, activity.maxParticipants - updatedTotal);
+
+    res.json({
+      message: '已移除活動參加者',
+      registration: {
+        _id: registration._id,
+        user: registration.user,
+        participantCount: registration.participantCount,
+        totalCost: registration.totalCost,
+        status: registration.status,
+        paymentStatus: registration.paymentStatus,
+        contactInfo: registration.contactInfo,
+        notes: registration.notes,
+        cancelledAt: registration.cancelledAt,
+        cancellationReason: registration.cancellationReason
+      },
+      stats: {
+        totalRegistered: updatedTotal,
+        availableSpots: availableAfter,
+        maxParticipants: activity.maxParticipants,
+        refundedAmount
+      }
+    });
+  } catch (error) {
+    console.error('管理員移除活動參加者錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
 
@@ -590,6 +979,14 @@ router.put('/:id', [
       updates.coaches = coachKeys.map(key => req.body[key]).filter(id => id);
     }
     
+    // 處理日期時間字段 - 使用 parseLocalDateTime 正確處理時區
+    const dateTimeFields = ['startDate', 'endDate', 'registrationDeadline'];
+    dateTimeFields.forEach(field => {
+      if (updates[field] !== undefined) {
+        updates[field] = parseLocalDateTime(updates[field]);
+      }
+    });
+    
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {
         activity[key] = updates[key];
@@ -640,6 +1037,157 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
     res.status(500).json({ 
       message: '服務器錯誤，請稍後再試' 
     });
+  }
+});
+
+// @route   POST /api/activities/:activityId/admin/registrations/:registrationId/notify
+// @desc    管理員向活動參加者發送提醒電郵
+// @access  Private (Admin)
+router.post('/:activityId/admin/registrations/:registrationId/notify', [
+  auth,
+  adminAuth
+], async (req, res) => {
+  try {
+    const { activityId, registrationId } = req.params;
+
+    const activity = await Activity.findById(activityId)
+      .populate('coaches', 'name email')
+      .lean();
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const registration = await ActivityRegistration.findOne({
+      _id: registrationId,
+      activity: activityId
+    }).populate('user', 'name email phone');
+
+    if (!registration) {
+      return res.status(404).json({ message: '報名記錄不存在' });
+    }
+
+    if (registration.status !== 'registered') {
+      return res.status(400).json({ message: '僅可向已報名的參加者發送提醒' });
+    }
+
+    const finalEmail = registration.contactInfo?.email || registration.user?.email;
+    if (!finalEmail) {
+      return res.status(400).json({ message: '找不到聯絡電郵，無法發送提醒' });
+    }
+
+    const finalPhone = registration.contactInfo?.phone || registration.user?.phone || '';
+
+    try {
+      await emailService.sendActivityReminderEmail(
+        {
+          name: registration.user?.name || '尊貴的用戶',
+          email: finalEmail,
+          phone: finalPhone
+        },
+        activity,
+        {
+          _id: registration._id,
+          participantCount: registration.participantCount,
+          totalCost: registration.totalCost,
+          notes: registration.notes,
+          createdAt: registration.createdAt,
+          contactInfo: {
+            email: finalEmail,
+            phone: finalPhone
+          }
+        }
+      );
+    } catch (emailError) {
+      console.error('發送活動提醒電郵失敗:', emailError);
+      return res.status(500).json({ message: '提醒電郵發送失敗' });
+    }
+
+    res.json({ message: '提醒電郵已發送給參加者' });
+  } catch (error) {
+    console.error('管理員發送活動提醒電郵錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/activities/:id/admin/registrations/notify-all
+// @desc    管理員向活動所有參加者批量發送提醒電郵
+// @access  Private (Admin)
+router.post('/:id/admin/registrations/notify-all', [
+  auth,
+  adminAuth
+], async (req, res) => {
+  try {
+    const activityId = req.params.id;
+
+    const activity = await Activity.findById(activityId)
+      .populate('coaches', 'name email')
+      .lean();
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const registrations = await ActivityRegistration.find({
+      activity: activityId,
+      status: 'registered'
+    }).populate('user', 'name email phone');
+
+    if (registrations.length === 0) {
+      return res.status(400).json({ message: '目前沒有已報名的參加者' });
+    }
+
+    let successCount = 0;
+    const failedRecipients = [];
+
+    for (const registration of registrations) {
+      const finalEmail = registration.contactInfo?.email || registration.user?.email;
+      if (!finalEmail) {
+        failedRecipients.push({
+          registrationId: registration._id,
+          reason: '缺少聯絡電郵'
+        });
+        continue;
+      }
+
+      const finalPhone = registration.contactInfo?.phone || registration.user?.phone || '';
+
+      try {
+        await emailService.sendActivityReminderEmail(
+          {
+            name: registration.user?.name || '尊貴的用戶',
+            email: finalEmail,
+            phone: finalPhone
+          },
+          activity,
+          {
+            _id: registration._id,
+            participantCount: registration.participantCount,
+            totalCost: registration.totalCost,
+            notes: registration.notes,
+            createdAt: registration.createdAt,
+            contactInfo: {
+              email: finalEmail,
+              phone: finalPhone
+            }
+          }
+        );
+        successCount += 1;
+      } catch (emailError) {
+        console.error(`發送活動提醒電郵失敗 (${registration._id}):`, emailError);
+        failedRecipients.push({
+          registrationId: registration._id,
+          reason: emailError.message || '未知錯誤'
+        });
+      }
+    }
+
+    res.json({
+      message: `提醒電郵已發送完成。成功 ${successCount} 位，失敗 ${failedRecipients.length} 位。`,
+      successCount,
+      failed: failedRecipients
+    });
+  } catch (error) {
+    console.error('管理員批量發送活動提醒電郵錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
 

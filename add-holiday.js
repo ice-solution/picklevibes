@@ -27,7 +27,8 @@ async function addHoliday() {
     console.log(`📅 添加國定假日: ${holiday}`);
     
     // 添加國定假日
-    weekendService.addHolidays([holiday]);
+    await weekendService.initialize();
+    await weekendService.addHolidays([holiday]);
     
     console.log('✅ 國定假日添加成功！');
     console.log(`📋 當前國定假日列表:`);

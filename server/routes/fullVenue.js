@@ -61,8 +61,25 @@ router.post('/create', auth, async (req, res) => {
         totalPrice: result.totalPrice
       };
 
-      await accessControlService.processAccessControl(visitorData, bookingData);
+      const accessControlResult = await accessControlService.processAccessControl(visitorData, bookingData);
       console.log('📧 包場QR碼郵件發送成功');
+      
+      // 保存 tempAuth 數據到第一個預約記錄
+      if (accessControlResult && accessControlResult.tempAuth && result.bookings && result.bookings.length > 0) {
+        const Booking = require('../models/Booking');
+        const firstBooking = await Booking.findById(result.bookings[0]._id);
+        if (firstBooking) {
+          firstBooking.tempAuth = {
+            code: accessControlResult.tempAuth.code || null,
+            password: accessControlResult.tempAuth.password || null,
+            startTime: accessControlResult.tempAuth.startTime || null,
+            endTime: accessControlResult.tempAuth.endTime || null,
+            createdAt: new Date()
+          };
+          await firstBooking.save();
+          console.log('✅ 包場臨時授權數據已保存到預約記錄');
+        }
+      }
     } catch (emailError) {
       console.error('❌ 包場QR碼郵件發送失敗:', emailError);
       // 不影響預約創建，只記錄錯誤

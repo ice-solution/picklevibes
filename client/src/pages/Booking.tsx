@@ -71,6 +71,8 @@ const Booking: React.FC = () => {
     }
   }, [selectedCourt, selectedDate, selectedTimeSlot, checkSoloCourtAvailability]);
 
+  const maxAdvanceDays = user?.role === 'coach' ? 14 : 7;
+
   const steps = [
     { id: 1, name: '選擇場地', icon: CalendarDaysIcon },
     { id: 2, name: '選擇日期', icon: CalendarDaysIcon },
@@ -243,6 +245,7 @@ const Booking: React.FC = () => {
                   <DateSelector
                     onSelect={setSelectedDate}
                     selectedDate={selectedDate}
+                    maxAdvanceDays={maxAdvanceDays}
                   />
                 )}
 

@@ -51,6 +51,15 @@ interface UserStats {
   roleStats: Array<{ _id: string; count: number }>;
 }
 
+interface PaginationInfo {
+  current: number;
+  pages: number;
+  total: number;
+  limit: number;
+}
+
+const BALANCE_HISTORY_PAGE_SIZE = 20;
+
 const UserManagement: React.FC = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
@@ -67,6 +76,9 @@ const UserManagement: React.FC = () => {
   const [deductReason, setDeductReason] = useState('');
   const [showBalanceHistory, setShowBalanceHistory] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState<any[]>([]);
+  const [balanceHistoryLoading, setBalanceHistoryLoading] = useState(false);
+  const [balanceHistoryPagination, setBalanceHistoryPagination] = useState<PaginationInfo | null>(null);
+  const [balanceHistoryPage, setBalanceHistoryPage] = useState(1);
   const [showRechargeRecords, setShowRechargeRecords] = useState(false);
   const [rechargeRecords, setRechargeRecords] = useState<any[]>([]);
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -243,6 +255,49 @@ const UserManagement: React.FC = () => {
     }
   };
 
+  const fetchBalanceHistory = async (userId: string, page = 1) => {
+    try {
+      setBalanceHistoryLoading(true);
+      const response = await axios.get(`/users/${userId}/balance-history`, {
+        params: {
+          page,
+          limit: BALANCE_HISTORY_PAGE_SIZE
+        }
+      });
+
+      const transactions = Array.isArray(response.data.transactions)
+        ? [...response.data.transactions].sort(
+            (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          )
+        : [];
+
+      setBalanceHistory(transactions);
+      if (response.data.pagination) {
+        setBalanceHistoryPagination(response.data.pagination as PaginationInfo);
+        setBalanceHistoryPage(response.data.pagination.current || page);
+      } else {
+        setBalanceHistoryPagination({
+          current: page,
+          pages: Math.ceil(transactions.length / BALANCE_HISTORY_PAGE_SIZE),
+          total: transactions.length,
+          limit: BALANCE_HISTORY_PAGE_SIZE
+        });
+        setBalanceHistoryPage(page);
+      }
+    } catch (error) {
+      console.error('獲取積分歷史失敗:', error);
+      setBalanceHistory([]);
+      setBalanceHistoryPagination({
+        current: page,
+        pages: 0,
+        total: 0,
+        limit: BALANCE_HISTORY_PAGE_SIZE
+      });
+    } finally {
+      setBalanceHistoryLoading(false);
+    }
+  };
+
   const handleSubmitDeduct = async () => {
     if (!selectedUser || !deductPoints || !deductReason) return;
     
@@ -276,15 +331,26 @@ const UserManagement: React.FC = () => {
     }
   };
 
-  const handleViewBalanceHistory = async (user: User) => {
-    try {
-      const response = await axios.get(`/users/${user._id}/balance-history`);
-      setBalanceHistory(response.data.transactions);
-      setSelectedUser(user);
-      setShowBalanceHistory(true);
-    } catch (error) {
-      console.error('獲取積分歷史失敗:', error);
-    }
+  const handleViewBalanceHistory = (user: User) => {
+    setSelectedUser(user);
+    setBalanceHistory([]);
+    setBalanceHistoryPagination(null);
+    setBalanceHistoryPage(1);
+    setShowBalanceHistory(true);
+    fetchBalanceHistory(user._id, 1);
+  };
+  const handleBalanceHistoryPageChange = (page: number) => {
+    if (!selectedUser || balanceHistoryLoading) return;
+    if (page < 1) return;
+    if (balanceHistoryPagination && page > balanceHistoryPagination.pages) return;
+    fetchBalanceHistory(selectedUser._id, page);
+  };
+
+  const closeBalanceHistoryModal = () => {
+    setShowBalanceHistory(false);
+    setBalanceHistory([]);
+    setBalanceHistoryPagination(null);
+    setBalanceHistoryPage(1);
   };
 
   const handleViewRechargeRecords = async (user: User) => {
@@ -1110,7 +1176,7 @@ const UserManagement: React.FC = () => {
                 {selectedUser.name} 的積分歷史
               </h3>
               <button
-                onClick={() => setShowBalanceHistory(false)}
+                onClick={closeBalanceHistoryModal}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <XMarkIcon className="w-6 h-6" />
@@ -1145,38 +1211,94 @@ const UserManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {balanceHistory.map((transaction, index) => (
-                    <tr key={index}>
-                      <td className="px-4 py-2">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          transaction.type === 'recharge' ? 'bg-green-100 text-green-800' :
-                          transaction.type === 'spend' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {transaction.type === 'recharge' ? '充值' :
-                           transaction.type === 'spend' ? '消費' : '退款'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2">
-                        <span className={`font-medium ${
-                          transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
-                        }`}>
-                          {transaction.amount > 0 ? '+' : ''}{transaction.amount}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-sm text-gray-600">{transaction.description}</td>
-                      <td className="px-4 py-2 text-sm text-gray-500">
-                        {new Date(transaction.createdAt).toLocaleString('zh-TW')}
+                  {balanceHistoryLoading ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                        載入中...
                       </td>
                     </tr>
-                  ))}
+                  ) : balanceHistory.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-4 py-6 text-center text-gray-500">
+                        暫無積分交易記錄
+                      </td>
+                    </tr>
+                  ) : (
+                    balanceHistory.map((transaction, index) => (
+                      <tr key={index}>
+                        <td className="px-4 py-2">
+                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                            transaction.type === 'recharge' ? 'bg-green-100 text-green-800' :
+                            transaction.type === 'spend' ? 'bg-red-100 text-red-800' :
+                            'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {transaction.type === 'recharge' ? '充值' :
+                             transaction.type === 'spend' ? '消費' : '退款'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`font-medium ${
+                            transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {transaction.amount > 0 ? '+' : ''}{transaction.amount}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{transaction.description}</td>
+                        <td className="px-4 py-2 text-sm text-gray-500">
+                          {new Date(transaction.createdAt).toLocaleString('zh-TW')}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
-
-            {balanceHistory.length === 0 && (
-              <div className="text-center py-8 text-gray-500">
-                暫無積分交易記錄
+            {balanceHistoryPagination && balanceHistoryPagination.pages > 1 && (
+              <div className="flex items-center justify-center mt-4 space-x-2">
+                <button
+                  onClick={() => handleBalanceHistoryPageChange(balanceHistoryPage - 1)}
+                  disabled={balanceHistoryLoading || balanceHistoryPage === 1}
+                  className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  上一頁
+                </button>
+                <div className="flex space-x-1">
+                  {Array.from({ length: Math.min(5, balanceHistoryPagination.pages) }, (_, i) => {
+                    const pageNum = Math.max(1, balanceHistoryPage - 2) + i;
+                    if (pageNum > balanceHistoryPagination.pages) {
+                      return null;
+                    }
+                    return (
+                      <button
+                        key={pageNum}
+                        onClick={() => handleBalanceHistoryPageChange(pageNum)}
+                        disabled={balanceHistoryLoading}
+                        className={`px-3 py-2 text-sm font-medium rounded-md ${
+                          pageNum === balanceHistoryPage
+                            ? 'bg-primary-600 text-white'
+                            : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                        } disabled:opacity-50 disabled:cursor-not-allowed`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  onClick={() => handleBalanceHistoryPageChange(balanceHistoryPage + 1)}
+                  disabled={
+                    balanceHistoryLoading ||
+                    (balanceHistoryPagination && balanceHistoryPage === balanceHistoryPagination.pages)
+                  }
+                  className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  下一頁
+                </button>
+              </div>
+            )}
+            {balanceHistoryPagination && (
+              <div className="mt-2 text-center text-xs text-gray-500">
+                共 {balanceHistoryPagination.total} 筆交易
               </div>
             )}
           </div>

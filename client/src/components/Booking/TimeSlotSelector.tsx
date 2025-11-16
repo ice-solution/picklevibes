@@ -252,7 +252,12 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">選擇時間</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-3">選擇時間</h2>
+      <div className="mb-6 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+        <p className="text-lg font-semibold text-yellow-800">
+          以下為 12 小時制（AM/PM），請確認時間
+        </p>
+      </div>
       <p className="text-gray-600 mb-8">請選擇您想要預約的時間段</p>
 
       {/* 時長選擇 */}

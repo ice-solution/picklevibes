@@ -223,11 +223,22 @@ class AccessControlService {
       // 4. 發送郵件（包含二維碼和密碼）
       await this.sendAccessEmail(visitorData, bookingData, qrCodeData, tempAuth.password);
       
+      // 計算開始和結束時間（ISO 格式）
+      const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
+      const startTimeISO = this.convertToISOString(bookingData.date, earlyStartTime);
+      const endTimeISO = this.convertToISOString(bookingData.date, bookingData.endTime);
+      
       console.log('✅ 開門系統流程處理完成');
       return {
         success: true,
-        tempAuth: tempAuth,
-        message: '開門系統流程處理成功'
+        tempAuth: {
+          ...tempAuth,
+          startTime: startTimeISO,
+          endTime: endTimeISO
+        },
+        message: '開門系統流程處理成功',
+        qrCodeData: qrCodeData,
+        password: tempAuth.password
       };
     } catch (error) {
       console.error('❌ 開門系統流程處理失敗:', error.message);

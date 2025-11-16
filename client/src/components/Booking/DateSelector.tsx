@@ -5,9 +5,10 @@ import { CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/
 interface DateSelectorProps {
   onSelect: (date: string) => void;
   selectedDate: string;
+  maxAdvanceDays?: number;
 }
 
-const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate }) => {
+const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate, maxAdvanceDays = 7 }) => {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   
   const today = new Date();
@@ -15,7 +16,7 @@ const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate }) =
   today.setHours(0, 0, 0, 0);
   
   const maxDate = new Date();
-  maxDate.setDate(today.getDate() + 7); // 最多可預約7天後
+  maxDate.setDate(today.getDate() + maxAdvanceDays); // 最多可預約指定天數後
   maxDate.setHours(23, 59, 59, 999); // 設置為當天結束時間
 
   const getDaysInMonth = (date: Date) => {
@@ -188,7 +189,7 @@ const DateSelector: React.FC<DateSelectorProps> = ({ onSelect, selectedDate }) =
 
       {/* 說明文字 */}
       <div className="mt-6 text-sm text-gray-500">
-        <p>• 最多可預約7天內的場地</p>
+        <p>• 最多可預約{maxAdvanceDays}天內的場地</p>
         <p>• 灰色日期表示不可預約</p>
         <p>• 粉紅色日期表示今天</p>
       </div>
