@@ -395,12 +395,12 @@ const Navbar: React.FC = () => {
                     {/* 用戶功能 */}
                     <div className="text-sm font-medium text-gray-500 px-3 py-1">我的功能</div>
                     <Link
-                      to="/dashboard"
+                      to="/profile"
                       onClick={() => setIsOpen(false)}
                       className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
                     >
                       <UserIcon className="w-5 h-5" />
-                      <span>儀表板</span>
+                      <span>編輯資料</span>
                     </Link>
                     <Link
                       to="/my-bookings"
@@ -458,6 +458,14 @@ const Navbar: React.FC = () => {
                           <span>預約管理</span>
                         </Link>
                         <Link
+                          to="/admin?tab=calendar"
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          <CalendarDaysIcon className="w-5 h-5" />
+                          <span>預約日曆</span>
+                        </Link>
+                        <Link
                           to="/admin?tab=users"
                           onClick={() => setIsOpen(false)}
                           className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
@@ -486,16 +494,8 @@ const Navbar: React.FC = () => {
                           onClick={() => setIsOpen(false)}
                           className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
                         >
-                          <CalendarDaysIcon className="w-5 h-5" />
+                          <ClockIcon className="w-5 h-5" />
                           <span>假期管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=calendar"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <CalendarDaysIcon className="w-5 h-5" />
-                          <span>預約日曆</span>
                         </Link>
                         <Link
                           to="/admin?tab=activities"
@@ -534,7 +534,7 @@ const Navbar: React.FC = () => {
                           onClick={() => setIsOpen(false)}
                           className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
                         >
-                          <ChartBarIcon className="w-5 h-5" />
+                          <CurrencyDollarIcon className="w-5 h-5" />
                           <span>收入統計</span>
                         </Link>
                         <Link

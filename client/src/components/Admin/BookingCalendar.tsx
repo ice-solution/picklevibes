@@ -66,6 +66,7 @@ const BookingCalendar: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedCourt, setSelectedCourt] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
+  const [resendingEmail, setResendingEmail] = useState(false);
 
   useEffect(() => {
     fetchBookings();
@@ -173,6 +174,25 @@ const BookingCalendar: React.FC = () => {
     if (calendarRef.current) {
       const calendarApi = calendarRef.current.getApi();
       calendarApi.changeView(newView);
+    }
+  };
+
+  const handleResendEmail = async () => {
+    if (!selectedBooking) return;
+    
+    if (!window.confirm('確認要重新發送開門通知郵件嗎？')) {
+      return;
+    }
+    
+    try {
+      setResendingEmail(true);
+      const response = await axios.post(`/bookings/${selectedBooking._id}/resend-access-email`);
+      alert(`郵件已重新發送到：${response.data.email}`);
+    } catch (error: any) {
+      console.error('重發郵件失敗:', error);
+      alert(error.response?.data?.message || '重發郵件失敗，請稍後再試');
+    } finally {
+      setResendingEmail(false);
     }
   };
 
@@ -409,6 +429,20 @@ const BookingCalendar: React.FC = () => {
 
               {/* 管理動作 */}
               <div className="mt-4 flex justify-end space-x-3">
+                <button
+                  onClick={handleResendEmail}
+                  disabled={resendingEmail}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded flex items-center gap-2"
+                >
+                  {resendingEmail ? (
+                    <>
+                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                      發送中...
+                    </>
+                  ) : (
+                    '重發開門通知郵件'
+                  )}
+                </button>
                 {selectedBooking.status !== 'cancelled' && (
                   <button
                     onClick={async () => {
