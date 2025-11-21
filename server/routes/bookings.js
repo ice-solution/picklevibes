@@ -40,7 +40,8 @@ router.post('/', [
   body('court').isMongoId().withMessage('請提供有效的場地ID'),
   body('date').isISO8601().withMessage('請提供有效的日期格式'),
   body('startTime').matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的開始時間'),
-  body('endTime').matches(/^([0-1]?[0-9]|2[0-4]):[0-5][0-9]$/).withMessage('請提供有效的結束時間'),
+  // 結束時間允許 00:00-23:59，另外特別允許 24:00 作為結束時間（代表隔天 00:00）
+  body('endTime').matches(/^((?:[0-1]?[0-9]|2[0-3]):[0-5][0-9]|24:00)$/).withMessage('請提供有效的結束時間'),
   body('players').isArray({ min: 1, max: 7 }).withMessage('玩家信息必須是1-7個對象的數組'),
   body('players.*.name').trim().isLength({ min: 1, max: 50 }).withMessage('玩家姓名必須在1-50個字符之間'),
   body('players.*.email').isEmail().withMessage('玩家電子郵件格式無效'),

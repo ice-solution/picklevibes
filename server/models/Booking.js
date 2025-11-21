@@ -37,7 +37,8 @@ const bookingSchema = new mongoose.Schema({
   endTime: {
     type: String,
     required: [true, '結束時間為必填項目'],
-    match: [/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, '請輸入有效的時間格式 (HH:MM)']
+    // 允許 00:00-23:59，另外特別允許 24:00 作為結束時間（代表隔天 00:00）
+    match: [/^((?:[0-1]?[0-9]|2[0-3]):[0-5][0-9]|24:00)$/, '請輸入有效的時間格式 (HH:MM)']
   },
   duration: {
     type: Number,

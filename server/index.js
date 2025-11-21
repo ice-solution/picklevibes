@@ -143,6 +143,7 @@ app.use('/api/bulk-upgrade', require('./routes/bulk-upgrade')); // Added bulk up
 app.use('/api/activities', require('./routes/activities')); // Added activities routes
 app.use('/api/full-venue', require('./routes/fullVenue')); // Added full venue routes
 app.use('/api/weekend', require('./routes/weekend')); // Added weekend management routes
+app.use('/api/stats', require('./routes/stats')); // Added statistics routes
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

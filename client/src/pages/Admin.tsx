@@ -8,6 +8,7 @@ import UserManagement from '../components/Admin/UserManagement';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
+import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import CourtManagement from '../components/Admin/CourtManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
 import MaintenanceControl from '../components/Admin/MaintenanceControl';
@@ -327,44 +328,13 @@ const Admin: React.FC = () => {
             )}
 
             {activeTab === 'analytics' && (
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900 mb-6">數據分析</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="bg-gray-50 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">預約狀態分佈</h3>
-                    <div className="space-y-2">
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">已確認</span>
-                        <span className="text-sm font-medium">{confirmedBookings}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">待確認</span>
-                        <span className="text-sm font-medium">{pendingBookings}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-sm text-gray-600">已取消</span>
-                        <span className="text-sm font-medium">{cancelledBookings}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gray-50 rounded-lg p-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">場地使用率</h3>
-                    <div className="space-y-2">
-                      {courts.map((court) => {
-                        const courtBookings = bookings.filter(b => b.court?._id === court._id);
-                        const usageRate = totalBookings > 0 ? (courtBookings.length / totalBookings * 100).toFixed(1) : 0;
-                        return (
-                          <div key={court._id} className="flex justify-between">
-                            <span className="text-sm text-gray-600">{court.name}</span>
-                            <span className="text-sm font-medium">{usageRate}%</span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <AnalyticsDashboard />
+              </motion.div>
             )}
           </div>
         </motion.div>
