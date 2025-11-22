@@ -81,6 +81,13 @@ const Recharge: React.FC = () => {
   };
 
   const handleRecharge = async (option: RechargeOption) => {
+    // 顯示確認對話框
+    const confirmMessage = `請確認充值信息：\n\n積分：${option.points} 分\n金額：HK$ ${option.amount}\n\n⚠️ 重要提示：\n如經確認後需要退款，將收取 8% 手續費。\n\n是否確認繼續？`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return; // 用戶取消，不執行充值
+    }
+
     try {
       setProcessing(true);
       setSelectedOption(option);
@@ -116,6 +123,13 @@ const Recharge: React.FC = () => {
     if (points < 100) {
       alert('充值積分最少需要100分');
       return;
+    }
+
+    // 顯示確認對話框
+    const confirmMessage = `請確認充值信息：\n\n積分：${points} 分\n金額：HK$ ${amount}\n\n⚠️ 重要提示：\n如經確認後需要退款，將收取 8% 手續費。\n\n是否確認繼續？`;
+    
+    if (!window.confirm(confirmMessage)) {
+      return; // 用戶取消，不執行充值
     }
 
     try {
@@ -299,6 +313,43 @@ const Recharge: React.FC = () => {
                 <p className="text-sm text-gray-500 mt-1">
                   將獲得 {Math.floor(parseFloat(customAmount) || 0)} 積分
                 </p>
+                
+                {/* 快速添加金額按鈕 */}
+                <div className="mt-3">
+                  <p className="text-xs text-gray-500 mb-2">快速添加：</p>
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseFloat(customAmount) || 0;
+                        setCustomAmount((current + 1000).toString());
+                      }}
+                      className="flex-1 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 hover:border-primary-300 transition-colors duration-200"
+                    >
+                      +1000
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseFloat(customAmount) || 0;
+                        setCustomAmount((current + 500).toString());
+                      }}
+                      className="flex-1 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 hover:border-primary-300 transition-colors duration-200"
+                    >
+                      +500
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const current = parseFloat(customAmount) || 0;
+                        setCustomAmount((current + 200).toString());
+                      }}
+                      className="flex-1 px-3 py-2 text-sm font-medium text-primary-600 bg-primary-50 border border-primary-200 rounded-lg hover:bg-primary-100 hover:border-primary-300 transition-colors duration-200"
+                    >
+                      +200
+                    </button>
+                  </div>
+                </div>
               </div>
               
               <div className="flex space-x-3">

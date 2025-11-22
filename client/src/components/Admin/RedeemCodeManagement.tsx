@@ -32,6 +32,21 @@ interface RedeemCode {
   createdAt: string;
 }
 
+interface RedeemUsage {
+  _id: string;
+  user: {
+    _id: string;
+    name: string;
+    email: string;
+    phone: string;
+  };
+  orderType: 'booking' | 'recharge';
+  originalAmount: number;
+  discountAmount: number;
+  finalAmount: number;
+  usedAt: string;
+}
+
 const RedeemCodeManagement: React.FC = () => {
   const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,6 +67,15 @@ const RedeemCodeManagement: React.FC = () => {
     totalUsage: 0,
     totalDiscount: 0
   });
+
+  // 使用記錄 modal 狀態
+  const [showUsageModal, setShowUsageModal] = useState(false);
+  const [selectedCode, setSelectedCode] = useState<RedeemCode | null>(null);
+  const [usageRecords, setUsageRecords] = useState<RedeemUsage[]>([]);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usagePage, setUsagePage] = useState(1);
+  const [usageTotalPages, setUsageTotalPages] = useState(1);
+  const [usageTotal, setUsageTotal] = useState(0);
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -145,6 +169,37 @@ const RedeemCodeManagement: React.FC = () => {
     });
     setEditingCode(code);
     setShowCreateForm(true);
+  };
+
+  const handleViewUsage = async (code: RedeemCode) => {
+    setSelectedCode(code);
+    setShowUsageModal(true);
+    setUsagePage(1);
+    await fetchUsageRecords(code._id, 1);
+  };
+
+  const fetchUsageRecords = async (codeId: string, page: number) => {
+    try {
+      setUsageLoading(true);
+      const response = await axios.get(`/redeem/admin/${codeId}/usage`, {
+        params: { page, limit: 20 }
+      });
+      setUsageRecords(response.data.usages);
+      setUsagePage(response.data.pagination.current);
+      setUsageTotalPages(response.data.pagination.pages);
+      setUsageTotal(response.data.pagination.total);
+    } catch (error) {
+      console.error('獲取使用記錄失敗:', error);
+      alert('獲取使用記錄失敗');
+    } finally {
+      setUsageLoading(false);
+    }
+  };
+
+  const handleUsagePageChange = (page: number) => {
+    if (selectedCode) {
+      fetchUsageRecords(selectedCode._id, page);
+    }
   };
 
   const handleUpdateRedeemCode = async (e: React.FormEvent) => {
@@ -409,7 +464,13 @@ const RedeemCodeManagement: React.FC = () => {
                 <tr key={code._id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{code.name}</div>
+                      <button
+                        onClick={() => handleViewUsage(code)}
+                        className="text-sm font-medium text-primary-600 hover:text-primary-800 hover:underline cursor-pointer"
+                        title="點擊查看使用記錄"
+                      >
+                        {code.name}
+                      </button>
                       <div className="text-sm text-gray-500">{code.code}</div>
                     </div>
                   </td>
@@ -717,6 +778,177 @@ const RedeemCodeManagement: React.FC = () => {
                 下一頁
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 使用記錄 Modal */}
+      {showUsageModal && selectedCode && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  兌換碼使用記錄
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  {selectedCode.name} ({selectedCode.code})
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowUsageModal(false);
+                  setSelectedCode(null);
+                  setUsageRecords([]);
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {usageLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+              </div>
+            ) : usageRecords.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                此兌換碼尚未被使用
+              </div>
+            ) : (
+              <>
+                <div className="mb-4 text-sm text-gray-600">
+                  共 {usageTotal} 筆使用記錄
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          用戶
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          訂單類型
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          原始金額
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          折扣金額
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          最終金額
+                        </th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          使用時間
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {usageRecords.map((usage) => (
+                        <tr key={usage._id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">
+                              {usage.user?.name || '未知用戶'}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {usage.user?.email || '-'}
+                            </div>
+                            {usage.user?.phone && (
+                              <div className="text-xs text-gray-500">
+                                {usage.user.phone}
+                              </div>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span className={`px-2 py-1 text-xs rounded-full ${
+                              usage.orderType === 'booking'
+                                ? 'bg-blue-100 text-blue-800'
+                                : 'bg-green-100 text-green-800'
+                            }`}>
+                              {usage.orderType === 'booking' ? '預約' : '充值'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">
+                            HK$ {usage.originalAmount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-green-600 font-medium">
+                            -HK$ {usage.discountAmount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900 font-medium">
+                            HK$ {usage.finalAmount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
+                            {new Date(usage.usedAt).toLocaleString('zh-TW', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* 使用記錄分頁 */}
+                {usageTotalPages > 1 && (
+                  <div className="mt-4 flex items-center justify-between">
+                    <div className="text-sm text-gray-700">
+                      顯示第 {((usagePage - 1) * 20) + 1} - {Math.min(usagePage * 20, usageTotal)} 筆，共 {usageTotal} 筆
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => handleUsagePageChange(usagePage - 1)}
+                        disabled={usagePage === 1}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        上一頁
+                      </button>
+                      <div className="flex space-x-1">
+                        {Array.from({ length: Math.min(5, usageTotalPages) }, (_, i) => {
+                          let pageNum: number;
+                          if (usageTotalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (usagePage <= 3) {
+                            pageNum = i + 1;
+                          } else if (usagePage >= usageTotalPages - 2) {
+                            pageNum = usageTotalPages - 4 + i;
+                          } else {
+                            pageNum = usagePage - 2 + i;
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => handleUsagePageChange(pageNum)}
+                              className={`px-3 py-1 text-sm border rounded-md ${
+                                usagePage === pageNum
+                                  ? 'bg-primary-600 text-white border-primary-600'
+                                  : 'border-gray-300 hover:bg-gray-50'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <button
+                        onClick={() => handleUsagePageChange(usagePage + 1)}
+                        disabled={usagePage === usageTotalPages}
+                        className="px-3 py-1 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        下一頁
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
       )}

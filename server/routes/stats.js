@@ -3,6 +3,8 @@ const { auth, adminAuth } = require('../middleware/auth');
 const Booking = require('../models/Booking');
 const User = require('../models/User');
 const RedeemUsage = require('../models/RedeemUsage');
+const Recharge = require('../models/Recharge');
+const UserBalance = require('../models/UserBalance');
 
 const router = express.Router();
 
@@ -186,6 +188,59 @@ router.get('/coupon-usage', [auth, adminAuth], async (req, res) => {
     });
   } catch (error) {
     console.error('獲取優惠券使用統計錯誤:', error);
+    res.status(500).json({ message: '伺服器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/stats/admin-summary
+// @desc    管理員首頁概要數據
+// @access  Private (Admin)
+router.get('/admin-summary', [auth, adminAuth], async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1, 0, 0, 0, 0);
+
+    const [
+      completedUntilToday,
+      totalBookings,
+      totalRechargeAgg,
+      monthlyBookings
+    ] = await Promise.all([
+      Booking.countDocuments({
+        status: 'completed',
+        date: { $lte: today }
+      }),
+      Booking.countDocuments({}),
+      Recharge.aggregate([
+        { $match: { status: 'completed' } },
+        {
+          $group: {
+            _id: null,
+            totalAmount: { $sum: '$amount' }
+          }
+        }
+      ]),
+      Booking.countDocuments({
+        date: { $gte: monthStart, $lte: today }
+      })
+    ]);
+
+    const totalRecharge =
+      totalRechargeAgg.length > 0 ? totalRechargeAgg[0].totalAmount : 0;
+
+    res.json({
+      success: true,
+      data: {
+        completedBookingsUntilToday: completedUntilToday,
+        totalBookings,
+        totalRechargeAmount: totalRecharge,
+        currentMonthBookings: monthlyBookings
+      }
+    });
+  } catch (error) {
+    console.error('獲取管理員概要統計錯誤:', error);
     res.status(500).json({ message: '伺服器錯誤，請稍後再試' });
   }
 });

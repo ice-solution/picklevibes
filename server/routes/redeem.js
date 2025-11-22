@@ -441,4 +441,47 @@ router.get('/admin/stats', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   GET /api/redeem/admin/:id/usage
+// @desc    獲取特定兌換碼的使用記錄 (僅管理員)
+// @access  Private (Admin)
+router.get('/admin/:id/usage', [auth, adminAuth], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    
+    // 檢查兌換碼是否存在
+    const redeemCode = await RedeemCode.findById(id);
+    if (!redeemCode) {
+      return res.status(404).json({ message: '兌換碼不存在' });
+    }
+    
+    // 獲取使用記錄
+    const usages = await RedeemUsage.find({ redeemCode: id })
+      .populate('user', 'name email phone')
+      .sort({ usedAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    const total = await RedeemUsage.countDocuments({ redeemCode: id });
+    
+    res.json({
+      success: true,
+      redeemCode: {
+        _id: redeemCode._id,
+        code: redeemCode.code,
+        name: redeemCode.name
+      },
+      usages,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / parseInt(limit)),
+        total
+      }
+    });
+  } catch (error) {
+    console.error('獲取兌換碼使用記錄錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 module.exports = router;

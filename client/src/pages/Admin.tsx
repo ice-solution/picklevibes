@@ -15,6 +15,7 @@ import MaintenanceControl from '../components/Admin/MaintenanceControl';
 import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import ActivityManagement from '../components/Admin/ActivityManagement';
 import HolidayManagement from '../components/Admin/WeekendManagement';
+import api from '../services/api';
 import { 
   CalendarDaysIcon, 
   UserGroupIcon,
@@ -34,6 +35,24 @@ const Admin: React.FC = () => {
   const { bookings, courts, fetchBookings, fetchCourts } = useBooking();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('bookings');
+  const [summary, setSummary] = useState<{
+    completedBookingsUntilToday: number;
+    totalBookings: number;
+    totalRechargeAmount: number;
+    currentMonthBookings: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        const res = await api.get('/stats/admin-summary');
+        setSummary(res.data?.data || null);
+      } catch (error) {
+        console.error('載入管理員概要統計失敗:', error);
+      }
+    };
+    fetchSummary();
+  }, []);
 
   // 從 URL 參數設置活動標籤
   useEffect(() => {
@@ -71,12 +90,12 @@ const Admin: React.FC = () => {
     );
   }
 
-  // 計算統計數據
-  const totalBookings = bookings.length;
+  // （保留原本基於當前加載預約的統計，用於其他區塊）
+  const totalBookingsLocal = bookings.length;
   const confirmedBookings = bookings.filter(b => b.status === 'confirmed').length;
   const pendingBookings = bookings.filter(b => b.status === 'pending').length;
   const cancelledBookings = bookings.filter(b => b.status === 'cancelled').length;
-  const totalRevenue = bookings
+  const totalRevenueLocal = bookings
     .filter(b => b.payment?.status === 'paid')
     .reduce((sum, b) => sum + (b.pricing?.totalPrice || 0), 0);
 
@@ -126,8 +145,10 @@ const Admin: React.FC = () => {
                 <CalendarDaysIcon className="w-6 h-6 text-blue-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">總預約</p>
-                <p className="text-2xl font-bold text-gray-900">{totalBookings}</p>
+                <p className="text-sm font-medium text-gray-500">完成預約（截至今日）</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {summary ? summary.completedBookingsUntilToday : '—'}
+                </p>
               </div>
             </div>
           </div>
@@ -138,8 +159,10 @@ const Admin: React.FC = () => {
                 <UserGroupIcon className="w-6 h-6 text-green-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">已確認</p>
-                <p className="text-2xl font-bold text-gray-900">{confirmedBookings}</p>
+                <p className="text-sm font-medium text-gray-500">總預約（全部）</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {summary ? summary.totalBookings : '—'}
+                </p>
               </div>
             </div>
           </div>
@@ -150,8 +173,10 @@ const Admin: React.FC = () => {
                 <CalendarDaysIcon className="w-6 h-6 text-yellow-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">待確認</p>
-                <p className="text-2xl font-bold text-gray-900">{pendingBookings}</p>
+                <p className="text-sm font-medium text-gray-500">本月總預約</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {summary ? summary.currentMonthBookings : '—'}
+                </p>
               </div>
             </div>
           </div>
@@ -162,8 +187,10 @@ const Admin: React.FC = () => {
                 <CurrencyDollarIcon className="w-6 h-6 text-purple-600" />
               </div>
               <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">總收入</p>
-                <p className="text-2xl font-bold text-gray-900">HK$ {totalRevenue.toLocaleString()}</p>
+                <p className="text-sm font-medium text-gray-500">總收入（累計充值）</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  HK$ {summary ? summary.totalRechargeAmount.toLocaleString() : '—'}
+                </p>
               </div>
             </div>
           </div>
@@ -307,7 +334,7 @@ const Admin: React.FC = () => {
                   <div className="bg-gray-50 rounded-lg p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">總收入</h3>
                     <p className="text-3xl font-bold text-primary-600">
-                      HK$ {totalRevenue.toLocaleString()}
+                      HK$ {totalRevenueLocal.toLocaleString()}
                     </p>
                     <p className="text-sm text-gray-500 mt-2">
                       來自 {confirmedBookings} 個已確認預約
@@ -317,7 +344,7 @@ const Admin: React.FC = () => {
                   <div className="bg-gray-50 rounded-lg p-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">平均收入</h3>
                     <p className="text-3xl font-bold text-green-600">
-                      HK$ {confirmedBookings > 0 ? Math.round(totalRevenue / confirmedBookings).toLocaleString() : 0}
+                      HK$ {confirmedBookings > 0 ? Math.round(totalRevenueLocal / confirmedBookings).toLocaleString() : 0}
                     </p>
                     <p className="text-sm text-gray-500 mt-2">
                       每個預約平均收入
