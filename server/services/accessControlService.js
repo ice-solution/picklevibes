@@ -24,7 +24,7 @@ class AccessControlService {
       const response = await axios.post(`${this.baseURL}/token/get`, {
         appKey: process.env.HIKKEY,
         secretKey: process.env.HIKSECRET
-      });火
+      });
 
       console.log('🔍 門禁系統 API 響應:', JSON.stringify(response.data, null, 2));
 
