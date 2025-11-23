@@ -36,6 +36,12 @@ const rechargeSchema = new mongoose.Schema({
     ref: 'RedeemCode',
     required: false
   },
+  rechargeOffer: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'RechargeOffer',
+    required: false,
+    description: '使用的充值優惠ID，null表示手動輸入'
+  },
   discountAmount: {
     type: Number,
     default: 0
@@ -73,5 +79,6 @@ const rechargeSchema = new mongoose.Schema({
 rechargeSchema.index({ user: 1, status: 1 });
 rechargeSchema.index({ 'payment.transactionId': 1 });
 rechargeSchema.index({ paymentIntentId: 1 });
+rechargeSchema.index({ rechargeOffer: 1 });
 
 module.exports = mongoose.model('Recharge', rechargeSchema);

@@ -208,4 +208,63 @@ router.post('/:id/toggle', auth, adminAuth, async (req, res) => {
   }
 });
 
+// @route   GET /api/recharge-offers/:id/usage
+// @desc    獲取特定充值優惠的使用記錄 (僅管理員)
+// @access  Private (Admin)
+router.get('/:id/usage', [auth, adminAuth], async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { page = 1, limit = 20 } = req.query;
+    
+    // 檢查充值優惠是否存在
+    const offer = await RechargeOffer.findById(id);
+    if (!offer) {
+      return res.status(404).json({ message: '充值優惠不存在' });
+    }
+    
+    // 查找使用該優惠的充值記錄（通過 rechargeOffer 字段）
+    const Recharge = require('../models/Recharge');
+    
+    const query = {
+      rechargeOffer: id,
+      status: 'completed' // 只統計已完成的充值
+    };
+    
+    const recharges = await Recharge.find(query)
+      .populate('user', 'name email phone')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .skip((parseInt(page) - 1) * parseInt(limit));
+    
+    const total = await Recharge.countDocuments(query);
+    
+    res.json({
+      success: true,
+      offer: {
+        _id: offer._id,
+        name: offer.name,
+        points: offer.points,
+        amount: offer.amount
+      },
+      recharges: recharges.map(r => ({
+        _id: r._id,
+        user: r.user,
+        points: r.points,
+        amount: r.amount,
+        status: r.status,
+        createdAt: r.createdAt,
+        paidAt: r.payment?.paidAt
+      })),
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / parseInt(limit)),
+        total
+      }
+    });
+  } catch (error) {
+    console.error('獲取充值優惠使用記錄錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 module.exports = router;

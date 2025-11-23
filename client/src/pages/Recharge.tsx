@@ -12,6 +12,7 @@ import {
 import axios from 'axios';
 
 interface RechargeOption {
+  _id?: string; // 充值優惠ID
   name: string;
   points: number;
   amount: number;
@@ -56,6 +57,7 @@ const Recharge: React.FC = () => {
       
       // 將 API 返回的優惠轉換為 RechargeOption 格式
       const offers = offersRes.data.offers.map((offer: any) => ({
+        _id: offer._id, // 保存優惠ID
         name: offer.name,
         points: offer.points,
         amount: offer.amount,
@@ -94,7 +96,8 @@ const Recharge: React.FC = () => {
 
       const response = await axios.post('/recharge/create-checkout-session', {
         points: option.points,
-        amount: option.amount
+        amount: option.amount,
+        rechargeOfferId: option._id || null // 傳遞優惠ID，如果有的話
         // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
       });
 
@@ -145,7 +148,8 @@ const Recharge: React.FC = () => {
 
       const response = await axios.post('/recharge/create-checkout-session', {
         points: points,
-        amount: amount
+        amount: amount,
+        rechargeOfferId: null // 自定義充值，不使用優惠
         // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
       });
 

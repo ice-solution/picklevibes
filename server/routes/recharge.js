@@ -37,7 +37,8 @@ router.get('/options', auth, (req, res) => {
 router.post('/create-checkout-session', [
   auth,
   body('points').isInt({ min: MIN_RECHARGE_POINTS }).withMessage(`充值積分最少需要${MIN_RECHARGE_POINTS}分`),
-  body('amount').isFloat({ min: MIN_RECHARGE_AMOUNT }).withMessage(`充值金額最少需要HK$${MIN_RECHARGE_AMOUNT}`)
+  body('amount').isFloat({ min: MIN_RECHARGE_AMOUNT }).withMessage(`充值金額最少需要HK$${MIN_RECHARGE_AMOUNT}`),
+  body('rechargeOfferId').optional().isMongoId().withMessage('充值優惠ID格式無效')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -48,7 +49,7 @@ router.post('/create-checkout-session', [
       });
     }
 
-    const { points, amount } = req.body;
+    const { points, amount, rechargeOfferId } = req.body;
 
     // 驗證最小充值限制
     if (points < MIN_RECHARGE_POINTS) {
@@ -63,6 +64,25 @@ router.post('/create-checkout-session', [
       });
     }
 
+    // 如果提供了 rechargeOfferId，驗證優惠是否存在且匹配
+    if (rechargeOfferId) {
+      const RechargeOffer = require('../models/RechargeOffer');
+      const offer = await RechargeOffer.findById(rechargeOfferId);
+      
+      if (!offer) {
+        return res.status(404).json({ message: '充值優惠不存在' });
+      }
+      
+      if (!offer.isActive || new Date(offer.expiryDate) <= new Date()) {
+        return res.status(400).json({ message: '充值優惠已過期或已停用' });
+      }
+      
+      // 驗證金額和積分是否匹配優惠
+      if (offer.points !== points || offer.amount !== amount) {
+        return res.status(400).json({ message: '充值金額或積分與優惠不匹配' });
+      }
+    }
+
     // 驗證充值選項（允許自定義金額）
     const validOption = RECHARGE_OPTIONS.find(option => 
       option.points === points && option.amount === amount
@@ -71,7 +91,7 @@ router.post('/create-checkout-session', [
     // 如果不是預設選項，檢查是否為自定義充值
     const isCustomRecharge = !validOption && points >= MIN_RECHARGE_POINTS && amount >= MIN_RECHARGE_AMOUNT;
 
-    if (!validOption && !isCustomRecharge) {
+    if (!validOption && !isCustomRecharge && !rechargeOfferId) {
       return res.status(400).json({ message: '無效的充值選項' });
     }
 
@@ -80,6 +100,7 @@ router.post('/create-checkout-session', [
       user: req.user.id,
       points: points,
       amount: amount,
+      rechargeOffer: rechargeOfferId || null, // 記錄使用的優惠，null表示手動輸入
       payment: {
         method: 'stripe'
       }

@@ -840,7 +840,7 @@ router.post('/:id/confirm', auth, async (req, res) => {
 // @route   POST /api/bookings/:id/resend-access-email
 // @desc    重發預約開門通知郵件
 // @access  Private (Admin only)
-router.post('/:id/resend-access-email', adminAuth, async (req, res) => {
+router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
   try {
     const { id } = req.params;
     
@@ -851,13 +851,6 @@ router.post('/:id/resend-access-email', adminAuth, async (req, res) => {
     
     if (!booking) {
       return res.status(404).json({ message: '預約記錄不存在' });
-    }
-    
-    // 檢查是否有 tempAuth 數據
-    if (!booking.tempAuth || !booking.tempAuth.code) {
-      return res.status(400).json({ 
-        message: '此預約沒有臨時授權數據，無法重發郵件。請先創建臨時授權。' 
-      });
     }
     
     // 準備訪問者數據
@@ -877,15 +870,68 @@ router.post('/:id/resend-access-email', adminAuth, async (req, res) => {
       courtNumber: booking.court.number
     };
     
-    // 使用已保存的 tempAuth 數據重發郵件
-    const qrCodeData = booking.tempAuth.code;
-    const password = booking.tempAuth.password;
+    let qrCodeData = null;
+    let password = null;
+    let tempAuthCreated = false;
     
+    // 檢查是否有 tempAuth 數據
+    if (!booking.tempAuth || !booking.tempAuth.code) {
+      // 如果沒有 tempAuth，重新創建
+      console.log('⚠️ 預約記錄沒有 tempAuth 數據，正在重新創建...');
+      
+      try {
+        // 調用 API 創建臨時授權
+        const tempAuth = await accessControlService.createTempAuth(visitorData, bookingData);
+        
+        if (tempAuth && tempAuth.code) {
+          // 處理二維碼數據
+          qrCodeData = tempAuth.code;
+          password = tempAuth.password;
+          
+          // 計算開始和結束時間（ISO 格式）
+          const earlyStartTime = accessControlService.subtractMinutes(bookingData.startTime, 15);
+          const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime);
+          const endTimeISO = accessControlService.convertToISOString(bookingData.date, bookingData.endTime);
+          
+          // 保存新創建的 tempAuth 數據到 Booking
+          booking.tempAuth = {
+            code: tempAuth.code || null,
+            password: tempAuth.password || null,
+            startTime: startTimeISO || null,
+            endTime: endTimeISO || null,
+            createdAt: new Date()
+          };
+          await booking.save();
+          console.log('✅ 臨時授權數據已重新創建並保存到預約記錄');
+          
+          tempAuthCreated = true;
+        } else {
+          throw new Error('創建臨時授權失敗：未返回有效數據');
+        }
+      } catch (createError) {
+        console.error('❌ 重新創建 tempAuth 失敗:', createError);
+        return res.status(500).json({ 
+          message: '重新創建臨時授權失敗，無法發送郵件',
+          error: createError.message 
+        });
+      }
+    } else {
+      // 使用已保存的 tempAuth 數據
+      qrCodeData = booking.tempAuth.code;
+      password = booking.tempAuth.password;
+    }
+    
+    // 發送郵件
     await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
     
+    const message = tempAuthCreated 
+      ? '臨時授權已重新創建，開門通知郵件已發送'
+      : '開門通知郵件已重新發送';
+    
     res.json({ 
-      message: '開門通知郵件已重新發送',
-      email: visitorData.email
+      message: message,
+      email: visitorData.email,
+      tempAuthCreated: tempAuthCreated
     });
     
   } catch (error) {
