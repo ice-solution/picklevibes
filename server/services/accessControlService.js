@@ -24,7 +24,7 @@ class AccessControlService {
       const response = await axios.post(`${this.baseURL}/token/get`, {
         appKey: process.env.HIKKEY,
         secretKey: process.env.HIKSECRET
-      });
+      });火
 
       console.log('🔍 門禁系統 API 響應:', JSON.stringify(response.data, null, 2));
 
@@ -58,14 +58,21 @@ class AccessControlService {
 
   /**
    * 將時間提前15分鐘
+   * 處理 24:00 的情況（轉換為 00:00 再計算）
    */
   subtractMinutes(timeString, minutes = 15) {
     try {
-      // 解析時間字符串 (格式: HH:MM)
-      const [hours, mins] = timeString.split(':').map(Number);
+      // 處理 24:00 的情況
+      let normalizedTime = timeString;
+      if (timeString === '24:00') {
+        normalizedTime = '00:00';
+      }
       
-      // 創建日期對象
-      const date = new Date();
+      // 解析時間字符串 (格式: HH:MM)
+      const [hours, mins] = normalizedTime.split(':').map(Number);
+      
+      // 創建日期對象（使用固定日期作為基準，避免時區問題）
+      const date = new Date('2000-01-01T00:00:00');
       date.setHours(hours, mins, 0, 0);
       
       // 減去指定分鐘數
@@ -142,24 +149,49 @@ class AccessControlService {
 
   /**
    * 將日期和時間轉換為帶時區的 ISO 字符串格式
+   * 處理 24:00 的情況，轉換為下一天的 00:00
    */
   convertToISOString(date, time) {
     try {
       // 處理日期格式
-      let dateStr;
+      let dateObj;
       if (date instanceof Date) {
-        dateStr = date.toISOString().split('T')[0]; // 轉換為 YYYY-MM-DD 格式
+        dateObj = new Date(date);
       } else {
-        dateStr = date;
+        // 如果是字符串，嘗試解析
+        dateObj = new Date(date);
+        if (isNaN(dateObj.getTime())) {
+          // 如果解析失敗，假設是 YYYY-MM-DD 格式
+          dateObj = new Date(date + 'T00:00:00');
+        }
       }
+      
+      // 處理 24:00 的情況
+      let finalDate = new Date(dateObj);
+      let finalTime = time;
+      
+      if (time === '24:00') {
+        // 24:00 轉換為下一天的 00:00
+        finalDate.setDate(finalDate.getDate() + 1);
+        finalTime = '00:00';
+        console.log('⏰ 檢測到 24:00，轉換為下一天的 00:00');
+      }
+      
+      // 格式化日期為 YYYY-MM-DD
+      const year = finalDate.getFullYear();
+      const month = String(finalDate.getMonth() + 1).padStart(2, '0');
+      const day = String(finalDate.getDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
       
       // 將日期和時間組合成帶時區的 ISO 字符串格式
       // 格式: 2025-09-29T00:00:00+08:00
-      const isoString = `${dateStr}T${time}:00+08:00`;
+      const isoString = `${dateStr}T${finalTime}:00+08:00`;
       
       console.log('🕐 轉換結果:', {
         inputDate: date,
         inputTime: time,
+        outputDate: dateStr,
+        outputTime: finalTime,
         outputISO: isoString
       });
       
