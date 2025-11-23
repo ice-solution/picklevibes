@@ -38,7 +38,7 @@ router.post('/create-checkout-session', [
   auth,
   body('points').isInt({ min: MIN_RECHARGE_POINTS }).withMessage(`充值積分最少需要${MIN_RECHARGE_POINTS}分`),
   body('amount').isFloat({ min: MIN_RECHARGE_AMOUNT }).withMessage(`充值金額最少需要HK$${MIN_RECHARGE_AMOUNT}`),
-  body('rechargeOfferId').optional().isMongoId().withMessage('充值優惠ID格式無效')
+  body('rechargeOfferId').optional({ nullable: true, checkFalsy: true }).isMongoId().withMessage('充值優惠ID格式無效')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
