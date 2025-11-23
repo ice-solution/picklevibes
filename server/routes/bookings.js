@@ -864,6 +864,7 @@ router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
     const bookingData = {
       bookingId: booking._id.toString(),
       date: booking.date,
+      endDate: booking.endDate || null, // 傳入 endDate 用於判斷跨天
       startTime: booking.startTime,
       endTime: booking.endTime,
       courtName: booking.court.name,
@@ -889,9 +890,15 @@ router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
           password = tempAuth.password;
           
           // 計算開始和結束時間（ISO 格式）
+          // 傳入 endDate 和 startTime 用於判斷 endTime 是否為跨天的 00:00
           const earlyStartTime = accessControlService.subtractMinutes(bookingData.startTime, 15);
           const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime);
-          const endTimeISO = accessControlService.convertToISOString(bookingData.date, bookingData.endTime);
+          const endTimeISO = accessControlService.convertToISOString(
+            bookingData.date, 
+            bookingData.endTime, 
+            bookingData.endDate || null, 
+            bookingData.startTime
+          );
           
           // 保存新創建的 tempAuth 數據到 Booking
           booking.tempAuth = {
