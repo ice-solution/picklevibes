@@ -58,7 +58,6 @@ const Navbar: React.FC = () => {
   const navigation = [
     { name: t('nav.home'), href: '/', icon: HomeIcon },
     { name: t('nav.about'), href: '/about', icon: InformationCircleIcon },
-    { name: t('nav.facilities'), href: '/facilities', icon: BuildingOfficeIcon },
     { name: t('nav.pricing'), href: '/pricing', icon: CurrencyDollarIcon },
     { name: t('nav.booking'), href: '/booking', icon: CalendarDaysIcon },
     { name: '活動中心', href: '/activities', icon: UsersIcon },

@@ -375,6 +375,22 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">價格詳情</h3>
             
+            {/* VIP折扣提示框 */}
+            {user?.membershipLevel !== 'vip' && (
+              <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-400 rounded-lg shadow-md">
+                <div className="flex items-center justify-center gap-2 mb-2">
+                  <span className="text-2xl animate-bounce">🎉</span>
+                  <span className="text-lg font-bold text-red-600">
+                    VIP會員8折!!
+                  </span>
+                  <span className="text-2xl animate-bounce">🎉</span>
+                </div>
+                <p className="text-center text-sm text-gray-600">
+                  成為VIP會員即可享受所有場地8折優惠
+                </p>
+              </div>
+            )}
+            
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">場地費用</span>

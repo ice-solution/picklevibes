@@ -11,7 +11,6 @@ import About from './pages/About';
 import FAQ from './pages/FAQ';
 import Privacy from './pages/Privacy';
 import Terms from './pages/Terms';
-import Facilities from './pages/Facilities';
 import Pricing from './pages/Pricing';
 import Booking from './pages/Booking';
 import Login from './pages/Login';
@@ -49,7 +48,6 @@ function App() {
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
-                <Route path="/facilities" element={<Facilities />} />
                 <Route path="/pricing" element={<Pricing />} />
                 <Route 
                   path="/booking" 

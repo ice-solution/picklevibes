@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { CheckIcon, XMarkIcon, MapPinIcon, BeakerIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
 import PricingIntro from '../components/Pricing/PricingIntro';
 import { useAuth } from '../contexts/AuthContext';
@@ -220,6 +220,72 @@ const Pricing: React.FC = () => {
         </div>
       </section>
 
+
+      {/* 其他設施 */}
+      <section className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true }}
+            className="text-center mb-16"
+          >
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">其他設施</h2>
+            <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+              除了專業的匹克球場地，我們還提供各種便利設施
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            {[
+              {
+                title: '3個專業場地',
+                description: '比賽場、訓練場、單人場，配備空調的現代化室內場地',
+                icon: MapPinIcon,
+                features: ['空調控制', '專業照明', '防滑地面', '標準尺寸']
+              },
+              {
+                title: '淋浴設施',
+                description: '現代化淋浴設施，讓您運動後保持清爽',
+                icon: BeakerIcon,
+                features: ['熱水淋浴', '私人空間', '清潔環境', '便利使用']
+              }
+            ].map((facility, index) => (
+              <motion.div
+                key={index}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: index * 0.1 }}
+                viewport={{ once: true }}
+                className="bg-gray-50 rounded-2xl p-8"
+              >
+                <div className="flex items-start gap-4">
+                  <div className="w-12 h-12 bg-primary-100 rounded-xl flex items-center justify-center flex-shrink-0">
+                    <facility.icon className="w-6 h-6 text-primary-600" />
+                  </div>
+                  <div className="flex-1">
+                    <h3 className="text-xl font-bold text-gray-900 mb-2">
+                      {facility.title}
+                    </h3>
+                    <p className="text-gray-600 mb-4">
+                      {facility.description}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {facility.features.map((feature, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-sm text-gray-600">
+                          <CheckCircleIcon className="w-4 h-4 text-green-500" />
+                          <span>{feature}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
 
       {/* 會員折扣說明 */}
       <section className="py-20 bg-primary-50">

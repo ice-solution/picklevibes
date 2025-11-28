@@ -52,6 +52,18 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
       <h2 className="text-2xl font-bold text-gray-900 mb-6">選擇場地</h2>
       <p className="text-gray-600 mb-8">請選擇您想要預約的場地</p>
 
+      {/* VIP折扣提示 */}
+      <div className="mb-6 bg-gradient-to-r from-red-500 via-pink-500 to-red-500 text-white px-6 py-4 rounded-xl shadow-lg animate-pulse">
+        <div className="flex items-center justify-center gap-3">
+          <span className="text-2xl animate-bounce">🎉</span>
+          <span className="text-xl font-bold">VIP會員8折!!</span>
+          <span className="text-2xl animate-bounce">🎉</span>
+        </div>
+        <p className="text-center text-sm mt-2 text-red-100">
+          成為VIP會員即可享受所有場地8折優惠
+        </p>
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {courts
           .filter(court => court.type !== 'full_venue') // 過濾掉包場場地
@@ -140,30 +152,56 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                 </div>
               )}
 
+              {/* VIP折扣提示框 */}
+              <div className="mb-4 p-3 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-400 rounded-lg shadow-md">
+                <div className="flex items-center justify-center gap-2">
+                  <span className="text-xl animate-bounce">🎉</span>
+                  <span className="text-base font-bold text-red-600">
+                    VIP會員8折!!
+                  </span>
+                  <span className="text-xl animate-bounce">🎉</span>
+                </div>
+              </div>
+
               {/* 價格信息 */}
               <div className="space-y-2">
                 {court.pricing.timeSlots && court.pricing.timeSlots.length > 0 ? (
                   court.pricing.timeSlots.map((slot, idx) => (
                     <div key={idx} className="flex items-center justify-between">
                       <span className="text-sm text-gray-500">{slot.name}</span>
-                      <span className="text-sm font-bold text-primary-600">
-                        {slot.price} 積分/小時
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm font-bold text-primary-600">
+                          {slot.price} 積分/小時
+                        </span>
+                        <span className="text-xs text-red-600 font-semibold">
+                          VIP: {Math.round(slot.price * 0.8)} 積分/小時
+                        </span>
+                      </div>
                     </div>
                   ))
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-500">非繁忙時間</span>
-                      <span className="text-sm font-bold text-primary-600">
-                        {court.pricing.offPeak} 積分/小時
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm font-bold text-primary-600">
+                          {court.pricing.offPeak} 積分/小時
+                        </span>
+                        <span className="text-xs text-red-600 font-semibold">
+                          VIP: {Math.round(court.pricing.offPeak * 0.8)} 積分/小時
+                        </span>
+                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-500">繁忙時間</span>
-                      <span className="text-sm font-bold text-primary-600">
-                        {court.pricing.peakHour} 積分/小時
-                      </span>
+                      <div className="flex flex-col items-end">
+                        <span className="text-sm font-bold text-primary-600">
+                          {court.pricing.peakHour} 積分/小時
+                        </span>
+                        <span className="text-xs text-red-600 font-semibold">
+                          VIP: {Math.round(court.pricing.peakHour * 0.8)} 積分/小時
+                        </span>
+                      </div>
                     </div>
                   </>
                 )}
