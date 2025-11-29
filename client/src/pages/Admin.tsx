@@ -14,6 +14,7 @@ import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement
 import MaintenanceControl from '../components/Admin/MaintenanceControl';
 import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import ActivityManagement from '../components/Admin/ActivityManagement';
+import RegularActivityManagement from '../components/Admin/RegularActivityManagement';
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import api from '../services/api';
 import { 
@@ -106,7 +107,8 @@ const Admin: React.FC = () => {
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'activities', name: '活動管理', icon: CalendarIcon },
-        { id: 'weekend', name: '假期管理', icon: ClockIcon },
+    { id: 'regular-activities', name: '恆常活動管理', icon: CalendarIcon },
+    { id: 'weekend', name: '假期管理', icon: ClockIcon },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon },
     { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon },
     { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon },
@@ -303,6 +305,16 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <ActivityManagement />
+              </motion.div>
+            )}
+
+            {activeTab === 'regular-activities' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <RegularActivityManagement />
               </motion.div>
             )}
 

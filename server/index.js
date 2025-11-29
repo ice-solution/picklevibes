@@ -141,6 +141,7 @@ app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added re
 app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes
 app.use('/api/bulk-upgrade', require('./routes/bulk-upgrade')); // Added bulk upgrade routes
 app.use('/api/activities', require('./routes/activities')); // Added activities routes
+app.use('/api/regular-activities', require('./routes/regularActivities')); // Added regular activities routes
 app.use('/api/full-venue', require('./routes/fullVenue')); // Added full venue routes
 app.use('/api/weekend', require('./routes/weekend')); // Added weekend management routes
 app.use('/api/stats', require('./routes/stats')); // Added statistics routes

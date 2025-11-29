@@ -13,6 +13,15 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 
+// Instagram Icon Component
+const InstagramIcon: React.FC<{ className?: string }> = ({ className }) => (
+  <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+    <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
+    <path d="m16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
+    <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+  </svg>
+);
+
 interface Activity {
   _id: string;
   title: string;
@@ -416,31 +425,44 @@ const ActivityDetail: React.FC = () => {
 
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-4">
-              {canRegister() ? (
-                <Link
-                  to={`/activities/${activity._id}/register`}
-                  className="flex-1 flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+              <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto sm:flex-1">
+                {canRegister() ? (
+                  <Link
+                    to={`/activities/${activity._id}/register`}
+                    className="flex-1 flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
+                  >
+                    <UserPlusIcon className="h-5 w-5 mr-2" />
+                    立即報名
+                  </Link>
+                ) : activity.userRegistration ? (
+                  <button
+                    disabled
+                    className="flex-1 flex items-center justify-center px-6 py-3 bg-green-100 text-green-800 rounded-lg cursor-not-allowed font-medium border border-green-200"
+                  >
+                    <UserPlusIcon className="h-5 w-5 mr-2" />
+                    {getRegisterButtonText()}
+                  </button>
+                ) : (
+                  <button
+                    disabled
+                    className="flex-1 flex items-center justify-center px-6 py-3 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed font-medium"
+                  >
+                    <UserPlusIcon className="h-5 w-5 mr-2" />
+                    {getRegisterButtonText()}
+                  </button>
+                )}
+                
+                {/* IG 查詢按鈕 */}
+                <a
+                  href="https://ig.me/m/picklevibes.hk"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors font-medium"
                 >
-                  <UserPlusIcon className="h-5 w-5 mr-2" />
-                  立即報名
-                </Link>
-              ) : activity.userRegistration ? (
-                <button
-                  disabled
-                  className="flex-1 flex items-center justify-center px-6 py-3 bg-green-100 text-green-800 rounded-lg cursor-not-allowed font-medium border border-green-200"
-                >
-                  <UserPlusIcon className="h-5 w-5 mr-2" />
-                  {getRegisterButtonText()}
-                </button>
-              ) : (
-                <button
-                  disabled
-                  className="flex-1 flex items-center justify-center px-6 py-3 bg-gray-300 text-gray-500 rounded-lg cursor-not-allowed font-medium"
-                >
-                  <UserPlusIcon className="h-5 w-5 mr-2" />
-                  {getRegisterButtonText()}
-                </button>
-              )}
+                  <InstagramIcon className="h-5 w-5 mr-2" />
+                  IG 查詢
+                </a>
+              </div>
               
               {!user && (
                 <Link

@@ -65,7 +65,7 @@ router.get('/', async (req, res) => {
     const activities = await Activity.find(query)
       .populate('organizer', 'name email')
       .populate('coaches', 'name email')
-      .sort({ startDate: 1 })
+      .sort({ startDate: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
     
@@ -197,6 +197,61 @@ router.get('/coach-courses', auth, async (req, res) => {
     res.status(500).json({ 
       message: '服務器錯誤，請稍後再試' 
     });
+  }
+});
+
+// @route   GET /api/activities/user/registrations
+// @desc    獲取用戶的活動報名記錄
+// @access  Private
+router.get('/user/registrations', auth, async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10 } = req.query;
+    
+    const query = { user: req.user.id };
+    if (status) {
+      query.status = status;
+    }
+
+    console.log(`🔍 查詢用戶報名記錄: userId=${req.user.id}, status=${status || 'all'}, query:`, JSON.stringify(query));
+
+    // 先檢查總數
+    const total = await ActivityRegistration.countDocuments(query);
+    console.log(`📊 數據庫中總共有 ${total} 條符合條件的報名記錄`);
+
+    const registrations = await ActivityRegistration.find(query)
+      .populate({
+        path: 'activity',
+        select: 'title description startDate endDate location status poster isActive'
+      })
+      .sort({ createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    console.log(`📊 查詢到 ${registrations.length} 條報名記錄`);
+    
+    // 詳細日誌每條記錄
+    registrations.forEach((reg, index) => {
+      console.log(`  [${index + 1}] Registration ID: ${reg._id}, Activity: ${reg.activity ? reg.activity._id : 'NULL'}, Status: ${reg.status}`);
+    });
+    
+    // 檢查是否有 activity 為 null 的記錄
+    const nullActivityCount = registrations.filter(reg => !reg.activity).length;
+    if (nullActivityCount > 0) {
+      console.warn(`⚠️ 有 ${nullActivityCount} 條記錄的活動不存在或已被刪除`);
+    }
+
+    // 返回所有記錄，包括活動已被刪除的（前端可以處理顯示）
+    const validRegistrations = registrations;
+
+    res.json({
+      registrations: validRegistrations,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+      total
+    });
+  } catch (error) {
+    console.error('獲取用戶報名記錄錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
   }
 });
 
@@ -840,41 +895,6 @@ router.patch('/:activityId/admin/registrations/:registrationId/cancel', [
   }
 });
 
-// @route   GET /api/activities/user/registrations
-// @desc    獲取用戶的活動報名記錄
-// @access  Private
-router.get('/user/registrations', auth, async (req, res) => {
-  try {
-    const { status, page = 1, limit = 10 } = req.query;
-    
-    const query = { user: req.user.id };
-    if (status) {
-      query.status = status;
-    }
-
-    const registrations = await ActivityRegistration.find(query)
-      .populate({
-        path: 'activity',
-        select: 'title description startDate endDate location status poster'
-      })
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await ActivityRegistration.countDocuments(query);
-
-    res.json({
-      registrations,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
-      total
-    });
-  } catch (error) {
-    console.error('獲取用戶報名記錄錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤' });
-  }
-});
-
 // @route   DELETE /api/activities/:id/register
 // @desc    取消活動報名
 // @access  Private
@@ -887,15 +907,22 @@ router.delete('/:id/register', auth, async (req, res) => {
       activity: activityId,
       user: userId,
       status: 'registered'
-    });
+    }).populate('activity');
 
     if (!registration) {
       return res.status(404).json({ message: '未找到報名記錄' });
     }
 
-    // 檢查是否可以取消
-    if (!registration.canCancel) {
-      return res.status(400).json({ message: '報名已截止，無法取消' });
+    // 檢查是否可以取消 - 檢查活動開始時間
+    const activity = await Activity.findById(activityId);
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+    
+    const now = new Date();
+    const activityStart = new Date(activity.startDate);
+    if (now >= activityStart) {
+      return res.status(400).json({ message: '活動已開始，無法取消' });
     }
 
     // 退還積分
@@ -910,11 +937,8 @@ router.delete('/:id/register', auth, async (req, res) => {
     await registration.cancel('用戶主動取消');
 
     // 更新活動當前報名人數
-    const activity = await Activity.findById(activityId);
-    if (activity) {
-      activity.currentParticipants = Math.max(0, activity.currentParticipants - registration.participantCount);
-      await activity.save();
-    }
+    activity.currentParticipants = Math.max(0, activity.currentParticipants - registration.participantCount);
+    await activity.save();
 
     console.log(`🎯 用戶取消活動報名: ${req.user.name} 取消 ${activity.title}，退還: ${registration.totalCost}積分`);
 

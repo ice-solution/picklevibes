@@ -70,7 +70,16 @@ const MyActivities: React.FC = () => {
         }
       });
       
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('獲取我的活動失敗:', errorData);
+        throw new Error(errorData.message || '獲取活動記錄失敗');
+      }
+      
       const data = await response.json();
+      console.log('📊 獲取到的報名記錄:', data);
+      console.log('📊 報名記錄數量:', data.registrations?.length || 0);
+      
       setRegistrations(data.registrations || []);
       setTotalPages(data.totalPages || 1);
     } catch (error) {
@@ -80,13 +89,13 @@ const MyActivities: React.FC = () => {
     }
   };
 
-  const handleCancelRegistration = async (registrationId: string, activityTitle: string) => {
+  const handleCancelRegistration = async (activityId: string, activityTitle: string) => {
     if (!window.confirm(`確定要取消報名「${activityTitle}」嗎？積分將會退還。`)) {
       return;
     }
 
     try {
-      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/activities/${registrationId}/register`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/activities/${activityId}/register`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -376,7 +385,8 @@ const MyActivities: React.FC = () => {
                         <EyeIcon className="h-4 w-4 mr-2" />
                         查看活動
                       </Link>
-                      {canCancel(registration) && (
+                      {/* 取消報名功能暫時隱藏，保留代碼以備將來使用 */}
+                      {false && canCancel(registration) && (
                         <button
                           onClick={() => handleCancelRegistration(registration.activity._id, registration.activity.title)}
                           className="flex items-center px-3 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
