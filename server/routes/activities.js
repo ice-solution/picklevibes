@@ -4,6 +4,8 @@ const Activity = require('../models/Activity');
 const ActivityRegistration = require('../models/ActivityRegistration');
 const UserBalance = require('../models/UserBalance');
 const User = require('../models/User');
+const RedeemCode = require('../models/RedeemCode');
+const RedeemUsage = require('../models/RedeemUsage');
 const emailService = require('../services/emailService');
 const { auth, adminAuth } = require('../middleware/auth');
 const { activityUpload, processActivityImage, deleteFile } = require('../middleware/upload');
@@ -486,7 +488,8 @@ router.post('/:id/register', [
   body('participantCount').isInt({ min: 1, max: 10 }).withMessage('參加人數必須在1-10之間'),
   body('contactInfo.email').isEmail().withMessage('請提供有效的電子郵件地址'),
   body('contactInfo.phone').matches(/^[0-9+\-\s()]+$/).withMessage('請提供有效的電話號碼'),
-  body('notes').optional().isLength({ max: 200 }).withMessage('備註不能超過200個字符')
+  body('notes').optional().isLength({ max: 200 }).withMessage('備註不能超過200個字符'),
+  body('redeemCodeId').optional().isMongoId().withMessage('請提供有效的兌換碼ID')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -496,7 +499,7 @@ router.post('/:id/register', [
       });
     }
 
-    const { participantCount, contactInfo, notes } = req.body;
+    const { participantCount, contactInfo, notes, redeemCodeId } = req.body;
     const activityId = req.params.id;
     const userId = req.user.id;
 
@@ -543,7 +546,53 @@ router.post('/:id/register', [
     }
 
     // 計算總費用
-    const totalCost = activity.price * participantCount;
+    const baseCost = activity.price * participantCount;
+    let totalCost = baseCost;
+    let discountAmount = 0;
+    let redeemCode = null;
+
+    // 處理兌換碼
+    if (redeemCodeId) {
+      redeemCode = await RedeemCode.findById(redeemCodeId);
+      
+      if (!redeemCode || !redeemCode.isValid()) {
+        return res.status(400).json({ message: '兌換碼無效或已過期' });
+      }
+
+      // 檢查專用代碼限制
+      if (redeemCode.restrictedCode && redeemCode.restrictedCode.trim() !== '') {
+        if (redeemCode.restrictedCode.trim() !== 'activity') {
+          return res.status(400).json({ message: '此兌換碼不適用於活動報名' });
+        }
+      }
+
+      // 檢查適用範圍
+      if (!redeemCode.applicableTypes.includes('all') && 
+          !redeemCode.applicableTypes.includes('activity')) {
+        return res.status(400).json({ message: '此兌換碼不適用於活動報名' });
+      }
+
+      // 檢查最低消費金額
+      if (baseCost < redeemCode.minAmount) {
+        return res.status(400).json({ 
+          message: `此兌換碼需要最低消費 HK$${redeemCode.minAmount}` 
+        });
+      }
+
+      // 檢查用戶是否可以使用
+      const userUsageCount = await RedeemUsage.countDocuments({
+        redeemCode: redeemCodeId,
+        user: userId
+      });
+      
+      if (userUsageCount >= redeemCode.userUsageLimit) {
+        return res.status(400).json({ message: '您已超過此兌換碼的使用次數限制' });
+      }
+
+      // 計算折扣
+      discountAmount = redeemCode.calculateDiscount(baseCost);
+      totalCost = baseCost - discountAmount;
+    }
 
     // 檢查用戶積分餘額
     const userBalance = await UserBalance.findOne({ user: userId });
@@ -556,9 +605,31 @@ router.post('/:id/register', [
     // 扣除積分並記錄交易
     await userBalance.deductBalance(
       totalCost,
-      `活動報名 - ${activity.title}`,
+      `活動報名 - ${activity.title}${discountAmount > 0 ? ` (已使用兌換碼，折扣 ${discountAmount} 積分)` : ''}`,
       null
     );
+
+    // 如果使用了兌換碼，記錄使用並更新統計
+    if (redeemCode && discountAmount > 0) {
+      const redeemUsage = new RedeemUsage({
+        redeemCode: redeemCodeId,
+        user: userId,
+        orderType: 'activity',
+        orderId: activityId,
+        originalAmount: baseCost,
+        discountAmount: discountAmount,
+        finalAmount: totalCost,
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+
+      await redeemUsage.save();
+
+      // 更新兌換碼統計
+      redeemCode.totalUsed += 1;
+      redeemCode.totalDiscount += discountAmount;
+      await redeemCode.save();
+    }
 
     // 創建報名記錄
     const registration = new ActivityRegistration({
@@ -601,7 +672,7 @@ router.post('/:id/register', [
       console.error('發送活動報名確認電郵失敗:', emailError);
     }
 
-    console.log(`🎯 用戶報名活動: ${req.user.name} 報名 ${activity.title}，人數: ${participantCount}，費用: ${totalCost}積分`);
+    console.log(`🎯 用戶報名活動: ${req.user.name} 報名 ${activity.title}，人數: ${participantCount}，原價: ${baseCost}積分，${discountAmount > 0 ? `折扣: ${discountAmount}積分，` : ''}實付: ${totalCost}積分`);
 
     res.status(201).json({
       message: '報名成功',

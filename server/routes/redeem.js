@@ -13,7 +13,8 @@ router.post('/validate', [
   auth,
   body('code').trim().notEmpty().withMessage('兌換碼不能為空'),
   body('amount').isFloat({ min: 0 }).withMessage('金額必須大於等於0'),
-  body('orderType').isIn(['booking', 'recharge']).withMessage('訂單類型必須是 booking 或 recharge')
+  body('orderType').isIn(['booking', 'recharge', 'activity']).withMessage('訂單類型必須是 booking、recharge 或 activity'),
+  body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -24,7 +25,7 @@ router.post('/validate', [
       });
     }
 
-    const { code, amount, orderType } = req.body;
+    const { code, amount, orderType, restrictedCode } = req.body;
 
     // 查找兌換碼
     const redeemCode = await RedeemCode.findOne({ 
@@ -39,6 +40,14 @@ router.post('/validate', [
     // 檢查兌換碼是否有效
     if (!redeemCode.isValid()) {
       return res.status(400).json({ message: '兌換碼已過期或使用次數已滿' });
+    }
+
+    // 檢查專用代碼限制
+    // 如果兌換碼設置了 restrictedCode，則必須匹配
+    if (redeemCode.restrictedCode && redeemCode.restrictedCode.trim() !== '') {
+      if (!restrictedCode || restrictedCode.trim() !== redeemCode.restrictedCode.trim()) {
+        return res.status(400).json({ message: '此兌換碼不適用於當前場景' });
+      }
     }
 
     // 檢查適用範圍
@@ -89,7 +98,7 @@ router.post('/validate', [
 router.post('/use', [
   auth,
   body('redeemCodeId').isMongoId().withMessage('請提供有效的兌換碼ID'),
-  body('orderType').isIn(['booking', 'recharge']).withMessage('訂單類型必須是 booking 或 recharge'),
+  body('orderType').isIn(['booking', 'recharge', 'activity']).withMessage('訂單類型必須是 booking、recharge 或 activity'),
   body('orderId').isMongoId().withMessage('請提供有效的訂單ID'),
   body('originalAmount').isFloat({ min: 0 }).withMessage('原始金額必須大於等於0'),
   body('discountAmount').isFloat({ min: 0 }).withMessage('折扣金額必須大於等於0'),
@@ -213,7 +222,8 @@ router.post('/admin/create', [
   }),
   body('userUsageLimit').isInt({ min: 1 }).withMessage('每用戶使用次數限制必須是正整數'),
   body('validUntil').isISO8601().withMessage('請提供有效的到期日期'),
-  body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組')
+  body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+  body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -312,7 +322,8 @@ router.put('/admin/:id', [
   }),
   body('userUsageLimit').optional().isInt({ min: 1 }).withMessage('每用戶使用次數限制必須是正整數'),
   body('validUntil').optional().isISO8601().withMessage('請提供有效的到期日期'),
-  body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組')
+  body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+  body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

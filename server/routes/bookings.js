@@ -209,12 +209,31 @@ router.post('/', [
         
         const redeemCode = await RedeemCode.findById(redeemCodeId);
         if (redeemCode && redeemCode.isValid()) {
+          // 檢查專用代碼限制
+          // 如果兌換碼設置了 restrictedCode，則必須匹配 "booking"
+          if (redeemCode.restrictedCode && redeemCode.restrictedCode.trim() !== '') {
+            if (redeemCode.restrictedCode.trim() !== 'booking') {
+              throw new Error('此兌換碼不適用於預約場地');
+            }
+          }
+
+          // 檢查適用範圍
+          if (!redeemCode.applicableTypes.includes('all') && 
+              !redeemCode.applicableTypes.includes('booking')) {
+            throw new Error('此兌換碼不適用於預約場地');
+          }
+
           // 檢查用戶是否可以使用
           const canUse = await redeemCode.canUserUse(bookingUserId);
           if (canUse) {
             // 計算兌換碼折扣 - 基於原價計算，不是基於已應用 VIP 折扣的價格
             let discountAmount = 0;
             const originalPrice = tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0);
+            
+            // 檢查最低消費金額
+            if (originalPrice < redeemCode.minAmount) {
+              throw new Error(`此兌換碼需要最低消費 HK$${redeemCode.minAmount}`);
+            }
             
             if (redeemCode.type === 'fixed') {
               discountAmount = redeemCode.value;

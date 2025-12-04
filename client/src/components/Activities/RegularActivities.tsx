@@ -317,4 +317,3 @@ const RegularActivities: React.FC = () => {
 };
 
 export default RegularActivities;
-

@@ -11,6 +11,7 @@ import {
   ExclamationTriangleIcon,
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
+import RedeemCodeInput from '../components/Common/RedeemCodeInput';
 
 interface Activity {
   _id: string;
@@ -56,6 +57,7 @@ const ActivityRegister: React.FC = () => {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [redeemData, setRedeemData] = useState<any>(null);
   const [registrationData, setRegistrationData] = useState<RegistrationForm>({
     participantCount: 1,
     contactInfo: {
@@ -154,7 +156,10 @@ const ActivityRegister: React.FC = () => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
-        body: JSON.stringify(registrationData)
+        body: JSON.stringify({
+          ...registrationData,
+          redeemCodeId: redeemData?.id || undefined
+        })
       });
 
       const data = await response.json();
@@ -187,7 +192,8 @@ const ActivityRegister: React.FC = () => {
     });
   };
 
-  const totalCost = activity ? activity.price * registrationData.participantCount : 0;
+  const baseCost = activity ? activity.price * registrationData.participantCount : 0;
+  const totalCost = redeemData ? redeemData.finalAmount : baseCost;
 
   if (loading) {
     return (
@@ -383,6 +389,15 @@ const ActivityRegister: React.FC = () => {
                   </p>
                 </div>
 
+                {/* Redeem Code */}
+                <RedeemCodeInput
+                  amount={baseCost}
+                  orderType="activity"
+                  onRedeemApplied={(data) => setRedeemData(data)}
+                  onRedeemRemoved={() => setRedeemData(null)}
+                  restrictedCode="activity"
+                />
+
                 {/* Cost Summary */}
                 <div className="bg-gray-50 rounded-lg p-4">
                   <h3 className="font-semibold text-gray-900 mb-3">費用明細</h3>
@@ -395,6 +410,18 @@ const ActivityRegister: React.FC = () => {
                       <span className="text-gray-600">人數：</span>
                       <span className="text-gray-900">{registrationData.participantCount} 人</span>
                     </div>
+                    {redeemData && (
+                      <>
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-600">原價：</span>
+                          <span className="text-gray-900">{baseCost} 積分</span>
+                        </div>
+                        <div className="flex justify-between text-sm text-green-600">
+                          <span>折扣：</span>
+                          <span>-{redeemData.discountAmount.toFixed(0)} 積分</span>
+                        </div>
+                      </>
+                    )}
                     <div className="border-t border-gray-200 pt-2">
                       <div className="flex justify-between font-semibold">
                         <span className="text-gray-900">總計：</span>

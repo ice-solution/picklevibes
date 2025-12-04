@@ -29,6 +29,7 @@ interface RedeemCode {
   totalUsed: number;
   totalDiscount: number;
   applicableTypes: string[];
+  restrictedCode?: string;
   createdAt: string;
 }
 
@@ -40,7 +41,7 @@ interface RedeemUsage {
     email: string;
     phone: string;
   };
-  orderType: 'booking' | 'recharge';
+  orderType: 'booking' | 'recharge' | 'activity';
   originalAmount: number;
   discountAmount: number;
   finalAmount: number;
@@ -88,7 +89,8 @@ const RedeemCodeManagement: React.FC = () => {
     userUsageLimit: 1,
     validFrom: new Date().toISOString().split('T')[0],
     validUntil: '',
-    applicableTypes: ['all'] as string[]
+    applicableTypes: ['all'] as string[],
+    restrictedCode: '' // 專用代碼限制
   });
 
   useEffect(() => {
@@ -165,7 +167,8 @@ const RedeemCodeManagement: React.FC = () => {
       userUsageLimit: code.userUsageLimit,
       validFrom: new Date(code.validFrom).toISOString().split('T')[0],
       validUntil: new Date(code.validUntil).toISOString().split('T')[0],
-      applicableTypes: code.applicableTypes
+      applicableTypes: code.applicableTypes,
+      restrictedCode: (code as any).restrictedCode || ''
     });
     setEditingCode(code);
     setShowCreateForm(true);
@@ -231,7 +234,8 @@ const RedeemCodeManagement: React.FC = () => {
         userUsageLimit: 1,
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
-        applicableTypes: ['all']
+        applicableTypes: ['all'],
+        restrictedCode: ''
       });
       
       setShowCreateForm(false);
@@ -272,7 +276,8 @@ const RedeemCodeManagement: React.FC = () => {
         userUsageLimit: 1,
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
-        applicableTypes: ['all']
+        applicableTypes: ['all'],
+        restrictedCode: ''
       });
       
       setShowCreateForm(false);
@@ -698,6 +703,108 @@ const RedeemCodeManagement: React.FC = () => {
                     required
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  適用範圍 *
+                </label>
+                <div className="space-y-2">
+                  <label className="flex items-center">
+                    <input
+                      type="checkbox"
+                      checked={formData.applicableTypes.includes('all')}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setFormData({ ...formData, applicableTypes: ['all'] });
+                        } else {
+                          setFormData({ ...formData, applicableTypes: [] });
+                        }
+                      }}
+                      className="mr-2"
+                    />
+                    <span className="text-sm text-gray-700">全部適用</span>
+                  </label>
+                  {!formData.applicableTypes.includes('all') && (
+                    <>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.applicableTypes.includes('booking')}
+                          onChange={(e) => {
+                            const types = [...formData.applicableTypes];
+                            if (e.target.checked) {
+                              types.push('booking');
+                            } else {
+                              const index = types.indexOf('booking');
+                              if (index > -1) types.splice(index, 1);
+                            }
+                            setFormData({ ...formData, applicableTypes: types });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">預約場地</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.applicableTypes.includes('recharge')}
+                          onChange={(e) => {
+                            const types = [...formData.applicableTypes];
+                            if (e.target.checked) {
+                              types.push('recharge');
+                            } else {
+                              const index = types.indexOf('recharge');
+                              if (index > -1) types.splice(index, 1);
+                            }
+                            setFormData({ ...formData, applicableTypes: types });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">充值</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.applicableTypes.includes('activity')}
+                          onChange={(e) => {
+                            const types = [...formData.applicableTypes];
+                            if (e.target.checked) {
+                              types.push('activity');
+                            } else {
+                              const index = types.indexOf('activity');
+                              if (index > -1) types.splice(index, 1);
+                            }
+                            setFormData({ ...formData, applicableTypes: types });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">活動報名</span>
+                      </label>
+                    </>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  選擇「全部適用」或選擇特定類型。如果選擇特定類型，則只能在此類型中使用。
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  專用代碼限制（可選）
+                </label>
+                <select
+                  value={formData.restrictedCode || ''}
+                  onChange={(e) => setFormData({ ...formData, restrictedCode: e.target.value || '' })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">無限制</option>
+                  <option value="activity">activity（僅限活動）</option>
+                  <option value="booking">booking（僅限預約場地）</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  選擇「無限制」則可在所有適用範圍內使用。選擇特定代碼則只能在匹配的場景中使用。
+                </p>
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">

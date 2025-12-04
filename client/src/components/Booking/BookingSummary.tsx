@@ -366,6 +366,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               orderType="booking"
               onRedeemApplied={handleRedeemApplied}
               onRedeemRemoved={handleRedeemRemoved}
+              restrictedCode="booking"
             />
           </div>
         )}

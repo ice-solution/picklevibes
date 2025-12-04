@@ -11,10 +11,11 @@ import axios from 'axios';
 
 interface RedeemCodeInputProps {
   amount: number;
-  orderType: 'booking' | 'recharge';
+  orderType: 'booking' | 'recharge' | 'activity';
   onRedeemApplied: (redeemData: RedeemData) => void;
   onRedeemRemoved: () => void;
   className?: string;
+  restrictedCode?: string; // 專用代碼，用於限制使用場景
 }
 
 interface RedeemData {
@@ -32,7 +33,8 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
   orderType,
   onRedeemApplied,
   onRedeemRemoved,
-  className = ''
+  className = '',
+  restrictedCode
 }) => {
   const { t } = useTranslation();
   const [code, setCode] = useState('');
@@ -53,7 +55,8 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
       const response = await axios.post('/redeem/validate', {
         code: code.trim(),
         amount,
-        orderType
+        orderType,
+        restrictedCode: restrictedCode || undefined
       });
 
       if (response.data.valid) {

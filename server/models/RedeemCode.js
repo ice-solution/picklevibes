@@ -76,9 +76,17 @@ const redeemCodeSchema = new mongoose.Schema({
   // 適用範圍
   applicableTypes: [{
     type: String,
-    enum: ['booking', 'recharge', 'all'],
+    enum: ['booking', 'recharge', 'activity', 'all'],
     default: 'all'
   }],
+  // 專用代碼限制（如果設置，則只能在此代碼指定的地方使用）
+  // 如果為空或 null，則可以在所有 applicableTypes 指定的地方使用
+  // 如果設置了，則需要檢查是否匹配當前使用場景
+  restrictedCode: {
+    type: String,
+    trim: true,
+    default: null // null = 無限制，可以在所有地方使用
+  },
   // 創建者
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
