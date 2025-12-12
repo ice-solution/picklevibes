@@ -42,3 +42,10 @@ code {
 .gradient-bg {
   @apply bg-gradient-to-br from-primary-500 to-primary-700;
 }
+
+/* FullCalendar 事件樣式 - 有特殊要求的預約使用紅色粗邊框 */
+.fc-event.booking-with-special-requests {
+  border-width: 3px !important;
+  border-color: #DC2626 !important;
+  border-style: solid !important;
+}

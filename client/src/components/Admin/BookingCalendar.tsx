@@ -118,14 +118,21 @@ const BookingCalendar: React.FC = () => {
     const endDate = new Date(startDate);
     endDate.setHours(endHour, endMinute, 0, 0);
 
+    // 檢查是否有特殊要求（不是 null 且不是空字符串）
+    const hasSpecialRequests = booking.specialRequests && booking.specialRequests.trim().length > 0;
+    
+    // 如果有特殊要求，使用紅色邊框；否則使用場地類型顏色
+    const borderColor = hasSpecialRequests ? '#DC2626' : getCourtTypeColor(booking.court.type, booking.status);
+
     return {
       id: booking._id,
       title: `${booking.court.name} - ${booking.user.name}`,
       start: startDate,
       end: endDate,
       backgroundColor: getCourtTypeColor(booking.court.type, booking.status),
-      borderColor: getCourtTypeColor(booking.court.type, booking.status),
+      borderColor: borderColor,
       textColor: 'white',
+      classNames: hasSpecialRequests ? ['booking-with-special-requests'] : [],
       extendedProps: {
         booking: booking
       }
@@ -294,6 +301,10 @@ const BookingCalendar: React.FC = () => {
             <div className="flex items-center">
               <div className="w-3 h-3 bg-gray-400 rounded mr-2"></div>
               <span className="text-sm text-gray-600">已取消</span>
+            </div>
+            <div className="flex items-center">
+              <div className="w-3 h-3 border-2 border-red-600 rounded mr-2"></div>
+              <span className="text-sm text-gray-600">有特殊要求</span>
             </div>
             <div className="text-xs text-gray-500">
               * 深色表示已確認，淺色表示待確認
