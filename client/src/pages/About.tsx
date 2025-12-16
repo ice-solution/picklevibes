@@ -9,10 +9,18 @@ import {
   PhoneIcon,
   EnvelopeIcon
 } from '@heroicons/react/24/outline';
+import SEO from '../components/SEO/SEO';
 
 const About: React.FC = () => {
   return (
-    <div className="min-h-screen bg-white">
+    <>
+      <SEO
+        title="關於我們 | Picklevibes 智能匹克球室"
+        description="了解 Picklevibes 的品牌故事、使命與目標。我們是香港智能匹克球室的領導者，致力於推廣全民匹克球運動普及化，提供24小時智能自助服務。"
+        keywords="Picklevibes,關於我們,匹克球室,香港匹克球,智能球室,24小時球室,荔枝角匹克球"
+        url="/about"
+      />
+      <div className="min-h-screen bg-white">
       {/* Hero Section */}
       <section className="py-20 bg-gradient-to-br from-blue-50 to-green-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -243,6 +251,7 @@ const About: React.FC = () => {
       </section>
 
     </div>
+    </>
   );
 };
 

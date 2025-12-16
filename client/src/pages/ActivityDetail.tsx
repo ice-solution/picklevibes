@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import SEO from '../components/SEO/SEO';
 import { 
   CalendarIcon, 
   MapPinIcon, 
@@ -222,10 +223,52 @@ const ActivityDetail: React.FC = () => {
     );
   }
 
+  const activityImage = activity.poster || (activity as any).posterThumb || '/logo512.png';
+  const activityImageUrl = getImageUrl(activityImage);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm">
+    <>
+      <SEO
+        title={`${activity.title} | Picklevibes 活動詳情`}
+        description={`${activity.description.substring(0, 150)}... 活動時間：${formatDate(activity.startDate)}，地點：${activity.location}，費用：${activity.price} 積分/人。立即報名參加！`}
+        keywords={`${activity.title},匹克球活動,活動報名,${activity.location},Picklevibes活動`}
+        url={`/activities/${activity._id}`}
+        image={activityImageUrl}
+        structuredData={{
+          '@context': 'https://schema.org',
+          '@type': 'SportsEvent',
+          name: activity.title,
+          description: activity.description,
+          startDate: activity.startDate,
+          endDate: activity.endDate,
+          location: {
+            '@type': 'Place',
+            name: activity.location,
+            address: {
+              '@type': 'PostalAddress',
+              addressLocality: '荔枝角',
+              addressRegion: '香港',
+              addressCountry: 'HK'
+            }
+          },
+          organizer: {
+            '@type': 'Organization',
+            name: 'Picklevibes',
+            url: 'https://picklevibes.hk'
+          },
+          offers: {
+            '@type': 'Offer',
+            price: activity.price,
+            priceCurrency: 'HKD',
+            availability: activity.availableSpots > 0 ? 'https://schema.org/InStock' : 'https://schema.org/SoldOut'
+          },
+          maximumAttendeeCapacity: activity.maxParticipants,
+          eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode'
+        }}
+      />
+      <div className="min-h-screen bg-gray-50">
+        {/* Header */}
+        <div className="bg-white shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <div className="flex items-center justify-between">
             <Link
@@ -500,6 +543,7 @@ const ActivityDetail: React.FC = () => {
         </motion.div>
       </div>
     </div>
+    </>
   );
 };
 

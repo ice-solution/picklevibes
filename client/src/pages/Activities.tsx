@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import SEO from '../components/SEO/SEO';
 import RegularActivities from '../components/Activities/RegularActivities';
 import { 
   CalendarIcon, 
@@ -175,7 +176,14 @@ const Activities: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <SEO
+        title="活動中心 | Picklevibes 匹克球活動與課程"
+        description="探索 Picklevibes 精彩的匹克球活動、教練課程及聯誼活動。與其他玩家一起享受運動樂趣，提升球技並擴展社交圈子。"
+        keywords="匹克球活動,教練課程,匹克球聯誼,活動報名,匹克球訓練,社群活動"
+        url="/activities"
+      />
+      <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -430,6 +438,7 @@ const Activities: React.FC = () => {
         )}
       </div>
     </div>
+    </>
   );
 };
 

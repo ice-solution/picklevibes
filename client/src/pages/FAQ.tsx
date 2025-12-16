@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import SEO from '../components/SEO/SEO';
 
 interface FAQItem {
   id: string;
@@ -98,7 +99,14 @@ const FAQ: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <SEO
+        title="常見問題 | Picklevibes 服務指南"
+        description="Picklevibes 智能匹克球室常見問題解答，包括會員註冊、場地預約、積分充值、取消退款等完整服務指南。"
+        keywords="常見問題,FAQ,匹克球預約,會員註冊,積分充值,場地預約,服務指南"
+        url="/faq"
+      />
+      <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
       <section className="py-20 bg-gradient-to-br from-blue-50 to-green-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -213,6 +221,7 @@ const FAQ: React.FC = () => {
         </div>
       </section>
     </div>
+    </>
   );
 };
 

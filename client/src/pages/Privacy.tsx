@@ -1,9 +1,18 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import SEO from '../components/SEO/SEO';
 
 const Privacy: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gray-50">
+    <>
+      <SEO
+        title="隱私政策 | Picklevibes"
+        description="Picklevibes 智能匹克球室個人資料收集聲明與隱私政策。了解我們如何收集、使用和保護您的個人資料。"
+        keywords="隱私政策,個人資料保護,資料收集聲明"
+        url="/privacy"
+        noindex={true}
+      />
+      <div className="min-h-screen bg-gray-50">
       {/* Hero Section */}
       <section className="py-20 bg-gradient-to-br from-blue-50 to-green-50">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
@@ -230,6 +239,7 @@ const Privacy: React.FC = () => {
         </div>
       </section>
     </div>
+    </>
   );
 };
 

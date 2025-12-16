@@ -1,5 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { BookingProvider } from './contexts/BookingContext';
 import './i18n'; // 初始化 i18n
@@ -35,10 +36,11 @@ import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 
 function App() {
   return (
-    <AuthProvider>
-      <BookingProvider>
-        <Router>
-          <MaintenanceCheck>
+    <HelmetProvider>
+      <AuthProvider>
+        <BookingProvider>
+          <Router>
+            <MaintenanceCheck>
             <div className="min-h-screen bg-gray-50">
               <Navbar />
               <main>
@@ -146,10 +148,11 @@ function App() {
               </main>
               <Footer />
             </div>
-          </MaintenanceCheck>
-        </Router>
-      </BookingProvider>
-    </AuthProvider>
+            </MaintenanceCheck>
+          </Router>
+        </BookingProvider>
+      </AuthProvider>
+    </HelmetProvider>
   );
 }
 

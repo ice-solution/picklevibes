@@ -1,11 +1,20 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { DocumentTextIcon, ShieldCheckIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import SEO from '../components/SEO/SEO';
 
 const Terms: React.FC = () => {
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+    <>
+      <SEO
+        title="服務使用條款 | Picklevibes"
+        description="Picklevibes 智能匹克球室服務使用條款。請仔細閱讀以下條款，使用我們的服務即表示您同意遵守這些條款。"
+        keywords="服務條款,使用條款,會員條款"
+        url="/terms"
+        noindex={true}
+      />
+      <div className="min-h-screen bg-gray-50 py-8">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* 頁面標題 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -356,6 +365,7 @@ const Terms: React.FC = () => {
         </motion.div>
       </div>
     </div>
+    </>
   );
 };
 

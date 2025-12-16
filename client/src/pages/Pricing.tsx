@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { CheckIcon, XMarkIcon, MapPinIcon, BeakerIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
+import SEO from '../components/SEO/SEO';
 import PricingIntro from '../components/Pricing/PricingIntro';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -80,7 +81,14 @@ const Pricing: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <>
+      <SEO
+        title="價格方案 | Picklevibes 會員計劃與場地收費"
+        description="了解 Picklevibes 的會員方案和場地收費。透明價格，無隱藏費用。基本會員免費，VIP會員享20%折扣及優先預約權。"
+        keywords="匹克球價格,匹克球收費,會員方案,VIP會員,場地租用價格,匹克球場地費用,荔枝角匹克球價格"
+        url="/pricing"
+      />
+      <div className="min-h-screen bg-white">
       {/* Hero Section */}
       <section className="relative py-20 bg-gradient-to-br from-primary-600 to-primary-800 text-white">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -409,6 +417,7 @@ const Pricing: React.FC = () => {
         </div>
       </section>
     </div>
+    </>
   );
 };
 
