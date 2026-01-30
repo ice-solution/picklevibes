@@ -24,19 +24,47 @@ import {
   AcademicCapIcon,
   ArrowTrendingUpIcon,
   CalendarIcon,
-  ClockIcon
+  ClockIcon,
+  ShoppingBagIcon,
+  TagIcon,
+  ShoppingCartIcon
 } from '@heroicons/react/24/outline';
 
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
   const [isAdminDropdownOpen, setIsAdminDropdownOpen] = useState(false);
+  const [cartCount, setCartCount] = useState(0);
   const { user, logout } = useAuth();
   const { status: maintenanceStatus } = useMaintenance();
   const { t } = useTranslation();
   const location = useLocation();
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const adminDropdownRef = useRef<HTMLDivElement>(null);
+
+  // 獲取購物車數量
+  useEffect(() => {
+    const updateCartCount = () => {
+      try {
+        const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+        const count = cart.reduce((sum: number, item: any) => sum + (item.quantity || 0), 0);
+        setCartCount(count);
+      } catch (error) {
+        setCartCount(0);
+      }
+    };
+
+    updateCartCount();
+    // 監聽 storage 變化（當其他標籤頁更新購物車時）
+    window.addEventListener('storage', updateCartCount);
+    // 定期檢查（因為同頁面的 localStorage 變化不會觸發 storage 事件）
+    const interval = setInterval(updateCartCount, 1000);
+
+    return () => {
+      window.removeEventListener('storage', updateCartCount);
+      clearInterval(interval);
+    };
+  }, []);
 
   // 點擊外部關閉下拉選單
   useEffect(() => {
@@ -94,25 +122,37 @@ const Navbar: React.FC = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-4 lg:space-x-6">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 to={item.href}
-                className={`flex items-center space-x-1 px-3 py-2 rounded-md text-sm font-medium transition-colors duration-200 ${
+                className={`flex items-center space-x-1 px-2 py-2 rounded-md text-sm font-medium transition-colors duration-200 whitespace-nowrap ${
                   isActive(item.href)
                     ? 'text-primary-600 bg-primary-50'
                     : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
                 }`}
               >
-                <item.icon className="w-4 h-4" />
-                <span>{item.name}</span>
+                <item.icon className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden lg:inline">{item.name}</span>
               </Link>
             ))}
+            {/* 線上商店 - 單獨顯示 */}
+            <Link
+              to="/shop"
+              className={`flex items-center space-x-1 px-2 py-2 rounded-md text-sm font-medium transition-colors duration-200 whitespace-nowrap ${
+                isActive('/shop')
+                  ? 'text-primary-600 bg-primary-50'
+                  : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+              }`}
+            >
+              <ShoppingBagIcon className="w-4 h-4 flex-shrink-0" />
+              <span className="hidden lg:inline">線上商店</span>
+            </Link>
           </div>
 
           {/* User Menu / Auth Buttons */}
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden md:flex items-center space-x-2 lg:space-x-4">
             {user ? (
               <div className="flex items-center space-x-4">
                 {/* 用戶下拉選單 */}
@@ -175,6 +215,14 @@ const Navbar: React.FC = () => {
                           >
                             <CurrencyDollarIcon className="w-4 h-4" />
                             <span>我的積分</span>
+                          </Link>
+                          <Link
+                            to="/orders"
+                            onClick={() => setIsUserDropdownOpen(false)}
+                            className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                          >
+                            <ShoppingBagIcon className="w-4 h-4" />
+                            <span>訂單歷史</span>
                           </Link>
                           {isCoach && (
                             <Link
@@ -279,6 +327,22 @@ const Navbar: React.FC = () => {
                               <span>充值優惠管理</span>
                             </Link>
                             <Link
+                              to="/admin?tab=shop"
+                              onClick={() => setIsAdminDropdownOpen(false)}
+                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <ShoppingBagIcon className="w-4 h-4" />
+                              <span>商店管理</span>
+                            </Link>
+                            <Link
+                              to="/admin?tab=orders"
+                              onClick={() => setIsAdminDropdownOpen(false)}
+                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <ShoppingBagIcon className="w-4 h-4" />
+                              <span>訂單管理</span>
+                            </Link>
+                            <Link
                               to="/admin?tab=bulk-upgrade"
                               onClick={() => setIsAdminDropdownOpen(false)}
                               className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
@@ -324,6 +388,18 @@ const Navbar: React.FC = () => {
                 >
                   {t('nav.logout')}
                 </button>
+                {/* 購物車圖標 */}
+                <Link
+                  to="/cart"
+                  className="relative flex items-center text-gray-700 hover:text-primary-600 transition-colors duration-200"
+                >
+                  <ShoppingCartIcon className="w-6 h-6" />
+                  {cartCount > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                      {cartCount > 99 ? '99+' : cartCount}
+                    </span>
+                  )}
+                </Link>
               </div>
             ) : (
               <div className="flex items-center space-x-4">
@@ -339,6 +415,18 @@ const Navbar: React.FC = () => {
                   className="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
                 >
                   {t('nav.register')}
+                </Link>
+                {/* 購物車圖標 */}
+                <Link
+                  to="/cart"
+                  className="relative flex items-center text-gray-700 hover:text-primary-600 transition-colors duration-200"
+                >
+                  <ShoppingCartIcon className="w-6 h-6" />
+                  {cartCount > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                      {cartCount > 99 ? '99+' : cartCount}
+                    </span>
+                  )}
                 </Link>
               </div>
             )}
@@ -386,11 +474,39 @@ const Navbar: React.FC = () => {
                   <span>{item.name}</span>
                 </Link>
               ))}
+              <Link
+                to="/shop"
+                onClick={() => setIsOpen(false)}
+                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-colors duration-200 ${
+                  isActive('/shop')
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                }`}
+              >
+                <ShoppingBagIcon className="w-5 h-5" />
+                <span>線上商店</span>
+              </Link>
               
               {/* Mobile Auth */}
               <div className="border-t border-gray-200 pt-4 mt-4">
                 {user ? (
                   <div className="space-y-2">
+                    {/* 購物車 */}
+                    <Link
+                      to="/cart"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                    >
+                      <div className="relative">
+                        <ShoppingCartIcon className="w-5 h-5" />
+                        {cartCount > 0 && (
+                          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                            {cartCount > 99 ? '99+' : cartCount}
+                          </span>
+                        )}
+                      </div>
+                      <span>購物車</span>
+                    </Link>
                     {/* 用戶功能 */}
                     <div className="text-sm font-medium text-gray-500 px-3 py-1">我的功能</div>
                     <Link
@@ -432,6 +548,14 @@ const Navbar: React.FC = () => {
                     >
                       <CurrencyDollarIcon className="w-5 h-5" />
                       <span>我的積分</span>
+                    </Link>
+                    <Link
+                      to="/orders"
+                      onClick={() => setIsOpen(false)}
+                      className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                    >
+                      <ShoppingBagIcon className="w-5 h-5" />
+                      <span>訂單歷史</span>
                     </Link>
                     {isCoach && (
                       <Link
@@ -511,6 +635,22 @@ const Navbar: React.FC = () => {
                         >
                           <CreditCardIcon className="w-5 h-5" />
                           <span>充值優惠管理</span>
+                        </Link>
+                        <Link
+                          to="/admin?tab=shop"
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          <ShoppingBagIcon className="w-5 h-5" />
+                          <span>商店管理</span>
+                        </Link>
+                        <Link
+                          to="/admin?tab=orders"
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          <ShoppingBagIcon className="w-5 h-5" />
+                          <span>訂單管理</span>
                         </Link>
                         <Link
                           to="/admin?tab=bulk-upgrade"

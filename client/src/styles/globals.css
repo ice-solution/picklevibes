@@ -114,3 +114,56 @@
   100% { background-position: 0% 50%; }
 }
 
+/* 預約日曆邊框樣式 */
+/* 單一狀態邊框 */
+.fc-event.booking-red-border {
+  border-color: #DC2626 !important;
+  border-width: 3px !important;
+}
+
+.fc-event.booking-green-border {
+  border-color: #10B981 !important;
+  border-width: 5px !important;
+  border-style: solid !important;
+}
+
+.fc-event.booking-blue-border {
+  border-color: #3B82F6 !important;
+  border-width: 3px !important;
+}
+
+/* 漸變色邊框 - 使用多層 box-shadow 實現 */
+.fc-event.booking-gradient-border {
+  position: relative !important;
+  border: none !important;
+}
+
+/* 紅色-藍色漸變 */
+.fc-event.booking-gradient-border.gradient-red-blue {
+  box-shadow: 
+    0 0 0 1.5px #DC2626,
+    0 0 0 3px #3B82F6 !important;
+}
+
+/* 紅色-綠色漸變 */
+.fc-event.booking-gradient-border.gradient-red-green {
+  box-shadow: 
+    0 0 0 2px #DC2626,
+    0 0 0 4px #10B981,
+    0 0 0 5px #10B981 !important;
+}/* 綠色-藍色漸變 */
+.fc-event.booking-gradient-border.gradient-green-blue {
+  box-shadow: 
+    0 0 0 2px #10B981,
+    0 0 0 4px #10B981,
+    0 0 0 5px #3B82F6 !important;
+}
+
+/* 三色漸變（紅色-藍色-綠色）- 使用三層邊框，綠色更粗 */
+.fc-event.booking-gradient-border.gradient-red-blue-green {
+  box-shadow: 
+    0 0 0 1px #DC2626,
+    0 0 0 2.5px #3B82F6,
+    0 0 0 4px #10B981,
+    0 0 0 5px #10B981 !important;
+}

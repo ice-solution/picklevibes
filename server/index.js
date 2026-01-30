@@ -145,6 +145,9 @@ app.use('/api/regular-activities', require('./routes/regularActivities')); // Ad
 app.use('/api/full-venue', require('./routes/fullVenue')); // Added full venue routes
 app.use('/api/weekend', require('./routes/weekend')); // Added weekend management routes
 app.use('/api/stats', require('./routes/stats')); // Added statistics routes
+app.use('/api/products', require('./routes/products')); // Added products routes
+app.use('/api/categories', require('./routes/categories')); // Added categories routes
+app.use('/api/orders', require('./routes/orders')); // Added orders routes
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

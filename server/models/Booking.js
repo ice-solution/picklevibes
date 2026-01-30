@@ -130,6 +130,30 @@ const bookingSchema = new mongoose.Schema({
     type: String,
     maxlength: [500, '特殊要求不能超過500個字符']
   },
+  specialRequestsProcessed: {
+    type: Boolean,
+    default: false,
+    description: '特殊要求是否已處理'
+  },
+  adminNotes: [{
+    content: {
+      type: String,
+      required: true,
+      maxlength: [1000, '留言內容不能超過1000個字符'],
+      description: '留言內容'
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true,
+      description: '創建留言的管理員'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now,
+      description: '留言創建時間'
+    }
+  }],
   includeSoloCourt: {
     type: Boolean,
     default: false

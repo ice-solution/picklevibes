@@ -45,45 +45,50 @@ const createUploadConfig = (destination, filenamePrefix) => {
   });
 };
 
-// 圖片處理中間件 - 統一轉換為 JPG 並調整尺寸
+// 圖片處理中間件 - 統一轉換為 JPG 並調整尺寸（支持單個或多個文件）
 const processImage = (targetWidth, targetHeight) => {
   return async (req, res, next) => {
     try {
-      if (!req.file) {
+      const files = req.files || (req.file ? [req.file] : []);
+      
+      if (files.length === 0) {
         return next();
       }
 
-      const inputPath = req.file.path;
-      const inputExt = path.extname(inputPath).toLowerCase();
-      const outputPath = inputPath.replace(/\.[^/.]+$/, '.jpg'); // 替換擴展名為 .jpg
-      
-      // 如果原文件已經是 JPG，創建臨時文件
-      let tempPath = inputPath;
-      if (inputExt === '.jpg' || inputExt === '.jpeg') {
-        tempPath = inputPath.replace(/\.(jpg|jpeg)$/i, '_temp.jpg');
-        fs.renameSync(inputPath, tempPath);
+      // 處理所有文件
+      for (const file of files) {
+        const inputPath = file.path;
+        const inputExt = path.extname(inputPath).toLowerCase();
+        const outputPath = inputPath.replace(/\.[^/.]+$/, '.jpg'); // 替換擴展名為 .jpg
+        
+        // 如果原文件已經是 JPG，創建臨時文件
+        let tempPath = inputPath;
+        if (inputExt === '.jpg' || inputExt === '.jpeg') {
+          tempPath = inputPath.replace(/\.(jpg|jpeg)$/i, '_temp.jpg');
+          fs.renameSync(inputPath, tempPath);
+        }
+        
+        // 使用 sharp 處理圖片
+        await sharp(tempPath)
+          .resize(targetWidth, targetHeight, {
+            fit: 'cover', // 保持比例，裁剪多餘部分
+            position: 'center' // 從中心裁剪
+          })
+          .jpeg({ 
+            quality: 85,
+            progressive: true 
+          })
+          .toFile(outputPath);
+        
+        // 刪除臨時文件
+        if (tempPath !== outputPath) {
+          fs.unlinkSync(tempPath);
+        }
+        
+        // 更新文件路徑
+        file.path = outputPath;
+        file.filename = path.basename(outputPath);
       }
-      
-      // 使用 sharp 處理圖片
-      await sharp(tempPath)
-        .resize(targetWidth, targetHeight, {
-          fit: 'cover', // 保持比例，裁剪多餘部分
-          position: 'center' // 從中心裁剪
-        })
-        .jpeg({ 
-          quality: 85,
-          progressive: true 
-        })
-        .toFile(outputPath);
-      
-      // 刪除臨時文件
-      if (tempPath !== outputPath) {
-        fs.unlinkSync(tempPath);
-      }
-      
-      // 更新文件路徑
-      req.file.path = outputPath;
-      req.file.filename = path.basename(outputPath);
       
       next();
     } catch (error) {
@@ -191,6 +196,8 @@ module.exports = {
   processActivityImage,
   
   // 通用功能
+  createUploadConfig,
+  processImage,
   deleteFile,
   ensureUploadDir
 };

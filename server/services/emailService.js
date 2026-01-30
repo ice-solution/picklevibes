@@ -1727,6 +1727,324 @@ PickleVibes 團隊
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * 發送訂單確認郵件
+   */
+  async sendOrderConfirmationEmail(userData, orderData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      await this.ensureLogoLoaded();
+
+      const emailSubject = `訂單確認 - ${orderData.orderNumber}`;
+      
+      const itemsHtml = orderData.items.map(item => `
+        <tr>
+          <td style="padding: 12px; border-bottom: 1px solid #eee;">
+            <strong>${item.name}</strong>
+          </td>
+          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
+            ${item.quantity}
+          </td>
+          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">
+            HK$${item.price.toFixed(2)}
+          </td>
+          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">
+            HK$${item.subtotal.toFixed(2)}
+          </td>
+        </tr>
+      `).join('');
+
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes" style="max-width: 200px; margin-bottom: 20px;">` : ''}
+            
+            <h2 style="color: #333; margin-bottom: 20px;">訂單確認</h2>
+            
+            <p style="color: #666; line-height: 1.6;">
+              親愛的 ${userData.name}，<br><br>
+              感謝您的訂購！您的訂單已成功建立，訂單詳情如下：
+            </p>
+            
+            <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
+              <p style="margin: 0 0 10px 0;"><strong>訂單編號：</strong>${orderData.orderNumber}</p>
+              <p style="margin: 0 0 10px 0;"><strong>訂單日期：</strong>${new Date(orderData.createdAt).toLocaleString('zh-TW')}</p>
+              <p style="margin: 0;"><strong>訂單狀態：</strong><span style="color: #ff9800; font-weight: bold;">待處理</span></p>
+            </div>
+
+            <h3 style="color: #333; margin-top: 30px; margin-bottom: 15px;">訂單項目</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <thead>
+                <tr style="background: #f8f9fa;">
+                  <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">產品名稱</th>
+                  <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">數量</th>
+                  <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd;">單價</th>
+                  <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd;">小計</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 20px 0;">
+              <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                <span><strong>小計：</strong></span>
+                <span><strong>HK$${orderData.subtotal.toFixed(2)}</strong></span>
+              </div>
+              ${orderData.discount > 0 ? `
+              <div style="display: flex; justify-content: space-between; margin-bottom: 10px; color: #28a745;">
+                <span>折扣${orderData.redeemCodeName ? ` (${orderData.redeemCodeName})` : ''}：</span>
+                <span>-HK$${orderData.discount.toFixed(2)}</span>
+              </div>
+              ` : ''}
+              <div style="display: flex; justify-content: space-between; padding-top: 10px; border-top: 2px solid #ddd; font-size: 18px;">
+                <span><strong>總計：</strong></span>
+                <span style="color: #ff6b35; font-weight: bold;">HK$${orderData.total.toFixed(2)}</span>
+              </div>
+            </div>
+
+            <h3 style="color: #333; margin-top: 30px; margin-bottom: 15px;">收貨地址</h3>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+              <p style="margin: 5px 0;"><strong>${orderData.shippingAddress.name}</strong></p>
+              <p style="margin: 5px 0;">${orderData.shippingAddress.phone}</p>
+              <p style="margin: 5px 0;">${orderData.shippingAddress.address}</p>
+              ${orderData.shippingAddress.district ? `<p style="margin: 5px 0;">${orderData.shippingAddress.district}</p>` : ''}
+              ${orderData.shippingAddress.postalCode ? `<p style="margin: 5px 0;">${orderData.shippingAddress.postalCode}</p>` : ''}
+            </div>
+
+            ${orderData.notes ? `
+            <div style="background: #fff3cd; padding: 15px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+              <p style="margin: 0;"><strong>備註：</strong>${orderData.notes}</p>
+            </div>
+            ` : ''}
+
+            <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; border-left: 4px solid #28a745; margin-top: 20px;">
+              <p style="margin: 0; color: #333;">
+                <strong>📦 我們將盡快處理您的訂單，並在出貨時發送通知郵件給您。</strong>
+              </p>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+              <p style="color: #666; font-size: 14px;">
+                如有任何疑問，請隨時聯繫我們：<br>
+                📧 info@picklevibes.hk | 📞 +852 6190-2761
+              </p>
+              <p style="color: #999; font-size: 12px; margin-top: 15px;">
+                此致<br>
+                PickleVibes 團隊
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const emailText = `
+訂單確認
+
+親愛的 ${userData.name}，
+
+感謝您的訂購！您的訂單已成功建立。
+
+訂單編號：${orderData.orderNumber}
+訂單日期：${new Date(orderData.createdAt).toLocaleString('zh-TW')}
+訂單狀態：待處理
+
+訂單項目：
+${orderData.items.map(item => `- ${item.name} x ${item.quantity} = HK$${item.subtotal.toFixed(2)}`).join('\n')}
+
+小計：HK$${orderData.subtotal.toFixed(2)}
+${orderData.discount > 0 ? `折扣：-HK$${orderData.discount.toFixed(2)}\n` : ''}總計：HK$${orderData.total.toFixed(2)}
+
+收貨地址：
+${orderData.shippingAddress.name}
+${orderData.shippingAddress.phone}
+${orderData.shippingAddress.address}
+${orderData.shippingAddress.district || ''}
+${orderData.shippingAddress.postalCode || ''}
+
+我們將盡快處理您的訂單，並在出貨時發送通知郵件給您。
+
+如有任何疑問，請隨時聯繫我們：
+📧 info@picklevibes.hk | 📞 +852 6190-2761
+
+此致
+PickleVibes 團隊
+      `;
+
+      const attachments = [];
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo'
+        });
+      }
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+        attachments: attachments
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 訂單確認郵件已發送給 ${userData.email}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送訂單確認郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * 發送出貨通知郵件
+   */
+  async sendOrderShippedEmail(userData, orderData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      await this.ensureLogoLoaded();
+
+      const emailSubject = `訂單已出貨 - ${orderData.orderNumber}`;
+      
+      const itemsHtml = orderData.items.map(item => `
+        <tr>
+          <td style="padding: 12px; border-bottom: 1px solid #eee;">
+            <strong>${item.name}</strong>
+          </td>
+          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
+            ${item.quantity}
+          </td>
+        </tr>
+      `).join('');
+
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes" style="max-width: 200px; margin-bottom: 20px;">` : ''}
+            
+            <h2 style="color: #333; margin-bottom: 20px;">訂單已出貨 🚚</h2>
+            
+            <p style="color: #666; line-height: 1.6;">
+              親愛的 ${userData.name}，<br><br>
+              您的訂單已出貨！我們已將您的商品寄出，詳情如下：
+            </p>
+            
+            <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
+              <p style="margin: 0 0 10px 0;"><strong>訂單編號：</strong>${orderData.orderNumber}</p>
+              <p style="margin: 0 0 10px 0;"><strong>出貨日期：</strong>${new Date(orderData.shippedAt).toLocaleString('zh-TW')}</p>
+              ${orderData.trackingNumber ? `<p style="margin: 0;"><strong>追蹤號碼：</strong><span style="color: #ff6b35; font-weight: bold;">${orderData.trackingNumber}</span></p>` : ''}
+            </div>
+
+            <h3 style="color: #333; margin-top: 30px; margin-bottom: 15px;">出貨項目</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <thead>
+                <tr style="background: #f8f9fa;">
+                  <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">產品名稱</th>
+                  <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">數量</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${itemsHtml}
+              </tbody>
+            </table>
+
+            <h3 style="color: #333; margin-top: 30px; margin-bottom: 15px;">收貨地址</h3>
+            <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+              <p style="margin: 5px 0;"><strong>${orderData.shippingAddress.name}</strong></p>
+              <p style="margin: 5px 0;">${orderData.shippingAddress.phone}</p>
+              <p style="margin: 5px 0;">${orderData.shippingAddress.address}</p>
+              ${orderData.shippingAddress.district ? `<p style="margin: 5px 0;">${orderData.shippingAddress.district}</p>` : ''}
+              ${orderData.shippingAddress.postalCode ? `<p style="margin: 5px 0;">${orderData.shippingAddress.postalCode}</p>` : ''}
+            </div>
+
+            <div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107; margin-top: 20px;">
+              <p style="margin: 0; color: #333;">
+                <strong>📦 請注意查收您的包裹。如有任何問題，請隨時聯繫我們。</strong>
+              </p>
+            </div>
+            
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+              <p style="color: #666; font-size: 14px;">
+                如有任何疑問，請隨時聯繫我們：<br>
+                📧 info@picklevibes.hk | 📞 +852 6190-2761
+              </p>
+              <p style="color: #999; font-size: 12px; margin-top: 15px;">
+                此致<br>
+                PickleVibes 團隊
+              </p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const emailText = `
+訂單已出貨
+
+親愛的 ${userData.name}，
+
+您的訂單已出貨！我們已將您的商品寄出。
+
+訂單編號：${orderData.orderNumber}
+出貨日期：${new Date(orderData.shippedAt).toLocaleString('zh-TW')}
+${orderData.trackingNumber ? `追蹤號碼：${orderData.trackingNumber}\n` : ''}
+
+出貨項目：
+${orderData.items.map(item => `- ${item.name} x ${item.quantity}`).join('\n')}
+
+收貨地址：
+${orderData.shippingAddress.name}
+${orderData.shippingAddress.phone}
+${orderData.shippingAddress.address}
+${orderData.shippingAddress.district || ''}
+${orderData.shippingAddress.postalCode || ''}
+
+請注意查收您的包裹。如有任何問題，請隨時聯繫我們。
+
+如有任何疑問，請隨時聯繫我們：
+📧 info@picklevibes.hk | 📞 +852 6190-2761
+
+此致
+PickleVibes 團隊
+      `;
+
+      const attachments = [];
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo'
+        });
+      }
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+        attachments: attachments
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 出貨通知郵件已發送給 ${userData.email}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送出貨通知郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
 }
 
 module.exports = new EmailService();

@@ -112,13 +112,13 @@ class AccessControlService {
       });
 
       // 將時間轉換為 ISO 字符串格式
-      // 傳入 endDate 和 startTime 用於判斷 endTime 是否為跨天的 00:00
+      // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
       const startTime = this.convertToISOString(bookingData.date, earlyStartTime);
       const endTime = this.convertToISOString(
         bookingData.date, 
         bookingData.endTime, 
         bookingData.endDate || null, 
-        bookingData.startTime
+        earlyStartTime
       );
 
       const requestBody = {
@@ -185,8 +185,8 @@ class AccessControlService {
         finalDate.setDate(finalDate.getDate() + 1);
         finalTime = '00:00';
         console.log('⏰ 檢測到 24:00，轉換為下一天的 00:00');
-      } else if (time === '00:00') {
-        // 如果 endTime 是 00:00，需要判斷是否跨天
+      } else {
+        // 判斷是否需要跨天（適用於所有時間，不僅僅是 00:00）
         let isOvernight = false;
         
         if (endDate) {
@@ -207,14 +207,24 @@ class AccessControlService {
           
           if (endDateOnly.getTime() > dateOnly.getTime()) {
             isOvernight = true;
-            console.log('⏰ 檢測到跨天情況（endDate > date），轉換為下一天的 00:00');
+            console.log('⏰ 檢測到跨天情況（endDate > date），轉換為下一天');
           }
         } else if (startTime) {
-          // 如果沒有 endDate，使用 startTime 判斷（>= 22:00 很可能是跨天）
-          const startHour = parseInt(startTime.split(':')[0]);
-          if (startHour >= 22) {
+          // 如果沒有 endDate，使用 startTime 判斷跨天
+          // 將時間轉換為分鐘數以便比較
+          const parseTimeToMinutes = (timeStr) => {
+            const [hours, mins] = timeStr.split(':').map(Number);
+            return hours * 60 + mins;
+          };
+          
+          const startMinutes = parseTimeToMinutes(startTime);
+          const endMinutes = parseTimeToMinutes(time);
+          
+          // 如果 endTime 早於 startTime，表示跨天
+          // 或者如果 startTime >= 22:00（晚上10點後），endTime 很可能是跨天
+          if (endMinutes < startMinutes || startMinutes >= 22 * 60) {
             isOvernight = true;
-            console.log('⏰ 檢測到跨天情況（startTime >= 22:00, endTime = 00:00），轉換為下一天的 00:00');
+            console.log(`⏰ 檢測到跨天情況（startTime: ${startTime}, endTime: ${time}），轉換為下一天`);
           }
         }
         
@@ -303,14 +313,14 @@ class AccessControlService {
       await this.sendAccessEmail(visitorData, bookingData, qrCodeData, tempAuth.password);
       
       // 計算開始和結束時間（ISO 格式）
-      // 傳入 endDate 和 startTime 用於判斷 endTime 是否為跨天的 00:00
+      // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
       const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
       const startTimeISO = this.convertToISOString(bookingData.date, earlyStartTime);
       const endTimeISO = this.convertToISOString(
         bookingData.date, 
         bookingData.endTime, 
         bookingData.endDate || null, 
-        bookingData.startTime
+        earlyStartTime
       );
       
       console.log('✅ 開門系統流程處理完成');

@@ -108,3 +108,13 @@ client/build/
 .vercel
 
 db-backups/
+
+# One-time scripts (do not commit)
+update-vip-to-20260422.js
+
+# Uploads: track folder structure only (ignore binary files)
+uploads/**/*.jpg
+uploads/**/*.jpeg
+uploads/**/*.png
+uploads/**/*.gif
+uploads/**/*.webp

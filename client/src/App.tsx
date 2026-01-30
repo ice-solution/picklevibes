@@ -31,6 +31,11 @@ import ActivityDetail from './pages/ActivityDetail';
 import ActivityRegister from './pages/ActivityRegister';
 import MyActivities from './pages/MyActivities';
 import CoachCourses from './pages/CoachCourses';
+import Shop from './pages/Shop';
+import ProductDetail from './pages/ProductDetail';
+import Cart from './pages/Cart';
+import Checkout from './pages/Checkout';
+import OrderHistory from './pages/OrderHistory';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 
@@ -140,6 +145,40 @@ function App() {
                   element={
                     <ProtectedRoute>
                       <MyActivities />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route path="/shop" element={<Shop />} />
+                <Route path="/shop/:id" element={<ProductDetail />} />
+                <Route 
+                  path="/cart" 
+                  element={
+                    <ProtectedRoute>
+                      <Cart />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/checkout" 
+                  element={
+                    <ProtectedRoute>
+                      <Checkout />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/orders" 
+                  element={
+                    <ProtectedRoute>
+                      <OrderHistory />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
+                  path="/orders/:id" 
+                  element={
+                    <ProtectedRoute>
+                      <OrderHistory />
                     </ProtectedRoute>
                   } 
                 />

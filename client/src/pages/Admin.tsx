@@ -16,6 +16,8 @@ import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import ActivityManagement from '../components/Admin/ActivityManagement';
 import RegularActivityManagement from '../components/Admin/RegularActivityManagement';
 import HolidayManagement from '../components/Admin/WeekendManagement';
+import ShopManagement from '../components/Admin/ShopManagement';
+import OrderManagement from '../components/Admin/OrderManagement';
 import api from '../services/api';
 import { 
   CalendarDaysIcon, 
@@ -29,6 +31,8 @@ import {
   ArrowTrendingUpIcon,
   CalendarIcon,
   ClockIcon,
+  ShoppingBagIcon,
+  TagIcon,
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -58,7 +62,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'weekend'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'weekend', 'shop', 'orders'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -110,6 +114,8 @@ const Admin: React.FC = () => {
     { id: 'regular-activities', name: '恆常活動管理', icon: CalendarIcon },
     { id: 'weekend', name: '假期管理', icon: ClockIcon },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon },
+    { id: 'shop', name: '商店管理', icon: ShoppingBagIcon },
+    { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon },
     { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon },
     { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon },
     { id: 'revenue', name: '收入統計', icon: CurrencyDollarIcon },
@@ -285,6 +291,26 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <RechargeOfferManagement />
+              </motion.div>
+            )}
+
+            {activeTab === 'shop' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ShopManagement />
+              </motion.div>
+            )}
+
+            {activeTab === 'orders' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <OrderManagement />
               </motion.div>
             )}
 

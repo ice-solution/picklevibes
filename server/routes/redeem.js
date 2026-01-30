@@ -13,7 +13,7 @@ router.post('/validate', [
   auth,
   body('code').trim().notEmpty().withMessage('兌換碼不能為空'),
   body('amount').isFloat({ min: 0 }).withMessage('金額必須大於等於0'),
-  body('orderType').isIn(['booking', 'recharge', 'activity']).withMessage('訂單類型必須是 booking、recharge 或 activity'),
+  body('orderType').isIn(['booking', 'recharge', 'activity', 'product', 'eshop']).withMessage('訂單類型必須是 booking、recharge、activity、product 或 eshop'),
   body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {
@@ -98,7 +98,7 @@ router.post('/validate', [
 router.post('/use', [
   auth,
   body('redeemCodeId').isMongoId().withMessage('請提供有效的兌換碼ID'),
-  body('orderType').isIn(['booking', 'recharge', 'activity']).withMessage('訂單類型必須是 booking、recharge 或 activity'),
+  body('orderType').isIn(['booking', 'recharge', 'activity', 'product', 'eshop']).withMessage('訂單類型必須是 booking、recharge、activity、product 或 eshop'),
   body('orderId').isMongoId().withMessage('請提供有效的訂單ID'),
   body('originalAmount').isFloat({ min: 0 }).withMessage('原始金額必須大於等於0'),
   body('discountAmount').isFloat({ min: 0 }).withMessage('折扣金額必須大於等於0'),

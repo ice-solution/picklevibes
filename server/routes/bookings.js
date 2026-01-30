@@ -593,6 +593,235 @@ router.get('/', [auth], async (req, res) => {
   }
 });
 
+// @route   POST /api/bookings/:id/admin-notes
+// @desc    添加預約管理員留言（管理員）
+// @access  Private (Admin)
+router.post('/:id/admin-notes', [
+  auth,
+  adminAuth,
+  body('content').trim().notEmpty().withMessage('留言內容不能為空').isLength({ max: 1000 }).withMessage('留言內容不能超過1000個字符')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: '輸入驗證失敗',
+        errors: errors.array()
+      });
+    }
+
+    const { content } = req.body;
+    
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ message: '預約不存在' });
+    }
+
+    // 添加新留言
+    booking.adminNotes.push({
+      content: content.trim(),
+      createdBy: req.user.id,
+      createdAt: new Date()
+    });
+
+    await booking.save();
+
+    // 填充創建者信息
+    await booking.populate('adminNotes.createdBy', 'name email');
+
+    res.json({
+      message: '留言添加成功',
+      booking
+    });
+  } catch (error) {
+    console.error('添加預約留言錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PUT /api/bookings/:id/admin-notes/:noteId
+// @desc    更新或刪除特定留言（管理員，只能編輯/刪除自己的留言）
+// @access  Private (Admin)
+router.put('/:id/admin-notes/:noteId', [
+  auth,
+  adminAuth,
+  body('content').optional().trim().isLength({ max: 1000 }).withMessage('留言內容不能超過1000個字符')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: '輸入驗證失敗',
+        errors: errors.array()
+      });
+    }
+
+    const { content } = req.body;
+    const { id: bookingId, noteId } = req.params;
+    
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ message: '預約不存在' });
+    }
+
+    const note = booking.adminNotes.id(noteId);
+    if (!note) {
+      return res.status(404).json({ message: '留言不存在' });
+    }
+
+    // 檢查是否是留言創建者（處理 createdBy 可能是 ObjectId 或 Object 的情況）
+    const noteCreatedBy = note.createdBy.toString ? note.createdBy.toString() : note.createdBy;
+    if (noteCreatedBy !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: '只能編輯自己的留言' });
+    }
+
+    if (content !== undefined) {
+      note.content = content.trim();
+    }
+
+    await booking.save();
+    await booking.populate('adminNotes.createdBy', 'name email');
+
+    res.json({
+      message: '留言更新成功',
+      booking
+    });
+  } catch (error) {
+    console.error('更新留言錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   DELETE /api/bookings/:id/admin-notes/:noteId
+// @desc    刪除特定留言（管理員，只能刪除自己的留言）
+// @access  Private (Admin)
+router.delete('/:id/admin-notes/:noteId', [
+  auth,
+  adminAuth
+], async (req, res) => {
+  try {
+    const { id: bookingId, noteId } = req.params;
+    
+    const booking = await Booking.findById(bookingId);
+    if (!booking) {
+      return res.status(404).json({ message: '預約不存在' });
+    }
+
+    const note = booking.adminNotes.id(noteId);
+    if (!note) {
+      return res.status(404).json({ message: '留言不存在' });
+    }
+
+    // 檢查是否是留言創建者（處理 createdBy 可能是 ObjectId 或 Object 的情況）
+    const noteCreatedBy = note.createdBy.toString ? note.createdBy.toString() : note.createdBy;
+    if (noteCreatedBy !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: '只能刪除自己的留言' });
+    }
+
+    note.deleteOne();
+    await booking.save();
+    await booking.populate('adminNotes.createdBy', 'name email');
+
+    res.json({
+      message: '留言刪除成功',
+      booking
+    });
+  } catch (error) {
+    console.error('刪除留言錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/bookings/admin/all
+// @desc    獲取所有預約（管理員）
+// @access  Private (Admin)
+router.get('/admin/all', [
+  auth,
+  adminAuth
+], async (req, res) => {
+  try {
+    const { 
+      status, 
+      court, 
+      date, 
+      page = 1, 
+      limit = 20 
+    } = req.query;
+    
+    let query = {};
+    
+    if (status) query.status = status;
+    if (court) query.court = court;
+    if (date) {
+      const startDate = new Date(date);
+      const endDate = new Date(date);
+      endDate.setDate(endDate.getDate() + 1);
+      query.date = { $gte: startDate, $lt: endDate };
+    }
+
+    const bookings = await Booking.find(query)
+      .populate('user', 'name email phone')
+      .populate('court', 'name number type')
+      .populate('adminNotes.createdBy', 'name email')
+      .sort({ date: -1, startTime: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Booking.countDocuments(query);
+
+    res.json({
+      bookings,
+      pagination: {
+        current: parseInt(page),
+        pages: Math.ceil(total / limit),
+        total
+      }
+    });
+  } catch (error) {
+    console.error('獲取所有預約錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PUT /api/bookings/:id/special-requests-processed
+// @desc    更新特殊要求處理狀態（管理員）
+// @access  Private (Admin)
+router.put('/:id/special-requests-processed', [
+  auth,
+  adminAuth,
+  body('specialRequestsProcessed').isBoolean().withMessage('特殊要求處理狀態必須是布林值')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ 
+        message: '輸入驗證失敗',
+        errors: errors.array()
+      });
+    }
+
+    const { specialRequestsProcessed } = req.body;
+    
+    const booking = await Booking.findByIdAndUpdate(
+      req.params.id,
+      { specialRequestsProcessed },
+      { new: true, runValidators: true }
+    );
+
+    if (!booking) {
+      return res.status(404).json({ message: '預約不存在' });
+    }
+
+    res.json({
+      message: '處理狀態更新成功',
+      booking
+    });
+  } catch (error) {
+    console.error('更新處理狀態錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/bookings/:id
 // @desc    獲取單個預約詳情
 // @access  Private
@@ -600,7 +829,8 @@ router.get('/:id', [auth], async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
       .populate('court', 'name number type amenities pricing')
-      .populate('user', 'name email phone');
+      .populate('user', 'name email phone')
+      .populate('adminNotes.createdBy', 'name email');
 
     if (!booking) {
       return res.status(404).json({ message: '預約不存在' });
@@ -745,56 +975,6 @@ router.put('/:id/status', [
   }
 });
 
-// @route   GET /api/bookings/admin/all
-// @desc    獲取所有預約（管理員）
-// @access  Private (Admin)
-router.get('/admin/all', [
-  auth,
-  adminAuth
-], async (req, res) => {
-  try {
-    const { 
-      status, 
-      court, 
-      date, 
-      page = 1, 
-      limit = 20 
-    } = req.query;
-    
-    let query = {};
-    
-    if (status) query.status = status;
-    if (court) query.court = court;
-    if (date) {
-      const startDate = new Date(date);
-      const endDate = new Date(date);
-      endDate.setDate(endDate.getDate() + 1);
-      query.date = { $gte: startDate, $lt: endDate };
-    }
-
-    const bookings = await Booking.find(query)
-      .populate('user', 'name email phone')
-      .populate('court', 'name number type')
-      .sort({ date: -1, startTime: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-
-    const total = await Booking.countDocuments(query);
-
-    res.json({
-      bookings,
-      pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(total / limit),
-        total
-      }
-    });
-  } catch (error) {
-    console.error('獲取所有預約錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
-  }
-});
-
 // @route   GET /api/bookings/calendar/:courtId
 // @desc    獲取場地日曆視圖
 // @access  Public
@@ -909,14 +1089,14 @@ router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
           password = tempAuth.password;
           
           // 計算開始和結束時間（ISO 格式）
-          // 傳入 endDate 和 startTime 用於判斷 endTime 是否為跨天的 00:00
+          // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
           const earlyStartTime = accessControlService.subtractMinutes(bookingData.startTime, 15);
           const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime);
           const endTimeISO = accessControlService.convertToISOString(
             bookingData.date, 
             bookingData.endTime, 
             bookingData.endDate || null, 
-            bookingData.startTime
+            earlyStartTime
           );
           
           // 保存新創建的 tempAuth 數據到 Booking

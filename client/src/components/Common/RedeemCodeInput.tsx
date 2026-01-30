@@ -11,7 +11,7 @@ import axios from 'axios';
 
 interface RedeemCodeInputProps {
   amount: number;
-  orderType: 'booking' | 'recharge' | 'activity';
+  orderType: 'booking' | 'recharge' | 'activity' | 'product' | 'eshop';
   onRedeemApplied: (redeemData: RedeemData) => void;
   onRedeemRemoved: () => void;
   className?: string;

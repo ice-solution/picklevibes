@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { 
   UserIcon, 
   EnvelopeIcon, 
   PhoneIcon,
   CogIcon,
-  BellIcon
+  BellIcon,
+  ShoppingBagIcon
 } from '@heroicons/react/24/outline';
 
 const Profile: React.FC = () => {
@@ -362,6 +364,13 @@ const Profile: React.FC = () => {
             >
               <h3 className="text-lg font-semibold text-gray-900 mb-4">快速操作</h3>
               <div className="space-y-3">
+                <Link
+                  to="/orders"
+                  className="flex items-center space-x-2 w-full btn-outline text-left"
+                >
+                  <ShoppingBagIcon className="w-5 h-5" />
+                  <span>訂單歷史</span>
+                </Link>
                 <button className="w-full btn-outline text-left">
                   修改密碼
                 </button>
