@@ -42,14 +42,7 @@ router.post('/validate', [
       return res.status(400).json({ message: '兌換碼已過期或使用次數已滿' });
     }
 
-    // 檢查專用代碼限制
-    // 如果兌換碼設置了 restrictedCode，則必須匹配
-    if (redeemCode.restrictedCode && redeemCode.restrictedCode.trim() !== '') {
-      if (!restrictedCode || restrictedCode.trim() !== redeemCode.restrictedCode.trim()) {
-        return res.status(400).json({ message: '此兌換碼不適用於當前場景' });
-      }
-    }
-
+    // 使用限制僅以「適用範圍」(applicableTypes) 為準；restrictedCode 已不再使用，避免與適用範圍重複
     // 檢查適用範圍
     if (!redeemCode.applicableTypes.includes('all') && 
         !redeemCode.applicableTypes.includes(orderType)) {

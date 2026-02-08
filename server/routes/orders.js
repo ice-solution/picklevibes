@@ -20,7 +20,7 @@ router.post('/', [
   body('shippingAddress.name').trim().notEmpty().withMessage('收件人姓名為必填項目'),
   body('shippingAddress.phone').trim().notEmpty().withMessage('收件人電話為必填項目'),
   body('shippingAddress.address').trim().notEmpty().withMessage('收件地址為必填項目'),
-  body('redeemCodeId').optional().isMongoId().withMessage('請提供有效的兌換碼ID'),
+  body('redeemCodeId').optional({ values: 'null' }).isMongoId().withMessage('請提供有效的兌換碼ID'),
   body('notes').optional().trim()
 ], async (req, res) => {
   try {
@@ -82,14 +82,7 @@ router.post('/', [
         return res.status(400).json({ message: '兌換碼無效或已過期' });
       }
 
-      // 檢查專用代碼限制
-      if (redeemCode.restrictedCode && redeemCode.restrictedCode.trim() !== '') {
-        if (redeemCode.restrictedCode.trim() !== 'product' && redeemCode.restrictedCode.trim() !== 'eshop') {
-          return res.status(400).json({ message: '此兌換碼不適用於產品購買' });
-        }
-      }
-
-      // 檢查適用範圍
+      // 檢查適用範圍（僅以此為準）
       if (!redeemCode.applicableTypes.includes('all') && 
           !redeemCode.applicableTypes.includes('product') &&
           !redeemCode.applicableTypes.includes('eshop')) {

@@ -31,6 +31,7 @@ router.get('/', async (req, res) => {
         introduction: activity.introduction,
         poster: activity.poster,
         requirements: activity.requirements,
+        fee: activity.fee != null ? activity.fee : 0,
         isActive: activity.isActive,
         createdAt: activity.createdAt,
         updatedAt: activity.updatedAt
@@ -64,6 +65,7 @@ router.get('/:id', async (req, res) => {
       introduction: activity.introduction,
       poster: activity.poster,
       requirements: activity.requirements,
+      fee: activity.fee != null ? activity.fee : 0,
       isActive: activity.isActive,
       createdAt: activity.createdAt,
       updatedAt: activity.updatedAt
@@ -85,7 +87,8 @@ router.post('/', [
   body('title').trim().isLength({ min: 1, max: 100 }).withMessage('活動標題必須在1-100個字符之間'),
   body('description').trim().isLength({ min: 1, max: 1000 }).withMessage('活動描述必須在1-1000個字符之間'),
   body('introduction').trim().isLength({ min: 1, max: 2000 }).withMessage('活動介紹必須在1-2000個字符之間'),
-  body('requirements').optional().trim().isLength({ max: 500 }).withMessage('活動要求不能超過500個字符')
+  body('requirements').optional().trim().isLength({ max: 500 }).withMessage('活動要求不能超過500個字符'),
+  body('fee').optional().isFloat({ min: 0 }).withMessage('收費不能為負數')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -107,7 +110,8 @@ router.post('/', [
       title,
       description,
       introduction,
-      requirements
+      requirements,
+      fee
     } = req.body;
 
     // 使用上傳的圖片路徑
@@ -121,6 +125,7 @@ router.post('/', [
       introduction,
       poster: posterPath,
       requirements: requirements || '',
+      fee: fee != null && fee !== '' ? parseFloat(fee) : 0,
       isActive: req.body.isActive !== undefined ? req.body.isActive === 'true' || req.body.isActive === true : true,
       createdBy: req.user.id
     });
@@ -136,6 +141,7 @@ router.post('/', [
         introduction: activity.introduction,
         poster: activity.poster,
         requirements: activity.requirements,
+        fee: activity.fee,
         isActive: activity.isActive,
         createdAt: activity.createdAt,
         updatedAt: activity.updatedAt
@@ -166,7 +172,8 @@ router.put('/:id', [
   body('title').optional().trim().isLength({ min: 1, max: 100 }).withMessage('活動標題必須在1-100個字符之間'),
   body('description').optional().trim().isLength({ min: 1, max: 1000 }).withMessage('活動描述必須在1-1000個字符之間'),
   body('introduction').optional().trim().isLength({ min: 1, max: 2000 }).withMessage('活動介紹必須在1-2000個字符之間'),
-  body('requirements').optional().trim().isLength({ max: 500 }).withMessage('活動要求不能超過500個字符')
+  body('requirements').optional().trim().isLength({ max: 500 }).withMessage('活動要求不能超過500個字符'),
+  body('fee').optional().isFloat({ min: 0 }).withMessage('收費不能為負數')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -194,7 +201,8 @@ router.put('/:id', [
       title,
       description,
       introduction,
-      requirements
+      requirements,
+      fee
     } = req.body;
 
     // 更新字段
@@ -202,6 +210,7 @@ router.put('/:id', [
     if (description !== undefined) activity.description = description;
     if (introduction !== undefined) activity.introduction = introduction;
     if (requirements !== undefined) activity.requirements = requirements;
+    if (fee !== undefined && fee !== '') activity.fee = parseFloat(fee);
     if (req.body.isActive !== undefined) {
       activity.isActive = req.body.isActive === 'true' || req.body.isActive === true;
     }
@@ -233,6 +242,7 @@ router.put('/:id', [
         introduction: activity.introduction,
         poster: activity.poster,
         requirements: activity.requirements,
+        fee: activity.fee != null ? activity.fee : 0,
         isActive: activity.isActive,
         createdAt: activity.createdAt,
         updatedAt: activity.updatedAt

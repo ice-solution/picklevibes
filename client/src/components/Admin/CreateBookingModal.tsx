@@ -620,8 +620,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                         <h4 className="text-sm font-medium text-blue-900 mb-2">💰 包場價格參考</h4>
                         <div className="text-xs text-blue-800 space-y-1">
-                          <div>• 非繁忙時間: $504/小時</div>
-                          <div>• 繁忙時間: $780/小時</div>
+                          <div>• 非繁忙時間: $604/小時</div>
+                          <div>• 繁忙時間: $884/小時</div>
                           <div>• 貓頭鷹時間: $456/小時</div>
                         </div>
                       </div>

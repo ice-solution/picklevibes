@@ -559,14 +559,7 @@ router.post('/:id/register', [
         return res.status(400).json({ message: '兌換碼無效或已過期' });
       }
 
-      // 檢查專用代碼限制
-      if (redeemCode.restrictedCode && redeemCode.restrictedCode.trim() !== '') {
-        if (redeemCode.restrictedCode.trim() !== 'activity') {
-          return res.status(400).json({ message: '此兌換碼不適用於活動報名' });
-        }
-      }
-
-      // 檢查適用範圍
+      // 檢查適用範圍（僅以此為準）
       if (!redeemCode.applicableTypes.includes('all') && 
           !redeemCode.applicableTypes.includes('activity')) {
         return res.status(400).json({ message: '此兌換碼不適用於活動報名' });

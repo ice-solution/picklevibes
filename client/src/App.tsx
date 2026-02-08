@@ -38,11 +38,14 @@ import Checkout from './pages/Checkout';
 import OrderHistory from './pages/OrderHistory';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
+import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
+import ShopDisabled from './pages/ShopDisabled';
 
 function App() {
   return (
     <HelmetProvider>
       <AuthProvider>
+        <ShopConfigProvider>
         <BookingProvider>
           <Router>
             <MaintenanceCheck>
@@ -148,23 +151,15 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
-                <Route path="/shop" element={<Shop />} />
-                <Route path="/shop/:id" element={<ProductDetail />} />
+                <Route path="/shop" element={<ShopOrDisabled />} />
+                <Route path="/shop/:id" element={<ProductDetailOrDisabled />} />
                 <Route 
                   path="/cart" 
-                  element={
-                    <ProtectedRoute>
-                      <Cart />
-                    </ProtectedRoute>
-                  } 
+                  element={<ProtectedRoute><CartOrDisabled /></ProtectedRoute>} 
                 />
                 <Route 
                   path="/checkout" 
-                  element={
-                    <ProtectedRoute>
-                      <Checkout />
-                    </ProtectedRoute>
-                  } 
+                  element={<ProtectedRoute><CheckoutOrDisabled /></ProtectedRoute>} 
                 />
                 <Route 
                   path="/orders" 
@@ -190,9 +185,32 @@ function App() {
             </MaintenanceCheck>
           </Router>
         </BookingProvider>
+        </ShopConfigProvider>
       </AuthProvider>
     </HelmetProvider>
   );
+}
+
+// 依購物功能開關顯示商店或暫停頁（須在 ShopConfigProvider 內使用）
+function ShopOrDisabled() {
+  const { shopEnabled, loading } = useShopConfig();
+  if (loading) return null;
+  return shopEnabled ? <Shop /> : <ShopDisabled />;
+}
+function ProductDetailOrDisabled() {
+  const { shopEnabled, loading } = useShopConfig();
+  if (loading) return null;
+  return shopEnabled ? <ProductDetail /> : <ShopDisabled />;
+}
+function CartOrDisabled() {
+  const { shopEnabled, loading } = useShopConfig();
+  if (loading) return null;
+  return shopEnabled ? <Cart /> : <ShopDisabled />;
+}
+function CheckoutOrDisabled() {
+  const { shopEnabled, loading } = useShopConfig();
+  if (loading) return null;
+  return shopEnabled ? <Checkout /> : <ShopDisabled />;
 }
 
 export default App;

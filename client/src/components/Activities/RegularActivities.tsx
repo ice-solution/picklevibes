@@ -19,6 +19,7 @@ interface RegularActivity {
   introduction: string;
   poster?: string;
   requirements?: string;
+  fee?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -291,6 +292,14 @@ const RegularActivities: React.FC = () => {
                         {selectedActivity.requirements}
                       </p>
                     </div>
+                  </div>
+                )}
+
+                {/* 收費 */}
+                {selectedActivity.fee != null && selectedActivity.fee > 0 && (
+                  <div className="mb-6">
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">收費</h4>
+                    <p className="text-gray-700 font-medium">HK$ {selectedActivity.fee}</p>
                   </div>
                 )}
 

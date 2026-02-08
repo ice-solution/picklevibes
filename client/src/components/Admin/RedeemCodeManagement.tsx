@@ -41,7 +41,7 @@ interface RedeemUsage {
     email: string;
     phone: string;
   };
-  orderType: 'booking' | 'recharge' | 'activity';
+  orderType: 'booking' | 'recharge' | 'activity' | 'product' | 'eshop';
   originalAmount: number;
   discountAmount: number;
   finalAmount: number;
@@ -781,29 +781,27 @@ const RedeemCodeManagement: React.FC = () => {
                         />
                         <span className="text-sm text-gray-700">活動報名</span>
                       </label>
+                      <label className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.applicableTypes.includes('product') || formData.applicableTypes.includes('eshop')}
+                          onChange={(e) => {
+                            let types = formData.applicableTypes.filter(t => t !== 'product' && t !== 'eshop');
+                            if (e.target.checked) {
+                              types = types.filter(t => t !== 'all'); // 勾選只限商城時改為特定類型
+                              types.push('product', 'eshop');
+                            }
+                            setFormData({ ...formData, applicableTypes: types });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">只限商城使用</span>
+                      </label>
                     </>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
-                  選擇「全部適用」或選擇特定類型。如果選擇特定類型，則只能在此類型中使用。
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  專用代碼限制（可選）
-                </label>
-                <select
-                  value={formData.restrictedCode || ''}
-                  onChange={(e) => setFormData({ ...formData, restrictedCode: e.target.value || '' })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-                >
-                  <option value="">無限制</option>
-                  <option value="activity">activity（僅限活動）</option>
-                  <option value="booking">booking（僅限預約場地）</option>
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  選擇「無限制」則可在所有適用範圍內使用。選擇特定代碼則只能在匹配的場景中使用。
+                  適用範圍二選一：<strong>全部適用</strong>（無限制）或<strong>勾選特定類型</strong>（僅在勾選的類型中使用）。只限商城 = 僅限線上商店／商品訂單。
                 </p>
               </div>
 
@@ -973,9 +971,15 @@ const RedeemCodeManagement: React.FC = () => {
                             <span className={`px-2 py-1 text-xs rounded-full ${
                               usage.orderType === 'booking'
                                 ? 'bg-blue-100 text-blue-800'
-                                : 'bg-green-100 text-green-800'
+                                : usage.orderType === 'recharge'
+                                ? 'bg-green-100 text-green-800'
+                                : usage.orderType === 'activity'
+                                ? 'bg-purple-100 text-purple-800'
+                                : (usage.orderType === 'product' || usage.orderType === 'eshop')
+                                ? 'bg-amber-100 text-amber-800'
+                                : 'bg-gray-100 text-gray-800'
                             }`}>
-                              {usage.orderType === 'booking' ? '預約' : '充值'}
+                              {usage.orderType === 'booking' ? '預約' : usage.orderType === 'recharge' ? '充值' : usage.orderType === 'activity' ? '活動' : (usage.orderType === 'product' || usage.orderType === 'eshop') ? '商城' : usage.orderType || '—'}
                             </span>
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">

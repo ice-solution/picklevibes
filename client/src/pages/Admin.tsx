@@ -18,6 +18,8 @@ import RegularActivityManagement from '../components/Admin/RegularActivityManage
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import ShopManagement from '../components/Admin/ShopManagement';
 import OrderManagement from '../components/Admin/OrderManagement';
+import BookingConfig from '../components/Admin/BookingConfig';
+import ReportManagement from '../components/Admin/ReportManagement';
 import api from '../services/api';
 import { 
   CalendarDaysIcon, 
@@ -33,6 +35,8 @@ import {
   ClockIcon,
   ShoppingBagIcon,
   TagIcon,
+  Cog6ToothIcon,
+  DocumentChartBarIcon,
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -62,7 +66,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'weekend', 'shop', 'orders'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -113,13 +117,15 @@ const Admin: React.FC = () => {
     { id: 'activities', name: '活動管理', icon: CalendarIcon },
     { id: 'regular-activities', name: '恆常活動管理', icon: CalendarIcon },
     { id: 'weekend', name: '假期管理', icon: ClockIcon },
+    { id: 'booking-config', name: '預約設定', icon: Cog6ToothIcon },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon },
     { id: 'shop', name: '商店管理', icon: ShoppingBagIcon },
     { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon },
     { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon },
     { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon },
     { id: 'revenue', name: '收入統計', icon: CurrencyDollarIcon },
-    { id: 'analytics', name: '數據分析', icon: ChartBarIcon }
+    { id: 'analytics', name: '數據分析', icon: ChartBarIcon },
+    { id: 'reports', name: '報告', icon: DocumentChartBarIcon }
   ];
 
   return (
@@ -354,6 +360,15 @@ const Admin: React.FC = () => {
         </motion.div>
       )}
 
+            {activeTab === 'booking-config' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <BookingConfig />
+              </motion.div>
+            )}
 
             {activeTab === 'bulk-upgrade' && (
               <motion.div
@@ -399,6 +414,15 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <AnalyticsDashboard />
+              </motion.div>
+            )}
+            {activeTab === 'reports' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <ReportManagement />
               </motion.div>
             )}
           </div>

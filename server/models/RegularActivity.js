@@ -28,6 +28,12 @@ const regularActivitySchema = new mongoose.Schema({
     trim: true,
     maxlength: [500, '活動要求不能超過500個字符']
   },
+  fee: {
+    type: Number,
+    default: 0,
+    min: [0, '收費不能為負數'],
+    description: '恆常班收費（可選，0 表示免費或另議）'
+  },
   isActive: {
     type: Boolean,
     default: true

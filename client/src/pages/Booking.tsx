@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
+import api from '../services/api';
 import CourtSelector from '../components/Booking/CourtSelector';
 import DateSelector from '../components/Booking/DateSelector';
 import TimeSlotSelector from '../components/Booking/TimeSlotSelector';
@@ -33,6 +34,7 @@ const Booking: React.FC = () => {
   const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [availability, setAvailability] = useState<any>(null);
+  const [maxAdvanceDaysByRole, setMaxAdvanceDaysByRole] = useState<Record<string, number>>({ user: 7, coach: 14, admin: 30 });
   const [bookingFormData, setBookingFormData] = useState({
     totalPlayers: 1,
     contactName: '',
@@ -55,6 +57,20 @@ const Booking: React.FC = () => {
     fetchCourts();
   }, [fetchCourts]); // 添加 fetchCourts 依賴
 
+  // 載入預約設定（依 role 的可預約天數）
+  useEffect(() => {
+    const loadBookingConfig = async () => {
+      try {
+        const res = await api.get('/config/booking');
+        const data = res.data?.data?.maxAdvanceDaysByRole;
+        if (data && typeof data === 'object') setMaxAdvanceDaysByRole(data);
+      } catch (_) {
+        // 使用預設值
+      }
+    };
+    loadBookingConfig();
+  }, []);
+
   useEffect(() => {
     if (error) {
       const timer = setTimeout(() => {
@@ -71,7 +87,9 @@ const Booking: React.FC = () => {
     }
   }, [selectedCourt, selectedDate, selectedTimeSlot, checkSoloCourtAvailability]);
 
-  const maxAdvanceDays = user?.role === 'coach' ? 14 : 7;
+  const maxAdvanceDays = user?.role && maxAdvanceDaysByRole[user.role] != null
+    ? maxAdvanceDaysByRole[user.role]
+    : (maxAdvanceDaysByRole.user ?? 7);
 
   const steps = [
     { id: 1, name: '選擇場地', icon: CalendarDaysIcon },

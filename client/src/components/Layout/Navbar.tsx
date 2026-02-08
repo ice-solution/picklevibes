@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
+import { useShopConfig } from '../../contexts/ShopConfigContext';
 import { useMaintenance } from '../../hooks/useMaintenance';
 import LanguageSwitcher from '../Common/LanguageSwitcher';
 import { 
@@ -36,6 +37,7 @@ const Navbar: React.FC = () => {
   const [isAdminDropdownOpen, setIsAdminDropdownOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const { user, logout } = useAuth();
+  const { shopEnabled } = useShopConfig();
   const { status: maintenanceStatus } = useMaintenance();
   const { t } = useTranslation();
   const location = useLocation();
@@ -137,18 +139,20 @@ const Navbar: React.FC = () => {
                 <span className="hidden lg:inline">{item.name}</span>
               </Link>
             ))}
-            {/* 線上商店 - 單獨顯示 */}
-            <Link
-              to="/shop"
-              className={`flex items-center space-x-1 px-2 py-2 rounded-md text-sm font-medium transition-colors duration-200 whitespace-nowrap ${
-                isActive('/shop')
-                  ? 'text-primary-600 bg-primary-50'
-                  : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
-              }`}
-            >
-              <ShoppingBagIcon className="w-4 h-4 flex-shrink-0" />
-              <span className="hidden lg:inline">線上商店</span>
-            </Link>
+            {/* 線上商店 - 依購物功能開關顯示 */}
+            {shopEnabled && (
+              <Link
+                to="/shop"
+                className={`flex items-center space-x-1 px-2 py-2 rounded-md text-sm font-medium transition-colors duration-200 whitespace-nowrap ${
+                  isActive('/shop')
+                    ? 'text-primary-600 bg-primary-50'
+                    : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                }`}
+              >
+                <ShoppingBagIcon className="w-4 h-4 flex-shrink-0" />
+                <span className="hidden lg:inline">線上商店</span>
+              </Link>
+            )}
           </div>
 
           {/* User Menu / Auth Buttons */}
@@ -388,18 +392,20 @@ const Navbar: React.FC = () => {
                 >
                   {t('nav.logout')}
                 </button>
-                {/* 購物車圖標 */}
-                <Link
-                  to="/cart"
-                  className="relative flex items-center text-gray-700 hover:text-primary-600 transition-colors duration-200"
-                >
-                  <ShoppingCartIcon className="w-6 h-6" />
-                  {cartCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                      {cartCount > 99 ? '99+' : cartCount}
-                    </span>
-                  )}
-                </Link>
+                {/* 購物車圖標 - 依購物功能顯示 */}
+                {shopEnabled && (
+                  <Link
+                    to="/cart"
+                    className="relative flex items-center text-gray-700 hover:text-primary-600 transition-colors duration-200"
+                  >
+                    <ShoppingCartIcon className="w-6 h-6" />
+                    {cartCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                        {cartCount > 99 ? '99+' : cartCount}
+                      </span>
+                    )}
+                  </Link>
+                )}
               </div>
             ) : (
               <div className="flex items-center space-x-4">
@@ -416,18 +422,19 @@ const Navbar: React.FC = () => {
                 >
                   {t('nav.register')}
                 </Link>
-                {/* 購物車圖標 */}
-                <Link
-                  to="/cart"
-                  className="relative flex items-center text-gray-700 hover:text-primary-600 transition-colors duration-200"
-                >
-                  <ShoppingCartIcon className="w-6 h-6" />
-                  {cartCount > 0 && (
-                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                      {cartCount > 99 ? '99+' : cartCount}
-                    </span>
-                  )}
-                </Link>
+                {shopEnabled && (
+                  <Link
+                    to="/cart"
+                    className="relative flex items-center text-gray-700 hover:text-primary-600 transition-colors duration-200"
+                  >
+                    <ShoppingCartIcon className="w-6 h-6" />
+                    {cartCount > 0 && (
+                      <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                        {cartCount > 99 ? '99+' : cartCount}
+                      </span>
+                    )}
+                  </Link>
+                )}
               </div>
             )}
           </div>
@@ -474,39 +481,42 @@ const Navbar: React.FC = () => {
                   <span>{item.name}</span>
                 </Link>
               ))}
-              <Link
-                to="/shop"
-                onClick={() => setIsOpen(false)}
-                className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-colors duration-200 ${
-                  isActive('/shop')
-                    ? 'text-primary-600 bg-primary-50'
-                    : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
-                }`}
-              >
-                <ShoppingBagIcon className="w-5 h-5" />
-                <span>線上商店</span>
-              </Link>
+              {shopEnabled && (
+                <Link
+                  to="/shop"
+                  onClick={() => setIsOpen(false)}
+                  className={`flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium transition-colors duration-200 ${
+                    isActive('/shop')
+                      ? 'text-primary-600 bg-primary-50'
+                      : 'text-gray-700 hover:text-primary-600 hover:bg-gray-50'
+                  }`}
+                >
+                  <ShoppingBagIcon className="w-5 h-5" />
+                  <span>線上商店</span>
+                </Link>
+              )}
               
               {/* Mobile Auth */}
               <div className="border-t border-gray-200 pt-4 mt-4">
                 {user ? (
                   <div className="space-y-2">
-                    {/* 購物車 */}
-                    <Link
-                      to="/cart"
-                      onClick={() => setIsOpen(false)}
-                      className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                    >
-                      <div className="relative">
-                        <ShoppingCartIcon className="w-5 h-5" />
-                        {cartCount > 0 && (
-                          <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
-                            {cartCount > 99 ? '99+' : cartCount}
-                          </span>
-                        )}
-                      </div>
-                      <span>購物車</span>
-                    </Link>
+                    {shopEnabled && (
+                      <Link
+                        to="/cart"
+                        onClick={() => setIsOpen(false)}
+                        className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                      >
+                        <div className="relative">
+                          <ShoppingCartIcon className="w-5 h-5" />
+                          {cartCount > 0 && (
+                            <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                              {cartCount > 99 ? '99+' : cartCount}
+                            </span>
+                          )}
+                        </div>
+                        <span>購物車</span>
+                      </Link>
+                    )}
                     {/* 用戶功能 */}
                     <div className="text-sm font-medium text-gray-500 px-3 py-1">我的功能</div>
                     <Link

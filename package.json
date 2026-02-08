@@ -47,7 +47,8 @@
     "qrcode": "^1.5.4",
     "sharp": "^0.34.4",
     "stripe": "^13.5.0",
-    "twilio": "^5.10.2"
+    "twilio": "^5.10.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "concurrently": "^8.2.0",

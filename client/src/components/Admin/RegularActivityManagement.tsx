@@ -15,6 +15,7 @@ interface RegularActivity {
   introduction: string;
   poster?: string;
   requirements?: string;
+  fee?: number;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -36,6 +37,7 @@ const RegularActivityManagement: React.FC = () => {
     description: '',
     introduction: '',
     requirements: '',
+    fee: 0,
     isActive: true
   });
 
@@ -77,6 +79,7 @@ const RegularActivityManagement: React.FC = () => {
       description: '',
       introduction: '',
       requirements: '',
+      fee: 0,
       isActive: true
     });
     setSelectedFile(null);
@@ -120,6 +123,7 @@ const RegularActivityManagement: React.FC = () => {
       submitFormData.append('description', formData.description);
       submitFormData.append('introduction', formData.introduction);
       submitFormData.append('requirements', formData.requirements || '');
+      submitFormData.append('fee', String(formData.fee ?? 0));
       submitFormData.append('isActive', formData.isActive.toString());
       
       if (selectedFile) {
@@ -165,6 +169,7 @@ const RegularActivityManagement: React.FC = () => {
       description: activity.description,
       introduction: activity.introduction,
       requirements: activity.requirements || '',
+      fee: activity.fee ?? 0,
       isActive: activity.isActive
     });
     setImagePreview(activity.poster ? `${apiBaseUrl}${activity.poster}` : '');
@@ -239,6 +244,9 @@ const RegularActivityManagement: React.FC = () => {
                 描述
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                收費
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 狀態
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -269,6 +277,9 @@ const RegularActivityManagement: React.FC = () => {
                   <div className="text-sm text-gray-500 line-clamp-2 max-w-xs">
                     {activity.description}
                   </div>
+                </td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {activity.fee != null && activity.fee > 0 ? `HK$ ${activity.fee}` : '—'}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
                   <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -416,6 +427,20 @@ const RegularActivityManagement: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                     rows={3}
                     maxLength={500}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    收費（HK$，0 表示免費或另議）
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={formData.fee ?? 0}
+                    onChange={(e) => setFormData({ ...formData, fee: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   />
                 </div>
 

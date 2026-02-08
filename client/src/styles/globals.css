@@ -157,9 +157,7 @@
     0 0 0 2px #10B981,
     0 0 0 4px #10B981,
     0 0 0 5px #3B82F6 !important;
-}
-
-/* 三色漸變（紅色-藍色-綠色）- 使用三層邊框，綠色更粗 */
+}/* 三色漸變（紅色-藍色-綠色）- 使用三層邊框，綠色更粗 */
 .fc-event.booking-gradient-border.gradient-red-blue-green {
   box-shadow: 
     0 0 0 1px #DC2626,

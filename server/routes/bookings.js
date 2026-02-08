@@ -8,6 +8,7 @@ const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
 const whatsappService = require('../services/whatsappService');
 const accessControlService = require('../services/accessControlService');
+const Config = require('../models/Config');
 
 const router = express.Router();
 
@@ -104,6 +105,25 @@ router.post('/', [
     const bookingDate = new Date(date);
     if (!bypassRestrictions && !courtDoc.isOpenAt(bookingDate, startTime, endTime)) {
       return res.status(400).json({ message: '場地在該時間段不開放' });
+    }
+
+    // 如果不是管理員 bypass，檢查預約日期是否在該角色可預約天數內
+    if (!bypassRestrictions) {
+      const bookingUserDoc = await User.findById(bookingUserId).select('role');
+      const role = bookingUserDoc?.role || 'user';
+      const bookingConfig = await Config.getBookingConfig();
+      const maxDays = bookingConfig.maxAdvanceDaysByRole[role] ?? 7;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const bookingDateOnly = new Date(bookingDate);
+      bookingDateOnly.setHours(0, 0, 0, 0);
+      const diffDays = Math.floor((bookingDateOnly - today) / (1000 * 60 * 60 * 24));
+      if (diffDays < 0) {
+        return res.status(400).json({ message: '不可預約過去的日期' });
+      }
+      if (diffDays > maxDays) {
+        return res.status(400).json({ message: `您的身份最多可預約 ${maxDays} 天內的場地，請選擇較近的日期` });
+      }
     }
 
     // 如果不是管理員 bypass，檢查時間衝突
@@ -209,15 +229,7 @@ router.post('/', [
         
         const redeemCode = await RedeemCode.findById(redeemCodeId);
         if (redeemCode && redeemCode.isValid()) {
-          // 檢查專用代碼限制
-          // 如果兌換碼設置了 restrictedCode，則必須匹配 "booking"
-          if (redeemCode.restrictedCode && redeemCode.restrictedCode.trim() !== '') {
-            if (redeemCode.restrictedCode.trim() !== 'booking') {
-              throw new Error('此兌換碼不適用於預約場地');
-            }
-          }
-
-          // 檢查適用範圍
+          // 檢查適用範圍（僅以此為準）
           if (!redeemCode.applicableTypes.includes('all') && 
               !redeemCode.applicableTypes.includes('booking')) {
             throw new Error('此兌換碼不適用於預約場地');

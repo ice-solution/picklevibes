@@ -7,9 +7,12 @@ import {
   TrashIcon,
   PlusIcon,
   XMarkIcon,
-  PhotoIcon
+  PhotoIcon,
+  PowerIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import api from '../../services/api';
+import { useShopConfig } from '../../contexts/ShopConfigContext';
 
 interface Product {
   _id: string;
@@ -37,6 +40,8 @@ interface Category {
 }
 
 const ShopManagement: React.FC = () => {
+  const { shopEnabled, refreshShopConfig } = useShopConfig();
+  const [shopToggleSaving, setShopToggleSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<'products' | 'categories'>('products');
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -235,8 +240,54 @@ const ShopManagement: React.FC = () => {
     }
   };
 
+  const handleShopToggle = async () => {
+    setShopToggleSaving(true);
+    try {
+      await api.put('/config/shop', { enabled: !shopEnabled });
+      await refreshShopConfig();
+    } catch (e: any) {
+      alert(e.response?.data?.message || '更新失敗');
+    } finally {
+      setShopToggleSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* 購物功能開關 */}
+      <div className="bg-white rounded-lg shadow-md p-4 border border-gray-200">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <PowerIcon className="w-6 h-6 text-gray-600" />
+            <div>
+              <h3 className="font-semibold text-gray-900">購物功能</h3>
+              <p className="text-sm text-gray-500">
+                {shopEnabled ? '前台顯示線上商店與購物車，用戶可瀏覽與下單' : '已關閉：前台隱藏商店與購物車，用戶無法進入商店頁面' }
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={shopEnabled}
+            disabled={shopToggleSaving}
+            onClick={handleShopToggle}
+            className={`relative inline-flex h-8 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50 ${
+              shopEnabled ? 'bg-primary-600' : 'bg-gray-200'
+            }`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-7 w-7 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                shopEnabled ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+        <p className="mt-2 text-sm text-gray-500">
+          目前狀態：<span className={shopEnabled ? 'text-green-600 font-medium' : 'text-gray-600 font-medium'}>{shopEnabled ? '開啟' : '關閉'}</span>
+        </p>
+      </div>
+
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">商店管理</h2>
       </div>
