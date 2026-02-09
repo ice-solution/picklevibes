@@ -14,7 +14,7 @@ const redeemUsageSchema = new mongoose.Schema({
   // 使用時的訂單信息
   orderType: {
     type: String,
-    enum: ['booking', 'recharge', 'activity'],
+    enum: ['booking', 'recharge', 'activity', 'product', 'eshop'],
     required: true
   },
   orderId: {

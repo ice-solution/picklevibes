@@ -1937,7 +1937,7 @@ PickleVibes 團隊
             
             <p style="color: #666; line-height: 1.6;">
               親愛的 ${userData.name}，<br><br>
-              您的訂單已出貨！我們已將您的商品寄出，詳情如下：
+              您的訂單已出貨！我們已將您的商品寄出，<strong>請留意收件時間並準備收貨</strong>。詳情如下：
             </p>
             
             <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; border-left: 4px solid #28a745; margin: 20px 0;">
@@ -1969,9 +1969,10 @@ PickleVibes 團隊
             </div>
 
             <div style="background: #fff3cd; padding: 20px; border-radius: 10px; border-left: 4px solid #ffc107; margin-top: 20px;">
-              <p style="margin: 0; color: #333;">
-                <strong>📦 請注意查收您的包裹。如有任何問題，請隨時聯繫我們。</strong>
+              <p style="margin: 0 0 8px 0; color: #333;">
+                <strong>📦 請留意收件時間，提前準備收貨並注意查收您的包裹。</strong>
               </p>
+              <p style="margin: 0; color: #666; font-size: 14px;">如有任何問題，請隨時聯繫我們。</p>
             </div>
             
             <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
@@ -1993,7 +1994,7 @@ PickleVibes 團隊
 
 親愛的 ${userData.name}，
 
-您的訂單已出貨！我們已將您的商品寄出。
+您的訂單已出貨！我們已將您的商品寄出，請留意收件時間並準備收貨。
 
 訂單編號：${orderData.orderNumber}
 出貨日期：${new Date(orderData.shippedAt).toLocaleString('zh-TW')}
@@ -2009,7 +2010,7 @@ ${orderData.shippingAddress.address}
 ${orderData.shippingAddress.district || ''}
 ${orderData.shippingAddress.postalCode || ''}
 
-請注意查收您的包裹。如有任何問題，請隨時聯繫我們。
+請留意收件時間，提前準備收貨並注意查收您的包裹。如有任何問題，請隨時聯繫我們。
 
 如有任何疑問，請隨時聯繫我們：
 📧 info@picklevibes.hk | 📞 +852 6190-2761
@@ -2042,6 +2043,116 @@ PickleVibes 團隊
       return { success: true, messageId: result.messageId };
     } catch (error) {
       console.error('❌ 發送出貨通知郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * 發送訂單取消通知郵件
+   * @param {Object} userData - 用戶資料
+   * @param {Object} orderData - 訂單資料
+   * @param {Object} options - { pointsRefunded: number } 若有退還積分
+   */
+  async sendOrderCancelledEmail(userData, orderData, options = {}) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      await this.ensureLogoLoaded();
+
+      const emailSubject = `訂單已取消 - ${orderData.orderNumber}`;
+      const { pointsRefunded } = options;
+
+      const itemsHtml = orderData.items.map(item => `
+        <tr>
+          <td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>${item.name}</strong></td>
+          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+          <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">HK$${item.subtotal.toFixed(2)}</td>
+        </tr>
+      `).join('');
+
+      const refundNote = pointsRefunded > 0
+        ? `<div style="background: #e8f5e8; padding: 15px; border-radius: 8px; border-left: 4px solid #28a745; margin: 15px 0;">
+            <p style="margin: 0;"><strong>退款說明：</strong>已為您退還訂單實付金額 HK$${orderData.total.toFixed(2)} 對應之積分（${pointsRefunded} 分）至帳戶餘額；兌換碼使用次數亦已退還。</p>
+          </div>`
+        : `<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 15px 0;">
+            <p style="margin: 0;">若此訂單曾使用兌換碼，其使用次數已退還，您可再次使用。</p>
+          </div>`;
+
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
+          <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes" style="max-width: 200px; margin-bottom: 20px;">` : ''}
+            <h2 style="color: #333; margin-bottom: 20px;">訂單已取消</h2>
+            <p style="color: #666; line-height: 1.6;">
+              親愛的 ${userData.name}，<br><br>
+              您的訂單 <strong>${orderData.orderNumber}</strong> 已取消。
+            </p>
+            <div style="background: #fff3cd; padding: 20px; border-radius: 8px; border-left: 4px solid #ffc107; margin: 20px 0;">
+              <p style="margin: 0 0 10px 0;"><strong>訂單編號：</strong>${orderData.orderNumber}</p>
+              <p style="margin: 0 0 10px 0;"><strong>原訂單金額：</strong>小計 HK$${orderData.subtotal.toFixed(2)}${orderData.discount > 0 ? `，折扣 -HK$${orderData.discount.toFixed(2)}` : ''}，總計 <strong>HK$${orderData.total.toFixed(2)}</strong></p>
+            </div>
+            <h3 style="color: #333; margin-top: 20px; margin-bottom: 10px;">原訂單項目</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+              <thead>
+                <tr style="background: #f8f9fa;">
+                  <th style="padding: 12px; text-align: left; border-bottom: 2px solid #ddd;">產品</th>
+                  <th style="padding: 12px; text-align: center; border-bottom: 2px solid #ddd;">數量</th>
+                  <th style="padding: 12px; text-align: right; border-bottom: 2px solid #ddd;">小計</th>
+                </tr>
+              </thead>
+              <tbody>${itemsHtml}</tbody>
+            </table>
+            ${refundNote}
+            <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+              <p style="color: #666; font-size: 14px;">如有任何疑問，請聯繫我們：<br>📧 info@picklevibes.hk | 📞 +852 6190-2761</p>
+              <p style="color: #999; font-size: 12px; margin-top: 15px;">此致<br>PickleVibes 團隊</p>
+            </div>
+          </div>
+        </div>
+      `;
+
+      const emailText = `
+訂單已取消
+
+親愛的 ${userData.name}，
+
+您的訂單 ${orderData.orderNumber} 已取消。
+
+原訂單總計：HK$${orderData.total.toFixed(2)}
+${pointsRefunded > 0 ? `已退還 ${pointsRefunded} 分至您的帳戶餘額；兌換碼使用次數已退還。\n` : '若曾使用兌換碼，其使用次數已退還。\n'}
+
+如有任何疑問，請聯繫我們：📧 info@picklevibes.hk | 📞 +852 6190-2761
+
+此致
+PickleVibes 團隊
+      `;
+
+      const attachments = [];
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo'
+        });
+      }
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: userData.email,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+        attachments
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 訂單取消通知郵件已發送給 ${userData.email}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送訂單取消通知郵件失敗:', error.message);
       return { success: false, error: error.message };
     }
   }

@@ -81,6 +81,17 @@ const OrderManagement: React.FC = () => {
     }
   };
 
+  const handleCancelOrder = async (orderId: string) => {
+    if (!window.confirm('確定要取消此訂單嗎？將恢復庫存並退還兌換碼使用次數。')) return;
+    try {
+      await axios.put(`/orders/${orderId}/cancel`);
+      fetchOrders();
+      setSelectedOrder(null);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '取消訂單失敗');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     const colors: {[key: string]: string} = {
       pending: 'bg-yellow-100 text-yellow-800',
@@ -224,7 +235,7 @@ const OrderManagement: React.FC = () => {
                     </button>
                   </div>
                 )}
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {selectedOrder.status === 'pending' && (
                     <button
                       onClick={() => handleUpdateStatus(selectedOrder._id, 'confirmed')}
@@ -247,6 +258,14 @@ const OrderManagement: React.FC = () => {
                       className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
                     >
                       標記為已送達
+                    </button>
+                  )}
+                  {['pending', 'confirmed', 'processing'].includes(selectedOrder.status) && (
+                    <button
+                      onClick={() => handleCancelOrder(selectedOrder._id)}
+                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                    >
+                      取消訂單
                     </button>
                   )}
                 </div>

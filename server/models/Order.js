@@ -104,6 +104,12 @@ const orderSchema = new mongoose.Schema({
   trackingNumber: {
     type: String,
     trim: true
+  },
+  // 若以積分支付，記錄扣除的積分數；取消訂單時退還此數量
+  pointsDeducted: {
+    type: Number,
+    default: 0,
+    min: 0
   }
 }, {
   timestamps: true

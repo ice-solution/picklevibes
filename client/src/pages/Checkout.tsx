@@ -43,11 +43,25 @@ const Checkout: React.FC = () => {
     district: ''
   });
   const [notes, setNotes] = useState('');
+  const [payByPoints, setPayByPoints] = useState(false);
+  const [userBalance, setUserBalance] = useState<number | null>(null);
 
   useEffect(() => {
     if (user) {
       loadCart();
     }
+  }, [user]);
+
+  useEffect(() => {
+    const fetchBalance = async () => {
+      try {
+        const res = await axios.get('/recharge/balance');
+        setUserBalance(res.data?.balance ?? null);
+      } catch {
+        setUserBalance(null);
+      }
+    };
+    if (user) fetchBalance();
   }, [user]);
 
   const loadCart = async () => {
@@ -115,7 +129,8 @@ const Checkout: React.FC = () => {
         })),
         shippingAddress,
         redeemCodeId: redeemData?.id || null,
-        notes
+        notes,
+        payByPoints: payByPoints || undefined
       });
 
       // 清空購物車
@@ -268,6 +283,22 @@ const Checkout: React.FC = () => {
                       restrictedCode="product"
                     />
                   </div>
+
+                  {/* 使用積分支付：實付 = 總計（折扣後） */}
+                  {userBalance !== null && userBalance >= Math.round(total) && total > 0 && (
+                    <div className="mb-6 flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="payByPoints"
+                        checked={payByPoints}
+                        onChange={(e) => setPayByPoints(e.target.checked)}
+                        className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                      />
+                      <label htmlFor="payByPoints" className="text-sm text-gray-700 cursor-pointer">
+                        使用積分支付（實付 <strong>{Math.round(total)} 分</strong>，餘額 {userBalance} 分）
+                      </label>
+                    </div>
+                  )}
 
                   <button
                     type="submit"
