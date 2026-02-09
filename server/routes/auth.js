@@ -376,6 +376,42 @@ router.get('/verify-reset-token/:token', async (req, res) => {
   }
 });
 
+// @route   PUT /api/auth/change-password
+// @desc    登入用戶修改密碼
+// @access  Private
+router.put('/change-password', auth, authLimiter, [
+  body('currentPassword').notEmpty().withMessage('請輸入當前密碼'),
+  body('newPassword')
+    .isLength({ min: 8 }).withMessage('新密碼至少需要8個字符')
+    .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('新密碼必須包含至少一個字母和一個數字')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0].msg });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id).select('+password');
+    if (!user) {
+      return res.status(404).json({ message: '用戶不存在' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(400).json({ message: '當前密碼不正確' });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({ message: '密碼已更新，請使用新密碼登入' });
+  } catch (error) {
+    console.error('修改密碼錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
 // @route   POST /api/auth/reset-password
 // @desc    重置密碼
 // @access  Public
