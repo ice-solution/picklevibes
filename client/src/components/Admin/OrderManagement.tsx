@@ -116,24 +116,40 @@ const OrderManagement: React.FC = () => {
     return texts[status] || status;
   };
 
+  const statusOptions = [
+    { value: '', label: '全部' },
+    ...['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'].map(s => ({
+      value: s,
+      label: getStatusText(s)
+    }))
+  ];
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-900">訂單管理</h2>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setStatusFilter('')}
-            className={`px-4 py-2 rounded-lg ${statusFilter === '' ? 'bg-primary-600 text-white' : 'bg-white'}`}
-          >
-            全部
-          </button>
-          {['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'].map(status => (
+    <div className="space-y-4 md:space-y-6">
+      {/* 標題 */}
+      <h2 className="text-xl md:text-2xl font-bold text-gray-900">訂單管理</h2>
+
+      {/* 狀態篩選：手機用下拉選單，桌面用橫向按鈕 */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="block w-full sm:hidden px-4 py-3 rounded-lg border border-gray-300 text-base focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+        >
+          {statusOptions.map(opt => (
+            <option key={opt.value || 'all'} value={opt.value}>{opt.label}</option>
+          ))}
+        </select>
+        <div className="hidden sm:flex flex-wrap gap-2">
+          {statusOptions.map(opt => (
             <button
-              key={status}
-              onClick={() => setStatusFilter(status)}
-              className={`px-4 py-2 rounded-lg ${statusFilter === status ? 'bg-primary-600 text-white' : 'bg-white'}`}
+              key={opt.value || 'all'}
+              onClick={() => setStatusFilter(opt.value)}
+              className={`min-h-[44px] px-4 py-2 rounded-lg whitespace-nowrap ${
+                statusFilter === opt.value ? 'bg-primary-600 text-white' : 'bg-white border border-gray-200 hover:bg-gray-50'
+              }`}
             >
-              {getStatusText(status)}
+              {opt.label}
             </button>
           ))}
         </div>
@@ -144,60 +160,94 @@ const OrderManagement: React.FC = () => {
           <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
         </div>
       ) : (
-        <div className="bg-white rounded-lg shadow-md overflow-hidden">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">訂單編號</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">用戶</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">總額</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">日期</th>
-                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {orders.map((order) => (
-                <tr key={order._id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">{order.orderNumber}</div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900">{order.user.name}</div>
-                    <div className="text-sm text-gray-500">{order.user.email}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">HK${order.total.toFixed(2)}</div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
-                      {getStatusText(order.status)}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                    {new Date(order.createdAt).toLocaleDateString('zh-TW')}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => setSelectedOrder(order)}
-                      className="text-primary-600 hover:text-primary-900"
-                    >
-                      <EyeIcon className="w-5 h-5" />
-                    </button>
-                  </td>
+        <>
+          {/* 桌面版：表格 */}
+          <div className="hidden md:block bg-white rounded-lg shadow-md overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">訂單編號</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">用戶</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">總額</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">日期</th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {orders.map((order) => (
+                  <tr key={order._id}>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">{order.orderNumber}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">{order.user.name}</div>
+                      <div className="text-sm text-gray-500">{order.user.email}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">HK${order.total.toFixed(2)}</div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {getStatusText(order.status)}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(order.createdAt).toLocaleDateString('zh-TW')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <button
+                        onClick={() => setSelectedOrder(order)}
+                        className="text-primary-600 hover:text-primary-900"
+                      >
+                        <EyeIcon className="w-5 h-5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* 手機版：卡片列表 */}
+          <div className="md:hidden space-y-3">
+            {orders.length === 0 ? (
+              <div className="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">暫無訂單</div>
+            ) : (
+              orders.map((order) => (
+                <button
+                  key={order._id}
+                  onClick={() => setSelectedOrder(order)}
+                  className="w-full text-left bg-white rounded-lg shadow-md p-4 active:bg-gray-50"
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-gray-900 truncate">{order.orderNumber}</div>
+                      <div className="text-sm text-gray-600 mt-0.5 truncate">{order.user.name}</div>
+                      <div className="text-xs text-gray-500 mt-0.5 truncate">{order.user.email}</div>
+                    </div>
+                    <div className="flex flex-col items-end shrink-0">
+                      <span className="text-sm font-semibold text-gray-900">HK${order.total.toFixed(2)}</span>
+                      <span className={`mt-1 px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(order.status)}`}>
+                        {getStatusText(order.status)}
+                      </span>
+                      <span className="mt-1 text-xs text-gray-500">{new Date(order.createdAt).toLocaleDateString('zh-TW')}</span>
+                    </div>
+                    <EyeIcon className="w-5 h-5 text-primary-600 shrink-0 mt-1" />
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </>
       )}
 
       {selectedOrder && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
           <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-white rounded-t-2xl sm:rounded-lg shadow-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto"
           >
             <h3 className="text-xl font-bold mb-4">訂單詳情 - {selectedOrder.orderNumber}</h3>
             <div className="space-y-4">
@@ -225,21 +275,21 @@ const OrderManagement: React.FC = () => {
                       placeholder="追蹤號碼"
                       value={trackingNumber}
                       onChange={(e) => setTrackingNumber(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg mb-2"
+                      className="w-full px-3 py-3 text-base border rounded-lg mb-2"
                     />
                     <button
                       onClick={() => handleUpdateStatus(selectedOrder._id, 'shipped')}
-                      className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                      className="w-full min-h-[44px] px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800"
                     >
                       標記為已出貨
                     </button>
                   </div>
                 )}
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex flex-col sm:flex-row gap-2 flex-wrap">
                   {selectedOrder.status === 'pending' && (
                     <button
                       onClick={() => handleUpdateStatus(selectedOrder._id, 'confirmed')}
-                      className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                      className="min-h-[44px] flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 active:bg-blue-800"
                     >
                       確認訂單
                     </button>
@@ -247,7 +297,7 @@ const OrderManagement: React.FC = () => {
                   {selectedOrder.status === 'confirmed' && (
                     <button
                       onClick={() => handleUpdateStatus(selectedOrder._id, 'processing')}
-                      className="flex-1 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700"
+                      className="min-h-[44px] flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 active:bg-purple-800"
                     >
                       開始處理
                     </button>
@@ -255,7 +305,7 @@ const OrderManagement: React.FC = () => {
                   {selectedOrder.status === 'shipped' && (
                     <button
                       onClick={() => handleUpdateStatus(selectedOrder._id, 'delivered')}
-                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+                      className="min-h-[44px] flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 active:bg-green-800"
                     >
                       標記為已送達
                     </button>
@@ -263,7 +313,7 @@ const OrderManagement: React.FC = () => {
                   {['pending', 'confirmed', 'processing'].includes(selectedOrder.status) && (
                     <button
                       onClick={() => handleCancelOrder(selectedOrder._id)}
-                      className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                      className="min-h-[44px] px-4 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 active:bg-red-800"
                     >
                       取消訂單
                     </button>
@@ -272,7 +322,7 @@ const OrderManagement: React.FC = () => {
               </div>
               <button
                 onClick={() => setSelectedOrder(null)}
-                className="w-full px-4 py-2 border rounded-lg hover:bg-gray-50"
+                className="w-full min-h-[44px] px-4 py-3 border rounded-lg hover:bg-gray-50 active:bg-gray-100"
               >
                 關閉
               </button>

@@ -53,7 +53,7 @@ async function recalcActivityParticipantCount(activityId) {
 }
 
 // @route   GET /api/activities
-// @desc    獲取所有活動列表
+// @desc    獲取所有活動列表（排序：最接近今天的在前，較後的在下，已完結的放最後）
 // @access  Public
 router.get('/', async (req, res) => {
   try {
@@ -63,14 +63,38 @@ router.get('/', async (req, res) => {
     if (status) {
       query.status = status;
     }
-    
-    const activities = await Activity.find(query)
+
+    const now = new Date();
+    // 排序邏輯：未結束的活動按 startDate 升序（最近的在最前），已結束的放最後、按 endDate 降序（剛結束的在前）
+    const aggResult = await Activity.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          isEnded: { $lt: ['$endDate', now] },
+          sortKey: {
+            $cond: {
+              if: { $lt: ['$endDate', now] },
+              then: { $add: [1e15, { $subtract: [now, '$endDate'] }] },
+              else: '$startDate'
+            }
+          }
+        }
+      },
+      { $sort: { sortKey: 1 } },
+      { $skip: (parseInt(page, 10) - 1) * parseInt(limit, 10) },
+      { $limit: parseInt(limit, 10) },
+      { $project: { _id: 1 } }
+    ]);
+    const orderedIds = aggResult.map((doc) => doc._id);
+
+    const activities = await Activity.find({ _id: { $in: orderedIds } })
       .populate('organizer', 'name email')
-      .populate('coaches', 'name email')
-      .sort({ startDate: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-    
+      .populate('coaches', 'name email');
+
+    // 還原為排序後順序（find 不保證 $in 的順序）
+    const idToOrder = new Map(orderedIds.map((id, i) => [id.toString(), i]));
+    activities.sort((a, b) => (idToOrder.get(a._id.toString()) ?? 0) - (idToOrder.get(b._id.toString()) ?? 0));
+
     const total = await Activity.countDocuments(query);
     
     // 為每個活動添加用戶報名狀態

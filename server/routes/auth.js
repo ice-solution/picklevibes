@@ -193,6 +193,49 @@ router.post('/login', authLimiter, [
   }
 });
 
+// @route   PUT /api/auth/profile
+// @desc    用戶更新個人資料（姓名、電話、偏好設置）
+// @access  Private
+router.put('/profile', auth, [
+  body('name').optional().trim().isLength({ min: 2, max: 50 }).withMessage('姓名必須在2-50個字符之間'),
+  body('phone').optional().trim().matches(/^[0-9+\-\s()]+$/).withMessage('請輸入有效的電話號碼'),
+  body('preferences').optional()
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0].msg });
+    }
+    const { name, phone, preferences } = req.body;
+    const user = await User.findById(req.user.id);
+    if (!user) {
+      return res.status(404).json({ message: '用戶不存在' });
+    }
+    if (name !== undefined) user.name = name;
+    if (phone !== undefined) user.phone = phone;
+    if (preferences !== undefined) user.preferences = { ...user.preferences, ...preferences };
+    await user.save();
+    const userObj = user.toObject();
+    delete userObj.password;
+    res.json({
+      user: {
+        id: userObj._id,
+        name: userObj.name,
+        email: userObj.email,
+        phone: userObj.phone,
+        role: userObj.role,
+        membershipLevel: userObj.membershipLevel,
+        preferences: userObj.preferences,
+        lastLogin: userObj.lastLogin,
+        createdAt: userObj.createdAt
+      }
+    });
+  } catch (error) {
+    console.error('更新個人資料錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
 // @route   GET /api/auth/me
 // @desc    獲取當前用戶信息
 // @access  Private

@@ -79,8 +79,8 @@ const Profile: React.FC = () => {
 
     if (!formData.phone.trim()) {
       newErrors.phone = '電話號碼為必填項目';
-    } else if (!/^[0-9]+$/.test(formData.phone)) {
-      newErrors.phone = '電話號碼只能包含數字';
+    } else if (!/^[0-9+\-\s()]+$/.test(formData.phone)) {
+      newErrors.phone = '請輸入有效的電話號碼';
     }
 
     setErrors(newErrors);

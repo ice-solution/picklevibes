@@ -146,6 +146,43 @@ router.get('/:id', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   PUT /api/users/:id/profile
+// @desc    管理員修改用戶資料（姓名、電話）
+// @access  Private (Admin)
+router.put('/:id/profile', [
+  auth,
+  adminAuth,
+  body('name').optional().trim().isLength({ min: 2, max: 50 }).withMessage('姓名必須在2-50個字符之間'),
+  body('phone').optional().trim().matches(/^[0-9+\-\s()]+$/).withMessage('請輸入有效的電話號碼')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0].msg });
+    }
+    const { name, phone } = req.body;
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: '用戶不存在' });
+    }
+    if (name !== undefined) user.name = name;
+    if (phone !== undefined) user.phone = phone;
+    await user.save();
+    res.json({
+      message: '用戶資料已更新',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone
+      }
+    });
+  } catch (error) {
+    console.error('更新用戶資料錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   PUT /api/users/:id/role
 // @desc    更新用戶角色 (僅管理員)
 // @access  Private (Admin)

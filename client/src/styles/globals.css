@@ -143,9 +143,7 @@
   box-shadow: 
     0 0 0 1.5px #DC2626,
     0 0 0 3px #3B82F6 !important;
-}
-
-/* 紅色-綠色漸變 */
+}/* 紅色-綠色漸變 */
 .fc-event.booking-gradient-border.gradient-red-green {
   box-shadow: 
     0 0 0 2px #DC2626,

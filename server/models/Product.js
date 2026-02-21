@@ -30,7 +30,11 @@ const productSchema = new mongoose.Schema({
     min: [0, '折扣價格不能為負數'],
     validate: {
       validator: function(value) {
-        return value === null || value < this.price;
+        if (value === null || value === undefined) return true;
+        const price = this.price;
+        // findByIdAndUpdate 時 this 可能無 price，交由 route 驗證
+        if (price == null || typeof price !== 'number') return true;
+        return value < price;
       },
       message: '折扣價格必須小於原價'
     }

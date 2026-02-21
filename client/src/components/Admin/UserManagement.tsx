@@ -14,7 +14,8 @@ import {
   ClockIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  UserCircleIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
@@ -88,6 +89,8 @@ const UserManagement: React.FC = () => {
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
   const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
+  const [showProfileEditModal, setShowProfileEditModal] = useState(false);
+  const [profileEditForm, setProfileEditForm] = useState({ name: '', phone: '' });
   
   // 創建用戶狀態
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
@@ -409,6 +412,36 @@ const UserManagement: React.FC = () => {
     setSelectedUser(user);
     setSelectedMembership(user.membershipLevel);
     setShowMembershipModal(true);
+  };
+
+  const handleEditProfile = (user: User) => {
+    setSelectedUser(user);
+    setProfileEditForm({ name: user.name, phone: user.phone });
+    setShowProfileEditModal(true);
+  };
+
+  const handleSubmitProfileEdit = async () => {
+    if (!selectedUser) return;
+    if (!profileEditForm.name.trim()) {
+      alert('請填寫姓名');
+      return;
+    }
+    if (!profileEditForm.phone.trim()) {
+      alert('請填寫電話號碼');
+      return;
+    }
+    if (!/^[0-9+\-\s()]+$/.test(profileEditForm.phone)) {
+      alert('請輸入有效的電話號碼');
+      return;
+    }
+    try {
+      await axios.put(`/users/${selectedUser._id}/profile`, profileEditForm);
+      setShowProfileEditModal(false);
+      fetchUsers();
+      alert('用戶資料已更新');
+    } catch (error: any) {
+      alert(error.response?.data?.message || '更新失敗');
+    }
   };
 
   const handleSubmitMembershipChange = async () => {
@@ -857,6 +890,13 @@ const UserManagement: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
+                      <button
+                        onClick={() => handleEditProfile(user)}
+                        className="text-gray-600 hover:text-gray-900"
+                        title="編輯資料（姓名、電話）"
+                      >
+                        <UserCircleIcon className="w-4 h-4" />
+                      </button>
                       <button
                         onClick={() => handleEditUser(user, 'role')}
                         className="text-blue-600 hover:text-blue-900"
@@ -1601,6 +1641,60 @@ const UserManagement: React.FC = () => {
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                   確認修改
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 編輯用戶資料模態框 */}
+      {showProfileEditModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">編輯用戶資料</h3>
+              <button
+                onClick={() => setShowProfileEditModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-500 mb-4">用戶: {selectedUser.email}</p>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">姓名</label>
+                <input
+                  type="text"
+                  value={profileEditForm.name}
+                  onChange={(e) => setProfileEditForm({ ...profileEditForm, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="請輸入姓名"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">電話號碼</label>
+                <input
+                  type="tel"
+                  value={profileEditForm.phone}
+                  onChange={(e) => setProfileEditForm({ ...profileEditForm, phone: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  placeholder="請輸入電話號碼"
+                />
+              </div>
+              <div className="flex justify-end space-x-3 pt-4">
+                <button
+                  onClick={() => setShowProfileEditModal(false)}
+                  className="px-4 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSubmitProfileEdit}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+                >
+                  保存
                 </button>
               </div>
             </div>
