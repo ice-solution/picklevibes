@@ -65,17 +65,18 @@ router.get('/', async (req, res) => {
     }
 
     const now = new Date();
-    // 排序邏輯：未結束的活動按 startDate 升序（最近的在最前），已結束的放最後、按 endDate 降序（剛結束的在前）
+    const epoch = new Date(0);
+    // 排序邏輯：最接近今天的在前（未結束按 startDate 升序），已結束的放最後
+    // sortKey 一律用數字（ms），避免 Date/Number 混排導致順序錯亂
     const aggResult = await Activity.aggregate([
       { $match: query },
       {
         $addFields: {
-          isEnded: { $lt: ['$endDate', now] },
           sortKey: {
             $cond: {
               if: { $lt: ['$endDate', now] },
               then: { $add: [1e15, { $subtract: [now, '$endDate'] }] },
-              else: '$startDate'
+              else: { $subtract: ['$startDate', epoch] }
             }
           }
         }
