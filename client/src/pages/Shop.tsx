@@ -257,7 +257,7 @@ const Shop: React.FC = () => {
                       <p className="text-gray-600 text-sm mb-3 line-clamp-2">
                         {product.description}
                       </p>
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col gap-3">
                         <div>
                           {product.discountPrice ? (
                             <div>
@@ -275,9 +275,10 @@ const Shop: React.FC = () => {
                           )}
                         </div>
                         <button
+                          type="button"
                           onClick={() => addToCart(product)}
                           disabled={product.stock === 0}
-                          className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+                          className="w-full px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                         >
                           加入購物車
                         </button>

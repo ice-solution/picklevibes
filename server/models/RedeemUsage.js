@@ -37,6 +37,16 @@ const redeemUsageSchema = new mongoose.Schema({
     required: true,
     min: [0, '最終金額不能為負數']
   },
+  // 佣金資訊（依 redeemCode.commissionRate 計算）
+  commissionRate: {
+    type: Number,
+    enum: [5, 10],
+    default: null
+  },
+  commissionAmount: {
+    type: Number,
+    default: 0
+  },
   // 使用時的信息
   usedAt: {
     type: Date,

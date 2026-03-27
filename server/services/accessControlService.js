@@ -112,8 +112,9 @@ class AccessControlService {
       });
 
       // 將時間轉換為 ISO 字符串格式
-      // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
-      const startTime = this.convertToISOString(bookingData.date, earlyStartTime);
+      // earlyStartTime 若大於 startTime（如 23:45 > 00:00）表示跨越前一天，開門日需減一天
+      const usePreviousDayForEarly = this._timeToMinutes(earlyStartTime) > this._timeToMinutes(bookingData.startTime);
+      const startTime = this.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
       const endTime = this.convertToISOString(
         bookingData.date, 
         bookingData.endTime, 
@@ -154,14 +155,25 @@ class AccessControlService {
   }
 
   /**
+   * 將 HH:MM 轉為分鐘數
+   */
+  _timeToMinutes(timeStr) {
+    if (!timeStr) return 0;
+    const normalized = timeStr === '24:00' ? '00:00' : timeStr;
+    const [hours, mins] = normalized.split(':').map(Number);
+    return (hours || 0) * 60 + (mins || 0);
+  }
+
+  /**
    * 將日期和時間轉換為帶時區的 ISO 字符串格式
    * 處理 24:00 的情況，轉換為下一天的 00:00
    * @param {Date|String} date - 日期
    * @param {String} time - 時間 (HH:MM 格式)
    * @param {Date|String} endDate - 結束日期（如果存在且與 date 不同，表示跨天）
    * @param {String} startTime - 開始時間（用於判斷跨天，當 endDate 不存在時）
+   * @param {Boolean} usePreviousDay - 若為 true，使用前一天的日期（例如 00:00 提前 15 分鐘為 23:45 前一天）
    */
-  convertToISOString(date, time, endDate = null, startTime = null) {
+  convertToISOString(date, time, endDate = null, startTime = null, usePreviousDay = false) {
     try {
       // 處理日期格式
       let dateObj;
@@ -176,9 +188,13 @@ class AccessControlService {
         }
       }
       
-      // 處理 24:00 的情況
+      // 處理 24:00 或需使用前一日的情況
       let finalDate = new Date(dateObj);
       let finalTime = time;
+      if (usePreviousDay) {
+        finalDate.setDate(finalDate.getDate() - 1);
+        console.log('⏰ 開門時間提前至前一日（例如 00:00 提前 15 分鐘）');
+      }
       
       if (time === '24:00') {
         // 24:00 轉換為下一天的 00:00
@@ -313,9 +329,9 @@ class AccessControlService {
       await this.sendAccessEmail(visitorData, bookingData, qrCodeData, tempAuth.password);
       
       // 計算開始和結束時間（ISO 格式）
-      // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
       const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
-      const startTimeISO = this.convertToISOString(bookingData.date, earlyStartTime);
+      const usePreviousDayForEarly = this._timeToMinutes(earlyStartTime) > this._timeToMinutes(bookingData.startTime);
+      const startTimeISO = this.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
       const endTimeISO = this.convertToISOString(
         bookingData.date, 
         bookingData.endTime, 

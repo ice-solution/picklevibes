@@ -1905,6 +1905,76 @@ PickleVibes 團隊
   }
 
   /**
+   * 發送訂單通知（寄給後台/內部信箱）
+   */
+  async sendOrderAdminNotificationEmail(userData, orderData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      const adminEmail = process.env.EMAIL_USER;
+      if (!adminEmail) {
+        console.warn('EMAIL_USER 未設定，跳過訂單通知信');
+        return { success: true, skipped: true };
+      }
+
+      const emailSubject = `新訂單通知 - ${orderData.orderNumber}`;
+
+      const itemsText = orderData.items
+        .map((item) => `- ${item.name} x ${item.quantity}`)
+        .join('\n');
+
+      const emailText = `
+新訂單已建立
+
+訂單編號：${orderData.orderNumber}
+建立時間：${new Date(orderData.createdAt).toLocaleString('zh-TW')}
+客人：${userData.name} (${userData.email})
+總計：HK$${Number(orderData.total || 0).toFixed(2)}
+
+訂單項目：
+${itemsText}
+
+收貨地址：
+${orderData.shippingAddress?.name || ''} / ${orderData.shippingAddress?.phone || ''}
+${orderData.shippingAddress?.address || ''}
+`;
+
+      // 簡單 HTML（避免 Logo/CID 依賴造成更多失敗點）
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto;">
+          <h2 style="margin: 0 0 12px 0;">新訂單已建立</h2>
+          <p style="margin: 0 0 8px 0;">訂單編號：<strong>${orderData.orderNumber}</strong></p>
+          <p style="margin: 0 0 8px 0;">建立時間：${new Date(orderData.createdAt).toLocaleString('zh-TW')}</p>
+          <p style="margin: 0 0 8px 0;">客人：${userData.name} (${userData.email})</p>
+          <p style="margin: 0 0 12px 0;">總計：<strong>HK$${Number(orderData.total || 0).toFixed(2)}</strong></p>
+          <div style="white-space: pre-wrap; background:#f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <pre style="margin:0; font-family: inherit;">${itemsText}</pre>
+          </div>
+          <p style="margin: 0;">收貨地址：${orderData.shippingAddress?.address || ''}</p>
+          <p style="margin: 6px 0 0 0;">收件人：${orderData.shippingAddress?.name || ''}（${orderData.shippingAddress?.phone || ''}）</p>
+        </div>
+      `;
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: adminEmail,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 訂單通知郵件已發送給 ${adminEmail}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送訂單通知郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * 發送出貨通知郵件
    */
   async sendOrderShippedEmail(userData, orderData) {

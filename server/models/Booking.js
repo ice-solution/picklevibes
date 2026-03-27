@@ -106,8 +106,10 @@ const bookingSchema = new mongoose.Schema({
     },
     method: {
       type: String,
-      enum: ['stripe', 'cash', 'bank_transfer', 'points'],
-      default: 'stripe'
+      enum: ['stripe', 'cash', 'bank_transfer', 'points', 'admin_waived'],
+      default: 'stripe',
+      description:
+        'admin_waived = 管理員繞過限制建單，未從用戶扣積分',
     },
     transactionId: String,
     paidAt: Date,
@@ -162,6 +164,11 @@ const bookingSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
     description: '管理員是否繞過了所有系統限制'
+  },
+  /** 建立時未從「預約所屬用戶」扣除積分；取消時不得自動退回積分 */
+  noUserBalanceDebited: {
+    type: Boolean,
+    default: false,
   },
   cancellation: {
     cancelledAt: Date,

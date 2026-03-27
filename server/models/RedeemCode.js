@@ -50,6 +50,19 @@ const redeemCodeSchema = new mongoose.Schema({
     default: 1, // 每個用戶最多使用次數
     min: [1, '每用戶使用次數限制必須大於0']
   },
+  // 是否需要「獨立兌換碼」（每個兌換碼只能使用一次）
+  // 若為 true：會在建立/使用檢查時強制 usageLimit=1、userUsageLimit=1。
+  isIndependentCode: {
+    type: Boolean,
+    default: false,
+    description: '若為 true，每個兌換碼只能使用一次（全域）'
+  },
+  // 佣金比例（5% 或 10%），使用時會依「用戶真正付款的金額」計算佣金並記錄
+  commissionRate: {
+    type: Number,
+    enum: [5, 10],
+    default: null
+  },
   // 有效期
   validFrom: {
     type: Date,
@@ -104,10 +117,11 @@ redeemCodeSchema.index({ isActive: 1, validFrom: 1, validUntil: 1 });
 // 驗證兌換碼是否有效
 redeemCodeSchema.methods.isValid = function() {
   const now = new Date();
+  const effectiveUsageLimit = this.isIndependentCode ? 1 : this.usageLimit;
   return this.isActive && 
          now >= this.validFrom && 
          now <= this.validUntil &&
-         (this.usageLimit === null || this.totalUsed < this.usageLimit);
+         (effectiveUsageLimit === null || this.totalUsed < effectiveUsageLimit);
 };
 
 // 計算折扣金額
@@ -140,8 +154,8 @@ redeemCodeSchema.methods.canUserUse = async function(userId) {
     redeemCode: this._id,
     user: userId
   });
-  
-  return userUsageCount < this.userUsageLimit;
+  const effectiveUserUsageLimit = this.isIndependentCode ? 1 : this.userUsageLimit;
+  return userUsageCount < effectiveUserUsageLimit;
 };
 
 module.exports = mongoose.model('RedeemCode', redeemCodeSchema);

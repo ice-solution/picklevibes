@@ -6,6 +6,38 @@ const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
+// 獨立兌換碼：6 位（字母+數字混合），至少包含一個字母與一個數字
+const REDEEM_CODE_RANDOM_REGEX = /^[A-Z0-9]{6}$/;
+function generateIndependentRedeemCode() {
+  const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // 避免容易混淆的 I/O
+  const digits = '0123456789';
+
+  // 6 位字元，從字母/數字池隨機取；後續會檢查是否至少含一個字母與一個數字
+  let code = '';
+  for (let i = 0; i < 6; i += 1) {
+    const pickLetter = Math.random() < 0.5;
+    code += pickLetter
+      ? letters[Math.floor(Math.random() * letters.length)]
+      : digits[Math.floor(Math.random() * digits.length)];
+  }
+  return code;
+}
+
+async function generateUniqueIndependentRedeemCode(maxTries = 10) {
+  for (let i = 0; i < maxTries; i += 1) {
+    const code = generateIndependentRedeemCode();
+    if (!REDEEM_CODE_RANDOM_REGEX.test(code)) continue;
+    const hasLetter = /[A-Z]/.test(code);
+    const hasDigit = /\d/.test(code);
+    if (!hasLetter || !hasDigit) continue;
+    // 確保 code 全域唯一
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await RedeemCode.findOne({ code }).select('_id').lean();
+    if (!exists) return code;
+  }
+  throw new Error('無法產生唯一兌換碼（請稍後再試）');
+}
+
 // @route   POST /api/redeem/validate
 // @desc    驗證兌換碼
 // @access  Private
@@ -128,6 +160,8 @@ router.post('/use', [
     }
 
     // 創建使用記錄
+    const commissionRate = redeemCode.commissionRate ?? null;
+    const commissionAmount = commissionRate ? Math.round(finalAmount * (commissionRate / 100) * 100) / 100 : 0;
     const redeemUsage = new RedeemUsage({
       redeemCode: redeemCodeId,
       user: req.user.id,
@@ -136,6 +170,8 @@ router.post('/use', [
       originalAmount,
       discountAmount,
       finalAmount,
+      commissionRate,
+      commissionAmount,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent')
     });
@@ -197,7 +233,10 @@ router.get('/my-usage', auth, async (req, res) => {
 router.post('/admin/create', [
   auth,
   adminAuth,
-  body('code').trim().notEmpty().withMessage('兌換碼不能為空'),
+  body('isIndependentCode').optional().isBoolean().withMessage('isIndependentCode必須是布林值'),
+  body('commissionRate').optional().isIn(['5', '10', 5, 10]).withMessage('佣金比例只能選擇 5 或 10'),
+  body('quantity').optional().isInt({ min: 1, max: 100 }).withMessage('生成數量必須是 1-100'),
+  body('code').optional().trim().notEmpty().withMessage('兌換碼不能為空'),
   body('name').trim().notEmpty().withMessage('兌換碼名稱不能為空'),
   body('type').isIn(['fixed', 'percentage']).withMessage('類型必須是 fixed 或 percentage'),
   body('value').isFloat({ min: 0 }).withMessage('折扣值必須大於等於0'),
@@ -213,7 +252,7 @@ router.post('/admin/create', [
     }
     return true;
   }),
-  body('userUsageLimit').isInt({ min: 1 }).withMessage('每用戶使用次數限制必須是正整數'),
+  body('userUsageLimit').optional().isInt({ min: 1 }).withMessage('每用戶使用次數限制必須是正整數'),
   body('validUntil').isISO8601().withMessage('請提供有效的到期日期'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
   body('restrictedCode').optional().trim()
@@ -227,19 +266,69 @@ router.post('/admin/create', [
       });
     }
 
+    const isIndependentCode = !!req.body.isIndependentCode;
+    const commissionRate =
+      req.body.commissionRate === '' || req.body.commissionRate == null
+        ? null
+        : Number(req.body.commissionRate);
+
+    const quantity =
+      req.body.quantity != null && String(req.body.quantity).trim() !== ''
+        ? Math.max(1, Math.min(parseInt(req.body.quantity, 10) || 1, 100))
+        : 1;
+
+    // 獨立兌換碼：一次生成 N 個唯一碼
+    if (isIndependentCode) {
+      const createdCodes = [];
+      for (let i = 0; i < quantity; i += 1) {
+        const generatedCode = await generateUniqueIndependentRedeemCode();
+
+        const redeemCodeData = {
+          ...req.body,
+          code: generatedCode,
+          isIndependentCode,
+          commissionRate,
+          // 獨立兌換碼：強制每個碼只用一次（全域）與每用戶一次
+          usageLimit: 1,
+          userUsageLimit: 1,
+          createdBy: req.user.id,
+          validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
+        };
+
+        const redeemCode = new RedeemCode(redeemCodeData);
+        await redeemCode.save();
+        createdCodes.push(redeemCode);
+      }
+
+      return res.status(201).json({
+        message: '兌換碼批次創建成功',
+        redeemCodes: createdCodes,
+      });
+    }
+
+    // 非獨立兌換碼：沿用單碼建立邏輯
+    const finalCode = req.body.code ? String(req.body.code).trim().toUpperCase() : null;
+    if (!finalCode) {
+      return res.status(400).json({ message: '兌換碼不能為空' });
+    }
+
     const redeemCodeData = {
       ...req.body,
-      code: req.body.code.toUpperCase(),
+      code: finalCode,
+      isIndependentCode,
+      commissionRate,
+      usageLimit: req.body.usageLimit,
+      userUsageLimit: req.body.userUsageLimit,
       createdBy: req.user.id,
-      validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date()
+      validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
     };
 
     const redeemCode = new RedeemCode(redeemCodeData);
     await redeemCode.save();
 
-    res.status(201).json({
+    return res.status(201).json({
       message: '兌換碼創建成功',
-      redeemCode
+      redeemCode,
     });
 
   } catch (error) {
@@ -297,6 +386,8 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
 router.put('/admin/:id', [
   auth,
   adminAuth,
+  body('isIndependentCode').optional().isBoolean().withMessage('isIndependentCode必須是布林值'),
+  body('commissionRate').optional().isIn(['5', '10', 5, 10]).withMessage('佣金比例只能選擇 5 或 10'),
   body('code').optional().trim().notEmpty().withMessage('兌換碼不能為空'),
   body('name').optional().trim().notEmpty().withMessage('兌換碼名稱不能為空'),
   body('type').optional().isIn(['fixed', 'percentage']).withMessage('類型必須是 fixed 或 percentage'),
@@ -327,9 +418,27 @@ router.put('/admin/:id', [
       });
     }
 
+    const update = { ...req.body };
+    if (update.code) update.code = String(update.code).trim().toUpperCase();
+    if (update.commissionRate === '' || update.commissionRate == null) {
+      update.commissionRate = null;
+    } else if (update.commissionRate != null) {
+      update.commissionRate = Number(update.commissionRate);
+    }
+
+    // 独立兌换码：強制使用次數限制
+    if (update.isIndependentCode === true) {
+      update.usageLimit = 1;
+      update.userUsageLimit = 1;
+      // 若更新時未提供 code（前端也可能因勾選而不送），則改由系統生成獨立兌換碼
+      if (!update.code) {
+        update.code = await generateUniqueIndependentRedeemCode();
+      }
+    }
+
     const redeemCode = await RedeemCode.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      update,
       { new: true, runValidators: true }
     );
 

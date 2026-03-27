@@ -316,24 +316,27 @@ router.post('/', [
       specialRequests,
       includeSoloCourt, // 添加單人場租用信息
       bypassRestrictions, // 記錄是否繞過了限制
+      noUserBalanceDebited: !!bypassRestrictions, // 繞過限制建單時未扣用戶積分，取消時不可退分
       status: 'confirmed', // 直接確認
       // 添加兌換碼信息
       redeemCode: redeemCodeData ? redeemCodeData.id : undefined,
       redeemDiscount: redeemCodeData ? redeemCodeData.discountAmount : 0,
       payment: {
         status: 'paid',
-        method: 'points',
         paidAt: new Date(),
-        pointsDeducted: pointsToDeduct,
+        // 管理員繞過限制：未扣積分，標記 admin_waived 並記 pointsDeducted=0，避免取消時誤退
+        method: bypassRestrictions ? 'admin_waived' : 'points',
+        pointsDeducted: bypassRestrictions ? 0 : pointsToDeduct,
         originalPrice: tempBooking.pricing.totalPrice,
         discount: isVip ? 20 : 0 // VIP折扣百分比
       },
       pricing: {
         basePrice: tempBooking.pricing.basePrice,
         memberDiscount: tempBooking.pricing.memberDiscount,
-        totalPrice: isCustomPoints ? customPoints : pointsToDeduct, // 使用自訂積分或實際扣除的積分
+        // 仍保存「參考應付」金額供列表顯示；實際扣款以 pointsDeducted / noUserBalanceDebited 為準
+        totalPrice: isCustomPoints ? customPoints : pointsToDeduct,
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
-        pointsDeducted: isCustomPoints ? customPoints : pointsToDeduct,
+        pointsDeducted: bypassRestrictions ? 0 : (isCustomPoints ? customPoints : pointsToDeduct),
         vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
         soloCourtFee: includeSoloCourt ? 100 : 0, // 單人場費用
         customPoints: isCustomPoints ? customPoints : undefined, // 自訂積分
@@ -360,6 +363,9 @@ router.post('/', [
       try {
         const RedeemUsage = require('../models/RedeemUsage');
         const RedeemCode = require('../models/RedeemCode');
+        const redeemCodeDoc = await RedeemCode.findById(redeemCodeData.id);
+        const commissionRate = redeemCodeDoc?.commissionRate ?? null;
+        const commissionAmount = commissionRate ? Math.round(pointsToDeduct * (commissionRate / 100) * 100) / 100 : 0;
         
         const redeemUsage = new RedeemUsage({
           redeemCode: redeemCodeData.id,
@@ -369,6 +375,8 @@ router.post('/', [
           originalAmount: tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0),
           discountAmount: redeemCodeData.discountAmount,
           finalAmount: pointsToDeduct,
+          commissionRate,
+          commissionAmount,
           ipAddress: req.ip,
           userAgent: req.get('User-Agent')
         });
@@ -376,11 +384,10 @@ router.post('/', [
         await redeemUsage.save();
         
         // 更新兌換碼統計
-        const redeemCode = await RedeemCode.findById(redeemCodeData.id);
-        if (redeemCode) {
-          redeemCode.totalUsed += 1;
-          redeemCode.totalDiscount += redeemCodeData.discountAmount;
-          await redeemCode.save();
+        if (redeemCodeDoc) {
+          redeemCodeDoc.totalUsed += 1;
+          redeemCodeDoc.totalDiscount += redeemCodeData.discountAmount;
+          await redeemCodeDoc.save();
         }
         
         console.log('✅ 兌換碼使用記錄已保存');
@@ -448,12 +455,13 @@ router.post('/', [
         specialRequests: `單人場租用 - 與主場地同時段使用`,
         includeSoloCourt: false, // 單人場記錄本身不包含單人場
         bypassRestrictions, // 記錄是否繞過了限制
+        noUserBalanceDebited: !!bypassRestrictions, // 與主預約一致：繞過時未扣款
         status: 'confirmed',
         payment: {
           status: 'paid',
-          method: 'points',
+          method: bypassRestrictions ? 'admin_waived' : 'points',
           paidAt: new Date(),
-          pointsDeducted: 0, // 單人場費用已包含在主預約中
+          pointsDeducted: 0, // 單人場費用已包含在主預約中（或主預約為免扣款）
           originalPrice: tempSoloBooking.pricing.totalPrice,
           discount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.2) : 0
         },
@@ -487,11 +495,13 @@ router.post('/', [
       });
     }
     
-    // 更新用戶餘額記錄中的預約ID
-    const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
-    if (latestTransaction) {
-      latestTransaction.relatedBooking = booking._id;
-      await userBalance.save();
+    // 更新用戶餘額記錄中的預約ID（僅在有實際扣款時，避免誤掛到無關交易）
+    if (!bypassRestrictions) {
+      const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
+      if (latestTransaction) {
+        latestTransaction.relatedBooking = booking._id;
+        await userBalance.save();
+      }
     }
 
     // 填充場地信息
@@ -897,9 +907,20 @@ router.put('/:id/cancel', [
 
     // 檢查是否為包場預約，如果是包場則不自動退款
     const isFullVenueBooking = booking.notes?.includes('包場預約') || booking.notes?.includes('🏢 包場預約');
-    
-    // 如為積分支付或管理員建立且已扣分，則退回積分（包場預約除外）
+
+    // 建立時未從預約用戶扣積分（管理員繞過限制手動建單、活動佔場等）→ 取消時不可自動退回積分
+    const skipAutoPointsRefund =
+      booking.noUserBalanceDebited === true ||
+      booking.bypassRestrictions === true ||
+      booking.payment?.method === 'admin_waived';
+
+    // 如為積分支付且實際有扣款，則退回積分（包場預約除外；免扣款建單除外）
     try {
+      if (skipAutoPointsRefund) {
+        console.log(
+          `📌 預約 ${booking._id} 建立時未扣用戶積分 (noUserBalanceDebited/bypass/admin_waived)，取消時跳過積分退回`
+        );
+      } else {
       const pointsToRefund = Number(
         booking.pricing?.pointsDeducted ??
         booking.payment?.pointsDeducted ??
@@ -924,6 +945,7 @@ router.put('/:id/cancel', [
           booking.payment.status = 'refunded';
           booking.payment.refundedAt = new Date();
         }
+      }
       }
     } catch (refundError) {
       console.error('退款處理失敗（不影響取消）:', refundError);
@@ -1101,9 +1123,9 @@ router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
           password = tempAuth.password;
           
           // 計算開始和結束時間（ISO 格式）
-          // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
           const earlyStartTime = accessControlService.subtractMinutes(bookingData.startTime, 15);
-          const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime);
+          const usePreviousDayForEarly = accessControlService._timeToMinutes(earlyStartTime) > accessControlService._timeToMinutes(bookingData.startTime);
+          const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
           const endTimeISO = accessControlService.convertToISOString(
             bookingData.date, 
             bookingData.endTime, 

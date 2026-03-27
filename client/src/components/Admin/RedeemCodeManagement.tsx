@@ -23,6 +23,8 @@ interface RedeemCode {
   maxDiscount: number;
   usageLimit: number;
   userUsageLimit: number;
+  isIndependentCode?: boolean;
+  commissionRate?: number | null;
   validFrom: string;
   validUntil: string;
   isActive: boolean;
@@ -45,6 +47,8 @@ interface RedeemUsage {
   originalAmount: number;
   discountAmount: number;
   finalAmount: number;
+  commissionRate?: number | null;
+  commissionAmount?: number;
   usedAt: string;
 }
 
@@ -87,6 +91,9 @@ const RedeemCodeManagement: React.FC = () => {
     maxDiscount: 0,
     usageLimit: '',
     userUsageLimit: 1,
+    isIndependentCode: false,
+    commissionRate: 5,
+    quantity: 1,
     validFrom: new Date().toISOString().split('T')[0],
     validUntil: '',
     applicableTypes: ['all'] as string[],
@@ -165,6 +172,9 @@ const RedeemCodeManagement: React.FC = () => {
       maxDiscount: code.maxDiscount || 0,
       usageLimit: code.usageLimit ? code.usageLimit.toString() : '',
       userUsageLimit: code.userUsageLimit,
+      isIndependentCode: (code as any).isIndependentCode ?? false,
+      commissionRate: (code as any).commissionRate ?? 5,
+      quantity: 1,
       validFrom: new Date(code.validFrom).toISOString().split('T')[0],
       validUntil: new Date(code.validUntil).toISOString().split('T')[0],
       applicableTypes: code.applicableTypes,
@@ -211,6 +221,10 @@ const RedeemCodeManagement: React.FC = () => {
 
     try {
       setCreateLoading(true);
+
+      if (formData.isIndependentCode && formData.quantity && formData.quantity > 1) {
+        alert('編輯模式不會批次新增兌換碼；請改用「創建兌換碼」來一次生成多個。');
+      }
       
       const submitData = {
         ...formData,
@@ -218,6 +232,13 @@ const RedeemCodeManagement: React.FC = () => {
         validFrom: new Date(formData.validFrom).toISOString(),
         validUntil: new Date(formData.validUntil).toISOString()
       };
+
+      // 獨立兌換碼由後端自動生成；前端不送 code，避免驗證失敗
+      if (formData.isIndependentCode) {
+        delete (submitData as any).code;
+      }
+      // 編輯模式不需要 quantity
+      delete (submitData as any).quantity;
 
       await axios.put(`/redeem/admin/${editingCode._id}`, submitData);
       
@@ -232,6 +253,9 @@ const RedeemCodeManagement: React.FC = () => {
         maxDiscount: 0,
         usageLimit: '',
         userUsageLimit: 1,
+        isIndependentCode: false,
+        commissionRate: 5,
+        quantity: 1,
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
         applicableTypes: ['all'],
@@ -261,7 +285,21 @@ const RedeemCodeManagement: React.FC = () => {
         validUntil: new Date(formData.validUntil).toISOString()
       };
 
-      await axios.post('/redeem/admin/create', submitData);
+      // 獨立兌換碼由後端自動生成；前端不送 code
+      if (formData.isIndependentCode) {
+        delete (submitData as any).code;
+      }
+
+      const res = await axios.post('/redeem/admin/create', submitData);
+
+      // 獨立兌換碼批次：把實際生成的 code 顯示給管理員
+      const createdCodes: string[] = Array.isArray(res.data?.redeemCodes)
+        ? res.data.redeemCodes.map((c: any) => c?.code).filter(Boolean)
+        : [];
+
+      if (formData.isIndependentCode && createdCodes.length > 0) {
+        alert(`已生成 ${createdCodes.length} 個兌換碼：\n\n${createdCodes.join(', ')}`);
+      }
       
       // 重置表單
       setFormData({
@@ -274,6 +312,9 @@ const RedeemCodeManagement: React.FC = () => {
         maxDiscount: 0,
         usageLimit: '',
         userUsageLimit: 1,
+        isIndependentCode: false,
+        commissionRate: 5,
+        quantity: 1,
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
         applicableTypes: ['all'],
@@ -552,11 +593,38 @@ const RedeemCodeManagement: React.FC = () => {
                   <input
                     type="text"
                     value={formData.code}
+                    disabled={formData.isIndependentCode}
                     onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="例如: WELCOME20"
-                    required
+                    required={!formData.isIndependentCode}
                   />
+                  <label className="flex items-center mt-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={formData.isIndependentCode}
+                      onChange={(e) => setFormData({ ...formData, isIndependentCode: e.target.checked, code: e.target.checked ? '' : formData.code })}
+                      className="mr-2"
+                    />
+                    需要獨立兌換碼（每個碼只能使用一次，系統自動生成）
+                  </label>
+                  {formData.isIndependentCode && (
+                    <div className="mt-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        生成數量 *
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={formData.quantity}
+                        onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">一次最多生成 100 個（避免大量寫入影響效能）。</p>
+                    </div>
+                  )}
                 </div>
                 
                 <div>
@@ -618,6 +686,21 @@ const RedeemCodeManagement: React.FC = () => {
                     {formData.type === 'fixed' ? '固定金額 (HK$)' : '百分比折扣 (%)'}
                   </p>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  佣金比例 *
+                </label>
+                <select
+                  value={formData.commissionRate}
+                  onChange={(e) => setFormData({ ...formData, commissionRate: parseInt(e.target.value) })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  disabled={false}
+                >
+                  <option value={5}>5%</option>
+                  <option value={10}>10%</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -946,6 +1029,12 @@ const RedeemCodeManagement: React.FC = () => {
                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                           最終金額
                         </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          佣金比例
+                        </th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          佣金金額
+                        </th>
                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           使用時間
                         </th>
@@ -990,6 +1079,12 @@ const RedeemCodeManagement: React.FC = () => {
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900 font-medium">
                             HK$ {usage.finalAmount.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">
+                            {usage.commissionRate ? `${usage.commissionRate}%` : '—'}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-yellow-700 font-medium">
+                            {usage.commissionAmount != null ? usage.commissionAmount.toLocaleString() : '—'}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-500">
                             {new Date(usage.usedAt).toLocaleString('zh-TW', {

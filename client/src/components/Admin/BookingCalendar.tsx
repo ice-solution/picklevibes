@@ -748,7 +748,11 @@ const BookingCalendar: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">付款方式</label>
-                  <p className="text-sm text-gray-900">{selectedBooking.payment.method}</p>
+                  <p className="text-sm text-gray-900">
+                  {selectedBooking.payment.method === 'admin_waived'
+                    ? '管理員免扣積分'
+                    : selectedBooking.payment.method}
+                </p>
                 </div>
               </div>
 

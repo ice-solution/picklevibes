@@ -139,6 +139,8 @@ router.post('/', [
 
     // 記錄兌換碼使用
     if (redeemCode) {
+      const commissionRate = redeemCode.commissionRate ?? null;
+      const commissionAmount = commissionRate ? Math.round(total * (commissionRate / 100) * 100) / 100 : 0;
       const redeemUsage = new RedeemUsage({
         redeemCode: redeemCode._id,
         user: userId,
@@ -147,6 +149,8 @@ router.post('/', [
         originalAmount: subtotal,
         discountAmount: discount,
         finalAmount: total,
+        commissionRate,
+        commissionAmount,
         ipAddress: req.ip,
         userAgent: req.get('User-Agent')
       });
@@ -163,6 +167,14 @@ router.post('/', [
     try {
       const user = await require('../models/User').findById(userId);
       await emailService.sendOrderConfirmationEmail(user, order);
+
+      // 額外寄送通知給後台信箱（EMAIL_USER）
+      try {
+        await emailService.sendOrderAdminNotificationEmail(user, order);
+      } catch (notifyError) {
+        console.error('發送後台訂單通知郵件失敗:', notifyError.message || notifyError);
+        // 不影響訂單回應
+      }
     } catch (emailError) {
       console.error('發送訂單確認郵件失敗:', emailError);
       // 不影響訂單創建

@@ -2,6 +2,8 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Activity = require('../models/Activity');
 const ActivityRegistration = require('../models/ActivityRegistration');
+const Booking = require('../models/Booking');
+const Court = require('../models/Court');
 const UserBalance = require('../models/UserBalance');
 const User = require('../models/User');
 const RedeemCode = require('../models/RedeemCode');
@@ -11,6 +13,7 @@ const { auth, adminAuth } = require('../middleware/auth');
 const { activityUpload, processActivityImage, deleteFile } = require('../middleware/upload');
 
 const router = express.Router();
+const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
 
 /**
  * 將 datetime-local 格式的字符串轉換為正確的 Date 對象
@@ -50,6 +53,80 @@ async function recalcActivityParticipantCount(activityId) {
   });
 
   return totalRegistered;
+}
+
+function calculateDurationAndEndDate(startDate, endDate) {
+  const durationMs = endDate.getTime() - startDate.getTime();
+  const durationMinutes = Math.max(1, Math.round(durationMs / (1000 * 60)));
+
+  const isOvernight = startDate.toDateString() !== endDate.toDateString();
+  const calculatedEndDate = isOvernight ? new Date(endDate) : new Date(startDate);
+
+  return { durationMinutes, calculatedEndDate };
+}
+
+function formatHHMM(dateObj) {
+  const h = String(dateObj.getHours()).padStart(2, '0');
+  const m = String(dateObj.getMinutes()).padStart(2, '0');
+  return `${h}:${m}`;
+}
+
+async function createActivityVenueBookings({ activity, adminUser }) {
+  const targetCourts = await Court.find({
+    isActive: true,
+    type: { $in: ['competition', 'training', 'solo'] }
+  });
+
+  if (!targetCourts.length) {
+    throw new Error('找不到可用場地，無法建立活動場地預約');
+  }
+
+  const startDate = new Date(activity.startDate);
+  const endDate = new Date(activity.endDate);
+  const { durationMinutes, calculatedEndDate } = calculateDurationAndEndDate(startDate, endDate);
+  const startTime = formatHHMM(startDate);
+  const endTime = formatHHMM(endDate);
+
+  const players = [{
+    name: adminUser.name || '活動管理員',
+    email: adminUser.email || 'admin@picklevibes.local',
+    phone: adminUser.phone || '00000000'
+  }];
+
+  const bookingDocs = targetCourts.map((court) => ({
+    user: adminUser._id,
+    court: court._id,
+    date: startDate,
+    endDate: calculatedEndDate,
+    startTime,
+    endTime,
+    duration: durationMinutes,
+    players,
+    totalPlayers: 1,
+    specialRequests: `活動預約 - ${activity.title}`,
+    bypassRestrictions: true,
+    noUserBalanceDebited: true,
+    status: 'confirmed',
+    payment: {
+      status: 'paid',
+      method: 'admin_waived',
+      paidAt: new Date(),
+      pointsDeducted: 0,
+      originalPrice: 0,
+      discount: 100
+    },
+    pricing: {
+      basePrice: 0,
+      memberDiscount: 0,
+      totalPrice: 0,
+      originalPrice: 0,
+      pointsDeducted: 0
+    },
+    createdAt: new Date(),
+    updatedAt: new Date()
+  }));
+
+  await Booking.collection.insertMany(bookingDocs);
 }
 
 // @route   GET /api/activities
@@ -134,18 +211,18 @@ router.get('/coach', auth, async (req, res) => {
 
     const { status, page = 1, limit = 10 } = req.query;
     
-    const query = { 
+    const query = {
       isActive: true,
-      coach: req.user.id 
+      coaches: req.user.id,
     };
-    
+
     if (status) {
       query.status = status;
     }
-    
+
     const activities = await Activity.find(query)
       .populate('organizer', 'name email')
-      .populate('coach', 'name email')
+      .populate('coaches', 'name email')
       .sort({ startDate: 1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -169,11 +246,15 @@ router.get('/coach', auth, async (req, res) => {
 // @access  Private (Coach only)
 router.get('/coach-courses', auth, async (req, res) => {
   try {
+    if (req.user.role !== 'coach') {
+      return res.status(403).json({ message: '僅教練可存取此功能' });
+    }
+
     const userId = req.user.id;
-    
-    // 查找當前用戶作為教練的活動
+
+    // 查找當前用戶作為教練的活動（活動中心指派於 coaches 陣列）
     const activities = await Activity.find({
-      coaches: userId
+      coaches: userId,
     })
     .populate('coaches', 'name email')
     .sort({ startDate: 1 });
@@ -199,6 +280,44 @@ router.get('/coach-courses', auth, async (req, res) => {
     res.status(500).json({ 
       message: '服務器錯誤，請稍後再試' 
     });
+  }
+});
+
+// @route   GET /api/activities/coach-calendar
+// @desc    教練專用：依可視日期範圍回傳「指派給我」的活動（供 FullCalendar）
+// @access  Private (Coach only)
+router.get('/coach-calendar', auth, async (req, res) => {
+  try {
+    if (req.user.role !== 'coach') {
+      return res.status(403).json({ message: '僅教練可存取此功能' });
+    }
+
+    const userId = req.user.id;
+    const { start, end } = req.query;
+
+    const query = {
+      isActive: true,
+      coaches: userId,
+    };
+
+    if (start && end) {
+      const rangeStart = new Date(start);
+      const rangeEnd = new Date(end);
+      if (!Number.isNaN(rangeStart.getTime()) && !Number.isNaN(rangeEnd.getTime())) {
+        query.startDate = { $lt: rangeEnd };
+        query.endDate = { $gt: rangeStart };
+      }
+    }
+
+    const activities = await Activity.find(query)
+      .select('title startDate endDate location status poster')
+      .sort({ startDate: 1 })
+      .lean();
+
+    res.json({ success: true, activities });
+  } catch (error) {
+    console.error('獲取教練課表日曆錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
 
@@ -361,6 +480,43 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// @route   POST /api/activities/:id/duplicate
+// @desc    複制活動（僅管理員），產生新活動且報名人數歸零
+// @access  Private (Admin)
+router.post('/:id/duplicate', [auth, adminAuth], async (req, res) => {
+  try {
+    const source = await Activity.findById(req.params.id);
+    if (!source) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+    const title = (source.title + ' (複製)').slice(0, 100);
+    const doc = {
+      title,
+      description: source.description,
+      poster: source.poster,
+      posterThumb: source.posterThumb,
+      maxParticipants: source.maxParticipants,
+      currentParticipants: 0,
+      price: source.price,
+      startDate: source.startDate,
+      endDate: source.endDate,
+      registrationDeadline: source.registrationDeadline,
+      location: source.location,
+      requirements: source.requirements,
+      organizer: req.user.id,
+      coaches: source.coaches ? [...source.coaches] : [],
+      isActive: source.isActive
+    };
+    const activity = new Activity(doc);
+    await activity.save();
+    console.log(`📋 複制活動: ${source.title} -> ${activity.title} (${activity._id})`);
+    res.status(201).json({ message: '活動已複制', activity });
+  } catch (error) {
+    console.error('複制活動錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   POST /api/activities
 // @desc    創建新活動（僅管理員）
 // @access  Private (Admin)
@@ -389,6 +545,7 @@ router.post('/', [
     const {
       title,
       description,
+      poster,
       maxParticipants,
       price,
       startDate,
@@ -465,6 +622,24 @@ router.post('/', [
     });
 
     await activity.save();
+
+    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
+      const adminUser = await User.findById(req.user.id).select('name email phone');
+      if (!adminUser) {
+        await Activity.findByIdAndDelete(activity._id);
+        return res.status(400).json({ message: '找不到管理員資料，無法建立活動場地預約' });
+      }
+
+      try {
+        await createActivityVenueBookings({ activity, adminUser });
+      } catch (bookingError) {
+        await Activity.findByIdAndDelete(activity._id);
+        console.error('建立活動場地預約失敗:', bookingError);
+        return res.status(400).json({
+          message: bookingError.message || '建立活動場地預約失敗，活動未建立'
+        });
+      }
+    }
 
     console.log(`🎯 管理員創建新活動: ${activity.title} (${activity._id})`);
 
@@ -604,6 +779,8 @@ router.post('/:id/register', [
 
     // 如果使用了兌換碼，記錄使用並更新統計
     if (redeemCode && discountAmount > 0) {
+      const commissionRate = redeemCode.commissionRate ?? null;
+      const commissionAmount = commissionRate ? Math.round(totalCost * (commissionRate / 100) * 100) / 100 : 0;
       const redeemUsage = new RedeemUsage({
         redeemCode: redeemCodeId,
         user: userId,
@@ -612,6 +789,8 @@ router.post('/:id/register', [
         originalAmount: baseCost,
         discountAmount: discountAmount,
         finalAmount: totalCost,
+        commissionRate,
+        commissionAmount,
         ipAddress: req.ip,
         userAgent: req.get('User-Agent')
       });

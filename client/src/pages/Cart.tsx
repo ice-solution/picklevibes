@@ -36,7 +36,10 @@ const Cart: React.FC = () => {
   };
 
   const updateQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity < 1) return;
+    if (newQuantity < 1) {
+      removeItem(productId);
+      return;
+    }
     
     const updatedCart = cartItems.map(item =>
       item.productId === productId
