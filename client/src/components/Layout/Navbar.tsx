@@ -28,7 +28,8 @@ import {
   ClockIcon,
   ShoppingBagIcon,
   TagIcon,
-  ShoppingCartIcon
+  ShoppingCartIcon,
+  ChatBubbleLeftRightIcon
 } from '@heroicons/react/24/outline';
 
 const Navbar: React.FC = () => {
@@ -246,6 +247,14 @@ const Navbar: React.FC = () => {
                                 <AcademicCapIcon className="w-4 h-4" />
                                 <span>我的課程預約</span>
                               </Link>
+                              <Link
+                                to="/coach/school-request"
+                                onClick={() => setIsUserDropdownOpen(false)}
+                                className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                              >
+                                <ChatBubbleLeftRightIcon className="w-4 h-4" />
+                                <span>教練學校要請</span>
+                              </Link>
                             </>
                           )}
                         </div>
@@ -291,6 +300,14 @@ const Navbar: React.FC = () => {
                             >
                               <CalendarDaysIcon className="w-4 h-4" />
                               <span>預約日曆</span>
+                            </Link>
+                            <Link
+                              to="/admin?tab=coach-requests"
+                              onClick={() => setIsAdminDropdownOpen(false)}
+                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                            >
+                              <ChatBubbleLeftRightIcon className="w-4 h-4" />
+                              <span>教練要請</span>
                             </Link>
                             <Link
                               to="/admin?tab=users"
@@ -595,6 +612,14 @@ const Navbar: React.FC = () => {
                           <AcademicCapIcon className="w-5 h-5" />
                           <span>我的課程預約</span>
                         </Link>
+                        <Link
+                          to="/coach/school-request"
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          <ChatBubbleLeftRightIcon className="w-5 h-5" />
+                          <span>教練學校要請</span>
+                        </Link>
                       </>
                     )}
 
@@ -617,6 +642,14 @@ const Navbar: React.FC = () => {
                         >
                           <CalendarDaysIcon className="w-5 h-5" />
                           <span>預約日曆</span>
+                        </Link>
+                        <Link
+                          to="/admin?tab=coach-requests"
+                          onClick={() => setIsOpen(false)}
+                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
+                        >
+                          <ChatBubbleLeftRightIcon className="w-5 h-5" />
+                          <span>教練要請</span>
                         </Link>
                         <Link
                           to="/admin?tab=users"

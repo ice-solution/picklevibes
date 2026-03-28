@@ -5,6 +5,7 @@ const Product = require('../models/Product');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
 const emailService = require('../services/emailService');
+const { normalizeClothingSize } = require('../utils/clothingSizes');
 const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -61,12 +62,28 @@ router.post('/', [
       const itemSubtotal = price * item.quantity;
       subtotal += itemSubtotal;
 
+      let sizeForOrder = null;
+      if (product.isClothing) {
+        const normalized = normalizeClothingSize(item.size);
+        if (!normalized) {
+          return res.status(400).json({
+            message: `產品「${product.name}」請選擇有效尺碼（XS、S、M、L、XL）`
+          });
+        }
+        sizeForOrder = normalized;
+      } else if (item.size !== undefined && item.size !== null && String(item.size).trim() !== '') {
+        return res.status(400).json({
+          message: `產品「${product.name}」無需填寫尺碼`
+        });
+      }
+
       orderItems.push({
         product: product._id,
         name: product.name,
         price: price,
         quantity: item.quantity,
-        subtotal: itemSubtotal
+        subtotal: itemSubtotal,
+        size: sizeForOrder
       });
     }
 

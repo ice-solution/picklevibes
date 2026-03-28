@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const Activity = require('../models/Activity');
 const ActivityRegistration = require('../models/ActivityRegistration');
@@ -21,6 +22,17 @@ const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
  * 問題：datetime-local 提交的是本地時間字符串，但可能被當作 UTC 處理
  * 解決：將字符串明確解析為香港時區（UTC+8）的本地時間
  */
+/**
+ * 活動開始／結束僅允許「整點」（本地 datetime 字串之分鐘為 :00），避免與場地預約整點時段衝突
+ * 僅處理形如 2024-11-15T15:00 或 2024-11-15T15:30 之字串；含 Z/±offset 的 ISO 仍走 parseLocalDateTime 原邏輯
+ */
+function snapActivityStartEndToHourLocalString(dateTimeString) {
+  if (!dateTimeString || typeof dateTimeString !== 'string') return dateTimeString;
+  const m = dateTimeString.match(/^(\d{4}-\d{2}-\d{2}T\d{2}):\d{2}(?::\d{2})?/);
+  if (m) return `${m[1]}:00`;
+  return dateTimeString;
+}
+
 function parseLocalDateTime(dateTimeString) {
   if (!dateTimeString) return null;
   
@@ -55,37 +67,150 @@ async function recalcActivityParticipantCount(activityId) {
   return totalRegistered;
 }
 
-function calculateDurationAndEndDate(startDate, endDate) {
+/** 香港時區下的日曆日期 YYYY-MM-DD（與前台預約選擇的日期一致） */
+function getHKCalendarYMD(dateObj) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(dateObj);
+  const y = parts.find((p) => p.type === 'year')?.value;
+  const m = parts.find((p) => p.type === 'month')?.value;
+  const d = parts.find((p) => p.type === 'day')?.value;
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * 與 POST /bookings 相同：`date` 為該日 YYYY-MM-DD 的 UTC 午夜（與前端傳入的 date 字串一致），
+ * 否則 Booking.checkTimeConflict 用 date 精確比對會找不到活動預約，前台仍可預約同一時段。
+ */
+function hkYmdToBookingUtcMidnight(ymdStr) {
+  if (!ymdStr || !/^\d{4}-\d{2}-\d{2}$/.test(ymdStr)) return new Date(ymdStr);
+  return new Date(`${ymdStr}T00:00:00.000Z`);
+}
+
+function formatHHMMHK(dateObj) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Hong_Kong',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  }).formatToParts(dateObj);
+  const hour = (parts.find((p) => p.type === 'hour')?.value ?? '00').padStart(2, '0');
+  const minute = (parts.find((p) => p.type === 'minute')?.value ?? '00').padStart(2, '0');
+  return `${hour}:${minute}`;
+}
+
+/**
+ * 與一般場地預約 / Booking.checkTimeConflict 一致的 date／時間欄位（香港時間）
+ */
+function computeActivityVenueBookingFields(activity) {
+  const startDate = new Date(activity.startDate);
+  const endDate = new Date(activity.endDate);
   const durationMs = endDate.getTime() - startDate.getTime();
   const durationMinutes = Math.max(1, Math.round(durationMs / (1000 * 60)));
 
-  const isOvernight = startDate.toDateString() !== endDate.toDateString();
-  const calculatedEndDate = isOvernight ? new Date(endDate) : new Date(startDate);
+  const startYmd = getHKCalendarYMD(startDate);
+  const endYmd = getHKCalendarYMD(endDate);
+  const bookingDate = hkYmdToBookingUtcMidnight(startYmd);
+  const calculatedEndDate = startYmd === endYmd ? bookingDate : hkYmdToBookingUtcMidnight(endYmd);
 
-  return { durationMinutes, calculatedEndDate };
+  const startTime = formatHHMMHK(startDate);
+  const endTime = formatHHMMHK(endDate);
+
+  return {
+    bookingDate,
+    calculatedEndDate,
+    startTime,
+    endTime,
+    durationMinutes,
+    specialRequests: `活動預約 - ${activity.title}`
+  };
 }
 
-function formatHHMM(dateObj) {
-  const h = String(dateObj.getHours()).padStart(2, '0');
-  const m = String(dateObj.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
+/** 活動既有之場地佔用預約 ID（供衝突檢查時排除自身） */
+async function getActivityVenueBookingIdList(activityId, previousTitle) {
+  const or = [{ relatedActivity: activityId }];
+  if (previousTitle) {
+    or.push({
+      specialRequests: `活動預約 - ${previousTitle}`,
+      bypassRestrictions: true
+    });
+  }
+  const rows = await Booking.find({
+    status: { $in: ['confirmed', 'pending'] },
+    $or: or
+  })
+    .select('_id')
+    .lean();
+  const seen = new Set();
+  return rows
+    .filter((row) => {
+      const k = String(row._id);
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .map((row) => row._id);
 }
 
-async function createActivityVenueBookings({ activity, adminUser }) {
-  const targetCourts = await Court.find({
+/** 荔枝角固定場地活動：要佔用的場地清單（包場=三場；單一場地=一場） */
+async function getActivityTargetCourts(activity) {
+  const mode = activity.venueHoldMode || 'full_venue';
+  if (mode === 'single_court') {
+    if (!activity.venueHoldCourtId) return [];
+    const c = await Court.findOne({
+      _id: activity.venueHoldCourtId,
+      isActive: true,
+      type: { $in: ['competition', 'training', 'solo'] }
+    });
+    return c ? [c] : [];
+  }
+  return Court.find({
     isActive: true,
     type: { $in: ['competition', 'training', 'solo'] }
   });
+}
+
+/**
+ * 固定場地活動：檢查各場是否可佔用（與一般預約同一套 checkTimeConflict）
+ */
+async function assertFixedVenueSlotsFree(activityLike, { excludeBookingIds = [] } = {}) {
+  const targetCourts = await getActivityTargetCourts(activityLike);
+  if (!targetCourts.length) {
+    throw new Error('找不到可用場地，請確認已選擇有效場地（單一場地模式須選場）');
+  }
+  const fields = computeActivityVenueBookingFields(activityLike);
+  const conflicts = [];
+  for (const court of targetCourts) {
+    const hasConflict = await Booking.checkTimeConflict(
+      court._id,
+      fields.bookingDate,
+      fields.startTime,
+      fields.endTime,
+      null,
+      excludeBookingIds
+    );
+    if (hasConflict) {
+      conflicts.push(court.name || String(court._id));
+    }
+  }
+  if (conflicts.length) {
+    throw new Error(
+      `以下場地在該時段已有其他預約，無法佔用：${conflicts.join('、')}`
+    );
+  }
+}
+
+async function createActivityVenueBookings({ activity, adminUser }) {
+  const targetCourts = await getActivityTargetCourts(activity);
 
   if (!targetCourts.length) {
     throw new Error('找不到可用場地，無法建立活動場地預約');
   }
 
-  const startDate = new Date(activity.startDate);
-  const endDate = new Date(activity.endDate);
-  const { durationMinutes, calculatedEndDate } = calculateDurationAndEndDate(startDate, endDate);
-  const startTime = formatHHMM(startDate);
-  const endTime = formatHHMM(endDate);
+  const fields = computeActivityVenueBookingFields(activity);
 
   const players = [{
     name: adminUser.name || '活動管理員',
@@ -93,17 +218,22 @@ async function createActivityVenueBookings({ activity, adminUser }) {
     phone: adminUser.phone || '00000000'
   }];
 
+  const venueBundleId = new mongoose.Types.ObjectId();
+
   const bookingDocs = targetCourts.map((court) => ({
     user: adminUser._id,
     court: court._id,
-    date: startDate,
-    endDate: calculatedEndDate,
-    startTime,
-    endTime,
-    duration: durationMinutes,
+    relatedActivity: activity._id,
+    venueBundleId,
+    venueBundleKind: 'activity_hold',
+    date: fields.bookingDate,
+    endDate: fields.calculatedEndDate,
+    startTime: fields.startTime,
+    endTime: fields.endTime,
+    duration: fields.durationMinutes,
     players,
     totalPlayers: 1,
-    specialRequests: `活動預約 - ${activity.title}`,
+    specialRequests: fields.specialRequests,
     bypassRestrictions: true,
     noUserBalanceDebited: true,
     status: 'confirmed',
@@ -129,6 +259,201 @@ async function createActivityVenueBookings({ activity, adminUser }) {
   await Booking.collection.insertMany(bookingDocs);
 }
 
+/**
+ * 活動時間／標題變更後，同步已建立的場地佔用（略過 Mongoose 驗證以允許長時數）
+ */
+async function syncActivityVenueBookings({ activity, previousTitle }) {
+  const fields = computeActivityVenueBookingFields(activity);
+
+  const or = [{ relatedActivity: activity._id }];
+  if (previousTitle) {
+    or.push({
+      specialRequests: `活動預約 - ${previousTitle}`,
+      bypassRestrictions: true
+    });
+  }
+
+  const rows = await Booking.find({
+    status: { $in: ['confirmed', 'pending'] },
+    $or: or
+  })
+    .select('_id')
+    .lean();
+
+  const seen = new Set();
+  const bookingIds = rows.filter((row) => {
+    const k = String(row._id);
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  const existingBundle = await Booking.findOne({
+    relatedActivity: activity._id,
+    venueBundleId: { $exists: true, $ne: null }
+  })
+    .select('venueBundleId')
+    .lean();
+  const venueBundleId = existingBundle?.venueBundleId || new mongoose.Types.ObjectId();
+
+  const now = new Date();
+  for (const row of bookingIds) {
+    await Booking.collection.updateOne(
+      { _id: row._id },
+      {
+        $set: {
+          date: fields.bookingDate,
+          endDate: fields.calculatedEndDate,
+          startTime: fields.startTime,
+          endTime: fields.endTime,
+          duration: fields.durationMinutes,
+          specialRequests: fields.specialRequests,
+          relatedActivity: activity._id,
+          venueBundleId,
+          venueBundleKind: 'activity_hold',
+          updatedAt: now
+        }
+      }
+    );
+  }
+}
+
+/**
+ * 依活動的 venueHoldMode／場地 同步資料庫：取消多餘場地、補建新場地、再 sync 時間／標題
+ */
+async function reconcileActivityVenueBookings(activity, adminUserId, previousTitle) {
+  const adminUser = await User.findById(adminUserId).select('name email phone');
+  if (!adminUser) {
+    throw new Error('找不到管理員資料');
+  }
+
+  const courts = await getActivityTargetCourts(activity);
+  if (!courts.length) {
+    await cancelActivityVenueBookingsForActivity(activity._id, previousTitle);
+    return;
+  }
+
+  const desiredIds = courts.map((c) => c._id);
+
+  const existing = await Booking.find({
+    relatedActivity: activity._id,
+    status: { $in: ['confirmed', 'pending'] }
+  }).lean();
+
+  const now = new Date();
+  for (const b of existing) {
+    const keep = desiredIds.some((id) => id.equals(b.court));
+    if (!keep) {
+      await Booking.collection.updateOne(
+        { _id: b._id },
+        {
+          $set: {
+            status: 'cancelled',
+            updatedAt: now,
+            'cancellation.cancelledAt': now,
+            'cancellation.cancelledBy': 'admin',
+            'cancellation.reason': '活動場地範圍變更（包場／單一場地）'
+          }
+        }
+      );
+    }
+  }
+
+  const fields = computeActivityVenueBookingFields(activity);
+  const bundleRow = await Booking.findOne({
+    relatedActivity: activity._id,
+    venueBundleId: { $exists: true, $ne: null }
+  })
+    .select('venueBundleId')
+    .lean();
+  const venueBundleId = bundleRow?.venueBundleId || new mongoose.Types.ObjectId();
+
+  const players = [{
+    name: adminUser.name || '活動管理員',
+    email: adminUser.email || 'admin@picklevibes.local',
+    phone: adminUser.phone || '00000000'
+  }];
+
+  for (const court of courts) {
+    const has = await Booking.findOne({
+      relatedActivity: activity._id,
+      court: court._id,
+      status: { $in: ['confirmed', 'pending'] }
+    });
+    if (!has) {
+      await Booking.collection.insertOne({
+        user: adminUser._id,
+        court: court._id,
+        relatedActivity: activity._id,
+        venueBundleId,
+        venueBundleKind: 'activity_hold',
+        date: fields.bookingDate,
+        endDate: fields.calculatedEndDate,
+        startTime: fields.startTime,
+        endTime: fields.endTime,
+        duration: fields.durationMinutes,
+        players,
+        totalPlayers: 1,
+        specialRequests: fields.specialRequests,
+        bypassRestrictions: true,
+        noUserBalanceDebited: true,
+        status: 'confirmed',
+        payment: {
+          status: 'paid',
+          method: 'admin_waived',
+          paidAt: now,
+          pointsDeducted: 0,
+          originalPrice: 0,
+          discount: 100
+        },
+        pricing: {
+          basePrice: 0,
+          memberDiscount: 0,
+          totalPrice: 0,
+          originalPrice: 0,
+          pointsDeducted: 0
+        },
+        createdAt: now,
+        updatedAt: now
+      });
+    }
+  }
+
+  await syncActivityVenueBookings({ activity, previousTitle });
+}
+
+/** 活動改為非固定場地時，取消自動佔用 */
+async function cancelActivityVenueBookingsForActivity(activityId, previousTitle) {
+  const now = new Date();
+  const $set = {
+    status: 'cancelled',
+    updatedAt: now,
+    'cancellation.cancelledAt': now,
+    'cancellation.cancelledBy': 'admin',
+    'cancellation.reason': '活動地點已變更，原自動場地佔用取消'
+  };
+
+  await Booking.updateMany(
+    {
+      relatedActivity: activityId,
+      status: { $in: ['confirmed', 'pending'] }
+    },
+    { $set }
+  );
+
+  if (previousTitle) {
+    await Booking.updateMany(
+      {
+        status: { $in: ['confirmed', 'pending'] },
+        bypassRestrictions: true,
+        specialRequests: `活動預約 - ${previousTitle}`,
+        $or: [{ relatedActivity: { $exists: false } }, { relatedActivity: null }]
+      },
+      { $set }
+    );
+  }
+}
+
 // @route   GET /api/activities
 // @desc    獲取所有活動列表
 // @access  Public
@@ -140,14 +465,53 @@ router.get('/', async (req, res) => {
     if (status) {
       query.status = status;
     }
-    
-    const activities = await Activity.find(query)
-      .populate('organizer', 'name email')
-      .populate('coaches', 'name email')
-      .sort({ startDate: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-    
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+    const skip = (pageNum - 1) * limitNum;
+    const now = new Date();
+
+    /**
+     * 活動中心排序：依「活動開始時間」，愈接近現在愈前。
+     * - 尚未結束（endDate >= now）：startDate 升序 → 最快開場的排最前
+     * - 已結束（endDate < now）：startDate 降序 → 最近才結束的排最前（仍依開始時間接近度）
+     */
+    const sortPipeline = [
+      {
+        $addFields: {
+          _ended: { $lt: ['$endDate', now] },
+          _sortKey: {
+            $cond: [
+              { $lt: ['$endDate', now] },
+              { $multiply: [-1, { $toLong: '$startDate' }] },
+              { $toLong: '$startDate' }
+            ]
+          }
+        }
+      },
+      { $sort: { _ended: 1, _sortKey: 1 } }
+    ];
+
+    const idRows = await Activity.aggregate([
+      { $match: query },
+      ...sortPipeline,
+      { $skip: skip },
+      { $limit: limitNum },
+      { $project: { _id: 1 } }
+    ]);
+    const orderedIds = idRows.map((r) => r._id);
+
+    let activities = [];
+    if (orderedIds.length > 0) {
+      const found = await Activity.find({ _id: { $in: orderedIds } })
+        .populate('organizer', 'name email')
+        .populate('coaches', 'name email');
+      const byId = new Map(found.map((a) => [a._id.toString(), a]));
+      activities = orderedIds
+        .map((id) => byId.get(id.toString()))
+        .filter(Boolean);
+    }
+
     const total = await Activity.countDocuments(query);
     
     // 為每個活動添加用戶報名狀態
@@ -189,8 +553,8 @@ router.get('/', async (req, res) => {
     
     res.json({
       activities: activitiesWithRegistration,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      totalPages: Math.ceil(total / limitNum),
+      currentPage: pageNum,
       total
     });
   } catch (error) {
@@ -505,7 +869,9 @@ router.post('/:id/duplicate', [auth, adminAuth], async (req, res) => {
       requirements: source.requirements,
       organizer: req.user.id,
       coaches: source.coaches ? [...source.coaches] : [],
-      isActive: source.isActive
+      isActive: source.isActive,
+      venueHoldMode: source.venueHoldMode || 'full_venue',
+      venueHoldCourtId: source.venueHoldCourtId || null
     };
     const activity = new Activity(doc);
     await activity.save();
@@ -589,8 +955,8 @@ router.post('/', [
 
     // 驗證時間邏輯 - 使用 parseLocalDateTime 正確處理時區
     const now = new Date();
-    const start = parseLocalDateTime(startDate);
-    const end = parseLocalDateTime(endDate);
+    const start = parseLocalDateTime(snapActivityStartEndToHourLocalString(startDate));
+    const end = parseLocalDateTime(snapActivityStartEndToHourLocalString(endDate));
     const deadline = parseLocalDateTime(registrationDeadline);
 
     if (deadline >= start) {
@@ -603,6 +969,32 @@ router.post('/', [
       return res.status(400).json({ 
         message: '活動開始時間必須早於結束時間' 
       });
+    }
+
+    const venueHoldMode =
+      req.body.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue';
+    let venueHoldCourtId = null;
+    if (req.body.venueHoldCourtId && String(req.body.venueHoldCourtId).trim() !== '') {
+      venueHoldCourtId = new mongoose.Types.ObjectId(String(req.body.venueHoldCourtId));
+    }
+
+    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
+      if (venueHoldMode === 'single_court' && !venueHoldCourtId) {
+        return res.status(400).json({ message: '請選擇要佔用的場地' });
+      }
+      try {
+        await assertFixedVenueSlotsFree({
+          startDate: start,
+          endDate: end,
+          title,
+          venueHoldMode,
+          venueHoldCourtId
+        });
+      } catch (slotErr) {
+        return res.status(400).json({
+          message: slotErr.message || '該時段已有預約，無法建立活動'
+        });
+      }
     }
 
     const activity = new Activity({
@@ -618,7 +1010,12 @@ router.post('/', [
       location,
       requirements,
       organizer: req.user.id,
-      coaches: coachIds
+      coaches: coachIds,
+      venueHoldMode: location === FIXED_ACTIVITY_VENUE_LOCATION ? venueHoldMode : 'full_venue',
+      venueHoldCourtId:
+        location === FIXED_ACTIVITY_VENUE_LOCATION && venueHoldMode === 'single_court'
+          ? venueHoldCourtId
+          : null
     });
 
     await activity.save();
@@ -631,7 +1028,7 @@ router.post('/', [
       }
 
       try {
-        await createActivityVenueBookings({ activity, adminUser });
+        await reconcileActivityVenueBookings(activity, req.user.id, undefined);
       } catch (bookingError) {
         await Activity.findByIdAndDelete(activity._id);
         console.error('建立活動場地預約失敗:', bookingError);
@@ -1223,6 +1620,9 @@ router.put('/:id', [
       return res.status(404).json({ message: '活動不存在' });
     }
 
+    const previousTitle = activity.title;
+    const previousLocation = activity.location;
+
     const updates = req.body;
     
     // 如果有新上傳的圖片，使用新圖片與縮略圖路徑
@@ -1259,17 +1659,105 @@ router.put('/:id', [
     const dateTimeFields = ['startDate', 'endDate', 'registrationDeadline'];
     dateTimeFields.forEach(field => {
       if (updates[field] !== undefined) {
-        updates[field] = parseLocalDateTime(updates[field]);
+        let raw = updates[field];
+        if (typeof raw === 'string' && (field === 'startDate' || field === 'endDate')) {
+          raw = snapActivityStartEndToHourLocalString(raw);
+        }
+        updates[field] = parseLocalDateTime(raw);
       }
     });
-    
+
+    if (updates.venueHoldCourtId !== undefined) {
+      const raw = updates.venueHoldCourtId;
+      updates.venueHoldCourtId =
+        raw && String(raw).trim() !== ''
+          ? new mongoose.Types.ObjectId(String(raw))
+          : null;
+    }
+    if (updates.venueHoldMode !== undefined) {
+      if (!['full_venue', 'single_court'].includes(updates.venueHoldMode)) {
+        delete updates.venueHoldMode;
+      }
+    }
+
+    const effectiveLocation =
+      updates.location !== undefined ? updates.location : activity.location;
+    const effectiveStart =
+      updates.startDate !== undefined ? updates.startDate : activity.startDate;
+    const effectiveEnd =
+      updates.endDate !== undefined ? updates.endDate : activity.endDate;
+    const effectiveTitle =
+      updates.title !== undefined ? updates.title : activity.title;
+    const effectiveVenueHoldMode =
+      updates.venueHoldMode !== undefined
+        ? updates.venueHoldMode
+        : activity.venueHoldMode || 'full_venue';
+    const effectiveVenueHoldCourtId =
+      updates.venueHoldCourtId !== undefined
+        ? updates.venueHoldCourtId
+        : activity.venueHoldCourtId;
+
+    const wasFixed = previousLocation === FIXED_ACTIVITY_VENUE_LOCATION;
+    const nextIsFixed = effectiveLocation === FIXED_ACTIVITY_VENUE_LOCATION;
+    /** 以「實際時間／標題是否與資料庫不同」為準，避免 multipart 未帶齊欄位時只改日期卻不觸發同步 */
+    const tMs = (d) => new Date(d).getTime();
+    const startMoved = tMs(effectiveStart) !== tMs(activity.startDate);
+    const endMoved = tMs(effectiveEnd) !== tMs(activity.endDate);
+    const titleMoved = effectiveTitle !== activity.title;
+    const timeChanged = startMoved || endMoved;
+    const venueScopeChanged =
+      updates.venueHoldMode !== undefined || updates.venueHoldCourtId !== undefined;
+
+    if (nextIsFixed && effectiveVenueHoldMode === 'single_court' && !effectiveVenueHoldCourtId) {
+      return res.status(400).json({ message: '荔枝角場地請選擇要佔用的場地' });
+    }
+
+    const needSlotAssert = nextIsFixed && (!wasFixed || timeChanged || venueScopeChanged);
+
+    if (needSlotAssert) {
+      try {
+        const excludeIds =
+          wasFixed && (timeChanged || venueScopeChanged)
+            ? await getActivityVenueBookingIdList(activity._id, previousTitle)
+            : [];
+        await assertFixedVenueSlotsFree(
+          {
+            startDate: effectiveStart,
+            endDate: effectiveEnd,
+            title: effectiveTitle,
+            venueHoldMode: effectiveVenueHoldMode,
+            venueHoldCourtId: effectiveVenueHoldCourtId
+          },
+          { excludeBookingIds: excludeIds }
+        );
+      } catch (slotErr) {
+        return res.status(400).json({
+          message: slotErr.message || '該時段已有其他預約，無法更新活動時間'
+        });
+      }
+    }
+
     Object.keys(updates).forEach(key => {
       if (updates[key] !== undefined) {
         activity[key] = updates[key];
       }
     });
 
+    if (activity.venueHoldMode === 'full_venue') {
+      activity.venueHoldCourtId = null;
+    }
+
     await activity.save();
+
+    try {
+      if (wasFixed && !nextIsFixed) {
+        await cancelActivityVenueBookingsForActivity(activity._id, previousTitle);
+      } else if (nextIsFixed) {
+        await reconcileActivityVenueBookings(activity, req.user.id, previousTitle);
+      }
+    } catch (venueErr) {
+      console.error('活動場地預約同步失敗:', venueErr);
+    }
 
     console.log(`🎯 管理員更新活動: ${activity.title} (${activity._id})`);
 

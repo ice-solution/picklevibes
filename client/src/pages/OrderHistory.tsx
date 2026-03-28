@@ -25,6 +25,7 @@ interface OrderItem {
   price: number;
   quantity: number;
   subtotal: number;
+  size?: string | null;
 }
 
 interface Order {
@@ -205,6 +206,9 @@ const OrderHistory: React.FC = () => {
                           />
                           <div className="flex-1">
                             <p className="font-medium text-lg">{item.name}</p>
+                            {item.size && (
+                              <p className="text-sm text-gray-500">尺碼：{item.size}</p>
+                            )}
                             <p className="text-sm text-gray-600">
                               數量：{item.quantity} × HK${item.price.toFixed(2)}
                             </p>
@@ -355,6 +359,9 @@ const OrderHistory: React.FC = () => {
                           />
                           <div className="flex-1">
                             <p className="font-medium">{item.name}</p>
+                            {item.size && (
+                              <p className="text-sm text-gray-500">尺碼：{item.size}</p>
+                            )}
                             <p className="text-sm text-gray-600">
                               數量：{item.quantity} × HK${item.price.toFixed(2)}
                             </p>

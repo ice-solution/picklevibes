@@ -44,6 +44,11 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: [0, '庫存不能為負數']
   },
+  /** 為 true 時，結帳必須選擇尺碼（XS–XL） */
+  isClothing: {
+    type: Boolean,
+    default: false
+  },
   isActive: {
     type: Boolean,
     default: true

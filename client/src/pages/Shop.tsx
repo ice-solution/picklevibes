@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SEO from '../components/SEO/SEO';
 import axios from 'axios';
@@ -9,7 +9,6 @@ import {
   MagnifyingGlassIcon,
   ShoppingCartIcon
 } from '@heroicons/react/24/outline';
-
 interface Product {
   _id: string;
   name: string;
@@ -24,6 +23,7 @@ interface Product {
   images: string[];
   stock: number;
   currentPrice: number;
+  isClothing?: boolean;
 }
 
 interface Category {
@@ -33,6 +33,7 @@ interface Category {
 }
 
 const Shop: React.FC = () => {
+  const navigate = useNavigate();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
@@ -107,6 +108,11 @@ const Shop: React.FC = () => {
   const addToCart = (product: Product) => {
     if (!user) {
       alert('請先登錄');
+      return;
+    }
+
+    if (product.isClothing) {
+      navigate(`/shop/${product._id}`);
       return;
     }
 
@@ -280,7 +286,7 @@ const Shop: React.FC = () => {
                           disabled={product.stock === 0}
                           className="w-full px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                         >
-                          加入購物車
+                          {product.isClothing ? '選擇尺碼' : '加入購物車'}
                         </button>
                       </div>
                     </div>

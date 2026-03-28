@@ -24,6 +24,12 @@ const orderItemSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0
+  },
+  /** 衣服類商品尺碼；非衣服為 null */
+  size: {
+    type: String,
+    default: null,
+    trim: true
   }
 }, { _id: true });
 

@@ -59,6 +59,19 @@ const activitySchema = new mongoose.Schema({
     required: [true, '活動地點為必填項目'],
     trim: true
   },
+  /**
+   * 僅當 location 為本店固定地址時有效：full_venue=三場地佔用；single_court=僅佔用 venueHoldCourtId
+   */
+  venueHoldMode: {
+    type: String,
+    enum: ['full_venue', 'single_court'],
+    default: 'full_venue'
+  },
+  venueHoldCourtId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Court',
+    default: null
+  },
   organizer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

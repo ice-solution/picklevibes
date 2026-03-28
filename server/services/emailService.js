@@ -4,6 +4,11 @@ const fs = require('fs').promises;
 const path = require('path');
 const pdfService = require('./pdfService');
 
+function orderItemDisplayName(item) {
+  if (!item || !item.name) return '';
+  return item.size ? `${item.name}（尺碼：${item.size}）` : item.name;
+}
+
 class EmailService {
   constructor() {
     this.transporter = null;
@@ -1744,7 +1749,7 @@ PickleVibes 團隊
       const itemsHtml = orderData.items.map(item => `
         <tr>
           <td style="padding: 12px; border-bottom: 1px solid #eee;">
-            <strong>${item.name}</strong>
+            <strong>${orderItemDisplayName(item)}</strong>
           </td>
           <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
             ${item.quantity}
@@ -1855,7 +1860,7 @@ PickleVibes 團隊
 訂單狀態：待處理
 
 訂單項目：
-${orderData.items.map(item => `- ${item.name} x ${item.quantity} = HK$${item.subtotal.toFixed(2)}`).join('\n')}
+${orderData.items.map(item => `- ${orderItemDisplayName(item)} x ${item.quantity} = HK$${item.subtotal.toFixed(2)}`).join('\n')}
 
 小計：HK$${orderData.subtotal.toFixed(2)}
 ${orderData.discount > 0 ? `折扣：-HK$${orderData.discount.toFixed(2)}\n` : ''}總計：HK$${orderData.total.toFixed(2)}
@@ -1922,7 +1927,7 @@ PickleVibes 團隊
       const emailSubject = `新訂單通知 - ${orderData.orderNumber}`;
 
       const itemsText = orderData.items
-        .map((item) => `- ${item.name} x ${item.quantity}`)
+        .map((item) => `- ${orderItemDisplayName(item)} x ${item.quantity}`)
         .join('\n');
 
       const emailText = `
@@ -1990,7 +1995,7 @@ ${orderData.shippingAddress?.address || ''}
       const itemsHtml = orderData.items.map(item => `
         <tr>
           <td style="padding: 12px; border-bottom: 1px solid #eee;">
-            <strong>${item.name}</strong>
+            <strong>${orderItemDisplayName(item)}</strong>
           </td>
           <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
             ${item.quantity}
@@ -2070,7 +2075,7 @@ ${orderData.shippingAddress?.address || ''}
 ${orderData.trackingNumber ? `追蹤號碼：${orderData.trackingNumber}\n` : ''}
 
 出貨項目：
-${orderData.items.map(item => `- ${item.name} x ${item.quantity}`).join('\n')}
+${orderData.items.map(item => `- ${orderItemDisplayName(item)} x ${item.quantity}`).join('\n')}
 
 收貨地址：
 ${orderData.shippingAddress.name}
@@ -2115,6 +2120,71 @@ PickleVibes 團隊
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * 教練學校要請：通知管理員信箱（EMAIL_USER）
+   */
+  async sendCoachScheduleRequestEmail({
+    coachName,
+    dateLabel,
+    timeRange,
+    message,
+    adminPanelUrl
+  }) {
+    try {
+      const to = process.env.EMAIL_USER || process.env.GMAIL_USER;
+      if (!to) {
+        console.warn('⚠️ 未設定 EMAIL_USER / GMAIL_USER，略過教練要請郵件');
+        return { success: false, error: '郵件收件人未設定' };
+      }
+      const subject = `[教練要請] ${coachName} ${dateLabel} - ${timeRange}`;
+      const text = [
+        '教練學校要請（新申請）',
+        '',
+        `教練：${coachName}`,
+        `日期：${dateLabel}`,
+        `時間：${timeRange}`,
+        message ? `備註：${message}` : '',
+        '',
+        `後台處理：${adminPanelUrl || ''}`
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const html = `
+        <p><strong>教練學校要請（新申請）</strong></p>
+        <p>教練：${escapeHtml(coachName)}</p>
+        <p>日期：${escapeHtml(dateLabel)}</p>
+        <p>時間：${escapeHtml(timeRange)}</p>
+        ${message ? `<p>備註：${escapeHtml(message)}</p>` : ''}
+        <p><a href="${escapeHtml(adminPanelUrl || '#')}">開啟後台處理</a></p>
+      `;
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to,
+        subject,
+        text,
+        html
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 教練要請通知已發送至 ${to}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 教練要請郵件發送失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 module.exports = new EmailService();

@@ -9,6 +9,7 @@ import {
   ArrowLeftIcon,
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
+import { CLOTHING_SIZE_OPTIONS } from '../constants/clothingSizes';
 
 interface Product {
   _id: string;
@@ -24,6 +25,7 @@ interface Product {
   images: string[];
   stock: number;
   currentPrice: number;
+  isClothing?: boolean;
 }
 
 const ProductDetail: React.FC = () => {
@@ -34,6 +36,7 @@ const ProductDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [selectedSize, setSelectedSize] = useState('');
 
   useEffect(() => {
     if (id) {
@@ -73,19 +76,30 @@ const ProductDetail: React.FC = () => {
 
     if (!product) return;
 
+    if (product.isClothing && !selectedSize) {
+      alert('請選擇尺碼');
+      return;
+    }
+
+    const size = product.isClothing ? selectedSize : undefined;
     const cart = JSON.parse(localStorage.getItem('cart') || '[]');
-    const existingItem = cart.find((item: any) => item.productId === product._id);
+    const existingItem = cart.find(
+      (item: any) =>
+        item.productId === product._id && (item.size || '') === (size || '')
+    );
     
     if (existingItem) {
       existingItem.quantity += quantity;
     } else {
-      cart.push({
+      const line: Record<string, unknown> = {
         productId: product._id,
         name: product.name,
         price: product.currentPrice,
         image: product.images[0],
         quantity: quantity
-      });
+      };
+      if (size) line.size = size;
+      cart.push(line);
     }
 
     localStorage.setItem('cart', JSON.stringify(cart));
@@ -101,13 +115,22 @@ const ProductDetail: React.FC = () => {
 
     if (!product) return;
 
-    const cart = [{
+    if (product.isClothing && !selectedSize) {
+      alert('請選擇尺碼');
+      return;
+    }
+
+    const size = product.isClothing ? selectedSize : undefined;
+    const line: Record<string, unknown> = {
       productId: product._id,
       name: product.name,
       price: product.currentPrice,
       image: product.images[0],
       quantity: quantity
-    }];
+    };
+    if (size) line.size = size;
+
+    const cart = [line];
 
     localStorage.setItem('cart', JSON.stringify(cart));
     navigate('/checkout');
@@ -214,6 +237,25 @@ const ProductDetail: React.FC = () => {
                     <div className="text-gray-600 whitespace-pre-line">
                       {product.details}
                     </div>
+                  </div>
+                )}
+
+                {product.isClothing && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">尺碼 *</label>
+                    <select
+                      value={selectedSize}
+                      onChange={(e) => setSelectedSize(e.target.value)}
+                      className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      required
+                    >
+                      <option value="">請選擇尺碼</option>
+                      {CLOTHING_SIZE_OPTIONS.map((sz) => (
+                        <option key={sz} value={sz}>
+                          {sz}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 )}
 

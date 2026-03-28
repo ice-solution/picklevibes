@@ -6,6 +6,7 @@ import ProtectedRoute from '../components/Auth/ProtectedRoute';
 import SEO from '../components/SEO/SEO';
 import RedeemCodeInput from '../components/Common/RedeemCodeInput';
 import axios from 'axios';
+import { CLOTHING_SIZE_OPTIONS } from '../constants/clothingSizes';
 import { 
   CheckCircleIcon,
   XCircleIcon
@@ -17,6 +18,7 @@ interface CartItem {
   price: number;
   image: string;
   quantity: number;
+  size?: string;
 }
 
 interface RedeemData {
@@ -93,7 +95,7 @@ const Checkout: React.FC = () => {
       return;
     }
 
-    // 驗證庫存
+    // 驗證庫存與衣服尺碼
     for (const cartItem of cartItems) {
       const product = products.find(p => p._id === cartItem.productId);
       if (!product) {
@@ -104,6 +106,13 @@ const Checkout: React.FC = () => {
         alert(`產品 ${cartItem.name} 庫存不足`);
         return;
       }
+      if (product.isClothing) {
+        const sz = (cartItem.size || '').trim().toUpperCase();
+        if (!(CLOTHING_SIZE_OPTIONS as readonly string[]).includes(sz)) {
+          alert(`請為「${cartItem.name}」選擇有效尺碼（XS–XL）`);
+          return;
+        }
+      }
     }
 
     try {
@@ -111,7 +120,8 @@ const Checkout: React.FC = () => {
       const response = await axios.post('/orders', {
         items: cartItems.map(item => ({
           productId: item.productId,
-          quantity: item.quantity
+          quantity: item.quantity,
+          ...(item.size ? { size: item.size } : {})
         })),
         shippingAddress,
         redeemCodeId: redeemData?.id || null,
@@ -235,8 +245,11 @@ const Checkout: React.FC = () => {
                   <h2 className="text-xl font-bold mb-4">訂單摘要</h2>
                   <div className="space-y-3 mb-6">
                     {cartItems.map((item) => (
-                      <div key={item.productId} className="flex justify-between text-sm">
-                        <span>{item.name} x {item.quantity}</span>
+                      <div key={`${item.productId}-${item.size ?? ''}`} className="flex justify-between text-sm">
+                        <span>
+                          {item.name}
+                          {item.size ? `（${item.size}）` : ''} x {item.quantity}
+                        </span>
                         <span>{Math.round(item.price * item.quantity)} 積分</span>
                       </div>
                     ))}
