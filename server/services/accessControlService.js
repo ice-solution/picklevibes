@@ -93,6 +93,65 @@ class AccessControlService {
   }
 
   /**
+   * 將時間加上指定分鐘（門禁結束時間延長用）
+   * 回傳 { time: 'HH:MM', addDays }；若跨午夜則 addDays 為 1
+   */
+  addMinutes(timeString, minutes = 15) {
+    try {
+      const normalizedTime = timeString === '24:00' ? '00:00' : timeString;
+      const [hours, mins] = normalizedTime.split(':').map(Number);
+      const base = new Date(2000, 0, 1, hours, mins, 0, 0);
+      const beforeDay = base.getDate();
+      base.setMinutes(base.getMinutes() + minutes);
+      const afterDay = base.getDate();
+      const addDays = afterDay !== beforeDay ? 1 : 0;
+      const newHours = base.getHours().toString().padStart(2, '0');
+      const newMins = base.getMinutes().toString().padStart(2, '0');
+      const resultTime = `${newHours}:${newMins}`;
+      console.log(
+        `⏰ 結束時間延長: ${timeString} → ${resultTime} (+${minutes}分鐘${addDays ? ', 跨日+1' : ''})`
+      );
+      return { time: resultTime, addDays };
+    } catch (error) {
+      console.error('❌ 結束時間延長失敗:', error.message);
+      return { time: timeString, addDays: 0 };
+    }
+  }
+
+  /**
+   * 門禁 API 用：預約結束時間 +15 分鐘，供 convertToISOString 使用
+   */
+  getExtendedEndForHik(bookingData, extendMinutes = 15) {
+    const extended = this.addMinutes(bookingData.endTime, extendMinutes);
+    let endDateParam = bookingData.endDate || null;
+    if (extended.addDays > 0) {
+      let base;
+      if (endDateParam) {
+        base =
+          endDateParam instanceof Date
+            ? new Date(endDateParam.getTime())
+            : new Date(
+                String(endDateParam).includes('T')
+                  ? endDateParam
+                  : `${endDateParam}T12:00:00`
+              );
+      } else {
+        const bd = bookingData.date;
+        base =
+          bd instanceof Date
+            ? new Date(bd.getTime())
+            : new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(bd).trim()) ? `${bd}T12:00:00` : bd);
+      }
+      if (Number.isNaN(base.getTime())) {
+        throw new Error('無法解析預約日期以延長門禁結束時間');
+      }
+      base.setDate(base.getDate() + extended.addDays);
+      endDateParam = base;
+    }
+    return { endTimeStr: extended.time, endDateParam };
+  }
+
+  /**
    * 創建臨時授權
    */
   async createTempAuth(visitorData, bookingData) {
@@ -101,6 +160,7 @@ class AccessControlService {
       
       // 將開始時間提前15分鐘，讓用戶可以提早進場
       const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
+      const { endTimeStr, endDateParam } = this.getExtendedEndForHik(bookingData, 15);
       
       console.log('👤 正在創建臨時授權...', {
         name: visitorData.name,
@@ -108,7 +168,8 @@ class AccessControlService {
         email: visitorData.email,
         originalStartTime: bookingData.startTime,
         earlyStartTime: earlyStartTime,
-        endTime: bookingData.endTime
+        bookingEndTime: bookingData.endTime,
+        hikEndTime: endTimeStr
       });
 
       // 將時間轉換為 ISO 字符串格式
@@ -116,9 +177,9 @@ class AccessControlService {
       const usePreviousDayForEarly = this._timeToMinutes(earlyStartTime) > this._timeToMinutes(bookingData.startTime);
       const startTime = this.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
       const endTime = this.convertToISOString(
-        bookingData.date, 
-        bookingData.endTime, 
-        bookingData.endDate || null, 
+        bookingData.date,
+        endTimeStr,
+        endDateParam,
         earlyStartTime
       );
 
@@ -328,14 +389,15 @@ class AccessControlService {
       // 4. 發送郵件（包含二維碼和密碼）
       await this.sendAccessEmail(visitorData, bookingData, qrCodeData, tempAuth.password);
       
-      // 計算開始和結束時間（ISO 格式）
+      // 計算開始和結束時間（ISO 格式，與送 Hik 的授權窗一致：開始提前 15 分、結束延後 15 分）
       const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
       const usePreviousDayForEarly = this._timeToMinutes(earlyStartTime) > this._timeToMinutes(bookingData.startTime);
       const startTimeISO = this.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
+      const { endTimeStr, endDateParam } = this.getExtendedEndForHik(bookingData, 15);
       const endTimeISO = this.convertToISOString(
-        bookingData.date, 
-        bookingData.endTime, 
-        bookingData.endDate || null, 
+        bookingData.date,
+        endTimeStr,
+        endDateParam,
         earlyStartTime
       );
       
