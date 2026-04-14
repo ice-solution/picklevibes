@@ -10,6 +10,7 @@ const whatsappService = require('../services/whatsappService');
 const accessControlService = require('../services/accessControlService');
 const Config = require('../models/Config');
 const { collectBundledBookingIds } = require('../utils/bookingBundle');
+const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 
 const router = express.Router();
 
@@ -371,35 +372,18 @@ router.post('/', [
     // 記錄兌換碼使用
     if (redeemCodeData) {
       try {
-        const RedeemUsage = require('../models/RedeemUsage');
-        const RedeemCode = require('../models/RedeemCode');
-        const redeemCodeDoc = await RedeemCode.findById(redeemCodeData.id);
-        const commissionRate = redeemCodeDoc?.commissionRate ?? null;
-        const commissionAmount = commissionRate ? Math.round(pointsToDeduct * (commissionRate / 100) * 100) / 100 : 0;
-        
-        const redeemUsage = new RedeemUsage({
-          redeemCode: redeemCodeData.id,
-          user: bookingUserId,
+        await consumeRedeemCodeOnce({
+          redeemCodeId: redeemCodeData.id,
+          userId: bookingUserId,
           orderType: 'booking',
           orderId: booking._id,
           originalAmount: tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0),
           discountAmount: redeemCodeData.discountAmount,
           finalAmount: pointsToDeduct,
-          commissionRate,
-          commissionAmount,
           ipAddress: req.ip,
-          userAgent: req.get('User-Agent')
+          userAgent: req.get('User-Agent'),
         });
-        
-        await redeemUsage.save();
-        
-        // 更新兌換碼統計
-        if (redeemCodeDoc) {
-          redeemCodeDoc.totalUsed += 1;
-          redeemCodeDoc.totalDiscount += redeemCodeData.discountAmount;
-          await redeemCodeDoc.save();
-        }
-        
+
         console.log('✅ 兌換碼使用記錄已保存');
       } catch (error) {
         console.error('❌ 兌換碼使用記錄保存失敗:', error);

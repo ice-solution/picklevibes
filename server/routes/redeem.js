@@ -1,10 +1,24 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
+const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
+
+function escapeRegex(input) {
+  return String(input).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeSearchQ(qRaw) {
+  if (qRaw == null) return null;
+  const q = String(qRaw).trim();
+  if (!q) return null;
+  // 避免過長 regex 造成效能問題
+  return q.slice(0, 64);
+}
 
 // 獨立兌換碼：6 位（字母+數字混合），至少包含一個字母與一個數字
 const REDEEM_CODE_RANDOM_REGEX = /^[A-Z0-9]{6}$/;
@@ -147,46 +161,22 @@ router.post('/use', [
       finalAmount 
     } = req.body;
 
-    // 查找兌換碼
-    const redeemCode = await RedeemCode.findById(redeemCodeId);
-    if (!redeemCode || !redeemCode.isValid()) {
-      return res.status(400).json({ message: '兌換碼無效或已過期' });
-    }
-
-    // 檢查用戶是否可以使用
-    const canUse = await redeemCode.canUserUse(req.user.id);
-    if (!canUse) {
-      return res.status(400).json({ message: '您已超過此兌換碼的使用次數限制' });
-    }
-
-    // 創建使用記錄
-    const commissionRate = redeemCode.commissionRate ?? null;
-    const commissionAmount = commissionRate ? Math.round(finalAmount * (commissionRate / 100) * 100) / 100 : 0;
-    const redeemUsage = new RedeemUsage({
-      redeemCode: redeemCodeId,
-      user: req.user.id,
+    const { usage } = await consumeRedeemCodeOnce({
+      redeemCodeId,
+      userId: req.user.id,
       orderType,
       orderId,
       originalAmount,
       discountAmount,
       finalAmount,
-      commissionRate,
-      commissionAmount,
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
+      userAgent: req.get('User-Agent'),
     });
-
-    await redeemUsage.save();
-
-    // 更新兌換碼統計
-    redeemCode.totalUsed += 1;
-    redeemCode.totalDiscount += discountAmount;
-    await redeemCode.save();
 
     res.json({
       message: '兌換碼使用成功',
       usage: {
-        id: redeemUsage._id,
+        id: usage?._id || null,
         discountAmount,
         finalAmount
       }
@@ -194,7 +184,8 @@ router.post('/use', [
 
   } catch (error) {
     console.error('使用兌換碼錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+    const status = error?.statusCode || 500;
+    res.status(status).json({ message: status === 500 ? '服務器錯誤，請稍後再試' : (error?.message || '兌換碼使用失敗') });
   }
 });
 
@@ -279,6 +270,7 @@ router.post('/admin/create', [
 
     // 獨立兌換碼：一次生成 N 個唯一碼
     if (isIndependentCode) {
+      const batchId = new mongoose.Types.ObjectId();
       const createdCodes = [];
       for (let i = 0; i < quantity; i += 1) {
         const generatedCode = await generateUniqueIndependentRedeemCode();
@@ -286,6 +278,7 @@ router.post('/admin/create', [
         const redeemCodeData = {
           ...req.body,
           code: generatedCode,
+          batchId,
           isIndependentCode,
           commissionRate,
           // 獨立兌換碼：強制每個碼只用一次（全域）與每用戶一次
@@ -345,7 +338,7 @@ router.post('/admin/create', [
 // @access  Private (Admin)
 router.get('/admin/list', [auth, adminAuth], async (req, res) => {
   try {
-    const { page = 1, limit = 10, status } = req.query;
+    const { page = 1, limit = 10, status, batchId, q: qRaw } = req.query;
     
     const query = {};
     if (status === 'active') {
@@ -356,6 +349,20 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
       query.validUntil = { $lt: new Date() };
     } else if (status === 'inactive') {
       query.isActive = false;
+    }
+
+    if (batchId && String(batchId).trim() !== '') {
+      query.batchId = String(batchId).trim();
+    }
+
+    const q = normalizeSearchQ(qRaw);
+    if (q) {
+      const re = new RegExp(escapeRegex(q), 'i');
+      query.$or = [
+        { code: re },
+        { name: re },
+        { description: re },
+      ];
     }
     
     const redeemCodes = await RedeemCode.find(query)
@@ -376,6 +383,180 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
     });
   } catch (error) {
     console.error('獲取兌換碼列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/redeem/admin/groups
+// @desc    以 batchId 群組顯示（僅管理員）
+// @access  Private (Admin)
+router.get('/admin/groups', [auth, adminAuth], async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status, q: qRaw } = req.query;
+
+    const now = new Date();
+    const match = { batchId: { $ne: null } };
+    if (status === 'active') {
+      match.isActive = true;
+      match.validFrom = { $lte: now };
+      match.validUntil = { $gte: now };
+    } else if (status === 'expired') {
+      match.validUntil = { $lt: now };
+    } else if (status === 'inactive') {
+      match.isActive = false;
+    }
+
+    const q = normalizeSearchQ(qRaw);
+    if (q) {
+      const re = new RegExp(escapeRegex(q), 'i');
+      // 群組列表先以 name/description/code 先過濾（效率較好）
+      match.$or = [
+        { name: re },
+        { description: re },
+        { code: re },
+      ];
+    }
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+    const skip = (pageNum - 1) * limitNum;
+
+    const [groups, total] = await Promise.all([
+      RedeemCode.aggregate([
+        { $match: match },
+        { $sort: { createdAt: -1 } },
+        {
+          $group: {
+            _id: '$batchId',
+            name: { $first: '$name' },
+            description: { $first: '$description' },
+            type: { $first: '$type' },
+            value: { $first: '$value' },
+            minAmount: { $first: '$minAmount' },
+            maxDiscount: { $first: '$maxDiscount' },
+            usageLimit: { $first: '$usageLimit' },
+            userUsageLimit: { $first: '$userUsageLimit' },
+            isIndependentCode: { $first: '$isIndependentCode' },
+            commissionRate: { $first: '$commissionRate' },
+            validFrom: { $first: '$validFrom' },
+            validUntil: { $first: '$validUntil' },
+            isActive: { $first: '$isActive' },
+            applicableTypes: { $first: '$applicableTypes' },
+            createdAt: { $first: '$createdAt' },
+            totalCodes: { $sum: 1 },
+            totalUsed: { $sum: '$totalUsed' },
+            totalDiscount: { $sum: '$totalDiscount' },
+          }
+        },
+        { $skip: skip },
+        { $limit: limitNum },
+      ]),
+      RedeemCode.aggregate([
+        { $match: match },
+        { $group: { _id: '$batchId' } },
+        { $count: 'count' }
+      ]).then((rows) => rows?.[0]?.count || 0),
+    ]);
+
+    res.json({
+      groups,
+      pagination: {
+        current: pageNum,
+        pages: Math.ceil(total / limitNum),
+        total,
+      }
+    });
+  } catch (error) {
+    console.error('獲取兌換碼群組列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PUT /api/redeem/admin/batch/:batchId
+// @desc    批次更新同一 batchId 的兌換碼（僅管理員）
+// @access  Private (Admin)
+router.put('/admin/batch/:batchId', [
+  auth,
+  adminAuth,
+  body('name').optional().trim().notEmpty().withMessage('兌換碼名稱不能為空'),
+  body('description').optional().trim(),
+  body('type').optional().isIn(['fixed', 'percentage']).withMessage('類型必須是 fixed 或 percentage'),
+  body('value').optional().isFloat({ min: 0 }).withMessage('折扣值必須大於等於0'),
+  body('minAmount').optional().isFloat({ min: 0 }).withMessage('最低消費金額不能為負數'),
+  body('maxDiscount').optional().isFloat({ min: 0 }).withMessage('最大折扣金額不能為負數'),
+  body('commissionRate').optional().isIn(['5', '10', 5, 10]).withMessage('佣金比例只能選擇 5 或 10'),
+  body('validFrom').optional().isISO8601().withMessage('請提供有效的開始日期'),
+  body('validUntil').optional().isISO8601().withMessage('請提供有效的到期日期'),
+  body('isActive').optional().isBoolean().withMessage('狀態必須是布林值'),
+  body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array()
+      });
+    }
+
+    const { batchId } = req.params;
+    if (!batchId || String(batchId).trim() === '') {
+      return res.status(400).json({ message: 'batchId 不能為空' });
+    }
+
+    // 先找一筆確認 batch 存在
+    const sample = await RedeemCode.findOne({ batchId }).select('_id isIndependentCode').lean();
+    if (!sample) {
+      return res.status(404).json({ message: '找不到此批次' });
+    }
+
+    const update = { ...req.body };
+
+    // 正規化 commissionRate
+    if (update.commissionRate === '' || update.commissionRate == null) {
+      update.commissionRate = null;
+    } else if (update.commissionRate != null) {
+      update.commissionRate = Number(update.commissionRate);
+    }
+
+    // 正規化日期
+    if (update.validFrom) update.validFrom = new Date(update.validFrom);
+    if (update.validUntil) update.validUntil = new Date(update.validUntil);
+
+    // 避免批次修改破壞「獨立兌換碼」一次性限制
+    if (sample.isIndependentCode === true) {
+      update.usageLimit = 1;
+      update.userUsageLimit = 1;
+      update.isIndependentCode = true;
+    } else {
+      // 不允許透過 batch endpoint 切換獨立/非獨立
+      delete update.isIndependentCode;
+      delete update.usageLimit;
+      delete update.userUsageLimit;
+    }
+
+    // 不允許批次改 code / batchId / 統計欄位
+    delete update.code;
+    delete update.batchId;
+    delete update.totalUsed;
+    delete update.totalDiscount;
+    delete update.createdBy;
+
+    update.updatedAt = new Date();
+
+    const result = await RedeemCode.updateMany(
+      { batchId },
+      { $set: update },
+      { runValidators: true }
+    );
+
+    res.json({
+      message: '批次更新成功',
+      matched: result.matchedCount ?? result.n ?? 0,
+      modified: result.modifiedCount ?? result.nModified ?? 0
+    });
+  } catch (error) {
+    console.error('批次更新兌換碼錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

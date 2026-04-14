@@ -1,6 +1,11 @@
 const mongoose = require('mongoose');
 
 const redeemCodeSchema = new mongoose.Schema({
+  // 批次群組（用於「獨立兌換碼」一次生成 N 個時 group 顯示）
+  batchId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+  },
   code: {
     type: String,
     required: true,
@@ -113,6 +118,7 @@ const redeemCodeSchema = new mongoose.Schema({
 // 索引優化查詢
 redeemCodeSchema.index({ code: 1 });
 redeemCodeSchema.index({ isActive: 1, validFrom: 1, validUntil: 1 });
+redeemCodeSchema.index({ batchId: 1, createdAt: -1 });
 
 // 驗證兌換碼是否有效
 redeemCodeSchema.methods.isValid = function() {

@@ -10,6 +10,7 @@ const User = require('../models/User');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
 const emailService = require('../services/emailService');
+const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { auth, adminAuth } = require('../middleware/auth');
 const { activityUpload, processActivityImage, deleteFile } = require('../middleware/upload');
 
@@ -1176,28 +1177,17 @@ router.post('/:id/register', [
 
     // 如果使用了兌換碼，記錄使用並更新統計
     if (redeemCode && discountAmount > 0) {
-      const commissionRate = redeemCode.commissionRate ?? null;
-      const commissionAmount = commissionRate ? Math.round(totalCost * (commissionRate / 100) * 100) / 100 : 0;
-      const redeemUsage = new RedeemUsage({
-        redeemCode: redeemCodeId,
-        user: userId,
+      await consumeRedeemCodeOnce({
+        redeemCodeId,
+        userId,
         orderType: 'activity',
         orderId: activityId,
         originalAmount: baseCost,
-        discountAmount: discountAmount,
+        discountAmount,
         finalAmount: totalCost,
-        commissionRate,
-        commissionAmount,
         ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
+        userAgent: req.get('User-Agent'),
       });
-
-      await redeemUsage.save();
-
-      // 更新兌換碼統計
-      redeemCode.totalUsed += 1;
-      redeemCode.totalDiscount += discountAmount;
-      await redeemCode.save();
     }
 
     // 創建報名記錄

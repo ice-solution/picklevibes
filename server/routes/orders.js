@@ -4,6 +4,7 @@ const Order = require('../models/Order');
 const Product = require('../models/Product');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
+const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const emailService = require('../services/emailService');
 const { normalizeClothingSize } = require('../utils/clothingSizes');
 const { auth, adminAuth } = require('../middleware/auth');
@@ -156,28 +157,17 @@ router.post('/', [
 
     // 記錄兌換碼使用
     if (redeemCode) {
-      const commissionRate = redeemCode.commissionRate ?? null;
-      const commissionAmount = commissionRate ? Math.round(total * (commissionRate / 100) * 100) / 100 : 0;
-      const redeemUsage = new RedeemUsage({
-        redeemCode: redeemCode._id,
-        user: userId,
+      await consumeRedeemCodeOnce({
+        redeemCodeId: redeemCode._id,
+        userId,
         orderType: 'product',
         orderId: order._id,
         originalAmount: subtotal,
         discountAmount: discount,
         finalAmount: total,
-        commissionRate,
-        commissionAmount,
         ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
+        userAgent: req.get('User-Agent'),
       });
-
-      await redeemUsage.save();
-
-      // 更新兌換碼統計
-      redeemCode.totalUsed += 1;
-      redeemCode.totalDiscount += discount;
-      await redeemCode.save();
     }
 
     // 發送訂單確認郵件
