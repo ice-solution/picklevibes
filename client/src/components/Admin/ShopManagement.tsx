@@ -29,6 +29,7 @@ interface Product {
   stock: number;
   isActive: boolean;
   sortOrder: number;
+  isClothing?: boolean;
 }
 
 interface Category {
@@ -58,7 +59,8 @@ const ShopManagement: React.FC = () => {
     price: '',
     discountPrice: '',
     stock: '',
-    sortOrder: 0
+    sortOrder: 0,
+    isClothing: false
   });
   const [productImages, setProductImages] = useState<File[]>([]);
   const [productErrors, setProductErrors] = useState<{[key: string]: string}>({});
@@ -188,6 +190,7 @@ const ShopManagement: React.FC = () => {
     }
     formDataToSend.append('stock', productFormData.stock);
     formDataToSend.append('sortOrder', productFormData.sortOrder.toString());
+    formDataToSend.append('isClothing', productFormData.isClothing ? 'true' : 'false');
     
     productImages.forEach((image) => {
       formDataToSend.append('images', image);
@@ -207,7 +210,7 @@ const ShopManagement: React.FC = () => {
       
       setShowProductModal(false);
       setEditingProduct(null);
-      setProductFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0 });
+      setProductFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0, isClothing: false });
       setProductImages([]);
       fetchData();
     } catch (error: any) {
@@ -225,7 +228,8 @@ const ShopManagement: React.FC = () => {
       price: product.price.toString(),
       discountPrice: product.discountPrice?.toString() || '',
       stock: product.stock.toString(),
-      sortOrder: product.sortOrder
+      sortOrder: product.sortOrder,
+      isClothing: !!product.isClothing
     });
     setShowProductModal(true);
   };
@@ -337,7 +341,7 @@ const ShopManagement: React.FC = () => {
                 <button
                   onClick={() => {
                     setEditingProduct(null);
-                    setProductFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0 });
+                    setProductFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0, isClothing: false });
                     setProductImages([]);
                     setShowProductModal(true);
                   }}
@@ -369,6 +373,9 @@ const ShopManagement: React.FC = () => {
                           {product.isActive ? '啟用' : '停用'}
                         </span>
                       </div>
+                      {product.isClothing && (
+                        <p className="text-xs text-primary-600 font-medium mb-1">衣服（需選尺碼）</p>
+                      )}
                       <div className="flex space-x-2 mt-4">
                         <button
                           onClick={() => handleProductEdit(product)}
@@ -573,6 +580,15 @@ const ShopManagement: React.FC = () => {
                   />
                 </div>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={productFormData.isClothing}
+                  onChange={(e) => setProductFormData({ ...productFormData, isClothing: e.target.checked })}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-800">衣服（結帳時需選擇尺碼：XS–XL）</span>
+              </label>
               <div>
                 <label className="block text-sm font-medium mb-1">產品圖片 *</label>
                 <input

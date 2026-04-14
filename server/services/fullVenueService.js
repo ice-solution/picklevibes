@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Court = require('../models/Court');
 const User = require('../models/User');
@@ -40,6 +41,7 @@ class FullVenueService {
       // 計算包場總價格
       let totalPrice = 0;
       const courtBookings = [];
+      const venueBundleId = new mongoose.Types.ObjectId();
 
       // 為每個場地創建預約記錄
       for (const court of courts) {
@@ -53,17 +55,21 @@ class FullVenueService {
           duration: bookingData.duration,
           players: bookingData.players,
           totalPlayers: bookingData.totalPlayers,
-          isFullVenue: false, // 所有預約都是普通預約
+          venueBundleId,
+          venueBundleKind: 'full_venue',
+          isFullVenue: false,
           status: 'confirmed',
           pricing: {
             basePrice: courtPrice,
             totalPrice: courtPrice,
-            discount: 0,
-            finalPrice: courtPrice,
-            pointsDeducted: pointsDeducted // 每個預約都記錄積分扣除
+            memberDiscount: 0
           },
-          notes: `🏢 包場預約 - ${court.name}\n📅 預約日期: ${bookingData.date.toLocaleDateString('zh-TW')}\n⏰ 時間: ${bookingData.startTime}-${bookingData.endTime}\n👥 參與人數: ${bookingData.totalPlayers}人\n💰 場地費用: ${courtPrice}積分${bookingData.notes ? `\n📝 備註: ${bookingData.notes}` : ''}`,
-          createdBy: 'admin'
+          payment: {
+            status: 'paid',
+            method: 'points',
+            pointsDeducted: 0
+          },
+          specialRequests: `🏢 包場預約 - ${court.name}\n📅 預約日期: ${bookingData.date.toLocaleDateString('zh-TW')}\n⏰ 時間: ${bookingData.startTime}-${bookingData.endTime}\n👥 參與人數: ${bookingData.totalPlayers}人\n💰 場地費用: ${courtPrice}積分${bookingData.notes ? `\n📝 備註: ${bookingData.notes}` : ''}`
         });
 
         courtBookings.push(courtBooking);
@@ -72,6 +78,20 @@ class FullVenueService {
 
       // 保存所有預約
       const savedBookings = await Booking.insertMany(courtBookings);
+
+      // 舊版「主預約」標記：第一筆為主並指向其餘場地，供舊 cancel API 相容
+      if (savedBookings.length > 1) {
+        const [main, ...rest] = savedBookings;
+        await Booking.updateOne(
+          { _id: main._id },
+          {
+            $set: {
+              isFullVenue: true,
+              fullVenueBookings: rest.map((b) => b._id)
+            }
+          }
+        );
+      }
 
       // 如果有積分扣除，創建積分扣除記錄
       if (pointsDeducted > 0) {
@@ -166,18 +186,43 @@ class FullVenueService {
       console.log('🗑️ 開始取消包場預約...');
 
       const mainBooking = await Booking.findById(mainBookingId);
-      if (!mainBooking || !mainBooking.isFullVenue) {
+      if (!mainBooking) {
+        throw new Error('找不到包場預約');
+      }
+
+      const cancellation = {
+        cancelledAt: new Date(),
+        cancelledBy: 'admin',
+        reason: '包場預約取消'
+      };
+
+      if (mainBooking.venueBundleId) {
+        const cancelResult = await Booking.updateMany(
+          {
+            venueBundleId: mainBooking.venueBundleId,
+            status: { $in: ['pending', 'confirmed'] }
+          },
+          { $set: { status: 'cancelled', cancellation } }
+        );
+        console.log(`✅ 包場預約取消成功: ${cancelResult.modifiedCount} 個場地`);
+        return {
+          success: true,
+          cancelledCount: cancelResult.modifiedCount,
+          message: `包場預約取消成功，共取消 ${cancelResult.modifiedCount} 個預約`
+        };
+      }
+
+      if (!mainBooking.isFullVenue) {
         throw new Error('找不到包場預約或不是包場預約');
       }
 
-      // 取消所有關聯的預約
       const cancelResult = await Booking.updateMany(
         { _id: { $in: mainBooking.fullVenueBookings } },
-        { status: 'cancelled' }
+        { $set: { status: 'cancelled', cancellation } }
       );
 
-      // 取消主預約
       mainBooking.status = 'cancelled';
+      mainBooking.cancellation = cancellation;
       await mainBooking.save();
 
       console.log(`✅ 包場預約取消成功: ${cancelResult.modifiedCount} 個場地`);
@@ -187,7 +232,6 @@ class FullVenueService {
         cancelledCount: cancelResult.modifiedCount + 1,
         message: `包場預約取消成功，共取消 ${cancelResult.modifiedCount + 1} 個預約`
       };
-
     } catch (error) {
       console.error('❌ 取消包場預約失敗:', error);
       throw error;

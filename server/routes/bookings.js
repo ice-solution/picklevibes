@@ -9,6 +9,8 @@ const { auth, adminAuth } = require('../middleware/auth');
 const whatsappService = require('../services/whatsappService');
 const accessControlService = require('../services/accessControlService');
 const Config = require('../models/Config');
+const { collectBundledBookingIds } = require('../utils/bookingBundle');
+const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 
 const router = express.Router();
 
@@ -65,7 +67,13 @@ router.post('/', [
     
     // 只有管理員才能 bypass 限制
     const bypassRestrictions = req.user.role === 'admin' && req.body.bypassRestrictions === true;
-    
+    /**
+     * 後台建單且未勾選「管理員權限」時：僅放寬「可預約天數上限」與「營業時段 isOpenAt」，
+     * 其餘與一般用戶相同（含場地啟用、1～2 小時時長）；仍檢查衝突、照常扣積分。
+     * 勾選管理員權限時行為不變（完全繞過、不扣分等）。
+     */
+    const adminRelaxRules = req.user.role === 'admin' && !bypassRestrictions;
+
     // 如果沒有指定用戶（普通用戶創建），使用當前登錄用戶
     // 如果指定了用戶（管理員創建），使用指定的用戶
     const bookingUserId = user || req.user.id;
@@ -96,23 +104,20 @@ router.post('/', [
       return res.status(404).json({ message: '場地不存在' });
     }
 
-    // 如果不是管理員 bypass，檢查場地可用性
+    // 僅「管理員權限」繞過時不檢查 isAvailable；未勾選時與一般用戶相同
     if (!bypassRestrictions && !courtDoc.isAvailable()) {
       return res.status(400).json({ message: '場地目前不可用' });
     }
 
-    // 如果不是管理員 bypass，檢查場地是否在營業時間內開放
     const bookingDate = new Date(date);
-    if (!bypassRestrictions && !courtDoc.isOpenAt(bookingDate, startTime, endTime)) {
+
+    // 未勾選管理員權限之後台建單：可超出營業時段；勾選則一併略過
+    if (!bypassRestrictions && !adminRelaxRules && !courtDoc.isOpenAt(bookingDate, startTime, endTime)) {
       return res.status(400).json({ message: '場地在該時間段不開放' });
     }
 
-    // 如果不是管理員 bypass，檢查預約日期是否在該角色可預約天數內
+    // 過去日期：除完全繞過外一律禁止；可預約天數上限：僅一般用戶與非放寬後台建單需遵守
     if (!bypassRestrictions) {
-      const bookingUserDoc = await User.findById(bookingUserId).select('role');
-      const role = bookingUserDoc?.role || 'user';
-      const bookingConfig = await Config.getBookingConfig();
-      const maxDays = bookingConfig.maxAdvanceDaysByRole[role] ?? 7;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const bookingDateOnly = new Date(bookingDate);
@@ -121,8 +126,16 @@ router.post('/', [
       if (diffDays < 0) {
         return res.status(400).json({ message: '不可預約過去的日期' });
       }
-      if (diffDays > maxDays) {
-        return res.status(400).json({ message: `您的身份最多可預約 ${maxDays} 天內的場地，請選擇較近的日期` });
+      if (!adminRelaxRules) {
+        const bookingUserDoc = await User.findById(bookingUserId).select('role');
+        const role = bookingUserDoc?.role || 'user';
+        const bookingConfig = await Config.getBookingConfig();
+        const maxDays = bookingConfig.maxAdvanceDaysByRole[role] ?? 7;
+        if (diffDays > maxDays) {
+          return res.status(400).json({
+            message: `您的身份最多可預約 ${maxDays} 天內的場地，請選擇較近的日期`
+          });
+        }
       }
     }
 
@@ -157,12 +170,12 @@ router.post('/', [
       return res.status(400).json({ message: '結束時間必須晚於開始時間' });
     }
 
-    // 如果不是管理員 bypass，檢查時長限制（最多2小時）
+    // 僅「管理員權限」繞過時不限制時長；未勾選時仍須 1～2 小時
     if (!bypassRestrictions) {
       if (duration < 60) {
         return res.status(400).json({ message: '預約時長至少1小時' });
       }
-      
+
       if (duration > 120) {
         return res.status(400).json({ message: '預約時長最多2小時' });
       }
@@ -316,24 +329,27 @@ router.post('/', [
       specialRequests,
       includeSoloCourt, // 添加單人場租用信息
       bypassRestrictions, // 記錄是否繞過了限制
+      noUserBalanceDebited: !!bypassRestrictions, // 繞過限制建單時未扣用戶積分，取消時不可退分
       status: 'confirmed', // 直接確認
       // 添加兌換碼信息
       redeemCode: redeemCodeData ? redeemCodeData.id : undefined,
       redeemDiscount: redeemCodeData ? redeemCodeData.discountAmount : 0,
       payment: {
         status: 'paid',
-        method: 'points',
         paidAt: new Date(),
-        pointsDeducted: pointsToDeduct,
+        // 管理員繞過限制：未扣積分，標記 admin_waived 並記 pointsDeducted=0，避免取消時誤退
+        method: bypassRestrictions ? 'admin_waived' : 'points',
+        pointsDeducted: bypassRestrictions ? 0 : pointsToDeduct,
         originalPrice: tempBooking.pricing.totalPrice,
         discount: isVip ? 20 : 0 // VIP折扣百分比
       },
       pricing: {
         basePrice: tempBooking.pricing.basePrice,
         memberDiscount: tempBooking.pricing.memberDiscount,
-        totalPrice: isCustomPoints ? customPoints : pointsToDeduct, // 使用自訂積分或實際扣除的積分
+        // 仍保存「參考應付」金額供列表顯示；實際扣款以 pointsDeducted / noUserBalanceDebited 為準
+        totalPrice: isCustomPoints ? customPoints : pointsToDeduct,
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
-        pointsDeducted: isCustomPoints ? customPoints : pointsToDeduct,
+        pointsDeducted: bypassRestrictions ? 0 : (isCustomPoints ? customPoints : pointsToDeduct),
         vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
         soloCourtFee: includeSoloCourt ? 100 : 0, // 單人場費用
         customPoints: isCustomPoints ? customPoints : undefined, // 自訂積分
@@ -345,12 +361,10 @@ router.post('/', [
 
     let booking;
 
-    // 如果是管理員 bypass，直接插入數據庫繞過所有驗證
     if (bypassRestrictions) {
       const result = await Booking.collection.insertOne(bookingData);
       booking = await Booking.findById(result.insertedId);
     } else {
-      // 正常流程，使用 Mongoose 驗證
       booking = new Booking(bookingData);
       await booking.save();
     }
@@ -358,31 +372,18 @@ router.post('/', [
     // 記錄兌換碼使用
     if (redeemCodeData) {
       try {
-        const RedeemUsage = require('../models/RedeemUsage');
-        const RedeemCode = require('../models/RedeemCode');
-        
-        const redeemUsage = new RedeemUsage({
-          redeemCode: redeemCodeData.id,
-          user: bookingUserId,
+        await consumeRedeemCodeOnce({
+          redeemCodeId: redeemCodeData.id,
+          userId: bookingUserId,
           orderType: 'booking',
           orderId: booking._id,
           originalAmount: tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0),
           discountAmount: redeemCodeData.discountAmount,
           finalAmount: pointsToDeduct,
           ipAddress: req.ip,
-          userAgent: req.get('User-Agent')
+          userAgent: req.get('User-Agent'),
         });
-        
-        await redeemUsage.save();
-        
-        // 更新兌換碼統計
-        const redeemCode = await RedeemCode.findById(redeemCodeData.id);
-        if (redeemCode) {
-          redeemCode.totalUsed += 1;
-          redeemCode.totalDiscount += redeemCodeData.discountAmount;
-          await redeemCode.save();
-        }
-        
+
         console.log('✅ 兌換碼使用記錄已保存');
       } catch (error) {
         console.error('❌ 兌換碼使用記錄保存失敗:', error);
@@ -448,12 +449,13 @@ router.post('/', [
         specialRequests: `單人場租用 - 與主場地同時段使用`,
         includeSoloCourt: false, // 單人場記錄本身不包含單人場
         bypassRestrictions, // 記錄是否繞過了限制
+        noUserBalanceDebited: !!bypassRestrictions, // 與主預約一致：繞過時未扣款
         status: 'confirmed',
         payment: {
           status: 'paid',
-          method: 'points',
+          method: bypassRestrictions ? 'admin_waived' : 'points',
           paidAt: new Date(),
-          pointsDeducted: 0, // 單人場費用已包含在主預約中
+          pointsDeducted: 0, // 單人場費用已包含在主預約中（或主預約為免扣款）
           originalPrice: tempSoloBooking.pricing.totalPrice,
           discount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.2) : 0
         },
@@ -470,12 +472,10 @@ router.post('/', [
         updatedAt: new Date()
       };
 
-      // 如果是管理員 bypass，直接插入數據庫繞過所有驗證
       if (bypassRestrictions) {
         const soloResult = await Booking.collection.insertOne(soloCourtBookingData);
         soloCourtBooking = await Booking.findById(soloResult.insertedId);
       } else {
-        // 正常流程，使用 Mongoose 驗證
         soloCourtBooking = new Booking(soloCourtBookingData);
         await soloCourtBooking.save();
       }
@@ -487,11 +487,13 @@ router.post('/', [
       });
     }
     
-    // 更新用戶餘額記錄中的預約ID
-    const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
-    if (latestTransaction) {
-      latestTransaction.relatedBooking = booking._id;
-      await userBalance.save();
+    // 更新用戶餘額記錄中的預約ID（僅在有實際扣款時，避免誤掛到無關交易）
+    if (!bypassRestrictions) {
+      const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
+      if (latestTransaction) {
+        latestTransaction.relatedBooking = booking._id;
+        await userBalance.save();
+      }
     }
 
     // 填充場地信息
@@ -756,8 +758,11 @@ router.get('/admin/all', [
       status, 
       court, 
       date, 
+      dateFrom,
+      dateTo,
       page = 1, 
-      limit = 20 
+      limit = 20,
+      sort: sortParam
     } = req.query;
     
     let query = {};
@@ -769,15 +774,26 @@ router.get('/admin/all', [
       const endDate = new Date(date);
       endDate.setDate(endDate.getDate() + 1);
       query.date = { $gte: startDate, $lt: endDate };
+    } else if (dateFrom && dateTo) {
+      const df = new Date(dateFrom);
+      const dt = new Date(dateTo);
+      query.$or = [
+        { date: { $gte: df, $lte: dt } },
+        { endDate: { $gte: df, $lte: dt } },
+        { $and: [{ date: { $lte: dt } }, { endDate: { $gte: df } }] }
+      ];
     }
+
+    const sortDir = sortParam === 'asc' ? 1 : -1;
+    const limitNum = Math.min(10000, Math.max(1, parseInt(limit, 10) || 20));
 
     const bookings = await Booking.find(query)
       .populate('user', 'name email phone')
       .populate('court', 'name number type')
       .populate('adminNotes.createdBy', 'name email')
-      .sort({ date: -1, startTime: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .sort({ date: sortDir, startTime: sortDir })
+      .limit(limitNum)
+      .skip((page - 1) * limitNum);
 
     const total = await Booking.countDocuments(query);
 
@@ -785,7 +801,7 @@ router.get('/admin/all', [
       bookings,
       pagination: {
         current: parseInt(page),
-        pages: Math.ceil(total / limit),
+        pages: Math.ceil(total / limitNum),
         total
       }
     });
@@ -880,26 +896,58 @@ router.put('/:id/cancel', [
       return res.status(403).json({ message: '無權限取消此預約' });
     }
 
-    // 檢查是否可以取消（管理員可繞過時間限制）
-    if (req.user.role !== 'admin' && !booking.canBeCancelled()) {
-      return res.status(400).json({ 
-        message: '預約無法取消，請至少提前2小時取消或聯繫客服' 
-      });
+    const bundledIds = await collectBundledBookingIds(booking);
+    const bundleBookings =
+      bundledIds.length > 1
+        ? await Booking.find({ _id: { $in: bundledIds } })
+        : [booking];
+
+    if (req.user.role !== 'admin') {
+      const foreign = bundleBookings.find((b) => b.user.toString() !== req.user.id);
+      if (foreign) {
+        return res.status(403).json({ message: '無權限取消此預約' });
+      }
     }
 
-    // 更新預約狀態
-    booking.status = 'cancelled';
-    booking.cancellation = {
+    // 檢查是否可以取消（管理員可繞過時間限制）；包場／活動佔用須整組可取消
+    if (req.user.role !== 'admin') {
+      const cannot = bundleBookings.find((b) => !b.canBeCancelled());
+      if (cannot) {
+        return res.status(400).json({
+          message: '預約無法取消，請至少提前2小時取消或聯繫客服'
+        });
+      }
+    }
+
+    const cancellation = {
       cancelledAt: new Date(),
       cancelledBy: booking.user.toString() === req.user.id ? 'user' : 'admin',
       reason
     };
 
+    // 更新預約狀態（先寫入主預約，退款邏輯僅針對 URL 上這一筆）
+    booking.status = 'cancelled';
+    booking.cancellation = cancellation;
+
     // 檢查是否為包場預約，如果是包場則不自動退款
-    const isFullVenueBooking = booking.notes?.includes('包場預約') || booking.notes?.includes('🏢 包場預約');
-    
-    // 如為積分支付或管理員建立且已扣分，則退回積分（包場預約除外）
+    const isFullVenueBooking =
+      booking.venueBundleKind === 'full_venue' ||
+      booking.specialRequests?.includes('包場預約') ||
+      booking.specialRequests?.includes('🏢 包場預約');
+
+    // 建立時未從預約用戶扣積分（管理員繞過限制手動建單、活動佔場等）→ 取消時不可自動退回積分
+    const skipAutoPointsRefund =
+      booking.noUserBalanceDebited === true ||
+      booking.bypassRestrictions === true ||
+      booking.payment?.method === 'admin_waived';
+
+    // 如為積分支付且實際有扣款，則退回積分（包場預約除外；免扣款建單除外）
     try {
+      if (skipAutoPointsRefund) {
+        console.log(
+          `📌 預約 ${booking._id} 建立時未扣用戶積分 (noUserBalanceDebited/bypass/admin_waived)，取消時跳過積分退回`
+        );
+      } else {
       const pointsToRefund = Number(
         booking.pricing?.pointsDeducted ??
         booking.payment?.pointsDeducted ??
@@ -925,12 +973,27 @@ router.put('/:id/cancel', [
           booking.payment.refundedAt = new Date();
         }
       }
+      }
     } catch (refundError) {
       console.error('退款處理失敗（不影響取消）:', refundError);
     }
 
     // 使用關閉驗證的保存方式，避免舊資料因缺欄位而無法更新
     await booking.save({ validateBeforeSave: false });
+
+    // 包場／活動佔用：同組其他場地一併取消（不重複退款）
+    const otherIds = bundledIds.filter((oid) => !oid.equals(booking._id));
+    if (otherIds.length > 0) {
+      await Booking.updateMany(
+        { _id: { $in: otherIds } },
+        {
+          $set: {
+            status: 'cancelled',
+            cancellation
+          }
+        }
+      );
+    }
 
     // 發送 WhatsApp 取消通知
     try {
@@ -946,9 +1009,13 @@ router.put('/:id/cancel', [
       // 不影響預約取消，只記錄錯誤
     }
 
-    res.json({ 
-      message: '預約取消成功',
-      booking 
+    res.json({
+      message:
+        bundledIds.length > 1
+          ? `已取消 ${bundledIds.length} 筆關聯場地預約（包場／活動佔用）`
+          : '預約取消成功',
+      cancelledCount: bundledIds.length,
+      booking
     });
   } catch (error) {
     console.error('取消預約錯誤:', error);
@@ -1101,9 +1168,9 @@ router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
           password = tempAuth.password;
           
           // 計算開始和結束時間（ISO 格式）
-          // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
           const earlyStartTime = accessControlService.subtractMinutes(bookingData.startTime, 15);
-          const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime);
+          const usePreviousDayForEarly = accessControlService._timeToMinutes(earlyStartTime) > accessControlService._timeToMinutes(bookingData.startTime);
+          const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
           const endTimeISO = accessControlService.convertToISOString(
             bookingData.date, 
             bookingData.endTime, 

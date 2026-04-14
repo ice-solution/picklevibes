@@ -4,6 +4,11 @@ const fs = require('fs').promises;
 const path = require('path');
 const pdfService = require('./pdfService');
 
+function orderItemDisplayName(item) {
+  if (!item || !item.name) return '';
+  return item.size ? `${item.name}（尺碼：${item.size}）` : item.name;
+}
+
 class EmailService {
   constructor() {
     this.transporter = null;
@@ -1744,7 +1749,7 @@ PickleVibes 團隊
       const itemsHtml = orderData.items.map(item => `
         <tr>
           <td style="padding: 12px; border-bottom: 1px solid #eee;">
-            <strong>${item.name}</strong>
+            <strong>${orderItemDisplayName(item)}</strong>
           </td>
           <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
             ${item.quantity}
@@ -1855,7 +1860,7 @@ PickleVibes 團隊
 訂單狀態：待處理
 
 訂單項目：
-${orderData.items.map(item => `- ${item.name} x ${item.quantity} = HK$${item.subtotal.toFixed(2)}`).join('\n')}
+${orderData.items.map(item => `- ${orderItemDisplayName(item)} x ${item.quantity} = HK$${item.subtotal.toFixed(2)}`).join('\n')}
 
 小計：HK$${orderData.subtotal.toFixed(2)}
 ${orderData.discount > 0 ? `折扣：-HK$${orderData.discount.toFixed(2)}\n` : ''}總計：HK$${orderData.total.toFixed(2)}
@@ -1905,6 +1910,76 @@ PickleVibes 團隊
   }
 
   /**
+   * 發送訂單通知（寄給後台/內部信箱）
+   */
+  async sendOrderAdminNotificationEmail(userData, orderData) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+
+      const adminEmail = process.env.EMAIL_USER;
+      if (!adminEmail) {
+        console.warn('EMAIL_USER 未設定，跳過訂單通知信');
+        return { success: true, skipped: true };
+      }
+
+      const emailSubject = `新訂單通知 - ${orderData.orderNumber}`;
+
+      const itemsText = orderData.items
+        .map((item) => `- ${orderItemDisplayName(item)} x ${item.quantity}`)
+        .join('\n');
+
+      const emailText = `
+新訂單已建立
+
+訂單編號：${orderData.orderNumber}
+建立時間：${new Date(orderData.createdAt).toLocaleString('zh-TW')}
+客人：${userData.name} (${userData.email})
+總計：HK$${Number(orderData.total || 0).toFixed(2)}
+
+訂單項目：
+${itemsText}
+
+收貨地址：
+${orderData.shippingAddress?.name || ''} / ${orderData.shippingAddress?.phone || ''}
+${orderData.shippingAddress?.address || ''}
+`;
+
+      // 簡單 HTML（避免 Logo/CID 依賴造成更多失敗點）
+      const emailHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 720px; margin: 0 auto;">
+          <h2 style="margin: 0 0 12px 0;">新訂單已建立</h2>
+          <p style="margin: 0 0 8px 0;">訂單編號：<strong>${orderData.orderNumber}</strong></p>
+          <p style="margin: 0 0 8px 0;">建立時間：${new Date(orderData.createdAt).toLocaleString('zh-TW')}</p>
+          <p style="margin: 0 0 8px 0;">客人：${userData.name} (${userData.email})</p>
+          <p style="margin: 0 0 12px 0;">總計：<strong>HK$${Number(orderData.total || 0).toFixed(2)}</strong></p>
+          <div style="white-space: pre-wrap; background:#f8f9fa; padding: 12px; border-radius: 8px; margin-bottom: 12px;">
+            <pre style="margin:0; font-family: inherit;">${itemsText}</pre>
+          </div>
+          <p style="margin: 0;">收貨地址：${orderData.shippingAddress?.address || ''}</p>
+          <p style="margin: 6px 0 0 0;">收件人：${orderData.shippingAddress?.name || ''}（${orderData.shippingAddress?.phone || ''}）</p>
+        </div>
+      `;
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to: adminEmail,
+        subject: emailSubject,
+        text: emailText,
+        html: emailHtml,
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 訂單通知郵件已發送給 ${adminEmail}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送訂單通知郵件失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * 發送出貨通知郵件
    */
   async sendOrderShippedEmail(userData, orderData) {
@@ -1920,7 +1995,7 @@ PickleVibes 團隊
       const itemsHtml = orderData.items.map(item => `
         <tr>
           <td style="padding: 12px; border-bottom: 1px solid #eee;">
-            <strong>${item.name}</strong>
+            <strong>${orderItemDisplayName(item)}</strong>
           </td>
           <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">
             ${item.quantity}
@@ -2001,7 +2076,7 @@ PickleVibes 團隊
 ${orderData.trackingNumber ? `追蹤號碼：${orderData.trackingNumber}\n` : ''}
 
 出貨項目：
-${orderData.items.map(item => `- ${item.name} x ${item.quantity}`).join('\n')}
+${orderData.items.map(item => `- ${orderItemDisplayName(item)} x ${item.quantity}`).join('\n')}
 
 收貨地址：
 ${orderData.shippingAddress.name}
@@ -2156,6 +2231,71 @@ PickleVibes 團隊
       return { success: false, error: error.message };
     }
   }
+
+  /**
+   * 教練學校要請：通知管理員信箱（EMAIL_USER）
+   */
+  async sendCoachScheduleRequestEmail({
+    coachName,
+    dateLabel,
+    timeRange,
+    message,
+    adminPanelUrl
+  }) {
+    try {
+      const to = process.env.EMAIL_USER || process.env.GMAIL_USER;
+      if (!to) {
+        console.warn('⚠️ 未設定 EMAIL_USER / GMAIL_USER，略過教練要請郵件');
+        return { success: false, error: '郵件收件人未設定' };
+      }
+      const subject = `[教練要請] ${coachName} ${dateLabel} - ${timeRange}`;
+      const text = [
+        '教練學校要請（新申請）',
+        '',
+        `教練：${coachName}`,
+        `日期：${dateLabel}`,
+        `時間：${timeRange}`,
+        message ? `備註：${message}` : '',
+        '',
+        `後台處理：${adminPanelUrl || ''}`
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const html = `
+        <p><strong>教練學校要請（新申請）</strong></p>
+        <p>教練：${escapeHtml(coachName)}</p>
+        <p>日期：${escapeHtml(dateLabel)}</p>
+        <p>時間：${escapeHtml(timeRange)}</p>
+        ${message ? `<p>備註：${escapeHtml(message)}</p>` : ''}
+        <p><a href="${escapeHtml(adminPanelUrl || '#')}">開啟後台處理</a></p>
+      `;
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to,
+        subject,
+        text,
+        html
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 教練要請通知已發送至 ${to}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 教練要請郵件發送失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+}
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 module.exports = new EmailService();

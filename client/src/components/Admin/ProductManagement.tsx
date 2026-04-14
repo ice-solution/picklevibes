@@ -25,6 +25,7 @@ interface Product {
   stock: number;
   isActive: boolean;
   sortOrder: number;
+  isClothing?: boolean;
 }
 
 interface Category {
@@ -46,7 +47,8 @@ const ProductManagement: React.FC = () => {
     price: '',
     discountPrice: '',
     stock: '',
-    sortOrder: 0
+    sortOrder: 0,
+    isClothing: false
   });
   const [images, setImages] = useState<File[]>([]);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
@@ -98,6 +100,7 @@ const ProductManagement: React.FC = () => {
     }
     formDataToSend.append('stock', formData.stock);
     formDataToSend.append('sortOrder', formData.sortOrder.toString());
+    formDataToSend.append('isClothing', formData.isClothing ? 'true' : 'false');
     
     images.forEach((image) => {
       formDataToSend.append('images', image);
@@ -117,7 +120,7 @@ const ProductManagement: React.FC = () => {
       
       setShowModal(false);
       setEditingProduct(null);
-      setFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0 });
+      setFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0, isClothing: false });
       setImages([]);
       fetchProducts();
     } catch (error: any) {
@@ -186,7 +189,8 @@ const ProductManagement: React.FC = () => {
                         price: product.price.toString(),
                         discountPrice: product.discountPrice?.toString() || '',
                         stock: product.stock.toString(),
-                        sortOrder: product.sortOrder
+                        sortOrder: product.sortOrder,
+                        isClothing: !!product.isClothing
                       });
                       setShowModal(true);
                     }}
@@ -310,6 +314,15 @@ const ProductManagement: React.FC = () => {
                   />
                 </div>
               </div>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={formData.isClothing}
+                  onChange={(e) => setFormData({ ...formData, isClothing: e.target.checked })}
+                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                />
+                <span className="text-sm font-medium text-gray-800">衣服（結帳時需選擇尺碼：XS–XL）</span>
+              </label>
               <div>
                 <label className="block text-sm font-medium mb-1">產品圖片 *</label>
                 <input

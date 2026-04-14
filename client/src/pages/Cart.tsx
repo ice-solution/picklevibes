@@ -4,11 +4,13 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import ProtectedRoute from '../components/Auth/ProtectedRoute';
 import SEO from '../components/SEO/SEO';
+import axios from 'axios';
 import { 
   TrashIcon,
   ShoppingCartIcon,
   ArrowLeftIcon
 } from '@heroicons/react/24/outline';
+import { CLOTHING_SIZE_OPTIONS } from '../constants/clothingSizes';
 
 interface CartItem {
   productId: string;
@@ -16,13 +18,19 @@ interface CartItem {
   price: number;
   image: string;
   quantity: number;
+  /** 衣服類商品尺碼 */
+  size?: string;
+}
+
+function lineKey(item: CartItem): string {
+  return `${item.productId}::${item.size ?? ''}`;
 }
 
 const Cart: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [clothingByProductId, setClothingByProductId] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     if (user) {
@@ -35,23 +43,76 @@ const Cart: React.FC = () => {
     setCartItems(cart);
   };
 
-  const updateQuantity = (productId: string, newQuantity: number) => {
-    if (newQuantity < 1) return;
-    
-    const updatedCart = cartItems.map(item =>
-      item.productId === productId
-        ? { ...item, quantity: newQuantity }
-        : item
-    );
-    
-    setCartItems(updatedCart);
-    localStorage.setItem('cart', JSON.stringify(updatedCart));
+  useEffect(() => {
+    const ids = Array.from(new Set(cartItems.map((i) => i.productId)));
+    if (ids.length === 0) {
+      setClothingByProductId({});
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const results = await Promise.all(ids.map((id) => axios.get(`/products/${id}`)));
+        if (cancelled) return;
+        const map: Record<string, boolean> = {};
+        results.forEach((r, i) => {
+          map[ids[i]] = !!r.data?.isClothing;
+        });
+        setClothingByProductId(map);
+      } catch {
+        if (!cancelled) setClothingByProductId({});
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [cartItems]);
+
+  const persistCart = (next: CartItem[]) => {
+    setCartItems(next);
+    localStorage.setItem('cart', JSON.stringify(next));
   };
 
-  const removeItem = (productId: string) => {
-    const updatedCart = cartItems.filter(item => item.productId !== productId);
-    setCartItems(updatedCart);
-    localStorage.setItem('cart', JSON.stringify(updatedCart));
+  const updateQuantity = (item: CartItem, newQuantity: number) => {
+    if (newQuantity < 1) {
+      removeItem(item);
+      return;
+    }
+
+    const updatedCart = cartItems.map((row) =>
+      lineKey(row) === lineKey(item) ? { ...row, quantity: newQuantity } : row
+    );
+
+    persistCart(updatedCart);
+  };
+
+  const removeItem = (item: CartItem) => {
+    const updatedCart = cartItems.filter((row) => lineKey(row) !== lineKey(item));
+    persistCart(updatedCart);
+  };
+
+  const updateClothingSize = (item: CartItem, newSize: string) => {
+    if (!newSize) return;
+    if ((item.size || '') === newSize) return;
+    const others = cartItems.filter((row) => lineKey(row) !== lineKey(item));
+    const merge = others.find(
+      (row) => row.productId === item.productId && (row.size || '') === newSize
+    );
+    if (merge) {
+      persistCart(
+        others.map((row) =>
+          lineKey(row) === lineKey(merge)
+            ? { ...row, quantity: row.quantity + item.quantity }
+            : row
+        )
+      );
+    } else {
+      persistCart(
+        cartItems.map((row) =>
+          lineKey(row) === lineKey(item) ? { ...row, size: newSize } : row
+        )
+      );
+    }
   };
 
   const getImageUrl = (imagePath: string) => {
@@ -101,7 +162,7 @@ const Cart: React.FC = () => {
                   <div className="divide-y divide-gray-200">
                     {cartItems.map((item) => (
                       <motion.div
-                        key={item.productId}
+                        key={lineKey(item)}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         className="p-6 flex items-center"
@@ -113,12 +174,33 @@ const Cart: React.FC = () => {
                         />
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg mb-1">{item.name}</h3>
+                          {clothingByProductId[item.productId] && (
+                            <div className="mt-1 flex flex-wrap items-center gap-2">
+                              <label className="text-sm text-gray-600">尺碼</label>
+                              <select
+                                value={item.size || ''}
+                                onChange={(e) => {
+                                  const v = e.target.value;
+                                  if (!v) return;
+                                  updateClothingSize(item, v);
+                                }}
+                                className="text-sm border border-gray-300 rounded-lg px-2 py-1 bg-white"
+                              >
+                                <option value="">請選擇</option>
+                                {CLOTHING_SIZE_OPTIONS.map((sz) => (
+                                  <option key={sz} value={sz}>
+                                    {sz}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
                           <p className="text-gray-600">HK${item.price.toFixed(2)}</p>
                         </div>
                         <div className="flex items-center space-x-4">
                           <div className="flex items-center border border-gray-300 rounded-lg">
                             <button
-                              onClick={() => updateQuantity(item.productId, item.quantity - 1)}
+                              onClick={() => updateQuantity(item, item.quantity - 1)}
                               className="px-3 py-1 hover:bg-gray-100"
                             >
                               -
@@ -127,7 +209,7 @@ const Cart: React.FC = () => {
                               {item.quantity}
                             </span>
                             <button
-                              onClick={() => updateQuantity(item.productId, item.quantity + 1)}
+                              onClick={() => updateQuantity(item, item.quantity + 1)}
                               className="px-3 py-1 hover:bg-gray-100"
                             >
                               +
@@ -139,7 +221,7 @@ const Cart: React.FC = () => {
                             </p>
                           </div>
                           <button
-                            onClick={() => removeItem(item.productId)}
+                            onClick={() => removeItem(item)}
                             className="text-red-600 hover:text-red-800 ml-4"
                           >
                             <TrashIcon className="w-5 h-5" />

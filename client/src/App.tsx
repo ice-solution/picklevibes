@@ -31,6 +31,9 @@ import ActivityDetail from './pages/ActivityDetail';
 import ActivityRegister from './pages/ActivityRegister';
 import MyActivities from './pages/MyActivities';
 import CoachCourses from './pages/CoachCourses';
+import CoachCalendar from './pages/CoachCalendar';
+import CoachSchoolRequest from './pages/CoachSchoolRequest';
+import CoachRoute from './components/Auth/CoachRoute';
 import Shop from './pages/Shop';
 import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
@@ -58,7 +61,14 @@ function App() {
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
-                <Route path="/pricing" element={<Pricing />} />
+                <Route 
+                  path="/pricing" 
+                  element={
+                    <ProtectedRoute>
+                      <Pricing />
+                    </ProtectedRoute>
+                  } 
+                />
                 <Route 
                   path="/booking" 
                   element={
@@ -125,13 +135,29 @@ function App() {
                   } 
                 />
                 <Route path="/maintenance" element={<Maintenance />} />
-                <Route 
+                <Route
+                  path="/coach-calendar"
+                  element={
+                    <CoachRoute>
+                      <CoachCalendar />
+                    </CoachRoute>
+                  }
+                />
+                <Route
                   path="/coach-courses" 
                   element={
-                    <ProtectedRoute>
+                    <CoachRoute>
                       <CoachCourses />
-                    </ProtectedRoute>
+                    </CoachRoute>
                   } 
+                />
+                <Route
+                  path="/coach/school-request"
+                  element={
+                    <CoachRoute>
+                      <CoachSchoolRequest />
+                    </CoachRoute>
+                  }
                 />
                 <Route path="/activities" element={<Activities />} />
                 <Route path="/activities/:id" element={<ActivityDetail />} />

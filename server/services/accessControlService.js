@@ -93,6 +93,65 @@ class AccessControlService {
   }
 
   /**
+   * 將時間加上指定分鐘（門禁結束時間延長用）
+   * 回傳 { time: 'HH:MM', addDays }；若跨午夜則 addDays 為 1
+   */
+  addMinutes(timeString, minutes = 15) {
+    try {
+      const normalizedTime = timeString === '24:00' ? '00:00' : timeString;
+      const [hours, mins] = normalizedTime.split(':').map(Number);
+      const base = new Date(2000, 0, 1, hours, mins, 0, 0);
+      const beforeDay = base.getDate();
+      base.setMinutes(base.getMinutes() + minutes);
+      const afterDay = base.getDate();
+      const addDays = afterDay !== beforeDay ? 1 : 0;
+      const newHours = base.getHours().toString().padStart(2, '0');
+      const newMins = base.getMinutes().toString().padStart(2, '0');
+      const resultTime = `${newHours}:${newMins}`;
+      console.log(
+        `⏰ 結束時間延長: ${timeString} → ${resultTime} (+${minutes}分鐘${addDays ? ', 跨日+1' : ''})`
+      );
+      return { time: resultTime, addDays };
+    } catch (error) {
+      console.error('❌ 結束時間延長失敗:', error.message);
+      return { time: timeString, addDays: 0 };
+    }
+  }
+
+  /**
+   * 門禁 API 用：預約結束時間 +15 分鐘，供 convertToISOString 使用
+   */
+  getExtendedEndForHik(bookingData, extendMinutes = 15) {
+    const extended = this.addMinutes(bookingData.endTime, extendMinutes);
+    let endDateParam = bookingData.endDate || null;
+    if (extended.addDays > 0) {
+      let base;
+      if (endDateParam) {
+        base =
+          endDateParam instanceof Date
+            ? new Date(endDateParam.getTime())
+            : new Date(
+                String(endDateParam).includes('T')
+                  ? endDateParam
+                  : `${endDateParam}T12:00:00`
+              );
+      } else {
+        const bd = bookingData.date;
+        base =
+          bd instanceof Date
+            ? new Date(bd.getTime())
+            : new Date(/^\d{4}-\d{2}-\d{2}$/.test(String(bd).trim()) ? `${bd}T12:00:00` : bd);
+      }
+      if (Number.isNaN(base.getTime())) {
+        throw new Error('無法解析預約日期以延長門禁結束時間');
+      }
+      base.setDate(base.getDate() + extended.addDays);
+      endDateParam = base;
+    }
+    return { endTimeStr: extended.time, endDateParam };
+  }
+
+  /**
    * 創建臨時授權
    */
   async createTempAuth(visitorData, bookingData) {
@@ -101,6 +160,7 @@ class AccessControlService {
       
       // 將開始時間提前15分鐘，讓用戶可以提早進場
       const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
+      const { endTimeStr, endDateParam } = this.getExtendedEndForHik(bookingData, 15);
       
       console.log('👤 正在創建臨時授權...', {
         name: visitorData.name,
@@ -108,16 +168,18 @@ class AccessControlService {
         email: visitorData.email,
         originalStartTime: bookingData.startTime,
         earlyStartTime: earlyStartTime,
-        endTime: bookingData.endTime
+        bookingEndTime: bookingData.endTime,
+        hikEndTime: endTimeStr
       });
 
       // 將時間轉換為 ISO 字符串格式
-      // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
-      const startTime = this.convertToISOString(bookingData.date, earlyStartTime);
+      // earlyStartTime 若大於 startTime（如 23:45 > 00:00）表示跨越前一天，開門日需減一天
+      const usePreviousDayForEarly = this._timeToMinutes(earlyStartTime) > this._timeToMinutes(bookingData.startTime);
+      const startTime = this.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
       const endTime = this.convertToISOString(
-        bookingData.date, 
-        bookingData.endTime, 
-        bookingData.endDate || null, 
+        bookingData.date,
+        endTimeStr,
+        endDateParam,
         earlyStartTime
       );
 
@@ -154,14 +216,25 @@ class AccessControlService {
   }
 
   /**
+   * 將 HH:MM 轉為分鐘數
+   */
+  _timeToMinutes(timeStr) {
+    if (!timeStr) return 0;
+    const normalized = timeStr === '24:00' ? '00:00' : timeStr;
+    const [hours, mins] = normalized.split(':').map(Number);
+    return (hours || 0) * 60 + (mins || 0);
+  }
+
+  /**
    * 將日期和時間轉換為帶時區的 ISO 字符串格式
    * 處理 24:00 的情況，轉換為下一天的 00:00
    * @param {Date|String} date - 日期
    * @param {String} time - 時間 (HH:MM 格式)
    * @param {Date|String} endDate - 結束日期（如果存在且與 date 不同，表示跨天）
    * @param {String} startTime - 開始時間（用於判斷跨天，當 endDate 不存在時）
+   * @param {Boolean} usePreviousDay - 若為 true，使用前一天的日期（例如 00:00 提前 15 分鐘為 23:45 前一天）
    */
-  convertToISOString(date, time, endDate = null, startTime = null) {
+  convertToISOString(date, time, endDate = null, startTime = null, usePreviousDay = false) {
     try {
       // 處理日期格式
       let dateObj;
@@ -176,9 +249,13 @@ class AccessControlService {
         }
       }
       
-      // 處理 24:00 的情況
+      // 處理 24:00 或需使用前一日的情況
       let finalDate = new Date(dateObj);
       let finalTime = time;
+      if (usePreviousDay) {
+        finalDate.setDate(finalDate.getDate() - 1);
+        console.log('⏰ 開門時間提前至前一日（例如 00:00 提前 15 分鐘）');
+      }
       
       if (time === '24:00') {
         // 24:00 轉換為下一天的 00:00
@@ -312,14 +389,15 @@ class AccessControlService {
       // 4. 發送郵件（包含二維碼和密碼）
       await this.sendAccessEmail(visitorData, bookingData, qrCodeData, tempAuth.password);
       
-      // 計算開始和結束時間（ISO 格式）
-      // 傳入 endDate 和 earlyStartTime 用於判斷 endTime 是否為跨天
+      // 計算開始和結束時間（ISO 格式，與送 Hik 的授權窗一致：開始提前 15 分、結束延後 15 分）
       const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
-      const startTimeISO = this.convertToISOString(bookingData.date, earlyStartTime);
+      const usePreviousDayForEarly = this._timeToMinutes(earlyStartTime) > this._timeToMinutes(bookingData.startTime);
+      const startTimeISO = this.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
+      const { endTimeStr, endDateParam } = this.getExtendedEndForHik(bookingData, 15);
       const endTimeISO = this.convertToISOString(
-        bookingData.date, 
-        bookingData.endTime, 
-        bookingData.endDate || null, 
+        bookingData.date,
+        endTimeStr,
+        endDateParam,
         earlyStartTime
       );
       

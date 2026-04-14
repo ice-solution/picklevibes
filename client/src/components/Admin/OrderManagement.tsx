@@ -26,6 +26,7 @@ interface Order {
     price: number;
     quantity: number;
     subtotal: number;
+    size?: string | null;
   }>;
   subtotal: number;
   discount: number;
@@ -77,7 +78,12 @@ const OrderManagement: React.FC = () => {
       setSelectedOrder(null);
       setTrackingNumber('');
     } catch (error: any) {
-      alert(error.response?.data?.message || '更新失敗');
+      const data = error.response?.data;
+      let msg = data?.message || '更新失敗';
+      if (data?.required != null && data?.available != null) {
+        msg += `\n需要積分：${data.required}，客戶現有：${data.available}`;
+      }
+      alert(msg);
     }
   };
 
@@ -255,7 +261,10 @@ const OrderManagement: React.FC = () => {
                 <h4 className="font-semibold mb-2">訂單項目</h4>
                 {selectedOrder.items.map((item, index) => (
                   <div key={index} className="flex justify-between py-2 border-b">
-                    <span>{item.name} x {item.quantity}</span>
+                    <span>
+                      {item.name}
+                      {item.size ? `（${item.size}）` : ''} x {item.quantity}
+                    </span>
                     <span>HK${item.subtotal.toFixed(2)}</span>
                   </div>
                 ))}

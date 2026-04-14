@@ -11,7 +11,8 @@ import {
   ClockIcon,
   XMarkIcon,
   AcademicCapIcon,
-  UserPlusIcon
+  UserPlusIcon,
+  ClipboardDocumentIcon
 } from '@heroicons/react/24/outline';
 import CoachAutocomplete from '../Common/CoachAutocomplete';
 import UserAutocomplete from '../Common/UserAutocomplete';
@@ -42,6 +43,14 @@ interface Activity {
   requirements?: string;
   isActive: boolean;
   createdAt: string;
+  venueHoldMode?: 'full_venue' | 'single_court';
+  venueHoldCourtId?: string | { _id: string; name?: string };
+}
+
+interface VenueCourtOption {
+  _id: string;
+  name: string;
+  type: string;
 }
 
 interface ActivityRegistration {
@@ -85,6 +94,8 @@ type ParticipantCountValue = number | '';
 
 const ActivityManagement: React.FC = () => {
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
+  const fixedVenueLocation = '荔枝角福源廣場8樓B C D室';
+  const customLocationOption = '__custom__';
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -129,8 +140,13 @@ const ActivityManagement: React.FC = () => {
     registrationDeadline: '',
     location: '',
     requirements: '',
-    coaches: [] as any[]
+    coaches: [] as any[],
+    venueHoldMode: 'full_venue' as 'full_venue' | 'single_court',
+    venueHoldCourtId: ''
   });
+  const [locationOption, setLocationOption] = useState<string>(fixedVenueLocation);
+  const [customLocation, setCustomLocation] = useState<string>('');
+  const [venueCourts, setVenueCourts] = useState<VenueCourtOption[]>([]);
 
   // 圖片上傳狀態
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -139,6 +155,22 @@ const ActivityManagement: React.FC = () => {
   useEffect(() => {
     fetchActivities();
   }, [currentPage, statusFilter]);
+
+  useEffect(() => {
+    if (!showCreateModal && !showEditModal) return;
+    const loadCourts = async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/courts`);
+        const data = await res.json();
+        const list = (data.courts || []) as VenueCourtOption[];
+        const allowed = new Set(['competition', 'training', 'solo']);
+        setVenueCourts(list.filter((c) => allowed.has(c.type)));
+      } catch {
+        setVenueCourts([]);
+      }
+    };
+    loadCourts();
+  }, [showCreateModal, showEditModal, apiBaseUrl]);
 
   const fetchActivities = async () => {
     try {
@@ -180,10 +212,14 @@ const ActivityManagement: React.FC = () => {
       registrationDeadline: '',
       location: '',
       requirements: '',
-      coaches: []
+      coaches: [],
+      venueHoldMode: 'full_venue',
+      venueHoldCourtId: ''
     });
     setSelectedFile(null);
     setImagePreview('');
+    setLocationOption(fixedVenueLocation);
+    setCustomLocation('');
     setShowCreateModal(true);
   };
 
@@ -227,22 +263,55 @@ const ActivityManagement: React.FC = () => {
     return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
+  /** 活動開始／結束僅允許整點（分鐘為 :00），與場地預約時段一致、避免非整點時間 */
+  const formatDateTimeLocalHourOnly = (dateString: string): string => {
+    const date = new Date(dateString);
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    return `${year}-${month}-${day}T${hours}:00`;
+  };
+
+  const snapDateTimeLocalToHour = (value: string): string => {
+    if (!value) return value;
+    const m = value.match(/^(\d{4}-\d{2}-\d{2}T\d{2}):\d{2}(?::\d{2})?/);
+    if (m) return `${m[1]}:00`;
+    return value;
+  };
+
   const handleEditActivity = (activity: Activity) => {
+    let courtId = '';
+    if (activity.venueHoldCourtId) {
+      courtId =
+        typeof activity.venueHoldCourtId === 'object' && activity.venueHoldCourtId._id
+          ? String(activity.venueHoldCourtId._id)
+          : String(activity.venueHoldCourtId);
+    }
     setFormData({
       title: activity.title,
       description: activity.description,
       poster: activity.poster || '',
       maxParticipants: activity.maxParticipants,
       price: activity.price,
-      startDate: formatDateTimeLocal(activity.startDate),
-      endDate: formatDateTimeLocal(activity.endDate),
+      startDate: formatDateTimeLocalHourOnly(activity.startDate),
+      endDate: formatDateTimeLocalHourOnly(activity.endDate),
       registrationDeadline: formatDateTimeLocal(activity.registrationDeadline),
       location: activity.location,
       requirements: activity.requirements || '',
-      coaches: activity.coaches || []
+      coaches: activity.coaches || [],
+      venueHoldMode: activity.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue',
+      venueHoldCourtId: courtId
     });
     setSelectedFile(null);
     setImagePreview(activity.poster ? getImageUrl(activity.poster) : '');
+    if (activity.location === fixedVenueLocation) {
+      setLocationOption(fixedVenueLocation);
+      setCustomLocation('');
+    } else {
+      setLocationOption(customLocationOption);
+      setCustomLocation(activity.location || '');
+    }
     setSelectedActivity(activity);
     setShowEditModal(true);
   };
@@ -251,15 +320,49 @@ const ActivityManagement: React.FC = () => {
     e.preventDefault();
     
     try {
+      const finalLocation = locationOption === customLocationOption
+        ? customLocation.trim()
+        : locationOption;
+
+      if (!finalLocation) {
+        alert('請輸入活動地點');
+        return;
+      }
+
+      if (!selectedActivity && !selectedFile) {
+        alert('沒有poster是不行，請先上傳活動海報');
+        return;
+      }
+
+      if (finalLocation === fixedVenueLocation) {
+        if (formData.venueHoldMode === 'single_court' && !formData.venueHoldCourtId) {
+          alert('請選擇要佔用的場地');
+          return;
+        }
+        const shouldContinue = window.confirm('相關日期將會佔據場地時間，確認?');
+        if (!shouldContinue) {
+          return;
+        }
+      }
+
       const url = selectedActivity ? `${apiBaseUrl}/activities/${selectedActivity._id}` : `${apiBaseUrl}/activities`;
       const method = selectedActivity ? 'PUT' : 'POST';
+
+      const submitPayload = {
+        ...formData,
+        startDate: snapDateTimeLocalToHour(formData.startDate),
+        endDate: snapDateTimeLocalToHour(formData.endDate)
+      };
       
       // 創建 FormData 對象
       const formDataToSend = new FormData();
       
       // 添加表單數據
-      Object.keys(formData).forEach(key => {
-        const value = formData[key as keyof typeof formData];
+      Object.keys(submitPayload).forEach(key => {
+        if (key === 'location' || key === 'venueHoldMode' || key === 'venueHoldCourtId') {
+          return;
+        }
+        const value = submitPayload[key as keyof typeof submitPayload];
         if (value !== '' && value !== null) {
           // 特殊處理 coaches 陣列
           if (key === 'coaches' && Array.isArray(value)) {
@@ -273,7 +376,14 @@ const ActivityManagement: React.FC = () => {
           }
         }
       });
-      
+      formDataToSend.append('location', finalLocation);
+      if (finalLocation === fixedVenueLocation) {
+        formDataToSend.append('venueHoldMode', formData.venueHoldMode);
+        if (formData.venueHoldMode === 'single_court' && formData.venueHoldCourtId) {
+          formDataToSend.append('venueHoldCourtId', formData.venueHoldCourtId);
+        }
+      }
+
       // 如果有選中的文件，添加到 FormData
       if (selectedFile) {
         formDataToSend.append('poster', selectedFile);
@@ -325,6 +435,28 @@ const ActivityManagement: React.FC = () => {
       }
 
       alert('活動刪除成功！');
+      fetchActivities();
+    } catch (error: any) {
+      alert(error.message);
+    }
+  };
+
+  const handleDuplicateActivity = async (activity: Activity) => {
+    if (!window.confirm(`確定要複制活動「${activity.title}」嗎？將建立一個新活動（標題會加上「(複製)」、報名人數歸零）。`)) {
+      return;
+    }
+    try {
+      const response = await fetch(`${apiBaseUrl}/activities/${activity._id}/duplicate`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || '複制失敗');
+      }
+      alert('活動已複制！');
       fetchActivities();
     } catch (error: any) {
       alert(error.message);
@@ -820,28 +952,40 @@ const ActivityManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div className="flex space-x-2">
+                {/* Actions：上 icon、下文字，避免窄欄位時橫排難讀 */}
+                <div className="grid grid-cols-4 gap-2">
                   <button
+                    type="button"
                     onClick={() => handleOpenParticipantsModal(activity)}
-                    className="flex-1 flex items-center justify-center px-3 py-2 text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors"
+                    className="flex flex-col items-center justify-center gap-1.5 px-1.5 py-3 text-primary-600 border border-primary-300 rounded-lg hover:bg-primary-50 transition-colors min-h-[4.5rem]"
                   >
-                    <UserPlusIcon className="h-4 w-4 mr-2" />
-                    管理參加者
+                    <UserPlusIcon className="h-5 w-5 shrink-0" />
+                    <span className="text-xs text-center leading-snug">管理參加者</span>
                   </button>
                   <button
+                    type="button"
+                    onClick={() => handleDuplicateActivity(activity)}
+                    className="flex flex-col items-center justify-center gap-1.5 px-1.5 py-3 text-indigo-600 border border-indigo-300 rounded-lg hover:bg-indigo-50 transition-colors min-h-[4.5rem]"
+                    title="複制活動"
+                  >
+                    <ClipboardDocumentIcon className="h-5 w-5 shrink-0" />
+                    <span className="text-xs text-center leading-snug">複制</span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => handleEditActivity(activity)}
-                    className="flex-1 flex items-center justify-center px-3 py-2 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    className="flex flex-col items-center justify-center gap-1.5 px-1.5 py-3 text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors min-h-[4.5rem]"
                   >
-                    <PencilIcon className="h-4 w-4 mr-2" />
-                    編輯
+                    <PencilIcon className="h-5 w-5 shrink-0" />
+                    <span className="text-xs text-center leading-snug">編輯</span>
                   </button>
                   <button
+                    type="button"
                     onClick={() => handleDeleteActivity(activity._id, activity.title)}
-                    className="flex-1 flex items-center justify-center px-3 py-2 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors"
+                    className="flex flex-col items-center justify-center gap-1.5 px-1.5 py-3 text-red-600 border border-red-300 rounded-lg hover:bg-red-50 transition-colors min-h-[4.5rem]"
                   >
-                    <TrashIcon className="h-4 w-4 mr-2" />
-                    刪除
+                    <TrashIcon className="h-5 w-5 shrink-0" />
+                    <span className="text-xs text-center leading-snug">刪除</span>
                   </button>
                 </div>
               </div>
@@ -1163,14 +1307,79 @@ const ActivityManagement: React.FC = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       活動地點 <span className="text-red-500">*</span>
                     </label>
-                    <input
-                      type="text"
-                      value={formData.location}
-                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                    <select
+                      value={locationOption}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLocationOption(v);
+                        if (v !== fixedVenueLocation) {
+                          setFormData((prev) => ({
+                            ...prev,
+                            venueHoldMode: 'full_venue',
+                            venueHoldCourtId: ''
+                          }));
+                        }
+                      }}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="請輸入活動地點"
                       required
-                    />
+                    >
+                      <option value={fixedVenueLocation}>{fixedVenueLocation}</option>
+                      <option value={customLocationOption}>自訂地點</option>
+                    </select>
+                    {locationOption === customLocationOption && (
+                      <input
+                        type="text"
+                        value={customLocation}
+                        onChange={(e) => setCustomLocation(e.target.value)}
+                        className="mt-2 w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        placeholder="請輸入自訂活動地點"
+                        required
+                      />
+                    )}
+                    {locationOption === fixedVenueLocation && (
+                      <div className="mt-3 space-y-2 rounded-lg border border-amber-100 bg-amber-50/80 p-3">
+                        <label className="block text-sm font-medium text-gray-800">
+                          場地佔用方式
+                        </label>
+                        <select
+                          value={formData.venueHoldMode}
+                          onChange={(e) => {
+                            const mode = e.target.value === 'single_court' ? 'single_court' : 'full_venue';
+                            setFormData((prev) => ({
+                              ...prev,
+                              venueHoldMode: mode,
+                              venueHoldCourtId: mode === 'full_venue' ? '' : prev.venueHoldCourtId
+                            }));
+                          }}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        >
+                          <option value="full_venue">包場（三場地）</option>
+                          <option value="single_court">單一場地</option>
+                        </select>
+                        {formData.venueHoldMode === 'single_court' && (
+                          <div>
+                            <label className="block text-xs font-medium text-gray-600 mb-1">
+                              選擇場地 <span className="text-red-500">*</span>
+                            </label>
+                            <select
+                              value={formData.venueHoldCourtId}
+                              onChange={(e) =>
+                                setFormData({ ...formData, venueHoldCourtId: e.target.value })
+                              }
+                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                              required={formData.venueHoldMode === 'single_court'}
+                            >
+                              <option value="">請選擇場地</option>
+                              {venueCourts.map((c) => (
+                                <option key={c._id} value={c._id}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1220,9 +1429,9 @@ const ActivityManagement: React.FC = () => {
                   </div>
                 </div>
 
-                {/* 時間設置 */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
+                {/* 時間設置：截止獨立一行；開始／結束並列，避免 datetime-local 被擠壓截斷 */}
+                <div className="space-y-4">
+                  <div className="w-full min-w-0">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       報名截止時間 <span className="text-red-500">*</span>
                     </label>
@@ -1230,35 +1439,52 @@ const ActivityManagement: React.FC = () => {
                       type="datetime-local"
                       value={formData.registrationDeadline}
                       onChange={(e) => setFormData({ ...formData, registrationDeadline: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full max-w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       required
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      活動開始時間 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      required
-                    />
-                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <p className="text-xs text-gray-500 md:col-span-2 -mt-1 mb-0">
+                      活動開始與結束時間僅限整點（分鐘為 :00），與場地預約時段一致。
+                    </p>
+                    <div className="min-w-0">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        活動開始時間 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        step={3600}
+                        value={formData.startDate}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            startDate: snapDateTimeLocalToHour(e.target.value)
+                          })
+                        }
+                        className="w-full max-w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        required
+                      />
+                    </div>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      活動結束時間 <span className="text-red-500">*</span>
-                    </label>
-                    <input
-                      type="datetime-local"
-                      value={formData.endDate}
-                      onChange={(e) => setFormData({ ...formData, endDate: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      required
-                    />
+                    <div className="min-w-0">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        活動結束時間 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="datetime-local"
+                        step={3600}
+                        value={formData.endDate}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            endDate: snapDateTimeLocalToHour(e.target.value)
+                          })
+                        }
+                        className="w-full max-w-full min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        required
+                      />
+                    </div>
                   </div>
                 </div>
 

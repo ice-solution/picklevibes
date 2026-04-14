@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
@@ -69,6 +69,45 @@ interface Booking {
   updatedAt: string;
 }
 
+/** 香港時間 2026-04-15 00:00:00（與預約的香港日期＋時間比輯一致） */
+const LEGACY_BOOKING_CUTOFF_MS = new Date('2026-04-15T00:00:00+08:00').getTime();
+
+function getHongKongCalendarYmd(dateInput: string | Date): string {
+  const date = typeof dateInput === 'string' ? new Date(dateInput) : new Date(dateInput);
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function hkWallTimeToUtcMs(ymd: string, hhmm: string): number {
+  const parts = hhmm.split(':');
+  const h = Number(parts[0]);
+  const min = Number(parts[1] ?? 0);
+  const hh = String(h).padStart(2, '0');
+  const mm = String(min).padStart(2, '0');
+  return new Date(`${ymd}T${hh}:${mm}:00+08:00`).getTime();
+}
+
+function addDaysToYmd(ymd: string, days: number): string {
+  const noonMs = hkWallTimeToUtcMs(ymd, '12:00');
+  return getHongKongCalendarYmd(new Date(noonMs + days * 86400000));
+}
+
+/** 預約結束時間（香港）；24:00 為翌日 00:00（HKT）；跨日時段則加一日 */
+function hkBookingEndToUtcMs(ymd: string, endTime: string, startMs: number): number {
+  if (endTime === '24:00') {
+    return hkWallTimeToUtcMs(addDaysToYmd(ymd, 1), '00:00');
+  }
+  let endMs = hkWallTimeToUtcMs(ymd, endTime);
+  if (endMs <= startMs) {
+    endMs = hkWallTimeToUtcMs(addDaysToYmd(ymd, 1), endTime);
+  }
+  return endMs;
+}
+
 const BookingCalendar: React.FC = () => {
   const calendarRef = useRef<FullCalendar>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -86,25 +125,78 @@ const BookingCalendar: React.FC = () => {
   const [addingNote, setAddingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState<string>('');
+  const calendarRangeRef = useRef<{ start: string; end: string } | null>(null);
+  /** 避免 datesSet 與 events 更新連鎖造成重複請求／loading 卡死 */
+  const lastFetchedRangeKeyRef = useRef<string>('');
+
+  const fetchBookings = useCallback(
+    async (range?: { start: string; end: string }, options?: { silent?: boolean }) => {
+      const silent = options?.silent === true;
+      try {
+        if (!silent) {
+          setLoading(true);
+        }
+        setError(null);
+        const params = new URLSearchParams({ limit: '5000', sort: 'asc' });
+        const r = range ?? calendarRangeRef.current;
+        if (r?.start && r?.end) {
+          params.append('dateFrom', r.start);
+          params.append('dateTo', r.end);
+        }
+        const response = await axios.get(`/bookings/admin/all?${params.toString()}`);
+        setBookings(response.data.bookings);
+      } catch (error: any) {
+        console.error('獲取預約列表失敗:', error);
+        setError(error.response?.data?.message || '獲取預約列表失敗');
+      } finally {
+        if (!silent) {
+          setLoading(false);
+        }
+      }
+    },
+    []
+  );
+
+  const refetchBookings = useCallback(
+    () => fetchBookings(calendarRangeRef.current ?? undefined, { silent: true }),
+    [fetchBookings]
+  );
+
+  /** 避免 FullCalendar 回傳不同字串格式導致誤判為新範圍而無限 refetch */
+  const calendarRangeKey = (startStr: string, endStr: string) => {
+    const d = (s: string) =>
+      s.includes('T') ? s.split('T')[0] : s.slice(0, 10);
+    return `${d(startStr)}|${d(endStr)}`;
+  };
+
+  const handleDatesSet = useCallback(
+    (info: { startStr: string; endStr: string }) => {
+      calendarRangeRef.current = { start: info.startStr, end: info.endStr };
+      const key = calendarRangeKey(info.startStr, info.endStr);
+      if (key === lastFetchedRangeKeyRef.current) {
+        return;
+      }
+      lastFetchedRangeKeyRef.current = key;
+      /** 不可 setLoading(true)，否則上方 if(loading) 會整棵卸載 FullCalendar，換月會被重設回預設月份 */
+      fetchBookings({ start: info.startStr, end: info.endStr }, { silent: true });
+    },
+    [fetchBookings]
+  );
+
+  /** 掛載時必抓一次：若僅依賴 FullCalendar 的 datesSet，部分情況下不會觸發，loading 會永遠為 true */
+  useEffect(() => {
+    fetchBookings(undefined, { silent: false });
+  }, [fetchBookings]);
 
   useEffect(() => {
-    fetchBookings();
-  }, []);
-
-  const fetchBookings = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      const response = await axios.get('/bookings/admin/all?limit=1000');
-      setBookings(response.data.bookings);
-    } catch (error: any) {
-      console.error('獲取預約列表失敗:', error);
-      setError(error.response?.data?.message || '獲取預約列表失敗');
-    } finally {
-      setLoading(false);
-    }
-  };
+    const onFocus = () => {
+      if (calendarRangeRef.current) {
+        fetchBookings(calendarRangeRef.current, { silent: true });
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [fetchBookings]);
 
   const getCourtTypeColor = (courtType: string, status: string) => {
     // 如果狀態是已取消，統一使用灰色
@@ -127,15 +219,15 @@ const BookingCalendar: React.FC = () => {
     }
   };
 
-  // 將預約數據轉換為FullCalendar事件格式
-  const events = bookings.map(booking => {
-    const startDate = new Date(booking.date);
-    const [startHour, startMinute] = booking.startTime.split(':').map(Number);
-    const [endHour, endMinute] = booking.endTime.split(':').map(Number);
-    
-    startDate.setHours(startHour, startMinute, 0, 0);
-    const endDate = new Date(startDate);
-    endDate.setHours(endHour, endMinute, 0, 0);
+  // 將預約數據轉換為FullCalendar事件格式（必須 memo，否則每次父層 render 新陣列會觸發 FC 內部 datesSet → 無限 refetch、無法換月）
+  const events = useMemo(
+    () =>
+      bookings.map((booking) => {
+    const ymdHk = getHongKongCalendarYmd(booking.date);
+    const startMs = hkWallTimeToUtcMs(ymdHk, booking.startTime);
+    const endMs = hkBookingEndToUtcMs(ymdHk, booking.endTime, startMs);
+    const startDate = new Date(startMs);
+    const endDate = new Date(endMs);
 
     // 檢查狀態
     const hasSpecialRequests = booking.specialRequests && booking.specialRequests.trim().length > 0;
@@ -191,6 +283,10 @@ const BookingCalendar: React.FC = () => {
       classNames.push('gradient-red-blue-green');
     }
 
+    if (startMs < LEGACY_BOOKING_CUTOFF_MS) {
+      classNames.push('booking-legacy-cutoff-frame');
+    }
+
     // 計算最終的邊框顏色和寬度
     let finalBorderColor = borderColor;
     let finalBorderWidth = 1;
@@ -224,7 +320,9 @@ const BookingCalendar: React.FC = () => {
         states: states
       }
     };
-  });
+      }),
+    [bookings]
+  );
 
   const getStatusText = (status: string) => {
     switch (status) {
@@ -303,7 +401,7 @@ const BookingCalendar: React.FC = () => {
       });
       setSelectedBooking(response.data.booking);
       setNewNoteContent('');
-      fetchBookings();
+      refetchBookings();
     } catch (error: any) {
       console.error('添加留言失敗:', error);
       alert(error.response?.data?.message || '添加留言失敗，請稍後再試');
@@ -322,7 +420,7 @@ const BookingCalendar: React.FC = () => {
       setSelectedBooking(response.data.booking);
       setEditingNoteId(null);
       setEditingNoteContent('');
-      fetchBookings();
+      refetchBookings();
     } catch (error: any) {
       console.error('編輯留言失敗:', error);
       alert(error.response?.data?.message || '編輯留言失敗，請稍後再試');
@@ -337,7 +435,7 @@ const BookingCalendar: React.FC = () => {
     try {
       const response = await axios.delete(`/bookings/${selectedBooking._id}/admin-notes/${noteId}`);
       setSelectedBooking(response.data.booking);
-      fetchBookings();
+      refetchBookings();
       alert('留言已刪除');
     } catch (error: any) {
       console.error('刪除留言失敗:', error);
@@ -353,7 +451,7 @@ const BookingCalendar: React.FC = () => {
         specialRequestsProcessed: true
       });
       setSelectedBooking(response.data.booking);
-      fetchBookings();
+      refetchBookings();
       alert('已標記為已處理');
     } catch (error: any) {
       console.error('更新處理狀態失敗:', error);
@@ -523,6 +621,7 @@ const BookingCalendar: React.FC = () => {
             minute: '2-digit',
             hour12: false
           }}
+          datesSet={handleDatesSet}
           titleFormat={{
             year: 'numeric',
             month: 'long'
@@ -744,11 +843,17 @@ const BookingCalendar: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">總價</label>
-                  <p className="text-sm text-gray-900">{selectedBooking.pricing.totalPrice} 積分</p>
+                  <p className="text-sm text-gray-900">
+                    {selectedBooking.payment.method === 'admin_waived' ? 0 : selectedBooking.pricing.totalPrice} 積分
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">付款方式</label>
-                  <p className="text-sm text-gray-900">{selectedBooking.payment.method}</p>
+                  <p className="text-sm text-gray-900">
+                  {selectedBooking.payment.method === 'admin_waived'
+                    ? '管理員免扣積分'
+                    : selectedBooking.payment.method}
+                </p>
                 </div>
               </div>
 
@@ -772,12 +877,24 @@ const BookingCalendar: React.FC = () => {
                   {selectedBooking.status !== 'cancelled' && (
                     <button
                       onClick={async () => {
-                        if (!window.confirm('確認要取消此預約並退回積分嗎？')) return;
+                        const isAdminWaived = selectedBooking.payment?.method === 'admin_waived';
+                        if (
+                          !window.confirm(
+                            isAdminWaived
+                              ? '確認要取消此預約嗎？'
+                              : '確認要取消此預約並退回積分嗎？'
+                          )
+                        )
+                          return;
                         try {
                           await axios.put(`/bookings/${selectedBooking._id}/cancel`, { reason: 'Admin cancel via calendar' });
-                          alert('預約已取消，積分已退回');
+                          alert(
+                            isAdminWaived
+                              ? '預約已取消，因管理員權限故不會補回積分。'
+                              : '預約已取消，積分已退回'
+                          );
                           setShowDetailModal(false);
-                          fetchBookings();
+                          refetchBookings();
                         } catch (e: any) {
                           alert(e?.response?.data?.message || '取消失敗');
                         }
@@ -794,18 +911,20 @@ const BookingCalendar: React.FC = () => {
         </div>
       )}
 
-      {/* 創建預約模態框 */}
-      <CreateBookingModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onBookingCreated={() => {
-          fetchBookings();
-          setShowCreateModal(false);
-        }}
-        selectedDate={selectedDate}
-        selectedCourt={selectedCourt}
-        selectedTime={selectedTime}
-      />
+      {/* 關閉時卸載，避免與 FullCalendar 連動重繪時子元件重複掛載／effect 洗版 */}
+      {showCreateModal && (
+        <CreateBookingModal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          onBookingCreated={() => {
+            refetchBookings();
+            setShowCreateModal(false);
+          }}
+          selectedDate={selectedDate}
+          selectedCourt={selectedCourt}
+          selectedTime={selectedTime}
+        />
+      )}
     </div>
   );
 };

@@ -144,7 +144,8 @@ router.post('/', [
       price: parseFloat(req.body.price),
       discountPrice: req.body.discountPrice ? parseFloat(req.body.discountPrice) : null,
       stock: req.body.stock ? parseInt(req.body.stock) : 0,
-      sortOrder: req.body.sortOrder ? parseInt(req.body.sortOrder) : 0
+      sortOrder: req.body.sortOrder ? parseInt(req.body.sortOrder) : 0,
+      isClothing: req.body.isClothing === true || req.body.isClothing === 'true'
     };
 
     const product = new Product(productData);
@@ -268,6 +269,9 @@ router.put('/:id', [
     }
     if (updateData.stock !== undefined) updateData.stock = parseInt(updateData.stock);
     if (updateData.sortOrder !== undefined) updateData.sortOrder = parseInt(updateData.sortOrder);
+    if (updateData.isClothing !== undefined) {
+      updateData.isClothing = updateData.isClothing === true || updateData.isClothing === 'true';
+    }
 
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,

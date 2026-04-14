@@ -11,6 +11,12 @@ const bookingSchema = new mongoose.Schema({
     ref: 'Court',
     required: [true, '場地為必填項目']
   },
+  /** 活動中心自動佔用場地時，指向活動 ID（便於更新／取消時同步） */
+  relatedActivity: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Activity',
+    default: null
+  },
   isFullVenue: {
     type: Boolean,
     default: false,
@@ -21,6 +27,17 @@ const bookingSchema = new mongoose.Schema({
     ref: 'Booking',
     description: '包場時關聯的其他場地預約'
   }],
+  /** 多場地同一筆預約（包場／活動佔場）共用，取消任一场地時一併取消同組 */
+  venueBundleId: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: null,
+    index: true
+  },
+  venueBundleKind: {
+    type: String,
+    enum: [null, 'full_venue', 'activity_hold'],
+    default: null
+  },
   date: {
     type: Date,
     required: [true, '預約日期為必填項目']
@@ -106,8 +123,10 @@ const bookingSchema = new mongoose.Schema({
     },
     method: {
       type: String,
-      enum: ['stripe', 'cash', 'bank_transfer', 'points'],
-      default: 'stripe'
+      enum: ['stripe', 'cash', 'bank_transfer', 'points', 'admin_waived'],
+      default: 'stripe',
+      description:
+        'admin_waived = 管理員繞過限制建單，未從用戶扣積分',
     },
     transactionId: String,
     paidAt: Date,
@@ -162,6 +181,11 @@ const bookingSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
     description: '管理員是否繞過了所有系統限制'
+  },
+  /** 建立時未從「預約所屬用戶」扣除積分；取消時不得自動退回積分 */
+  noUserBalanceDebited: {
+    type: Boolean,
+    default: false,
   },
   cancellation: {
     cancelledAt: Date,
@@ -218,11 +242,19 @@ const bookingSchema = new mongoose.Schema({
 
 // 索引優化查詢
 bookingSchema.index({ court: 1, date: 1, startTime: 1 });
+bookingSchema.index({ relatedActivity: 1 });
 bookingSchema.index({ user: 1, date: 1 });
 bookingSchema.index({ status: 1, date: 1 });
 
-// 檢查時間衝突
-bookingSchema.statics.checkTimeConflict = async function(courtId, date, startTime, endTime, excludeId = null) {
+// 檢查時間衝突（excludeId：單筆排除；excludeIds：多筆排除，例如活動佔用之多場地預約）
+bookingSchema.statics.checkTimeConflict = async function(
+  courtId,
+  date,
+  startTime,
+  endTime,
+  excludeId = null,
+  excludeIds = null
+) {
   const bookingDate = new Date(date);
   
   // 確保 courtId 是 ObjectId 類型
@@ -257,8 +289,20 @@ bookingSchema.statics.checkTimeConflict = async function(courtId, date, startTim
     ]
   };
   
-  if (excludeId) {
-    query._id = { $ne: excludeId };
+  const mergedExclude = [];
+  if (excludeId) mergedExclude.push(excludeId);
+  if (Array.isArray(excludeIds)) mergedExclude.push(...excludeIds);
+  const seen = new Set();
+  const oidList = [];
+  for (const id of mergedExclude) {
+    if (id == null) continue;
+    const key = String(id);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    oidList.push(typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id);
+  }
+  if (oidList.length) {
+    query._id = { $nin: oidList };
   }
   
   const conflictingBookings = await this.find(query);

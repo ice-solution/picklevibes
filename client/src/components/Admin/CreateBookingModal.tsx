@@ -77,11 +77,6 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
 
   // 數據選項
   const [courts, setCourts] = useState<Court[]>([]);
-  
-  // 監控包場步驟變化
-  useEffect(() => {
-    console.log('包場步驟變化:', fullVenueStep);
-  }, [fullVenueStep]);
 
   // 載入數據
   useEffect(() => {
@@ -562,6 +557,10 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
             <p className="mt-2 text-xs text-yellow-700">
               ⚠️ 勾選此選項將忽略所有系統限制，包括：用戶積分餘額、預約時間限制、場地可用性檢查等。
               請謹慎使用此功能。
+            </p>
+            <p className="mt-2 text-xs text-gray-700">
+              <strong>未勾選</strong>時：後台建單可超出一般用戶的「可預約最遠天數」與「營業時段」，
+              其餘規則與一般用戶相同（場地須啟用、1～2 小時、時段不可重疊），並依價格<strong>扣除積分</strong>。
             </p>
           </div>
 

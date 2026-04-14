@@ -24,6 +24,12 @@ const orderItemSchema = new mongoose.Schema({
     type: Number,
     required: true,
     min: 0
+  },
+  /** 衣服類商品尺碼；非衣服為 null */
+  size: {
+    type: String,
+    default: null,
+    trim: true
   }
 }, { _id: true });
 
@@ -105,11 +111,21 @@ const orderSchema = new mongoose.Schema({
     type: String,
     trim: true
   },
-  // 若以積分支付，記錄扣除的積分數；取消訂單時退還此數量
+  // 舊流程：下單時若曾立即扣積分，記錄金額（取消時退回）
   pointsDeducted: {
     type: Number,
     default: 0,
     min: 0
+  },
+  /** 網店訂單：後台確認時從用戶扣款之積分（與 total 一致，含折扣後）；0 表示尚未扣款 */
+  pointsChargedAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  pointsChargedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

@@ -1,11 +1,13 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Order = require('../models/Order');
+const UserBalance = require('../models/UserBalance');
 const Product = require('../models/Product');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
-const UserBalance = require('../models/UserBalance');
+const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const emailService = require('../services/emailService');
+const { normalizeClothingSize } = require('../utils/clothingSizes');
 const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -22,8 +24,7 @@ router.post('/', [
   body('shippingAddress.phone').trim().notEmpty().withMessage('收件人電話為必填項目'),
   body('shippingAddress.address').trim().notEmpty().withMessage('收件地址為必填項目'),
   body('redeemCodeId').optional({ values: 'null' }).isMongoId().withMessage('請提供有效的兌換碼ID'),
-  body('notes').optional().trim(),
-  body('payByPoints').optional().isBoolean().withMessage('請提供有效的積分支付選項')
+  body('notes').optional().trim()
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -34,7 +35,7 @@ router.post('/', [
       });
     }
 
-    const { items, shippingAddress, redeemCodeId, notes, payByPoints } = req.body;
+    const { items, shippingAddress, redeemCodeId, notes } = req.body;
     const userId = req.user.id;
 
     // 驗證產品並計算總額
@@ -63,12 +64,28 @@ router.post('/', [
       const itemSubtotal = price * item.quantity;
       subtotal += itemSubtotal;
 
+      let sizeForOrder = null;
+      if (product.isClothing) {
+        const normalized = normalizeClothingSize(item.size);
+        if (!normalized) {
+          return res.status(400).json({
+            message: `產品「${product.name}」請選擇有效尺碼（XS、S、M、L、XL）`
+          });
+        }
+        sizeForOrder = normalized;
+      } else if (item.size !== undefined && item.size !== null && String(item.size).trim() !== '') {
+        return res.status(400).json({
+          message: `產品「${product.name}」無需填寫尺碼`
+        });
+      }
+
       orderItems.push({
         product: product._id,
         name: product.name,
         price: price,
         quantity: item.quantity,
-        subtotal: itemSubtotal
+        subtotal: itemSubtotal,
+        size: sizeForOrder
       });
     }
 
@@ -115,19 +132,7 @@ router.post('/', [
 
     const total = subtotal - discount;
 
-    // 若以積分支付：檢查餘額並預留扣款金額（實付 total，以積分計 1 元 = 1 分）
-    const pointsToDeduct = payByPoints ? Math.round(total) : 0;
-    if (payByPoints && pointsToDeduct > 0) {
-      const userBalance = await UserBalance.findOne({ user: userId });
-      const balance = userBalance ? userBalance.balance : 0;
-      if (balance < pointsToDeduct) {
-        return res.status(400).json({
-          message: `積分餘額不足，需要 ${pointsToDeduct} 分，目前餘額 ${balance} 分`
-        });
-      }
-    }
-
-    // 創建訂單
+    // 創建訂單（積分於後台「確認訂單」時扣除，見 PUT /:id/status）
     const order = new Order({
       orderNumber: Order.generateOrderNumber(),
       user: userId,
@@ -139,24 +144,10 @@ router.post('/', [
       redeemCode: redeemCodeId || null,
       redeemCodeName,
       notes,
-      status: 'pending',
-      pointsDeducted: pointsToDeduct
+      status: 'pending'
     });
 
     await order.save();
-
-    // 積分支付：扣除用戶餘額（實付 total 對應的積分）
-    if (pointsToDeduct > 0) {
-      let userBalance = await UserBalance.findOne({ user: userId });
-      if (!userBalance) {
-        userBalance = new UserBalance({ user: userId });
-      }
-      await userBalance.deductBalance(
-        pointsToDeduct,
-        `訂單 ${order.orderNumber} 產品購買`,
-        null
-      );
-    }
 
     // 更新產品庫存
     for (const item of items) {
@@ -167,30 +158,31 @@ router.post('/', [
 
     // 記錄兌換碼使用
     if (redeemCode) {
-      const redeemUsage = new RedeemUsage({
-        redeemCode: redeemCode._id,
-        user: userId,
+      await consumeRedeemCodeOnce({
+        redeemCodeId: redeemCode._id,
+        userId,
         orderType: 'product',
         orderId: order._id,
         originalAmount: subtotal,
         discountAmount: discount,
         finalAmount: total,
         ipAddress: req.ip,
-        userAgent: req.get('User-Agent')
+        userAgent: req.get('User-Agent'),
       });
-
-      await redeemUsage.save();
-
-      // 更新兌換碼統計
-      redeemCode.totalUsed += 1;
-      redeemCode.totalDiscount += discount;
-      await redeemCode.save();
     }
 
     // 發送訂單確認郵件
     try {
       const user = await require('../models/User').findById(userId);
       await emailService.sendOrderConfirmationEmail(user, order);
+
+      // 額外寄送通知給後台信箱（EMAIL_USER）
+      try {
+        await emailService.sendOrderAdminNotificationEmail(user, order);
+      } catch (notifyError) {
+        console.error('發送後台訂單通知郵件失敗:', notifyError.message || notifyError);
+        // 不影響訂單回應
+      }
     } catch (emailError) {
       console.error('發送訂單確認郵件失敗:', emailError);
       // 不影響訂單創建
@@ -330,6 +322,56 @@ router.put('/:id/status', [
     }
 
     const oldStatus = order.status;
+    const userId = order.user._id ? order.user._id : order.user;
+
+    // 取消訂單：若曾於確認時扣過積分，需退回
+    if (status === 'cancelled' && oldStatus !== 'cancelled') {
+      const refundAmt = order.pointsChargedAmount || 0;
+      if (refundAmt > 0) {
+        const userBalance = await UserBalance.findOne({ user: userId });
+        if (userBalance) {
+          await userBalance.refund(
+            refundAmt,
+            `網店訂單 ${order.orderNumber} 取消退回積分`,
+            null,
+            order._id
+          );
+        }
+        order.pointsChargedAmount = 0;
+        order.pointsChargedAt = null;
+      }
+    }
+
+    // 後台確認訂單（pending → confirmed）：依訂單總額扣除用戶積分（與前台「積分」定價一致）
+    if (status === 'confirmed' && oldStatus === 'pending') {
+      const chargedBefore = order.pointsChargedAmount || 0;
+      const pointsToCharge = Math.round(Number(order.total)) || 0;
+
+      if (pointsToCharge > 0 && chargedBefore === 0) {
+        let userBalance = await UserBalance.findOne({ user: userId });
+        if (!userBalance) {
+          userBalance = new UserBalance({ user: userId, balance: 0 });
+        }
+
+        if (userBalance.balance < pointsToCharge) {
+          return res.status(400).json({
+            message: '客戶積分不足，請通知客戶充值',
+            required: pointsToCharge,
+            available: userBalance.balance
+          });
+        }
+
+        await userBalance.deductBalance(
+          pointsToCharge,
+          `網店訂單 ${order.orderNumber}（後台確認扣款）`,
+          null,
+          order._id
+        );
+        order.pointsChargedAmount = pointsToCharge;
+        order.pointsChargedAt = new Date();
+      }
+    }
+
     order.status = status;
     
     if (trackingNumber) {
@@ -387,19 +429,33 @@ router.put('/:id/cancel', [auth, adminAuth], async (req, res) => {
       });
     }
 
-    // 2. 退還實付金額（積分）：若下單時有扣積分（order.total 對應的積分），取消時退還
+    // 2. 退還積分：後台確認扣款（pointsChargedAmount）或舊制下單即扣（pointsDeducted）
     let pointsRefunded = 0;
-    if (order.pointsDeducted && order.pointsDeducted > 0) {
-      let userBalance = await UserBalance.findOne({ user: order.user._id });
-      if (!userBalance) {
-        userBalance = new UserBalance({ user: order.user._id });
-      }
+    const charged = order.pointsChargedAmount || 0;
+    const legacyDeducted = order.pointsDeducted || 0;
+    let userBalance = await UserBalance.findOne({ user: order.user._id });
+    if (!userBalance) {
+      userBalance = new UserBalance({ user: order.user._id });
+    }
+    if (charged > 0) {
       await userBalance.refund(
-        order.pointsDeducted,
-        `訂單 ${order.orderNumber} 取消退款`,
-        null
+        charged,
+        `網店訂單 ${order.orderNumber} 取消退回積分`,
+        null,
+        order._id
       );
-      pointsRefunded = order.pointsDeducted;
+      pointsRefunded = charged;
+      order.pointsChargedAmount = 0;
+      order.pointsChargedAt = null;
+    } else if (legacyDeducted > 0) {
+      await userBalance.refund(
+        legacyDeducted,
+        `訂單 ${order.orderNumber} 取消退款`,
+        null,
+        order._id
+      );
+      pointsRefunded = legacyDeducted;
+      order.pointsDeducted = 0;
     }
 
     // 3. 退還兌換碼使用：刪除使用記錄並更新兌換碼統計
