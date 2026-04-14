@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Order = require('../models/Order');
+const UserBalance = require('../models/UserBalance');
 const Product = require('../models/Product');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
@@ -321,6 +322,56 @@ router.put('/:id/status', [
     }
 
     const oldStatus = order.status;
+    const userId = order.user._id ? order.user._id : order.user;
+
+    // 取消訂單：若曾於確認時扣過積分，需退回
+    if (status === 'cancelled' && oldStatus !== 'cancelled') {
+      const refundAmt = order.pointsChargedAmount || 0;
+      if (refundAmt > 0) {
+        const userBalance = await UserBalance.findOne({ user: userId });
+        if (userBalance) {
+          await userBalance.refund(
+            refundAmt,
+            `網店訂單 ${order.orderNumber} 取消退回積分`,
+            null,
+            order._id
+          );
+        }
+        order.pointsChargedAmount = 0;
+        order.pointsChargedAt = null;
+      }
+    }
+
+    // 後台確認訂單（pending → confirmed）：依訂單總額扣除用戶積分（與前台「積分」定價一致）
+    if (status === 'confirmed' && oldStatus === 'pending') {
+      const chargedBefore = order.pointsChargedAmount || 0;
+      const pointsToCharge = Math.round(Number(order.total)) || 0;
+
+      if (pointsToCharge > 0 && chargedBefore === 0) {
+        let userBalance = await UserBalance.findOne({ user: userId });
+        if (!userBalance) {
+          userBalance = new UserBalance({ user: userId, balance: 0 });
+        }
+
+        if (userBalance.balance < pointsToCharge) {
+          return res.status(400).json({
+            message: '客戶積分不足，請通知客戶充值',
+            required: pointsToCharge,
+            available: userBalance.balance
+          });
+        }
+
+        await userBalance.deductBalance(
+          pointsToCharge,
+          `網店訂單 ${order.orderNumber}（後台確認扣款）`,
+          null,
+          order._id
+        );
+        order.pointsChargedAmount = pointsToCharge;
+        order.pointsChargedAt = new Date();
+      }
+    }
+
     order.status = status;
     
     if (trackingNumber) {

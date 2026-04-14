@@ -268,6 +268,9 @@ const Checkout: React.FC = () => {
                         <span>總計</span>
                         <span>{Math.round(total)} 積分</span>
                       </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        積分將於後台確認訂單後扣除；提交訂單時不會立即扣款。
+                      </p>
                     </div>
                   </div>
 

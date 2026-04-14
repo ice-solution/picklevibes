@@ -110,6 +110,16 @@ const orderSchema = new mongoose.Schema({
   trackingNumber: {
     type: String,
     trim: true
+  },
+  /** 網店訂單：後台確認時從用戶扣款之積分（與 total 一致，含折扣後）；0 表示尚未扣款 */
+  pointsChargedAmount: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+  pointsChargedAt: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true

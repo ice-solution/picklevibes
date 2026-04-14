@@ -35,6 +35,10 @@ const userBalanceSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking'
     },
+    relatedOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Order'
+    },
     createdAt: {
       type: Date,
       default: Date.now
@@ -57,33 +61,37 @@ userBalanceSchema.methods.addBalance = function(amount, description = '充值') 
 };
 
 // 扣除餘額
-userBalanceSchema.methods.deductBalance = function(amount, description = '消費', relatedBooking = null) {
+userBalanceSchema.methods.deductBalance = function(amount, description = '消費', relatedBooking = null, relatedOrder = null) {
   if (this.balance < amount) {
     throw new Error('餘額不足');
   }
   this.balance -= amount;
   this.totalSpent += amount;
-  this.transactions.push({
+  const entry = {
     type: 'spend',
     amount: -amount,
-    description: description,
-    relatedBooking: relatedBooking
-  });
+    description: description
+  };
+  if (relatedBooking) entry.relatedBooking = relatedBooking;
+  if (relatedOrder) entry.relatedOrder = relatedOrder;
+  this.transactions.push(entry);
   return this.save();
 };
 
 // 退款
-userBalanceSchema.methods.refund = function(amount, description = '退款', relatedBooking = null) {
+userBalanceSchema.methods.refund = function(amount, description = '退款', relatedBooking = null, relatedOrder = null) {
   this.balance += amount;
   if (this.totalSpent > 0) {
     this.totalSpent = Math.max(0, this.totalSpent - amount);
   }
-  this.transactions.push({
+  const entry = {
     type: 'refund',
     amount: amount,
-    description: description,
-    relatedBooking: relatedBooking
-  });
+    description: description
+  };
+  if (relatedBooking) entry.relatedBooking = relatedBooking;
+  if (relatedOrder) entry.relatedOrder = relatedOrder;
+  this.transactions.push(entry);
   return this.save();
 };
 

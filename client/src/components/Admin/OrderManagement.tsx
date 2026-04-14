@@ -78,7 +78,12 @@ const OrderManagement: React.FC = () => {
       setSelectedOrder(null);
       setTrackingNumber('');
     } catch (error: any) {
-      alert(error.response?.data?.message || '更新失敗');
+      const data = error.response?.data;
+      let msg = data?.message || '更新失敗';
+      if (data?.required != null && data?.available != null) {
+        msg += `\n需要積分：${data.required}，客戶現有：${data.available}`;
+      }
+      alert(msg);
     }
   };
 
