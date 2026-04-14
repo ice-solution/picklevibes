@@ -114,6 +114,12 @@
   100% { background-position: 0% 50%; }
 }
 
+/* 預約日曆：香港時間 2026-04-15 00:00 前開始的預約（與 BookingCalendar LEGACY_BOOKING_CUTOFF_MS 對應） */
+.fc-event.booking-legacy-cutoff-frame {
+  outline: 2px solid #1f2e4d !important;
+  outline-offset: 1px;
+}
+
 /* 預約日曆邊框樣式 */
 /* 單一狀態邊框 */
 .fc-event.booking-red-border {
