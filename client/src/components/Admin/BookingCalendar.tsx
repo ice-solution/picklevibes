@@ -69,7 +69,7 @@ interface Booking {
   updatedAt: string;
 }
 
-/** 香港時間 2026-04-15 00:00:00（與預約的香港日期＋時間比輯一致） */
+/** 香港時間 2026-04-15 00:00:00；與預約「建立時間 createdAt」比較（非場次活動日） */
 const LEGACY_BOOKING_CUTOFF_MS = new Date('2026-04-15T00:00:00+08:00').getTime();
 
 function getHongKongCalendarYmd(dateInput: string | Date): string {
@@ -283,7 +283,8 @@ const BookingCalendar: React.FC = () => {
       classNames.push('gradient-red-blue-green');
     }
 
-    if (startMs < LEGACY_BOOKING_CUTOFF_MS) {
+    const createdMs = booking.createdAt ? new Date(booking.createdAt).getTime() : NaN;
+    if (!Number.isNaN(createdMs) && createdMs < LEGACY_BOOKING_CUTOFF_MS) {
       classNames.push('booking-legacy-cutoff-frame');
     }
 
