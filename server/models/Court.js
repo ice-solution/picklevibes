@@ -1,6 +1,21 @@
 const mongoose = require('mongoose');
 const weekendService = require('../services/weekendService');
 
+/**
+ * 預約開始時間 (HH:MM) 是否落在 pricing.timeSlots 某一格
+ * - 一般同日：startTime < endTime（例如 07:00–16:00）
+ * - 跨日：startTime > endTime（例如 23:00–07:00，含當晚 23:00 起至翌日 07:00 前）
+ */
+function isStartTimeInPricingSlot(startTime, slot) {
+  const st = slot.startTime;
+  const et = slot.endTime;
+  if (!startTime || st == null || et == null || st === et) return false;
+  if (st < et) {
+    return startTime >= st && startTime < et;
+  }
+  return startTime >= st || startTime < et;
+}
+
 const courtSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -203,9 +218,9 @@ courtSchema.methods.getPriceForTime = function(startTime, date = null) {
     }
   }
   
-  // 找到匹配的時段
+  // 找到匹配的時段（含跨日貓頭鷹 23:00–07:00）
   for (const timeSlot of this.pricing.timeSlots) {
-    if (startTime >= timeSlot.startTime && startTime < timeSlot.endTime) {
+    if (isStartTimeInPricingSlot(startTime, timeSlot)) {
       return timeSlot.price;
     }
   }
@@ -241,7 +256,7 @@ courtSchema.methods.getTimeSlotName = function(startTime, date = null) {
   }
   
   for (const timeSlot of this.pricing.timeSlots) {
-    if (startTime >= timeSlot.startTime && startTime < timeSlot.endTime) {
+    if (isStartTimeInPricingSlot(startTime, timeSlot)) {
       return timeSlot.name;
     }
   }

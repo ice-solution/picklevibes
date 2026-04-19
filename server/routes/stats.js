@@ -22,6 +22,82 @@ function timeToMinutes(time) {
   return h * 60 + m;
 }
 
+// 工具函數：香港時間月份區間（start inclusive, end exclusive）
+function getHongKongMonthRange(year, month) {
+  const mm = String(month).padStart(2, '0');
+  const start = new Date(`${year}-${mm}-01T00:00:00+08:00`);
+  const nextMonth = month === 12 ? 1 : month + 1;
+  const nextYear = month === 12 ? year + 1 : year;
+  const nextMm = String(nextMonth).padStart(2, '0');
+  const endExclusive = new Date(`${nextYear}-${nextMm}-01T00:00:00+08:00`);
+  return { start, endExclusive };
+}
+
+// 三個時段（以分鐘表示，當天 0:00 起算）
+const BOOKING_TIME_BUCKETS = [
+  { key: 'night', label: '00:00-06:00', start: 0, end: 6 * 60 },
+  { key: 'day', label: '07:00-15:00', start: 7 * 60, end: 15 * 60 },
+  { key: 'evening', label: '16:00-24:00', start: 16 * 60, end: 24 * 60 }
+];
+
+// @route   GET /api/stats/bookings-time-buckets
+// @desc    指定月份（香港時間）按三個時段統計 booking 數量（以 startTime 分桶）
+// @access  Private (Admin)
+router.get('/bookings-time-buckets', [auth, adminAuth], async (req, res) => {
+  try {
+    const year = parseInt(req.query.year, 10) || new Date().getFullYear();
+    const month = Math.min(12, Math.max(1, parseInt(req.query.month, 10) || (new Date().getMonth() + 1)));
+    const includeCancelled = String(req.query.includeCancelled || '').toLowerCase() === 'true';
+
+    const { start, endExclusive } = getHongKongMonthRange(year, month);
+
+    const statusQuery = includeCancelled
+      ? {}
+      : { status: { $ne: 'cancelled' } };
+
+    // 與 /bookings/admin/all 的 dateFrom/dateTo 邏輯一致：包含跨天預約
+    const query = {
+      ...statusQuery,
+      $or: [
+        { date: { $gte: start, $lt: endExclusive } },
+        { endDate: { $gte: start, $lt: endExclusive } },
+        { $and: [{ date: { $lt: endExclusive } }, { endDate: { $gte: start } }] }
+      ]
+    };
+
+    const bookings = await Booking.find(query).select('date startTime status endDate');
+
+    const counts = BOOKING_TIME_BUCKETS.reduce((acc, r) => {
+      acc[r.key] = { label: r.label, count: 0 };
+      return acc;
+    }, {});
+
+    for (const b of bookings) {
+      const startMin = timeToMinutes(b.startTime);
+      const bucket = BOOKING_TIME_BUCKETS.find((r) => startMin >= r.start && startMin < r.end);
+      if (bucket) {
+        counts[bucket.key].count += 1;
+      }
+    }
+
+    res.json({
+      success: true,
+      timezone: 'Asia/Hong_Kong',
+      year,
+      month,
+      range: {
+        start: start.toISOString(),
+        endExclusive: endExclusive.toISOString()
+      },
+      totalBookings: bookings.length,
+      buckets: counts
+    });
+  } catch (error) {
+    console.error('獲取 booking 時段統計錯誤:', error);
+    res.status(500).json({ message: '伺服器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/stats/court-usage
 // @desc    每月場地使用量（按三個時段）與每日平均使用小時
 // @access  Private (Admin)
@@ -38,12 +114,7 @@ router.get('/court-usage', [auth, adminAuth], async (req, res) => {
       status: { $in: ['confirmed', 'completed'] }
     }).select('date startTime endTime duration');
 
-    // 三個時段（以分鐘表示，當天 0:00 起算）
-    const ranges = [
-      { key: 'night', label: '00:00-06:00', start: 0, end: 6 * 60 },
-      { key: 'day', label: '07:00-15:00', start: 7 * 60, end: 15 * 60 },
-      { key: 'evening', label: '16:00-24:00', start: 16 * 60, end: 24 * 60 }
-    ];
+    const ranges = BOOKING_TIME_BUCKETS;
 
     const result = [];
 

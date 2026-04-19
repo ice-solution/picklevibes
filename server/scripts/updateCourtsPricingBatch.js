@@ -19,9 +19,10 @@ const PRICING_BY_COURT_NUMBER = {
     offPeak: 320,
     memberDiscount: 0,
     timeSlots: [
-      { startTime: '00:00', endTime: '07:00', price: 280, name: '貓頭鷹時間' },
+      // 貓頭鷹：跨日 23:00–翌日 07:00（Court.js 已支援 end < start）
+      { startTime: '23:00', endTime: '07:00', price: 280, name: '貓頭鷹時間' },
       { startTime: '07:00', endTime: '16:00', price: 320, name: '非繁忙時間' },
-      { startTime: '16:00', endTime: '24:00', price: 480, name: '繁忙時間' },
+      { startTime: '16:00', endTime: '23:00', price: 480, name: '繁忙時間' },
       // 紅日（08:00-24:00 會優先套用；00:00-08:00 仍會落入時段價）
       { startTime: '08:00', endTime: '24:00', price: 600, name: '紅日' },
     ],
@@ -33,9 +34,9 @@ const PRICING_BY_COURT_NUMBER = {
     offPeak: 280,
     memberDiscount: 0,
     timeSlots: [
-      { startTime: '00:00', endTime: '07:00', price: 250, name: '貓頭鷹時間' },
+      { startTime: '23:00', endTime: '07:00', price: 250, name: '貓頭鷹時間' },
       { startTime: '07:00', endTime: '16:00', price: 280, name: '非繁忙時間' },
-      { startTime: '16:00', endTime: '24:00', price: 320, name: '繁忙時間' },
+      { startTime: '16:00', endTime: '23:00', price: 320, name: '繁忙時間' },
       { startTime: '08:00', endTime: '24:00', price: 380, name: '紅日' },
     ],
   },
