@@ -1,12 +1,31 @@
 /**
- * 批次更新 A/B/C 場地價格（含紅日）
+ * 批次更新 A / B / C 場地價格（含紅日時段）
  *
- * 用法：
- *   MONGODB_URI="mongodb+srv://..." node server/scripts/updateCourtsPricingBatch.js
+ * ── 做什麼 ──
+ * - 連線 MongoDB，依場地 `number`（1=A、2=B、3=C）找到 `Court` 文件。
+ * - 用 `$set: { pricing }` **整份覆寫**該場地的 `pricing`（含 timeSlots、peakHour、offPeak、memberDiscount）。
+ * - 不會新增場地；找不到對應 `number` 會印警告並略過。
  *
- * 注意：
- * - 紅日判定來自 Holiday 資料表（weekendService），需要先把紅日日期加到系統假期。
- * - VIP 價格目前是「扣款時自動 8 折」，不需額外寫入 VIP 價格表。
+ * ── 怎麼執行 ──
+ * 在專案根目錄（picklevibes/）：
+ *
+ *   MONGODB_URI="你的連線字串" node server/scripts/updateCourtsPricingBatch.js
+ *
+ * 或先在本機 shell 匯入連線再執行（依你習慣，勿把密碼提交到 Git）：
+ *
+ *   export MONGODB_URI="mongodb+srv://..."
+ *   node server/scripts/updateCourtsPricingBatch.js
+ *
+ * **請再三確認 MONGODB_URI 指向正確環境**（UAT / 正式），避免誤改正式庫。
+ *
+ * ── 修改價格 ──
+ * - 直接改下方 `PRICING_BY_COURT_NUMBER` 內數字與 timeSlots。
+ * - 貓頭鷹可寫跨日：`{ startTime: '23:00', endTime: '07:00', ... }`（後端 Court 模型需支援 end < start）。
+ * - 改完存檔後再執行腳本才會寫入資料庫。
+ *
+ * ── 注意 ──
+ * - 「紅日」實際計價仍依系統假期（Holiday）＋ Court.getPriceForTime；請先把紅日日期維護在後台假期。
+ * - VIP 為扣款時 8 折邏輯，通常不必在此腳本另寫 VIP 價。
  */
 
 const mongoose = require('mongoose');
@@ -56,6 +75,7 @@ const PRICING_BY_COURT_NUMBER = {
 };
 
 async function main() {
+  // 必須透過環境變數提供連線（勿把連線字串寫死在程式裡）
   const uri = process.env.MONGODB_URI;
   if (!uri) {
     throw new Error('缺少環境變數 MONGODB_URI');
@@ -64,6 +84,7 @@ async function main() {
   await mongoose.connect(uri);
   console.log('✅ 已連線資料庫');
 
+  // 逐場更新：key 為 Court.number（1/2/3），value 為要寫入的整份 pricing
   for (const [numberStr, pricing] of Object.entries(PRICING_BY_COURT_NUMBER)) {
     const number = Number(numberStr);
     const court = await Court.findOneAndUpdate(
@@ -81,6 +102,7 @@ async function main() {
   console.log('🎉 批次更新完成');
 }
 
+// 執行完畢後關閉連線，讓 process 可正常結束
 main()
   .catch((err) => {
     console.error('❌ 更新失敗:', err);

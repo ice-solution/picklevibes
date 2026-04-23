@@ -59,6 +59,13 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   // 兌換碼相關狀態
   const [redeemData, setRedeemData] = useState<any>(null);
 
+  /** 確認預約前：鞋底政策 lightbox */
+  const [showSoleNoticeModal, setShowSoleNoticeModal] = useState(false);
+  const [soleNoticeAcknowledged, setSoleNoticeAcknowledged] = useState(false);
+
+  const SOLE_NOTICE_MESSAGE =
+    '通知各位波友：場地禁止穿著黑色鞋底的運動鞋。如因黑底鞋在場地上留下黑色痕跡，每條痕跡場方將收取港幣100元清潔費。';
+
   // 預約現在使用積分支付，不再需要支付狀態追蹤
   
 
@@ -136,6 +143,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
     return time;
   };
 
+  /** 僅在使用者於 lightbox 勾選同意後才呼叫，執行建立預約與扣積分 */
   const handleSubmit = async () => {
     console.log('🔍 handleSubmit 開始執行');
     
@@ -199,6 +207,31 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleConfirmBookingClick = () => {
+    if (!user) {
+      alert('請先登入');
+      return;
+    }
+    if (!court || !date || !timeSlot || !bookingData.contactName) {
+      alert('請完成所有必填信息');
+      return;
+    }
+    setSoleNoticeAcknowledged(false);
+    setShowSoleNoticeModal(true);
+  };
+
+  const handleSoleNoticeModalClose = () => {
+    setShowSoleNoticeModal(false);
+    setSoleNoticeAcknowledged(false);
+  };
+
+  const handleSoleNoticeConfirmProceed = () => {
+    if (!soleNoticeAcknowledged) return;
+    setShowSoleNoticeModal(false);
+    setSoleNoticeAcknowledged(false);
+    void handleSubmit();
   };
 
   // 預約現在使用積分支付，不再需要支付處理函數
@@ -511,7 +544,8 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         </button>
         
         <button
-          onClick={handleSubmit}
+          type="button"
+          onClick={handleConfirmBookingClick}
           disabled={isSubmitting || !user || isEditing}
           className={`flex-1 font-medium py-3 px-6 rounded-lg transition-colors duration-200 ${
             isSubmitting || !user || isEditing
@@ -535,6 +569,57 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       {/* 預約現在使用積分支付，不再需要調試信息 */}
 
       {/* 預約現在使用積分支付，不再需要 Stripe 支付組件 */}
+
+      {showSoleNoticeModal && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="sole-notice-title"
+        >
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
+            <h3 id="sole-notice-title" className="text-lg font-bold text-gray-900 mb-3">
+              場地使用須知
+            </h3>
+            <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line border border-gray-200 rounded-lg p-4 bg-gray-50 mb-5">
+              {SOLE_NOTICE_MESSAGE}
+            </p>
+            <label className="flex items-start gap-3 cursor-pointer mb-6">
+              <input
+                type="checkbox"
+                checked={soleNoticeAcknowledged}
+                onChange={(e) => setSoleNoticeAcknowledged(e.target.checked)}
+                className="mt-1 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+              />
+              <span className="text-sm text-gray-800">
+                本人已閱讀並同意上述須知，確認繼續預約及積分扣款程序。
+              </span>
+            </label>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={handleSoleNoticeModalClose}
+                disabled={isSubmitting}
+                className="flex-1 py-3 px-4 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleSoleNoticeConfirmProceed}
+                disabled={!soleNoticeAcknowledged || isSubmitting}
+                className={`flex-1 py-3 px-4 rounded-lg font-medium ${
+                  soleNoticeAcknowledged && !isSubmitting
+                    ? 'bg-primary-600 text-white hover:bg-primary-700'
+                    : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                }`}
+              >
+                {isSubmitting ? '處理中...' : '確認並扣款'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
