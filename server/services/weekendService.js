@@ -5,6 +5,19 @@
 
 const Holiday = require('../models/Holiday');
 
+/** 與 Holiday.date（YYYY-MM-DD）一致：以香港時區取日曆日，避免 UTC 差一天導致紅日判斷失敗 */
+function toHongKongDateString(date) {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
 class WeekendService {
   constructor() {
     // 可以從環境變數或資料庫讀取設定
@@ -101,7 +114,8 @@ class WeekendService {
    * @returns {boolean} 是否為國定假日
    */
   isHoliday(date) {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = toHongKongDateString(date);
+    if (!dateStr) return false;
     return this.config.holidays.includes(dateStr);
   }
 
@@ -138,7 +152,9 @@ class WeekendService {
   async addHolidays(dates) {
     await this.initialize();
     const dateArray = Array.isArray(dates) ? dates : [dates];
-    const formattedDates = dateArray.map(date => new Date(date).toISOString().split('T')[0]);
+    const formattedDates = dateArray
+      .map((d) => toHongKongDateString(new Date(d)))
+      .filter(Boolean);
     const uniqueDates = [...new Set(formattedDates)];
 
     await Promise.all(uniqueDates.map(date =>
@@ -156,7 +172,9 @@ class WeekendService {
   async removeHolidays(dates) {
     await this.initialize();
     const dateArray = Array.isArray(dates) ? dates : [dates];
-    const formattedDates = dateArray.map(date => new Date(date).toISOString().split('T')[0]);
+    const formattedDates = dateArray
+      .map((d) => toHongKongDateString(new Date(d)))
+      .filter(Boolean);
     await Holiday.deleteMany({ date: { $in: formattedDates } });
 
     const removeSet = new Set(formattedDates);

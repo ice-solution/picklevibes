@@ -68,7 +68,7 @@ router.get('/', [auth, adminAuth], async (req, res) => {
 });
 
 // @route   POST /api/coach-schedule-requests
-// @desc    教練提交要請（發信至 EMAIL_USER）
+// @desc    教練提交要請（發信至 NOTICE_EMAIL，備援 EMAIL_USER / GMAIL_USER）
 // @access  Private (coach)
 router.post(
   '/',

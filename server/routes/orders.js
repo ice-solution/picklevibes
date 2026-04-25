@@ -176,7 +176,7 @@ router.post('/', [
       const user = await require('../models/User').findById(userId);
       await emailService.sendOrderConfirmationEmail(user, order);
 
-      // 額外寄送通知給後台信箱（EMAIL_USER）
+      // 額外寄送通知給後台（NOTICE_EMAIL，備援 EMAIL_USER / GMAIL_USER）
       try {
         await emailService.sendOrderAdminNotificationEmail(user, order);
       } catch (notifyError) {

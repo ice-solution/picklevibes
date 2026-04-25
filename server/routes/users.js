@@ -18,23 +18,27 @@ router.get('/', [auth, adminAuth], async (req, res) => {
     const query = {};
     if (role) query.role = role;
     if (membershipLevel) query.membershipLevel = membershipLevel;
+
+    const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     // 添加搜索功能
     if (search) {
+      const safeSearch = escapeRegex(search);
       if (searchType) {
         // 指定搜索類型
         if (searchType === 'name') {
-          query.name = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+          query.name = { $regex: safeSearch, $options: 'i' }; // 不區分大小寫的模糊搜索
         } else if (searchType === 'email') {
-          query.email = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+          query.email = { $regex: safeSearch, $options: 'i' }; // 不區分大小寫的模糊搜索
         } else if (searchType === 'phone') {
-          query.phone = { $regex: search, $options: 'i' }; // 不區分大小寫的模糊搜索
+          query.phone = { $regex: safeSearch, $options: 'i' }; // 不區分大小寫的模糊搜索
         }
       } else {
-        // 沒有指定搜索類型時，同時搜索姓名和郵箱
+        // 沒有指定搜索類型時，同時搜索姓名、郵箱與電話
         query.$or = [
-          { name: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } }
+          { name: { $regex: safeSearch, $options: 'i' } },
+          { email: { $regex: safeSearch, $options: 'i' } },
+          { phone: { $regex: safeSearch, $options: 'i' } }
         ];
       }
     }

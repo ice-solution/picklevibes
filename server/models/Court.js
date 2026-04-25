@@ -200,19 +200,12 @@ courtSchema.methods.getPriceForTime = function(startTime, date = null) {
   const weekendType = date ? weekendService.getWeekendType(date) : 'weekday';
   const hour = parseInt(startTime.split(':')[0]);
 
-  // 紅日：08:00-24:00 優先使用「紅日」slot；若未設置則 fallback 到「繁忙時間」
-  if (isWeekend && weekendType === 'holiday') {
+  // 週末/紅日：08:00-24:00 優先使用「紅日」slot（若有配置），否則 fallback 到「繁忙時間」
+  // 注意：目前營運規則把星期六/日也視為可套用「紅日」價格（若場地有設置「紅日」時段）。
+  if (isWeekend) {
     if (hour >= 8 && hour < 24) {
       const holidaySlot = this.pricing.timeSlots.find((slot) => slot.name === '紅日');
       if (holidaySlot) return holidaySlot.price;
-      const peakSlot = this.pricing.timeSlots.find((slot) => slot.name === '繁忙時間');
-      if (peakSlot) return peakSlot.price;
-    }
-  }
-
-  // 週末：08:00-24:00 使用繁忙時間價格
-  if (isWeekend) {
-    if (hour >= 8 && hour < 24) {
       const peakSlot = this.pricing.timeSlots.find((slot) => slot.name === '繁忙時間');
       if (peakSlot) return peakSlot.price;
     }
@@ -240,18 +233,11 @@ courtSchema.methods.getTimeSlotName = function(startTime, date = null) {
   const weekendType = date ? weekendService.getWeekendType(date) : 'weekday';
   const hour = parseInt(startTime.split(':')[0]);
 
-  // 紅日：08:00-24:00 顯示為紅日（若配置），否則仍顯示繁忙時間
-  if (isWeekend && weekendType === 'holiday') {
+  // 週末/紅日：08:00-24:00 若有「紅日」slot 則顯示紅日，否則顯示繁忙時間
+  if (isWeekend) {
     if (hour >= 8 && hour < 24) {
       const hasHolidaySlot = this.pricing.timeSlots?.some((slot) => slot.name === '紅日');
       return hasHolidaySlot ? '紅日' : '繁忙時間';
-    }
-  }
-
-  // 週末：08:00-24:00 顯示為繁忙時間
-  if (isWeekend) {
-    if (hour >= 8 && hour < 24) {
-      return '繁忙時間';
     }
   }
   

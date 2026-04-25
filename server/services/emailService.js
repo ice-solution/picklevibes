@@ -9,6 +9,12 @@ function orderItemDisplayName(item) {
   return item.size ? `${item.name}（尺碼：${item.size}）` : item.name;
 }
 
+/** 內部通知收件人：優先 NOTICE_EMAIL（.env），否則 EMAIL_USER，再否則 GMAIL_USER */
+function getNoticeRecipientEmail() {
+  const pick = (v) => (v && String(v).trim() ? String(v).trim() : '');
+  return pick(process.env.NOTICE_EMAIL) || pick(process.env.EMAIL_USER) || pick(process.env.GMAIL_USER);
+}
+
 class EmailService {
   constructor() {
     this.transporter = null;
@@ -1910,7 +1916,7 @@ PickleVibes 團隊
   }
 
   /**
-   * 發送訂單通知（寄給後台/內部信箱）
+   * 發送訂單通知（寄給後台/內部信箱；優先 NOTICE_EMAIL）
    */
   async sendOrderAdminNotificationEmail(userData, orderData) {
     try {
@@ -1918,9 +1924,9 @@ PickleVibes 團隊
         throw new Error('郵件服務未初始化');
       }
 
-      const adminEmail = process.env.EMAIL_USER;
+      const adminEmail = getNoticeRecipientEmail();
       if (!adminEmail) {
-        console.warn('EMAIL_USER 未設定，跳過訂單通知信');
+        console.warn('NOTICE_EMAIL / EMAIL_USER / GMAIL_USER 均未設定，跳過訂單通知信');
         return { success: true, skipped: true };
       }
 
@@ -2233,7 +2239,7 @@ PickleVibes 團隊
   }
 
   /**
-   * 教練學校要請：通知管理員信箱（EMAIL_USER）
+   * 教練學校要請：通知內部信箱（優先 NOTICE_EMAIL）
    */
   async sendCoachScheduleRequestEmail({
     coachName,
@@ -2243,9 +2249,9 @@ PickleVibes 團隊
     adminPanelUrl
   }) {
     try {
-      const to = process.env.EMAIL_USER || process.env.GMAIL_USER;
+      const to = getNoticeRecipientEmail();
       if (!to) {
-        console.warn('⚠️ 未設定 EMAIL_USER / GMAIL_USER，略過教練要請郵件');
+        console.warn('⚠️ 未設定 NOTICE_EMAIL / EMAIL_USER / GMAIL_USER，略過教練要請郵件');
         return { success: false, error: '郵件收件人未設定' };
       }
       const subject = `[教練要請] ${coachName} ${dateLabel} - ${timeRange}`;

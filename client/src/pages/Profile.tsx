@@ -1,14 +1,16 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import axios from 'axios';
+import QRCode from 'qrcode';
 import { 
   UserIcon, 
   CogIcon,
   BellIcon,
   ShoppingBagIcon,
-  LockClosedIcon
+  LockClosedIcon,
+  QrCodeIcon
 } from '@heroicons/react/24/outline';
 
 const Profile: React.FC = () => {
@@ -39,21 +41,91 @@ const Profile: React.FC = () => {
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
 
+  /** API 通常回傳 id；少數情況僅有 _id */
+  const mongoUserId = useMemo(() => {
+    if (!user) return '';
+    const u = user as { id?: unknown; _id?: unknown };
+    const raw = u.id ?? u._id;
+    if (raw == null || raw === '') return '';
+    return String(raw).trim();
+  }, [user]);
+
+  const [memberQrSvg, setMemberQrSvg] = useState<string | null>(null);
+  const [pointsBalance, setPointsBalance] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!user || isEditing) return;
+    setFormData((prev) => ({
+      ...prev,
+      name: user.name || '',
+      phone: user.phone || '',
+      preferences: {
+        notifications: {
+          email: user.preferences?.notifications?.email ?? true,
+          sms: user.preferences?.notifications?.sms ?? false
+        },
+        skillLevel: user.preferences?.skillLevel || 'beginner'
+      }
+    }));
+  }, [user, isEditing]);
+
+  const refreshMemberQrAndBalance = useCallback(async () => {
+    if (!mongoUserId) {
+      setMemberQrSvg(null);
+      setPointsBalance(null);
+      return;
+    }
+    try {
+      const svg = await QRCode.toString(mongoUserId, {
+        type: 'svg',
+        width: 208,
+        margin: 2,
+        errorCorrectionLevel: 'M'
+      });
+      setMemberQrSvg(svg);
+    } catch {
+      setMemberQrSvg(null);
+    }
+    try {
+      const balRes = await axios.get('/recharge/balance');
+      setPointsBalance(typeof balRes.data?.balance === 'number' ? balRes.data.balance : null);
+    } catch {
+      setPointsBalance(null);
+    }
+  }, [mongoUserId]);
+
+  useEffect(() => {
+    void refreshMemberQrAndBalance();
+  }, [refreshMemberQrAndBalance]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
     
     if (name.startsWith('preferences.')) {
       const keys = name.split('.');
-      setFormData(prev => ({
-        ...prev,
-        preferences: {
-          ...prev.preferences,
-          [keys[1]]: {
-            ...(prev.preferences[keys[1] as keyof typeof prev.preferences] as any),
-            [keys[2]]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+      if (keys.length === 3) {
+        const [, group, field] = keys;
+        setFormData((prev) => ({
+          ...prev,
+          preferences: {
+            ...prev.preferences,
+            [group]: {
+              ...((prev.preferences as Record<string, unknown>)[group] as Record<string, unknown>),
+              [field]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+            }
           }
-        }
-      }));
+        }));
+      } else if (keys.length === 2) {
+        const [, field] = keys;
+        const val = type === 'checkbox' ? (e.target as HTMLInputElement).checked : value;
+        setFormData((prev) => ({
+          ...prev,
+          preferences: {
+            ...prev.preferences,
+            [field]: val
+          }
+        }));
+      }
     } else {
       setFormData(prev => ({
         ...prev,
@@ -165,7 +237,7 @@ const Profile: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -176,6 +248,44 @@ const Profile: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">個人資料</h1>
           <p className="text-gray-600">管理您的個人信息和偏好設置</p>
         </motion.div>
+
+        {mongoUserId && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="mb-8 bg-white rounded-xl shadow-lg border border-gray-200 p-6 max-w-md mx-auto"
+          >
+            <div className="flex items-center justify-center gap-2 text-gray-500 text-sm mb-4">
+              <QrCodeIcon className="w-5 h-5" />
+              <span>會員 QR</span>
+            </div>
+            <p className="text-center text-lg font-semibold text-gray-900 mb-3">
+              {user?.name || formData.name}
+            </p>
+            <div className="flex justify-center mb-3">
+              {memberQrSvg ? (
+                <div
+                  className="w-52 min-h-[13rem] flex items-center justify-center rounded-lg border border-gray-100 bg-white p-2 [&_svg]:max-h-[13rem] [&_svg]:w-auto [&_svg]:h-auto"
+                  dangerouslySetInnerHTML={{ __html: memberQrSvg }}
+                  role="img"
+                  aria-label="會員編號 QR"
+                />
+              ) : (
+                <div className="w-52 h-52 rounded-lg bg-gray-100 animate-pulse" aria-hidden />
+              )}
+            </div>
+            <p className="text-center text-base text-gray-700">
+              現有積分：
+              <span className="ml-1 font-bold text-primary-600">
+                {pointsBalance !== null ? `${pointsBalance} 分` : '—'}
+              </span>
+            </p>
+            <p className="text-xs text-gray-500 text-center mt-3 leading-relaxed">
+              QR 內容為您的會員編號（MongoDB ID），供場地核對身分。請勿截圖分享予不信任第三方。
+            </p>
+          </motion.div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* 主要內容 */}
