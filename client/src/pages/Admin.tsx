@@ -21,6 +21,11 @@ import OrderManagement from '../components/Admin/OrderManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import ReportManagement from '../components/Admin/ReportManagement';
 import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
+import TierManagement from '../components/Admin/TierManagement';
+import VlogManagement from '../components/Admin/VlogManagement';
+import HotNewsManagement from '../components/Admin/HotNewsManagement';
+import GameHallManagement from '../components/Admin/GameHallManagement';
+import GameClientManagement from '../components/Admin/GameClientManagement';
 import api from '../services/api';
 import { 
   CalendarDaysIcon, 
@@ -68,7 +73,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'coach-requests', 'users', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'coach-requests', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -115,6 +120,11 @@ const Admin: React.FC = () => {
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon },
     { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon },
     { id: 'users', name: '用戶管理', icon: UsersIcon },
+    { id: 'tiers', name: 'Tier 管理', icon: TagIcon },
+    { id: 'vlogs', name: 'Vlog 管理', icon: DocumentChartBarIcon },
+    { id: 'hotnews', name: 'HotNews 管理', icon: DocumentChartBarIcon },
+    { id: 'game-halls', name: 'GameHall 管理', icon: DocumentChartBarIcon },
+    { id: 'game-clients', name: 'GameClient 管理', icon: DocumentChartBarIcon },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'activities', name: '活動管理', icon: CalendarIcon },
@@ -291,6 +301,26 @@ const Admin: React.FC = () => {
 
             {activeTab === 'users' && (
               <UserManagement />
+            )}
+
+            {activeTab === 'tiers' && (
+              <TierManagement />
+            )}
+
+            {activeTab === 'vlogs' && (
+              <VlogManagement />
+            )}
+
+            {activeTab === 'hotnews' && (
+              <HotNewsManagement />
+            )}
+
+            {activeTab === 'game-halls' && (
+              <GameHallManagement />
+            )}
+
+            {activeTab === 'game-clients' && (
+              <GameClientManagement />
             )}
 
             {activeTab === 'redeem' && (

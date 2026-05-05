@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useBooking } from '../contexts/BookingContext';
 import SEO from '../components/SEO/SEO';
+import HotNews from '../components/Home/HotNews';
 import Hero from '../components/Home/Hero';
 import Features from '../components/Home/Features';
 import Courts from '../components/Home/Courts';
@@ -31,6 +32,7 @@ const Home: React.FC = () => {
       animate={{ opacity: 1 }}
       transition={{ duration: 0.5 }}
     >
+      <HotNews />
       <Hero />
       <Features />
       <Courts />

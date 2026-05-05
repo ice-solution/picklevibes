@@ -1,4 +1,5 @@
 const express = require('express');
+const http = require('http');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -9,6 +10,7 @@ const weekendService = require('./services/weekendService');
 require('dotenv').config();
 
 const app = express();
+const server = http.createServer(app);
 
 // 信任代理 - 因為使用 Cloudflare
 // 這樣 Express 可以正確識別客戶端真實 IP
@@ -80,6 +82,25 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization', 'x-requested-with']
 }));
 
+// Socket.IO（遊戲/即時通知會用到）
+const { Server } = require('socket.io');
+const io = new Server(server, {
+  cors: {
+    origin: allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST']
+  }
+});
+app.set('io', io);
+
+// 先提供最小連線（後續會在 games routes 裡擴展事件）
+io.on('connection', (socket) => {
+  socket.emit('hello', { ok: true });
+});
+
+// 遊戲相關 socket handlers
+require('./sockets/gameSockets')(io);
+
 // Stripe Webhook 需要原始請求體，必須在 express.json() 之前
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 
@@ -101,6 +122,9 @@ const staticFileMiddleware = (req, res, next) => {
   res.header('Access-Control-Allow-Credentials', 'true');
   next();
 };
+
+// SEO files（sitemap / robots）必須在 404 之前
+app.use(require('./routes/seo'));
 
 // 本地開發路徑
 app.use('/uploads', staticFileMiddleware, express.static(path.join(__dirname, '../uploads')));
@@ -144,6 +168,12 @@ app.use('/api/activities', require('./routes/activities')); // Added activities 
 app.use('/api/regular-activities', require('./routes/regularActivities')); // Added regular activities routes
 app.use('/api/full-venue', require('./routes/fullVenue')); // Added full venue routes
 app.use('/api/weekend', require('./routes/weekend')); // Added weekend management routes
+app.use('/api/tiers', require('./routes/tiers'));
+app.use('/api/vlogs', require('./routes/vlogs'));
+app.use('/api/games', require('./routes/games'));
+app.use('/api/game-auth', require('./routes/gameAuth'));
+app.use('/api/game-halls', require('./routes/gameHalls'));
+app.use('/api/game-clients', require('./routes/gameClients'));
 app.use('/api/stats', require('./routes/stats')); // Added statistics routes
 app.use('/api/products', require('./routes/products')); // Added products routes
 app.use('/api/categories', require('./routes/categories')); // Added categories routes
@@ -209,7 +239,7 @@ const scheduledSync = new ScheduledSync();
 scheduledSync.initialize();
 
 const PORT = process.env.PORT || 5009;
-app.listen(PORT, () => {
+server.listen(PORT, () => {
   console.log(`🚀 服務器運行在端口 ${PORT}`);
 });
 

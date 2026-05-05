@@ -10,7 +10,8 @@ import {
   BellIcon,
   ShoppingBagIcon,
   LockClosedIcon,
-  QrCodeIcon
+  QrCodeIcon,
+  TagIcon
 } from '@heroicons/react/24/outline';
 
 const Profile: React.FC = () => {
@@ -52,6 +53,14 @@ const Profile: React.FC = () => {
 
   const [memberQrSvg, setMemberQrSvg] = useState<string | null>(null);
   const [pointsBalance, setPointsBalance] = useState<number | null>(null);
+  const [tierProgress, setTierProgress] = useState<{
+    enabled: boolean;
+    annualSpent?: number;
+    remaining?: number;
+    progressPct?: number;
+    currentTier?: { name: string; color?: string } | null;
+    nextTier?: { name: string; color?: string; minAnnualSpent?: number } | null;
+  } | null>(null);
 
   useEffect(() => {
     if (!user || isEditing) return;
@@ -97,6 +106,68 @@ const Profile: React.FC = () => {
   useEffect(() => {
     void refreshMemberQrAndBalance();
   }, [refreshMemberQrAndBalance]);
+
+  const refreshTierProgress = useCallback(async () => {
+    try {
+      const res = await axios.get('/tiers/progress');
+      const data = res.data?.data;
+      if (!data) {
+        setTierProgress(null);
+        return;
+      }
+      if (data.enabled === false) {
+        setTierProgress({ enabled: false });
+        return;
+      }
+      setTierProgress({
+        enabled: true,
+        annualSpent: typeof data.annualSpent === 'number' ? data.annualSpent : 0,
+        remaining: typeof data.remaining === 'number' ? data.remaining : 0,
+        progressPct: typeof data.progressPct === 'number' ? data.progressPct : 0,
+        currentTier: data.currentTier ? { name: data.currentTier.name, color: data.currentTier.color } : null,
+        nextTier: data.nextTier
+          ? { name: data.nextTier.name, color: data.nextTier.color, minAnnualSpent: data.nextTier.minAnnualSpent }
+          : null
+      });
+    } catch {
+      setTierProgress(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshTierProgress();
+  }, [refreshTierProgress]);
+
+  const ProgressRing: React.FC<{ percent: number; color: string; label: string }> = ({ percent, color, label }) => {
+    const size = 120;
+    const stroke = 10;
+    const r = (size - stroke) / 2;
+    const c = 2 * Math.PI * r;
+    const p = Math.max(0, Math.min(100, Math.round(percent)));
+    const dash = (p / 100) * c;
+    return (
+      <div className="flex flex-col items-center">
+        <svg width={size} height={size} className="block">
+          <circle cx={size / 2} cy={size / 2} r={r} stroke="#e5e7eb" strokeWidth={stroke} fill="none" />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={color}
+            strokeWidth={stroke}
+            fill="none"
+            strokeLinecap="round"
+            strokeDasharray={`${dash} ${c - dash}`}
+            transform={`rotate(-90 ${size / 2} ${size / 2})`}
+          />
+          <text x="50%" y="50%" dominantBaseline="middle" textAnchor="middle" className="fill-gray-900 font-bold" fontSize="28">
+            {p}%
+          </text>
+        </svg>
+        <div className="text-xs text-gray-600 mt-2">{label}</div>
+      </div>
+    );
+  };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
@@ -249,42 +320,98 @@ const Profile: React.FC = () => {
           <p className="text-gray-600">管理您的個人信息和偏好設置</p>
         </motion.div>
 
-        {mongoUserId && (
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35 }}
-            className="mb-8 bg-white rounded-xl shadow-lg border border-gray-200 p-6 max-w-md mx-auto"
-          >
-            <div className="flex items-center justify-center gap-2 text-gray-500 text-sm mb-4">
-              <QrCodeIcon className="w-5 h-5" />
-              <span>會員 QR</span>
-            </div>
-            <p className="text-center text-lg font-semibold text-gray-900 mb-3">
-              {user?.name || formData.name}
-            </p>
-            <div className="flex justify-center mb-3">
-              {memberQrSvg ? (
-                <div
-                  className="w-52 min-h-[13rem] flex items-center justify-center rounded-lg border border-gray-100 bg-white p-2 [&_svg]:max-h-[13rem] [&_svg]:w-auto [&_svg]:h-auto"
-                  dangerouslySetInnerHTML={{ __html: memberQrSvg }}
-                  role="img"
-                  aria-label="會員編號 QR"
-                />
-              ) : (
-                <div className="w-52 h-52 rounded-lg bg-gray-100 animate-pulse" aria-hidden />
-              )}
-            </div>
-            <p className="text-center text-base text-gray-700">
-              現有積分：
-              <span className="ml-1 font-bold text-primary-600">
-                {pointsBalance !== null ? `${pointsBalance} 分` : '—'}
-              </span>
-            </p>
-            <p className="text-xs text-gray-500 text-center mt-3 leading-relaxed">
-              QR 內容為您的會員編號（MongoDB ID），供場地核對身分。請勿截圖分享予不信任第三方。
-            </p>
-          </motion.div>
+        {(mongoUserId || tierProgress?.enabled) && (
+          <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
+            {mongoUserId && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+                className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 w-full min-h-[420px] flex flex-col"
+              >
+                <div className="flex items-center justify-center gap-2 text-gray-500 text-sm mb-4">
+                  <QrCodeIcon className="w-5 h-5" />
+                  <span>會員 QR</span>
+                </div>
+                <p className="text-center text-lg font-semibold text-gray-900 mb-3">
+                  {user?.name || formData.name}
+                </p>
+                <div className="flex justify-center mb-3 flex-1 items-center">
+                  {memberQrSvg ? (
+                    <div
+                      className="w-52 min-h-[13rem] flex items-center justify-center rounded-lg border border-gray-100 bg-white p-2 [&_svg]:max-h-[13rem] [&_svg]:w-auto [&_svg]:h-auto"
+                      dangerouslySetInnerHTML={{ __html: memberQrSvg }}
+                      role="img"
+                      aria-label="會員編號 QR"
+                    />
+                  ) : (
+                    <div className="w-52 h-52 rounded-lg bg-gray-100 animate-pulse" aria-hidden />
+                  )}
+                </div>
+                <p className="text-center text-base text-gray-700">
+                  現有積分：
+                  <span className="ml-1 font-bold text-primary-600">
+                    {pointsBalance !== null ? `${pointsBalance} 分` : '—'}
+                  </span>
+                </p>
+              </motion.div>
+            )}
+
+            {!!tierProgress?.enabled && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35 }}
+                className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 w-full min-h-[420px] flex flex-col"
+              >
+                <div className="flex items-center justify-center gap-2 text-gray-500 text-sm mb-4">
+                  <TagIcon className="w-5 h-5" />
+                  <span>會員 Tier</span>
+                </div>
+
+                <p className="text-center text-lg font-semibold text-gray-900 mb-3">
+                  {tierProgress.currentTier?.name || '—'}
+                </p>
+
+                <div className="flex justify-center mb-4 flex-1 items-center">
+                  <ProgressRing
+                    percent={tierProgress.progressPct ?? 0}
+                    color={tierProgress.nextTier?.color || tierProgress.currentTier?.color || '#2563eb'}
+                    label={tierProgress.nextTier ? `距離「${tierProgress.nextTier.name}」` : '已達最高 Tier'}
+                  />
+                </div>
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center justify-between text-gray-700">
+                    <span>一年內總消費</span>
+                    <span className="font-bold text-gray-900">
+                      {(tierProgress.annualSpent ?? 0).toLocaleString()} 分
+                    </span>
+                  </div>
+                  {tierProgress.nextTier ? (
+                    <>
+                      <div className="flex items-center justify-between text-gray-700">
+                        <span>下一級門檻</span>
+                        <span className="font-bold text-gray-900">
+                          {(tierProgress.nextTier.minAnnualSpent ?? 0).toLocaleString()} 分
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between text-gray-700">
+                        <span>還差</span>
+                        <span className="font-bold text-primary-600">
+                          {(tierProgress.remaining ?? 0).toLocaleString()} 分
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-center text-gray-600">
+                      你已達到最高 Tier，感謝支持。
+                    </div>
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </div>
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

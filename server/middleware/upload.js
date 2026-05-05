@@ -175,6 +175,44 @@ const processActivityImage = async (req, res, next) => {
   }
 };
 
+// Vlog 上傳配置（保留原始比例，不裁切；限制最大寬度避免過大檔案）
+const vlogUpload = createUploadConfig('vlogs', 'vlog');
+const processVlogImage = async (req, res, next) => {
+  try {
+    if (!req.file) return next();
+
+    const inputPath = req.file.path;
+    const inputExt = path.extname(inputPath).toLowerCase();
+    const outputPath = inputPath.replace(/\.[^/.]+$/, '.jpg');
+
+    let tempPath = inputPath;
+    if (inputExt === '.jpg' || inputExt === '.jpeg') {
+      tempPath = inputPath.replace(/\.(jpg|jpeg)$/i, '_temp.jpg');
+      fs.renameSync(inputPath, tempPath);
+    }
+
+    await sharp(tempPath)
+      .resize({ width: 1600, withoutEnlargement: true })
+      .jpeg({ quality: 85, progressive: true })
+      .toFile(outputPath);
+
+    if (tempPath !== outputPath) {
+      fs.unlinkSync(tempPath);
+    }
+
+    req.file.path = outputPath;
+    req.file.filename = path.basename(outputPath);
+    next();
+  } catch (error) {
+    console.error('Vlog 圖片處理錯誤:', error);
+    res.status(500).json({
+      success: false,
+      message: '圖片處理失敗',
+      error: error.message
+    });
+  }
+};
+
 // 刪除文件的中間件
 const deleteFile = async (filePath) => {
   try {
@@ -194,6 +232,10 @@ module.exports = {
   // 活動上傳
   activityUpload,
   processActivityImage,
+
+  // Vlog 上傳
+  vlogUpload,
+  processVlogImage,
   
   // 通用功能
   createUploadConfig,

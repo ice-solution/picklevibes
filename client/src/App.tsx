@@ -39,6 +39,8 @@ import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import OrderHistory from './pages/OrderHistory';
+import Vlog from './pages/Vlog';
+import GameJoin from './pages/GameJoin';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
@@ -58,6 +60,7 @@ function App() {
                 <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/about" element={<About />} />
+                <Route path="/vlog/:id" element={<Vlog />} />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/privacy" element={<Privacy />} />
                 <Route path="/terms" element={<Terms />} />
@@ -100,6 +103,14 @@ function App() {
                       <Profile />
                     </ProtectedRoute>
                   } 
+                />
+                <Route
+                  path="/game/join/:sessionId"
+                  element={
+                    <ProtectedRoute>
+                      <GameJoin />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route 
                   path="/admin" 

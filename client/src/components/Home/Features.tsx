@@ -1,5 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 import { 
   HeartIcon, 
   UserGroupIcon, 
@@ -10,6 +12,7 @@ import {
 } from '@heroicons/react/24/outline';
 
 const Features: React.FC = () => {
+  const { user } = useAuth();
   const features = [
     {
       icon: HeartIcon,
@@ -65,6 +68,15 @@ const Features: React.FC = () => {
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
             讓我們直截了當。是什麼讓我們與眾不同？在所有世界上的匹克球場所中，為什麼選擇這一個？
           </p>
+
+          <div className="mt-6 flex justify-center">
+            <Link
+              to={user ? '/profile' : '/register'}
+              className="group bg-accent-400 hover:bg-accent-500 text-gray-900 font-bold py-3 px-7 rounded-full text-base transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center gap-2"
+            >
+              立即登記
+            </Link>
+          </div>
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">

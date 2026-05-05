@@ -1,12 +1,9 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
-import { PlayIcon, ArrowRightIcon } from '@heroicons/react/24/solid';
-import { useAuth } from '../../contexts/AuthContext';
+import { ArrowRightIcon } from '@heroicons/react/24/solid';
 
 const Hero: React.FC = () => {
-  const { user } = useAuth();
-
   return (
     <section className="relative min-h-screen flex items-center justify-center overflow-hidden">
       {/* 背景圖片 */}
@@ -33,14 +30,6 @@ const Hero: React.FC = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-            <Link
-              to={user ? '/profile' : '/register'}
-              className="group bg-accent-400 hover:bg-accent-500 text-gray-900 font-bold py-4 px-8 rounded-full text-lg transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center gap-2"
-            >
-              <PlayIcon className="w-6 h-6" />
-              立即登記
-            </Link>
-            
             <Link
               to="/about"
               className="group border-2 border-white text-white hover:bg-white hover:text-gray-900 font-bold py-4 px-8 rounded-full text-lg transition-all duration-300 flex items-center gap-2"

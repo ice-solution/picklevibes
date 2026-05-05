@@ -1,0 +1,238 @@
+{
+  "info": {
+    "_postman_id": "f3b45722-2b6c-4c6d-8e1a-2e1c0f3f4b01",
+    "name": "PickleVibes Game (UAT)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://uat.picklevibes.hk" },
+    { "key": "gameHallId", "value": "" },
+    { "key": "gameJwt", "value": "" },
+    { "key": "adminJwt", "value": "" },
+    { "key": "gameClientId", "value": "" },
+    { "key": "gameClientSecret", "value": "" },
+    { "key": "userJwt", "value": "" },
+    { "key": "sessionId", "value": "" },
+    { "key": "sig", "value": "" },
+    { "key": "socketCode", "value": "" },
+    { "key": "userId", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": { "type": "text/javascript", "exec": [] }
+    },
+    {
+      "listen": "test",
+      "script": { "type": "text/javascript", "exec": [] }
+    }
+  ],
+  "item": [
+    {
+      "name": "0) Admin - Create Game Client (get one-time secret)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json", "type": "text" },
+          { "key": "Authorization", "value": "Bearer {{adminJwt}}", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientId\": \"{{gameClientId}}\",\n  \"name\": \"postman client\",\n  \"isActive\": true\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/game-clients",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "game-clients" ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 201', () => pm.response.code === 201);",
+              "const d = pm.response.json().data;",
+              "pm.test('has one-time secret', () => !!d.clientSecret);",
+              "pm.environment.set('gameClientSecret', d.clientSecret);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "0) Game Client Login (clientId + secret -> GAME JWT)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientId\": \"{{gameClientId}}\",\n  \"clientSecret\": \"{{gameClientSecret}}\",\n  \"expiresInDays\": 30\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/game-auth/login",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "game-auth", "login" ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.code === 200);",
+              "const d = pm.response.json().data;",
+              "pm.environment.set('gameJwt', d.token);",
+              "pm.test('token issued', () => !!d.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "0) Admin - Issue GAME JWT",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json", "type": "text" },
+          { "key": "Authorization", "value": "Bearer {{adminJwt}}", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"clientId\": \"postman-test\",\n  \"expiresInDays\": 30\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/game-auth/token",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "game-auth", "token" ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.code === 200);",
+              "const d = pm.response.json().data;",
+              "pm.environment.set('gameJwt', d.token);",
+              "pm.test('token issued', () => !!d.token);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1) Get Game Info (generate session + QR)",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{gameJwt}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/games/{{gameHallId}}/info",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "{{gameHallId}}", "info" ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('status 200', () => pm.response.code === 200);",
+              "const d = pm.response.json().data;",
+              "pm.environment.set('sessionId', d.session._id);",
+              "pm.environment.set('sig', d.qr.sig);",
+              "pm.environment.set('socketCode', d.session.socketCode);",
+              "pm.test('has qr imageUrl', () => !!d.qr.imageUrl);",
+              "console.log('joinUrl:', d.qr.joinUrl);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2) Get QR PNG (image URL)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/games/sessions/{{sessionId}}/qrcode.png?sig={{sig}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "sessions", "{{sessionId}}", "qrcode.png" ],
+          "query": [ { "key": "sig", "value": "{{sig}}" } ]
+        }
+      }
+    },
+    {
+      "name": "3) User Join Session (after scanning QR) [needs user JWT]",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json", "type": "text" },
+          { "key": "Authorization", "value": "Bearer {{userJwt}}", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"sig\": \"{{sig}}\",\n  \"code\": \"{{socketCode}}\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/games/sessions/{{sessionId}}/join",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "sessions", "{{sessionId}}", "join" ]
+        }
+      }
+    },
+    {
+      "name": "3.5) User Start Game (press start on mobile) [needs user JWT]",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userJwt}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/games/sessions/{{sessionId}}/start",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "sessions", "{{sessionId}}", "start" ]
+        }
+      }
+    },
+    {
+      "name": "4) Submit Game Result [game JWT]",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json", "type": "text" },
+          { "key": "Authorization", "value": "Bearer {{gameJwt}}", "type": "text" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"scores\": 123,\n  \"history\": {\n    \"00:00\": { \"x\": 11, \"y\": 12 }\n  }\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/games/sessions/{{sessionId}}/result",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "sessions", "{{sessionId}}", "result" ]
+        }
+      }
+    },
+    {
+      "name": "5) Get Leaderboard (by gameHallId)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/games/{{gameHallId}}/leaderboard?limit=20",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "{{gameHallId}}", "leaderboard" ],
+          "query": [ { "key": "limit", "value": "20" } ]
+        }
+      }
+    }
+  ]
+}
+
