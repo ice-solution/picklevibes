@@ -32,6 +32,10 @@ const gameMatchSchema = new mongoose.Schema({
     type: Number,
     default: null
   },
+  hitAccuracy: {
+    type: Number,
+    default: null
+  },
   maxCombo: {
     type: Number,
     default: null

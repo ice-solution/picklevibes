@@ -122,6 +122,7 @@ Header：`Authorization: Bearer <GAME_JWT>`
   "userId": "mongo_user_id",
   "scores": 123,
   "hitRate": 0.87,
+  "hitAccuracy": 0.92,
   "maxCombo": 25,
   "history": [
     { "time": 0.00, "x": 11, "y": 12 }

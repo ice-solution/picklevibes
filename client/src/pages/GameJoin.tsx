@@ -123,12 +123,21 @@ const GameJoin: React.FC = () => {
     return Number.isFinite(n) ? n : null;
   }, [lastResult]);
 
+  const resultHitAccuracy = useMemo(() => {
+    const v = lastResult?.hitAccuracy;
+    if (v === undefined || v === null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }, [lastResult]);
+
   const resultMaxCombo = useMemo(() => {
     const v = lastResult?.maxCombo;
     if (v === undefined || v === null) return null;
     const n = Number(v);
     return Number.isFinite(n) ? n : null;
   }, [lastResult]);
+
+  const formatPercent2dp = (n: number | null) => (n === null ? '--' : `${(n * 100).toFixed(2)}%`);
 
   return (
     <div className="min-h-screen bg-gray-50 py-10">
@@ -180,23 +189,29 @@ const GameJoin: React.FC = () => {
 
           {lastResult ? (
             <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="grid grid-cols-3 gap-3">
-                <div className="text-left">
-                  <div className="text-xs font-semibold text-primary-600">分數</div>
-                  <div className="mt-1 text-2xl font-extrabold text-primary-600 tabular-nums">
+              <div className="grid grid-cols-2 gap-4 text-center">
+                <div>
+                  <div className="text-sm font-semibold text-primary-600">分數</div>
+                  <div className="mt-1 text-3xl font-extrabold text-primary-600 tabular-nums">
                     {resultScores ?? '--'}
                   </div>
                 </div>
-                <div className="text-left">
-                  <div className="text-xs font-semibold text-primary-600">Hit Rate</div>
-                  <div className="mt-1 text-2xl font-extrabold text-primary-600 tabular-nums">
-                    {resultHitRate === null ? '--' : resultHitRate}
+                <div>
+                  <div className="text-sm font-semibold text-primary-600">Max Combo</div>
+                  <div className="mt-1 text-3xl font-extrabold text-primary-600 tabular-nums">
+                    {resultMaxCombo ?? '--'}
                   </div>
                 </div>
-                <div className="text-left">
-                  <div className="text-xs font-semibold text-primary-600">Max Combo</div>
-                  <div className="mt-1 text-2xl font-extrabold text-primary-600 tabular-nums">
-                    {resultMaxCombo ?? '--'}
+                <div>
+                  <div className="text-sm font-semibold text-primary-600">Hit Rate</div>
+                  <div className="mt-1 text-3xl font-extrabold text-primary-600 tabular-nums">
+                    {formatPercent2dp(resultHitRate)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-sm font-semibold text-primary-600">Hit Accuracy</div>
+                  <div className="mt-1 text-3xl font-extrabold text-primary-600 tabular-nums">
+                    {formatPercent2dp(resultHitAccuracy)}
                   </div>
                 </div>
               </div>

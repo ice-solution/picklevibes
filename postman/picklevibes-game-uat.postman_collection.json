@@ -212,7 +212,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"scores\": 123,\n  \"hitRate\": 0.87,\n  \"maxCombo\": 25,\n  \"history\": [\n    { \"time\": 0.00, \"x\": 11, \"y\": 12 }\n  ]\n}"
+          "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"scores\": 123,\n  \"hitRate\": 0.87,\n  \"hitAccuracy\": 0.92,\n  \"maxCombo\": 25,\n  \"history\": [\n    { \"time\": 0.00, \"x\": 11, \"y\": 12 }\n  ]\n}"
         },
         "url": {
           "raw": "{{baseUrl}}/api/games/sessions/{{sessionId}}/result",

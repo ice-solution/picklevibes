@@ -240,6 +240,7 @@ router.post('/sessions/:sessionId/result', [
   body('userId').isMongoId().withMessage('userId 必須為 MongoId'),
   body('scores').isNumeric().withMessage('scores 必須為數字'),
   body('hitRate').optional().isFloat().withMessage('hitRate 必須為 float'),
+  body('hitAccuracy').optional().isFloat().withMessage('hitAccuracy 必須為 float'),
   body('maxCombo').optional().isInt().withMessage('maxCombo 必須為 number'),
   body('history').optional().custom((value) => {
     // history 可以係 object 或 array（由遊戲端決定格式）
@@ -270,6 +271,7 @@ router.post('/sessions/:sessionId/result', [
       user: userId,
       scores: Number(req.body.scores),
       hitRate: req.body.hitRate === undefined || req.body.hitRate === null ? null : Number(req.body.hitRate),
+      hitAccuracy: req.body.hitAccuracy === undefined || req.body.hitAccuracy === null ? null : Number(req.body.hitAccuracy),
       maxCombo: req.body.maxCombo === undefined || req.body.maxCombo === null ? null : Number(req.body.maxCombo),
       history: req.body.history ?? {}
     });
@@ -294,6 +296,7 @@ router.post('/sessions/:sessionId/result', [
         matchId: String(match._id),
         scores: Number(req.body.scores),
         hitRate: match.hitRate,
+        hitAccuracy: match.hitAccuracy,
         maxCombo: match.maxCombo
       });
       io.to(`gameHall:${gameHall._id.toString()}`).emit('game:matchSaved', {
@@ -301,6 +304,7 @@ router.post('/sessions/:sessionId/result', [
         userId: String(userId),
         scores: Number(req.body.scores),
         hitRate: match.hitRate,
+        hitAccuracy: match.hitAccuracy,
         maxCombo: match.maxCombo
       });
     }
