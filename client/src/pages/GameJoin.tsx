@@ -79,71 +79,99 @@ const GameJoin: React.FC = () => {
   const startGame = async () => {
     if (!sessionId) return;
     setStartStatus('starting');
-    setStartMessage('通知遊戲端開始中...');
+    setStartMessage('通知中...');
     try {
       await axios.post(`/games/sessions/${sessionId}/start`);
       setStartStatus('started');
-      setStartMessage('已通知遊戲端開始遊戲。');
+      setStartMessage('已通知');
     } catch (e: any) {
       setStartStatus('error');
       setStartMessage(e?.response?.data?.message || '通知失敗');
     }
   };
 
+  const resultScores = useMemo(() => {
+    const v = lastResult?.scores;
+    if (v === undefined || v === null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }, [lastResult]);
+
+  const resultHitRate = useMemo(() => {
+    const v = lastResult?.hitRate;
+    if (v === undefined || v === null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }, [lastResult]);
+
+  const resultMaxCombo = useMemo(() => {
+    const v = lastResult?.maxCombo;
+    if (v === undefined || v === null) return null;
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }, [lastResult]);
+
   return (
     <div className="min-h-screen bg-gray-50 py-10">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-xl shadow-lg border border-gray-200 p-6 max-w-xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900">加入遊戲廳</h1>
-          <p className="text-gray-600 mt-2">
-            掃描 QR 後會把你綁定到遊戲廳 session，之後可於手機按「開始遊戲」。
-          </p>
-
-          <div className="mt-6">
-            <div className="text-sm text-gray-700">
-              狀態：
-              <span className="ml-2 font-semibold">
-                {status === 'idle' && '準備中'}
-                {status === 'joining' && '加入中'}
-                {status === 'joined' && '已加入'}
-                {status === 'error' && '失敗'}
-              </span>
-            </div>
-            <div className="mt-2 text-sm text-gray-600">{message}</div>
-          </div>
+          <h1 className="text-2xl font-bold text-gray-900">開始遊戲</h1>
 
           {status === 'joined' ? (
             <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="text-sm font-semibold text-gray-900 mb-2">開始遊戲</div>
-              <div className="text-sm text-gray-600">
-                按下開始後，系統會通知遊戲端（大屏幕/遊戲機）開局。
-              </div>
-              <div className="mt-3 flex items-center gap-3">
+              <div className="mt-1">
                 <button
                   type="button"
-                  className="btn-primary"
+                  className="btn-primary w-full"
                   onClick={() => void startGame()}
                   disabled={startStatus === 'starting' || startStatus === 'started'}
                 >
                   {startStatus === 'starting' ? '通知中...' : startStatus === 'started' ? '已通知' : '開始遊戲'}
                 </button>
-                <div className="text-sm text-gray-600">{startMessage}</div>
+                {startMessage ? <div className="mt-2 text-sm text-gray-600">{startMessage}</div> : null}
+              </div>
+            </div>
+          ) : (
+            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="text-sm text-gray-600">{message || '處理中...'}</div>
+              {status === 'error' ? (
+                <div className="mt-3">
+                  <button type="button" className="btn-outline w-full" onClick={() => navigate('/profile')}>
+                    返回
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {lastResult ? (
+            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="text-left">
+                  <div className="text-xs font-semibold text-primary-600">分數</div>
+                  <div className="mt-1 text-2xl font-extrabold text-primary-600 tabular-nums">
+                    {resultScores ?? '--'}
+                  </div>
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-semibold text-primary-600">Hit Rate</div>
+                  <div className="mt-1 text-2xl font-extrabold text-primary-600 tabular-nums">
+                    {resultHitRate === null ? '--' : resultHitRate}
+                  </div>
+                </div>
+                <div className="text-left">
+                  <div className="text-xs font-semibold text-primary-600">Max Combo</div>
+                  <div className="mt-1 text-2xl font-extrabold text-primary-600 tabular-nums">
+                    {resultMaxCombo ?? '--'}
+                  </div>
+                </div>
               </div>
             </div>
           ) : null}
 
-          {lastResult ? (
-            <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="text-sm font-semibold text-gray-900 mb-2">最新遊戲結果</div>
-              <pre className="text-xs text-gray-700 whitespace-pre-wrap break-words">
-                {JSON.stringify(lastResult, null, 2)}
-              </pre>
-            </div>
-          ) : null}
-
-          <div className="mt-6 flex gap-3">
-            <button type="button" className="btn-outline" onClick={() => navigate('/profile')}>
-              返回個人資料
+          <div className="mt-6">
+            <button type="button" className="btn-outline w-full" onClick={() => navigate('/profile')}>
+              返回
             </button>
           </div>
         </div>

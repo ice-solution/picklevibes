@@ -68,7 +68,11 @@ connect 後 emit：
 
 當用戶完成掃碼 join（Step 3）後，遊戲端會收到：
 - event：`session:bound`
-- payload：`{ sessionId, userId }`
+- payload：`{ sessionId, userId, username }`
+
+同時會收到（可用作遊戲中動態設定）：
+- event：`session:setting`
+- payload：`{ sessionId, settings: { displayName: boolean } }`
 
 > 遊戲端收到 `session:bound` 後，即可把該 `userId` 綁到該房間（可用 `socketCode` 作 mapping）。
 
@@ -117,9 +121,11 @@ Header：`Authorization: Bearer <GAME_JWT>`
 {
   "userId": "mongo_user_id",
   "scores": 123,
-  "history": {
-    "00:00": { "x": 11, "y": 12 }
-  }
+  "hitRate": 0.87,
+  "maxCombo": 25,
+  "history": [
+    { "time": 0.00, "x": 11, "y": 12 }
+  ]
 }
 ```
 

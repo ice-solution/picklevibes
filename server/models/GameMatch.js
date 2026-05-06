@@ -28,6 +28,14 @@ const gameMatchSchema = new mongoose.Schema({
     type: Number,
     required: true
   },
+  hitRate: {
+    type: Number,
+    default: null
+  },
+  maxCombo: {
+    type: Number,
+    default: null
+  },
   history: {
     type: mongoose.Schema.Types.Mixed,
     default: {}

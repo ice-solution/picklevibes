@@ -12,9 +12,13 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 
-// 信任代理 - 因為使用 Cloudflare
-// 這樣 Express 可以正確識別客戶端真實 IP
-app.set('trust proxy', true);
+// 信任代理（不要設 true）
+// - 若設 true，任何人可偽造 X-Forwarded-For，令 IP-based rate limit 失效
+// - 正確做法：只信任你基礎設施前面「實際的 proxy hop 數」
+//   - 常見：Nginx/PM2 前面 1 層 → 1
+//   - Cloudflare + Nginx 之類 → 2（視乎你的流量是否再經多一層反向代理）
+const trustProxyHops = Number.parseInt(process.env.TRUST_PROXY_HOPS || '1', 10);
+app.set('trust proxy', Number.isFinite(trustProxyHops) ? trustProxyHops : 1);
 
 // 安全中間件
 app.use(helmet({

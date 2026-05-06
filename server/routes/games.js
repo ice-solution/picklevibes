@@ -134,12 +134,23 @@ router.post('/sessions/:sessionId/join', [
     session.status = 'bound';
     await session.save();
 
+    const boundUser = await User.findById(req.user.id).select('name').lean();
+    const username = boundUser?.name || '';
+
     const io = req.app.get('io');
     // 通知遊戲端：有人登入成功並綁定 session
     if (io) {
       io.to(`gameHall:${session.gameHall.toString()}`).emit('session:bound', {
         sessionId: session._id,
-        userId: req.user.id
+        userId: req.user.id,
+        username
+      });
+
+      io.to(`gameHall:${session.gameHall.toString()}`).emit('session:setting', {
+        sessionId: session._id,
+        settings: {
+          displayName: true
+        }
       });
     }
 
@@ -191,7 +202,15 @@ router.post('/sessions/:sessionId/result', [
   gameAuth,
   body('userId').isMongoId().withMessage('userId 必須為 MongoId'),
   body('scores').isNumeric().withMessage('scores 必須為數字'),
-  body('history').optional().isObject().withMessage('history 必須為 object'),
+  body('hitRate').optional().isFloat().withMessage('hitRate 必須為 float'),
+  body('maxCombo').optional().isInt().withMessage('maxCombo 必須為 number'),
+  body('history').optional().custom((value) => {
+    // history 可以係 object 或 array（由遊戲端決定格式）
+    if (value === undefined || value === null) return true;
+    if (Array.isArray(value)) return true;
+    if (typeof value === 'object') return true;
+    throw new Error('history 必須為 object 或 array');
+  }),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -213,7 +232,9 @@ router.post('/sessions/:sessionId/result', [
       session: session._id,
       user: userId,
       scores: Number(req.body.scores),
-      history: req.body.history || {}
+      hitRate: req.body.hitRate === undefined || req.body.hitRate === null ? null : Number(req.body.hitRate),
+      maxCombo: req.body.maxCombo === undefined || req.body.maxCombo === null ? null : Number(req.body.maxCombo),
+      history: req.body.history ?? {}
     });
 
     await GameLeaderboardEntry.findOneAndUpdate(
