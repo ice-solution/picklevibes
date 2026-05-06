@@ -149,7 +149,7 @@ router.post('/sessions/:sessionId/join', [
       io.to(`gameHall:${session.gameHall.toString()}`).emit('session:setting', {
         sessionId: session._id,
         settings: {
-          displayName: true
+          displayName: session?.settings?.displayName ?? true
         }
       });
     }
@@ -157,6 +157,43 @@ router.post('/sessions/:sessionId/join', [
     res.json({ message: '已綁定 session', data: { sessionId: session._id } });
   } catch (error) {
     console.error('join session 錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   POST /api/games/sessions/:sessionId/settings
+// @desc    更新遊戲 session 顯示設定（需登入且需為綁定用戶）
+// @access  Private(User)
+router.post('/sessions/:sessionId/settings', [
+  auth,
+  body('displayName').isBoolean().withMessage('displayName 必須為 boolean'),
+], async (req, res) => {
+  try {
+    const sessionId = String(req.params.sessionId);
+    const { displayName } = req.body;
+
+    const session = await GameSession.findById(sessionId);
+    if (!session) return res.status(404).json({ message: 'Session 不存在' });
+    if (session.expiresAt < new Date()) return res.status(400).json({ message: 'Session 已過期' });
+    if (!session.boundUser) return res.status(400).json({ message: 'Session 尚未綁定用戶' });
+    if (String(session.boundUser) !== String(req.user.id)) return res.status(403).json({ message: '無權限操作此 Session' });
+
+    // 持久化設定，令遊戲端可依設定顯示/隱藏玩家名稱
+    session.settings = session.settings || {};
+    session.settings.displayName = displayName;
+    await session.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`gameHall:${session.gameHall.toString()}`).emit('session:setting', {
+        sessionId: session._id,
+        settings: { displayName: session.settings.displayName }
+      });
+    }
+
+    res.json({ message: '設定已更新', data: { sessionId: session._id, settings: session.settings } });
+  } catch (error) {
+    console.error('更新 session settings 錯誤:', error);
     res.status(500).json({ message: '服務器錯誤' });
   }
 });
@@ -255,12 +292,16 @@ router.post('/sessions/:sessionId/result', [
         gameHallId: String(gameHall._id),
         sessionId: String(session._id),
         matchId: String(match._id),
-        scores: Number(req.body.scores)
+        scores: Number(req.body.scores),
+        hitRate: match.hitRate,
+        maxCombo: match.maxCombo
       });
       io.to(`gameHall:${gameHall._id.toString()}`).emit('game:matchSaved', {
         sessionId: String(session._id),
         userId: String(userId),
-        scores: Number(req.body.scores)
+        scores: Number(req.body.scores),
+        hitRate: match.hitRate,
+        maxCombo: match.maxCombo
       });
     }
 

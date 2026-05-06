@@ -23,6 +23,12 @@ const gameSessionSchema = new mongoose.Schema({
     ref: 'User',
     default: null
   },
+  settings: {
+    displayName: {
+      type: Boolean,
+      default: true
+    }
+  },
   expiresAt: {
     type: Date,
     required: true,

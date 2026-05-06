@@ -20,6 +20,9 @@ const GameJoin: React.FC = () => {
   const [lastResult, setLastResult] = useState<any>(null);
   const [startStatus, setStartStatus] = useState<'idle' | 'starting' | 'started' | 'error'>('idle');
   const [startMessage, setStartMessage] = useState<string>('');
+  const [displayNameEnabled, setDisplayNameEnabled] = useState<boolean>(true);
+  const [settingSaving, setSettingSaving] = useState<boolean>(false);
+  const [settingMessage, setSettingMessage] = useState<string>('');
 
   const sig = query.get('sig') || '';
   const code = query.get('code') || '';
@@ -90,6 +93,22 @@ const GameJoin: React.FC = () => {
     }
   };
 
+  const updateDisplayName = async (next: boolean) => {
+    if (!sessionId) return;
+    const prev = displayNameEnabled;
+    setDisplayNameEnabled(next);
+    setSettingSaving(true);
+    setSettingMessage('');
+    try {
+      await axios.post(`/games/sessions/${sessionId}/settings`, { displayName: next });
+    } catch (e: any) {
+      setDisplayNameEnabled(prev);
+      setSettingMessage(e?.response?.data?.message || '更新設定失敗');
+    } finally {
+      setSettingSaving(false);
+    }
+  };
+
   const resultScores = useMemo(() => {
     const v = lastResult?.scores;
     if (v === undefined || v === null) return null;
@@ -119,7 +138,22 @@ const GameJoin: React.FC = () => {
 
           {status === 'joined' ? (
             <div className="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-              <div className="mt-1">
+              <div className="flex items-center justify-between gap-4">
+                <label className="flex items-center gap-2 text-sm font-semibold text-primary-600 select-none">
+                  <input
+                    type="checkbox"
+                    checked={displayNameEnabled}
+                    disabled={settingSaving}
+                    onChange={(e) => void updateDisplayName(e.target.checked)}
+                    className="h-5 w-5"
+                  />
+                  顯示名字
+                </label>
+              </div>
+
+              {settingMessage ? <div className="mt-2 text-sm text-red-600">{settingMessage}</div> : null}
+
+              <div className="mt-3">
                 <button
                   type="button"
                   className="btn-primary w-full"
