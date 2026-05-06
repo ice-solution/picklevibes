@@ -26,6 +26,7 @@ import VlogManagement from '../components/Admin/VlogManagement';
 import HotNewsManagement from '../components/Admin/HotNewsManagement';
 import GameHallManagement from '../components/Admin/GameHallManagement';
 import GameClientManagement from '../components/Admin/GameClientManagement';
+import GameLeaderboardManagement from '../components/Admin/GameLeaderboardManagement';
 import api from '../services/api';
 import { 
   CalendarDaysIcon, 
@@ -125,6 +126,7 @@ const Admin: React.FC = () => {
     { id: 'hotnews', name: 'HotNews 管理', icon: DocumentChartBarIcon },
     { id: 'game-halls', name: 'GameHall 管理', icon: DocumentChartBarIcon },
     { id: 'game-clients', name: 'GameClient 管理', icon: DocumentChartBarIcon },
+    { id: 'game-leaderboard', name: '排行榜', icon: DocumentChartBarIcon },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'activities', name: '活動管理', icon: CalendarIcon },
@@ -321,6 +323,10 @@ const Admin: React.FC = () => {
 
             {activeTab === 'game-clients' && (
               <GameClientManagement />
+            )}
+
+            {activeTab === 'game-leaderboard' && (
+              <GameLeaderboardManagement />
             )}
 
             {activeTab === 'redeem' && (

@@ -316,6 +316,82 @@ router.post('/sessions/:sessionId/result', [
   }
 });
 
+// @route   GET /api/games/me/matches
+// @desc    取得目前登入用戶的遊戲記錄
+// @access  Private(User)
+router.get('/me/matches', auth, async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.max(1, Math.min(50, parseInt(req.query.limit, 10) || 20));
+
+    const total = await GameMatch.countDocuments({ user: req.user.id });
+    const matches = await GameMatch.find({ user: req.user.id })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('gameHall', 'name')
+      .lean();
+
+    res.json({
+      data: {
+        items: matches.map((m) => ({
+          _id: m._id,
+          createdAt: m.createdAt,
+          gameHall: m.gameHall && typeof m.gameHall === 'object'
+            ? { _id: m.gameHall._id, name: m.gameHall.name || '' }
+            : null,
+          scores: m.scores ?? 0,
+          hitRate: m.hitRate ?? null,
+          hitAccuracy: m.hitAccuracy ?? null,
+          maxCombo: m.maxCombo ?? null
+        })),
+        pagination: { current: page, pages: Math.ceil(total / limit), total }
+      }
+    });
+  } catch (error) {
+    console.error('取得用戶遊戲記錄錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   GET /api/games/:id/matches-leaderboard
+// @desc    以每一場 match 作排行榜（按 scores 高→低），可指定 seasonKey
+// @access  Public（或給後台/遊戲端）
+router.get('/:id/matches-leaderboard', async (req, res) => {
+  try {
+    const gameHall = await GameHall.findById(req.params.id).lean();
+    if (!gameHall) return res.status(404).json({ message: '遊戲廳不存在' });
+
+    const seasonKey = String(req.query.seasonKey || gameHall.seasonKey || 'season-1');
+    const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 50));
+
+    const matches = await GameMatch.find({ gameHall: gameHall._id, seasonKey })
+      .sort({ scores: -1, createdAt: -1 })
+      .limit(limit)
+      .populate('user', 'name')
+      .lean();
+
+    res.json({
+      data: {
+        gameHall: { _id: gameHall._id, name: gameHall.name, seasonKey },
+        leaderboard: matches.map((m) => ({
+          matchId: m._id,
+          userId: m.user?._id || m.user,
+          name: m.user?.name || '',
+          scores: m.scores ?? 0,
+          hitRate: m.hitRate ?? null,
+          hitAccuracy: m.hitAccuracy ?? null,
+          maxCombo: m.maxCombo ?? null,
+          createdAt: m.createdAt
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('取得 match leaderboard 錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
 // @route   GET /api/games/:id/leaderboard
 // @desc    取得該遊戲廳一期排行榜
 // @access  Public（或給遊戲端）

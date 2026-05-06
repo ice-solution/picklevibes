@@ -14,6 +14,16 @@ import {
   TagIcon
 } from '@heroicons/react/24/outline';
 
+type GameMatchItem = {
+  _id: string;
+  createdAt: string;
+  gameHall: { _id: string; name: string } | null;
+  scores: number;
+  hitRate: number | null;
+  hitAccuracy: number | null;
+  maxCombo: number | null;
+};
+
 const Profile: React.FC = () => {
   const { user, updateProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
@@ -41,6 +51,10 @@ const Profile: React.FC = () => {
   const [passwordErrors, setPasswordErrors] = useState<{ [key: string]: string }>({});
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  const [gameMatchesLoading, setGameMatchesLoading] = useState(false);
+  const [gameMatches, setGameMatches] = useState<GameMatchItem[]>([]);
+  const [gameMatchesError, setGameMatchesError] = useState<string>('');
 
   /** API 通常回傳 id；少數情況僅有 _id */
   const mongoUserId = useMemo(() => {
@@ -137,6 +151,27 @@ const Profile: React.FC = () => {
   useEffect(() => {
     void refreshTierProgress();
   }, [refreshTierProgress]);
+
+  const formatPercent2dp = (n: number | null) => (n === null ? '—' : `${(n * 100).toFixed(2)}%`);
+
+  const refreshGameMatches = useCallback(async () => {
+    if (!user) return;
+    setGameMatchesLoading(true);
+    setGameMatchesError('');
+    try {
+      const res = await axios.get('/games/me/matches?limit=20');
+      setGameMatches(res.data?.data?.items || []);
+    } catch (e: any) {
+      setGameMatches([]);
+      setGameMatchesError(e?.response?.data?.message || '載入遊戲記錄失敗');
+    } finally {
+      setGameMatchesLoading(false);
+    }
+  }, [user]);
+
+  useEffect(() => {
+    void refreshGameMatches();
+  }, [refreshGameMatches]);
 
   const ProgressRing: React.FC<{ percent: number; color: string; label: string }> = ({ percent, color, label }) => {
     const size = 120;
@@ -540,6 +575,72 @@ const Profile: React.FC = () => {
                   </div>
                 )}
               </form>
+            </motion.div>
+
+            {/* 遊戲記錄 */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.22 }}
+              className="mt-8 bg-white rounded-xl shadow-lg"
+            >
+              <div className="p-6 border-b border-gray-200 flex items-center justify-between gap-4">
+                <h2 className="text-xl font-bold text-gray-900">遊戲記錄</h2>
+                <button type="button" className="btn-outline" onClick={() => void refreshGameMatches()} disabled={gameMatchesLoading}>
+                  {gameMatchesLoading ? '更新中...' : '刷新'}
+                </button>
+              </div>
+              <div className="p-6">
+                {gameMatchesError ? (
+                  <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-4">
+                    <p className="text-sm text-red-800">{gameMatchesError}</p>
+                  </div>
+                ) : null}
+
+                {gameMatchesLoading ? (
+                  <div className="text-gray-600">載入中...</div>
+                ) : gameMatches.length === 0 ? (
+                  <div className="text-gray-600">暫時未有遊戲記錄。</div>
+                ) : (
+                  <div className="space-y-3">
+                    {gameMatches.map((m) => (
+                      <div key={m._id} className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-gray-900">
+                              {m.gameHall?.name || '遊戲'}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {m.createdAt ? new Date(m.createdAt).toLocaleString('zh-TW') : '—'}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="text-sm text-gray-500">分數</div>
+                            <div className="text-xl font-extrabold text-primary-600 tabular-nums">
+                              {typeof m.scores === 'number' ? m.scores : 0}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-3 grid grid-cols-3 gap-3 text-center">
+                          <div className="rounded-md bg-white border border-gray-200 p-2">
+                            <div className="text-xs font-semibold text-gray-600">Hit Rate</div>
+                            <div className="mt-1 font-bold text-gray-900 tabular-nums">{formatPercent2dp(m.hitRate)}</div>
+                          </div>
+                          <div className="rounded-md bg-white border border-gray-200 p-2">
+                            <div className="text-xs font-semibold text-gray-600">Hit Accuracy</div>
+                            <div className="mt-1 font-bold text-gray-900 tabular-nums">{formatPercent2dp(m.hitAccuracy)}</div>
+                          </div>
+                          <div className="rounded-md bg-white border border-gray-200 p-2">
+                            <div className="text-xs font-semibold text-gray-600">Max Combo</div>
+                            <div className="mt-1 font-bold text-gray-900 tabular-nums">{m.maxCombo ?? '—'}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </motion.div>
 
             {/* 修改密碼 */}
