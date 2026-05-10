@@ -21,6 +21,7 @@ import ResetPassword from './pages/ResetPassword';
 import MyBookings from './pages/MyBookings';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
+import AdminV2 from './pages/AdminV2';
 import PaymentResult from './pages/PaymentResult';
 import Recharge from './pages/Recharge';
 import RechargeSuccess from './pages/RechargeSuccess';
@@ -119,6 +120,14 @@ function App() {
                       <Admin />
                     </ProtectedRoute>
                   } 
+                />
+                <Route
+                  path="/admin-v2"
+                  element={
+                    <ProtectedRoute>
+                      <AdminV2 />
+                    </ProtectedRoute>
+                  }
                 />
                 <Route path="/payment-result" element={<PaymentResult />} />
                 <Route 

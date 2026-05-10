@@ -233,6 +233,40 @@
         }
       }
     }
+    ,
+    {
+      "name": "5.1) Get Match Leaderboard (by gameHallId) [scores desc]",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/api/games/{{gameHallId}}/matches-leaderboard?limit=50&seasonKey={{seasonKey}}",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "{{gameHallId}}", "matches-leaderboard" ],
+          "query": [
+            { "key": "limit", "value": "50" },
+            { "key": "seasonKey", "value": "{{seasonKey}}" }
+          ]
+        }
+      }
+    },
+    {
+      "name": "6) Get My Game Matches [needs user JWT]",
+      "request": {
+        "method": "GET",
+        "header": [
+          { "key": "Authorization", "value": "Bearer {{userJwt}}", "type": "text" }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/games/me/matches?limit=20&page=1",
+          "host": [ "{{baseUrl}}" ],
+          "path": [ "api", "games", "me", "matches" ],
+          "query": [
+            { "key": "limit", "value": "20" },
+            { "key": "page", "value": "1" }
+          ]
+        }
+      }
+    }
   ]
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -35,7 +35,6 @@ import {
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const [isAdminDropdownOpen, setIsAdminDropdownOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const { user, logout } = useAuth();
   const { shopEnabled } = useShopConfig();
@@ -43,7 +42,6 @@ const Navbar: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const userDropdownRef = useRef<HTMLDivElement>(null);
-  const adminDropdownRef = useRef<HTMLDivElement>(null);
 
   // 獲取購物車數量
   useEffect(() => {
@@ -75,9 +73,6 @@ const Navbar: React.FC = () => {
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
       }
-      if (adminDropdownRef.current && !adminDropdownRef.current.contains(event.target as Node)) {
-        setIsAdminDropdownOpen(false);
-      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
@@ -102,6 +97,7 @@ const Navbar: React.FC = () => {
   const isMaintenanceMode = maintenanceStatus?.maintenanceMode;
   const isAdmin = user?.role === 'admin';
   const isCoach = user?.role === 'coach';
+  const isAdminV2 = useMemo(() => location.pathname.startsWith('/admin-v2'), [location.pathname]);
 
   // 如果在維護模式下且不是管理員，隱藏導航（包括維護頁面）
   if (isMaintenanceMode && !isAdmin) {
@@ -263,153 +259,15 @@ const Navbar: React.FC = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 管理員下拉選單 */}
-                {user.role === 'admin' && (
-                  <div className="relative" ref={adminDropdownRef}>
-                    <button
-                      onClick={() => setIsAdminDropdownOpen(!isAdminDropdownOpen)}
-                      className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors duration-200"
-                    >
-                      <CogIcon className="w-5 h-5" />
-                      <span>管理</span>
-                      <ChevronDownIcon className="w-4 h-4" />
-                    </button>
-
-                    <AnimatePresence>
-                      {isAdminDropdownOpen && (
-                        <motion.div
-                          initial={{ opacity: 0, y: -10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -10 }}
-                          transition={{ duration: 0.2 }}
-                          className="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 z-50"
-                        >
-                          <div className="py-1">
-                            <Link
-                              to="/admin?tab=bookings"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <CalendarDaysIcon className="w-4 h-4" />
-                              <span>預約管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=calendar"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <CalendarDaysIcon className="w-4 h-4" />
-                              <span>預約日曆</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=coach-requests"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <ChatBubbleLeftRightIcon className="w-4 h-4" />
-                              <span>教練要請</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=users"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <UsersIcon className="w-4 h-4" />
-                              <span>用戶管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=redeem"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <TicketIcon className="w-4 h-4" />
-                              <span>兌換碼管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=courts"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <BuildingOfficeIcon className="w-4 h-4" />
-                              <span>場地管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=weekend"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <ClockIcon className="w-4 h-4" />
-                              <span>假期管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=activities"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <CalendarIcon className="w-4 h-4" />
-                              <span>活動管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=recharge-offers"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <CreditCardIcon className="w-4 h-4" />
-                              <span>充值優惠管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=shop"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <ShoppingBagIcon className="w-4 h-4" />
-                              <span>商店管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=orders"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <ShoppingBagIcon className="w-4 h-4" />
-                              <span>訂單管理</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=bulk-upgrade"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <ArrowTrendingUpIcon className="w-4 h-4" />
-                              <span>批量升級</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=maintenance"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <WrenchScrewdriverIcon className="w-4 h-4" />
-                              <span>系統維護</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=revenue"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <CurrencyDollarIcon className="w-4 h-4" />
-                              <span>收入統計</span>
-                            </Link>
-                            <Link
-                              to="/admin?tab=analytics"
-                              onClick={() => setIsAdminDropdownOpen(false)}
-                              className="flex items-center space-x-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                            >
-                              <ChartBarIcon className="w-4 h-4" />
-                              <span>數據分析</span>
-                            </Link>
-                          </div>
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </div>
+                {/* 管理入口（預設新版；新版可返舊版） */}
+                {isAdmin && (
+                  <Link
+                    to={isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
+                    className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors duration-200"
+                  >
+                    <CogIcon className="w-5 h-5" />
+                    <span>{isAdminV2 ? '返回舊版' : '管理'}</span>
+                  </Link>
                 )}
 
                 <LanguageSwitcher />
@@ -628,124 +486,12 @@ const Navbar: React.FC = () => {
                       <>
                         <div className="text-sm font-medium text-gray-500 px-3 py-1 mt-4">管理功能</div>
                         <Link
-                          to="/admin?tab=bookings"
+                          to={isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
                           onClick={() => setIsOpen(false)}
                           className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
                         >
-                          <CalendarDaysIcon className="w-5 h-5" />
-                          <span>預約管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=calendar"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <CalendarDaysIcon className="w-5 h-5" />
-                          <span>預約日曆</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=coach-requests"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <ChatBubbleLeftRightIcon className="w-5 h-5" />
-                          <span>教練要請</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=users"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <UsersIcon className="w-5 h-5" />
-                          <span>用戶管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=redeem"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <TicketIcon className="w-5 h-5" />
-                          <span>兌換碼管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=courts"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <BuildingOfficeIcon className="w-5 h-5" />
-                          <span>場地管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=weekend"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <ClockIcon className="w-5 h-5" />
-                          <span>假期管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=activities"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <CalendarIcon className="w-5 h-5" />
-                          <span>活動管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=recharge-offers"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <CreditCardIcon className="w-5 h-5" />
-                          <span>充值優惠管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=shop"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <ShoppingBagIcon className="w-5 h-5" />
-                          <span>商店管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=orders"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <ShoppingBagIcon className="w-5 h-5" />
-                          <span>訂單管理</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=bulk-upgrade"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <ArrowTrendingUpIcon className="w-5 h-5" />
-                          <span>批量升級</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=maintenance"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <WrenchScrewdriverIcon className="w-5 h-5" />
-                          <span>系統維護</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=revenue"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <CurrencyDollarIcon className="w-5 h-5" />
-                          <span>收入統計</span>
-                        </Link>
-                        <Link
-                          to="/admin?tab=analytics"
-                          onClick={() => setIsOpen(false)}
-                          className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
-                        >
-                          <ChartBarIcon className="w-5 h-5" />
-                          <span>數據分析</span>
+                          <CogIcon className="w-5 h-5" />
+                          <span>{isAdminV2 ? '返回舊版' : '管理（新版）'}</span>
                         </Link>
                       </>
                     )}
