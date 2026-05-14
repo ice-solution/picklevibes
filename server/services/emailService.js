@@ -2239,6 +2239,156 @@ PickleVibes 團隊
   }
 
   /**
+   * EDM：使用 server/templates/edm/default.html 範本批次寄送（管理員內容）
+   * @param {object} params
+   * @param {string[]|string} params.recipients
+   * @param {string} params.subject
+   * @param {string} params.headline
+   * @param {string} [params.preheader]
+   * @param {string} params.bodyHtml
+   * @param {string} [params.bodyText] 純文字後備
+   * @param {string} [params.ctaUrl]
+   * @param {string} [params.ctaLabel]
+   * @param {string} [params.footerNote]
+   * @param {object|string} [params.campaignId] 若有則寫入 EdmSendLog
+   * @param {object} [params.userIdByEmail] 小寫 email 字串 → User._id
+   */
+  async sendEdmNewsletter({
+    recipients,
+    subject,
+    headline,
+    preheader,
+    bodyHtml,
+    bodyText,
+    ctaUrl,
+    ctaLabel,
+    footerNote,
+    campaignId,
+    userIdByEmail
+  }) {
+    try {
+      const { buildEdmHtml, normalizeRecipients, stripHtml } = require('../utils/edmTemplate');
+      const list = normalizeRecipients(recipients).sort((a, b) => a.localeCompare(b));
+      if (!list.length) return { success: false, error: '收件人為空', sent: 0, failed: 0, errors: [] };
+
+      const mongoose = require('mongoose');
+      const EdmSendLog = require('../models/EdmSendLog');
+      const uidMap = userIdByEmail && typeof userIdByEmail === 'object' ? userIdByEmail : {};
+
+      const flushFailedAll = async (errorMessage) => {
+        if (!campaignId) return;
+        const sendLogs = list.map((to) => {
+          const row = {
+            campaign: campaignId,
+            email: to,
+            status: 'failed',
+            errorMessage,
+            sentAt: new Date()
+          };
+          const uid = uidMap[to];
+          if (uid) row.user = new mongoose.Types.ObjectId(String(uid));
+          return row;
+        });
+        try {
+          await EdmSendLog.insertMany(sendLogs, { ordered: true });
+        } catch (logErr) {
+          console.error('❌ EDM 寄送紀錄寫入失敗:', logErr.message);
+        }
+      };
+
+      if (!this.transporter) {
+        await flushFailedAll('郵件服務未初始化');
+        return {
+          success: false,
+          error: '郵件服務未初始化',
+          sent: 0,
+          failed: list.length,
+          errors: list.map((to) => ({ to, error: '郵件服務未初始化' }))
+        };
+      }
+
+      const siteUrl = (process.env.CLIENT_URL || 'https://picklevibes.hk').replace(/\/+$/, '');
+      const html = buildEdmHtml({
+        headline: headline || subject,
+        preheader: preheader || headline || subject,
+        bodyHtml: bodyHtml || '',
+        ctaUrl,
+        ctaLabel,
+        footerNote,
+        siteUrl,
+        siteName: 'picklevibes.hk'
+      });
+      const text = bodyText && String(bodyText).trim()
+        ? String(bodyText).trim()
+        : stripHtml(bodyHtml || subject);
+
+      let sent = 0;
+      const errors = [];
+      const sendLogs = [];
+      for (const to of list) {
+        const now = new Date();
+        let mailErr = null;
+        try {
+          await this.transporter.sendMail({
+            from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+            to,
+            subject: String(subject),
+            text,
+            html
+          });
+          sent += 1;
+          if (campaignId) {
+            const row = {
+              campaign: campaignId,
+              email: to,
+              status: 'sent',
+              errorMessage: '',
+              sentAt: now
+            };
+            const uid = uidMap[to];
+            if (uid) row.user = new mongoose.Types.ObjectId(String(uid));
+            sendLogs.push(row);
+          }
+          await new Promise((r) => setTimeout(r, 120));
+        } catch (e) {
+          mailErr = e.message || String(e);
+          errors.push({ to, error: mailErr });
+          if (campaignId) {
+            const row = {
+              campaign: campaignId,
+              email: to,
+              status: 'failed',
+              errorMessage: mailErr,
+              sentAt: now
+            };
+            const uid = uidMap[to];
+            if (uid) row.user = new mongoose.Types.ObjectId(String(uid));
+            sendLogs.push(row);
+          }
+        }
+      }
+
+      if (campaignId && sendLogs.length) {
+        try {
+          await EdmSendLog.insertMany(sendLogs, { ordered: true });
+        } catch (logErr) {
+          console.error('❌ EDM 寄送紀錄寫入失敗:', logErr.message);
+        }
+      }
+
+      return {
+        success: errors.length === 0,
+        sent,
+        failed: errors.length,
+        errors
+      };
+    } catch (error) {
+      console.error('❌ EDM 發送失敗:', error.message);
+      return { success: false, error: error.message, sent: 0, failed: 0, errors: [] };
+    }
+  }
+
+  /**
    * 教練學校要請：通知內部信箱（優先 NOTICE_EMAIL）
    */
   async sendCoachScheduleRequestEmail({

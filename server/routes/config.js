@@ -148,23 +148,35 @@ router.get('/hotnews', async (req, res) => {
 });
 
 // @route   PUT /api/config/hotnews
-// @desc    更新 HotNews（首頁）內容（管理員）
+// @desc    更新 HotNews 列表（首頁）（管理員）
 // @access  Private(Admin)
 router.put('/hotnews', [
   auth,
   adminAuth,
   body('enabled').optional().isBoolean().withMessage('enabled 必須為 true 或 false'),
-  body('heroBannerUrl').optional().isString().withMessage('heroBannerUrl 必須為字串'),
-  body('title').optional().isString().isLength({ min: 1, max: 120 }).withMessage('title 必須為 1-120 字'),
-  body('description').optional().isString().isLength({ min: 1, max: 500 }).withMessage('description 必須為 1-500 字'),
+  body('items').optional().isArray({ max: 30 }).withMessage('items 必須為陣列，最多 30 則'),
+  body('items.*.id').optional().isString().isLength({ max: 64 }),
+  body('items.*.title').optional().isString().isLength({ min: 1, max: 120 }),
+  body('items.*.shortDescription').optional().isString().isLength({ max: 280 }),
+  body('items.*.description').optional().isString().isLength({ max: 8000 }),
+  body('items.*.heroBannerUrl').optional().isString().isLength({ max: 2048 }),
+  body('items.*.sortOrder').optional().isInt({ min: 0, max: 999 })
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
-        message: '輸入驗證失敗',
+        message: errors.array()[0]?.msg || '輸入驗證失敗',
         errors: errors.array()
       });
+    }
+    if (Array.isArray(req.body.items)) {
+      for (let i = 0; i < req.body.items.length; i++) {
+        const it = req.body.items[i];
+        if (!it || !String(it.title || '').trim()) {
+          return res.status(400).json({ message: `第 ${i + 1} 則缺少標題（title）` });
+        }
+      }
     }
     const data = await Config.setHotNews(req.body);
     res.json({ message: 'HotNews 已更新', data });

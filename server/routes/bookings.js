@@ -69,8 +69,8 @@ router.post('/', [
     const bypassRestrictions = req.user.role === 'admin' && req.body.bypassRestrictions === true;
     /**
      * 後台建單且未勾選「管理員權限」時：僅放寬「可預約天數上限」與「營業時段 isOpenAt」，
-     * 其餘與一般用戶相同（含場地啟用、1～2 小時時長）；仍檢查衝突、照常扣積分。
-     * 勾選管理員權限時行為不變（完全繞過、不扣分等）。
+     * 其餘與一般用戶相同（含場地啟用、1～2 小時時長）；照常扣積分。
+     * 勾選管理員權限時：仍會檢查時段衝突（不可與現有預約重疊），其餘可繞過（不扣分等）。
      */
     const adminRelaxRules = req.user.role === 'admin' && !bypassRestrictions;
 
@@ -139,12 +139,10 @@ router.post('/', [
       }
     }
 
-    // 如果不是管理員 bypass，檢查時間衝突
-    if (!bypassRestrictions) {
-      const hasConflict = await Booking.checkTimeConflict(court, date, startTime, endTime);
-      if (hasConflict) {
-        return res.status(400).json({ message: '該時間段已被預約' });
-      }
+    // 無論是否管理員繞過（bypassRestrictions），皆須檢查時段是否已被占用，避免重疊預約
+    const hasConflict = await Booking.checkTimeConflict(court, date, startTime, endTime);
+    if (hasConflict) {
+      return res.status(400).json({ message: '該時間段已被預約' });
     }
 
     // 計算持續時間
@@ -409,6 +407,11 @@ router.post('/', [
       if (!soloCourt) {
         console.error('❌ 找不到單人場');
         return res.status(500).json({ message: '找不到單人場' });
+      }
+
+      const soloConflict = await Booking.checkTimeConflict(soloCourt._id, date, startTime, endTime);
+      if (soloConflict) {
+        return res.status(400).json({ message: '單人場在該時間段已被預約' });
       }
       
       // 創建單人場預約數據對象

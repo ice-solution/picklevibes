@@ -26,6 +26,7 @@ import BookingConfig from '../components/Admin/BookingConfig';
 import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
+import EdmSend from '../components/Admin/EdmSend';
 
 import {
   Bars3Icon,
@@ -43,7 +44,8 @@ import {
   TagIcon,
   Cog6ToothIcon,
   DocumentChartBarIcon,
-  ChatBubbleLeftRightIcon
+  ChatBubbleLeftRightIcon,
+  EnvelopeIcon
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -77,6 +79,7 @@ const AdminV2: React.FC = () => {
     { id: 'game-halls', name: 'GameHall 管理', icon: DocumentChartBarIcon, element: <GameHallManagement /> },
     { id: 'game-clients', name: 'GameClient 管理', icon: DocumentChartBarIcon, element: <GameClientManagement /> },
     { id: 'game-leaderboard', name: '排行榜', icon: DocumentChartBarIcon, element: <GameLeaderboardManagement /> },
+    { id: 'edm', name: 'EDM 發送', icon: EnvelopeIcon, element: <EdmSend /> },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon, element: <RedeemCodeManagement /> },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
     { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement /> },

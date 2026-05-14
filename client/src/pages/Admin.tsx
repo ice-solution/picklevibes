@@ -27,6 +27,7 @@ import HotNewsManagement from '../components/Admin/HotNewsManagement';
 import GameHallManagement from '../components/Admin/GameHallManagement';
 import GameClientManagement from '../components/Admin/GameClientManagement';
 import GameLeaderboardManagement from '../components/Admin/GameLeaderboardManagement';
+import EdmSend from '../components/Admin/EdmSend';
 import api from '../services/api';
 import { 
   CalendarDaysIcon, 
@@ -45,6 +46,7 @@ import {
   Cog6ToothIcon,
   DocumentChartBarIcon,
   ChatBubbleLeftRightIcon,
+  EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -74,7 +76,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'coach-requests', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'coach-requests', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'game-leaderboard', 'edm', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -127,6 +129,7 @@ const Admin: React.FC = () => {
     { id: 'game-halls', name: 'GameHall 管理', icon: DocumentChartBarIcon },
     { id: 'game-clients', name: 'GameClient 管理', icon: DocumentChartBarIcon },
     { id: 'game-leaderboard', name: '排行榜', icon: DocumentChartBarIcon },
+    { id: 'edm', name: 'EDM 發送', icon: EnvelopeIcon },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'activities', name: '活動管理', icon: CalendarIcon },
@@ -327,6 +330,10 @@ const Admin: React.FC = () => {
 
             {activeTab === 'game-leaderboard' && (
               <GameLeaderboardManagement />
+            )}
+
+            {activeTab === 'edm' && (
+              <EdmSend />
             )}
 
             {activeTab === 'redeem' && (

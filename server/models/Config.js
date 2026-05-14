@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const crypto = require('crypto');
 
 const configSchema = new mongoose.Schema({
   key: {
@@ -85,41 +86,117 @@ configSchema.statics.setTierEnabled = async function (enabled) {
   return { enabled: !!enabled };
 };
 
-// HotNews（首頁第一個 component）內容
+// HotNews（首頁）：多筆列表，每筆含短描述（banner）與完整 description（彈層）
 const DEFAULT_HOTNEWS = {
   enabled: true,
-  heroBannerUrl: '',
-  title: '最新消息',
-  description: '我們會在這裡發布最新活動、賽事與場地公告。'
+  items: [
+    {
+      id: 'default-1',
+      title: '最新消息',
+      shortDescription: '點擊查看活動與場地公告。',
+      description: '我們會在這裡發布最新活動、賽事與場地公告。',
+      heroBannerUrl: '',
+      sortOrder: 0
+    }
+  ]
 };
+
+function normalizeHotNewsItems(rawItems) {
+  if (!Array.isArray(rawItems)) return [];
+  return rawItems
+    .map((it, i) => {
+      const id = (it && it.id && String(it.id).trim()) || crypto.randomUUID();
+      const title = it && it.title != null ? String(it.title).trim().slice(0, 120) : '';
+      const shortDescription =
+        it && it.shortDescription != null
+          ? String(it.shortDescription).trim().slice(0, 280)
+          : '';
+      const description =
+        it && it.description != null ? String(it.description).trim().slice(0, 8000) : '';
+      const heroBannerUrl =
+        it && it.heroBannerUrl != null ? String(it.heroBannerUrl).trim().slice(0, 2048) : '';
+      const sortOrder = typeof it?.sortOrder === 'number' && Number.isFinite(it.sortOrder) ? it.sortOrder : i;
+      return { id, title, shortDescription, description, heroBannerUrl, sortOrder };
+    })
+    .filter((it) => it.title.length > 0)
+    .sort((a, b) => a.sortOrder - b.sortOrder)
+    .slice(0, 30)
+    .map((it, i) => ({ ...it, sortOrder: i }));
+}
+
+function migrateLegacyHotNews(v) {
+  if (!v || typeof v !== 'object') return { ...DEFAULT_HOTNEWS };
+  if (Array.isArray(v.items)) {
+    if (v.items.length > 0) {
+      return {
+        enabled: v.enabled !== false,
+        items: normalizeHotNewsItems(v.items)
+      };
+    }
+    return { enabled: v.enabled !== false, items: [] };
+  }
+  const hasLegacy =
+    (v.title && String(v.title).trim()) ||
+    (v.description && String(v.description).trim()) ||
+    (v.heroBannerUrl && String(v.heroBannerUrl).trim());
+  if (hasLegacy) {
+    const desc = v.description != null ? String(v.description) : '';
+    const short =
+      v.shortDescription != null && String(v.shortDescription).trim()
+        ? String(v.shortDescription).trim().slice(0, 280)
+        : desc.slice(0, 160) || String(v.title || '最新消息').slice(0, 120);
+    return {
+      enabled: v.enabled !== false,
+      items: normalizeHotNewsItems([
+        {
+          id: 'migrated-legacy',
+          title: v.title != null ? String(v.title).trim().slice(0, 120) : '最新消息',
+          shortDescription: short,
+          description: desc || short,
+          heroBannerUrl: v.heroBannerUrl != null ? String(v.heroBannerUrl).trim() : '',
+          sortOrder: 0
+        }
+      ])
+    };
+  }
+  return {
+    enabled: v.enabled !== false,
+    items: []
+  };
+}
 
 configSchema.statics.getHotNews = async function () {
   let doc = await this.findOne({ key: 'hotnews' });
   if (!doc) {
     doc = await this.create({ key: 'hotnews', value: DEFAULT_HOTNEWS });
   }
-  const v = doc.value || {};
-  return {
-    enabled: v.enabled !== false,
-    heroBannerUrl: v.heroBannerUrl || '',
-    title: v.title || DEFAULT_HOTNEWS.title,
-    description: v.description || DEFAULT_HOTNEWS.description,
-  };
+  const stored = doc.value || {};
+  const normalized = migrateLegacyHotNews(stored);
+  const needsPersist =
+    !Array.isArray(stored.items) ||
+    (stored.title != null && !Array.isArray(stored.items));
+  if (needsPersist) {
+    await this.findOneAndUpdate(
+      { key: 'hotnews' },
+      { value: normalized, updatedAt: new Date() },
+      { new: true }
+    );
+  }
+  return normalized;
 };
 
 configSchema.statics.setHotNews = async function (data) {
   const current = await this.getHotNews();
-  const merged = {
-    ...current,
-    ...(data || {}),
+  const next = {
     enabled: data?.enabled !== undefined ? !!data.enabled : current.enabled,
+    items: Array.isArray(data?.items) ? normalizeHotNewsItems(data.items) : current.items
   };
   await this.findOneAndUpdate(
     { key: 'hotnews' },
-    { value: merged, updatedAt: new Date() },
+    { value: next, updatedAt: new Date() },
     { new: true, upsert: true }
   );
-  return merged;
+  return next;
 };
 
 module.exports = mongoose.model('Config', configSchema);
