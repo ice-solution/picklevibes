@@ -833,24 +833,18 @@ router.put('/:id/membership', [auth, adminAuth], async (req, res) => {
 });
 
 // @route   GET /api/users/check-membership
-// @desc    檢查所有用戶的會員狀態並更新過期用戶 (僅管理員)
+// @desc    手動觸發：VIP 餘 1 整日續期 + 過期降級（與每日排程相同邏輯）
 // @access  Private (Admin)
 router.get('/check-membership', [auth, adminAuth], async (req, res) => {
   try {
-    const vipUsers = await User.find({ membershipLevel: 'vip' });
-    let expiredCount = 0;
-    
-    for (const user of vipUsers) {
-      const isStillVip = user.checkMembershipStatus();
-      if (!isStillVip) {
-        await user.save();
-        expiredCount++;
-      }
-    }
-    
+    const { runDailyMembershipJobs } = require('../utils/membershipChecker');
+    const result = await runDailyMembershipJobs();
+
     res.json({
-      message: `會員狀態檢查完成，${expiredCount} 個VIP會員已過期並降級為普通會員`,
-      expiredCount
+      message: `會員任務完成：續期 ${result.renewedCount ?? 0} 人，過期降級 ${result.expiredCount ?? 0} 人`,
+      renewedCount: result.renewedCount ?? 0,
+      expiredCount: result.expiredCount ?? 0,
+      totalVipUsers: result.totalVipUsers
     });
   } catch (error) {
     console.error('檢查會員狀態錯誤:', error);

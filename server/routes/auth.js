@@ -6,6 +6,7 @@ const nodemailer = require('nodemailer');
 const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
+const { VIP_PERIOD_MS } = require('../constants/vipMembership');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -78,14 +79,14 @@ router.post('/register', authLimiter, [
       });
     }
 
-    // 創建新用戶，自動設置為 VIP 會員（短期促銷活動）
+    // 新用戶：VIP 會員，到期日為註冊日起 180 日（每日 00:00 任務會對「剩 1 整日」自動再延 180 日）
     const user = new User({
       name,
       email,
       password,
       phone,
       membershipLevel: 'vip',
-      membershipExpiry: new Date(Date.now() + (30 * 24 * 60 * 60 * 1000)) // 30天後過期
+      membershipExpiry: new Date(Date.now() + VIP_PERIOD_MS)
     });
 
     await user.save();
@@ -107,6 +108,7 @@ router.post('/register', authLimiter, [
         phone: user.phone,
         role: user.role,
         membershipLevel: user.membershipLevel,
+        membershipExpiry: user.membershipExpiry,
         preferences: user.preferences
       }
     });

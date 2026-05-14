@@ -212,25 +212,31 @@ app.use('*', (req, res) => {
   res.status(404).json({ message: 'API 端點不存在' });
 });
 
-// 定時任務：檢查過期的VIP會員
-const { checkExpiredMemberships } = require('./utils/membershipChecker');
+// 定時任務：VIP 餘 1 整日自動續 180 日 + 過期降級（每日 00:00，預設香港時間）
+const cron = require('node-cron');
+const { runDailyMembershipJobs } = require('./utils/membershipChecker');
+const { VIP_MEMBERSHIP_CRON_TZ } = require('./constants/vipMembership');
 
-// 每小時檢查一次過期的VIP會員
-setInterval(async () => {
-  try {
-    await checkExpiredMemberships();
-  } catch (error) {
-    console.error('❌ 定時檢查過期會員失敗:', error);
-  }
-}, 60 * 60 * 1000); // 每小時執行一次
+cron.schedule(
+  '0 0 * * *',
+  async () => {
+    try {
+      console.log(`⏰ 每日會員任務開始（時區: ${VIP_MEMBERSHIP_CRON_TZ}）...`);
+      await runDailyMembershipJobs();
+    } catch (error) {
+      console.error('❌ 每日會員任務失敗:', error);
+    }
+  },
+  { timezone: VIP_MEMBERSHIP_CRON_TZ }
+);
 
-// 服務器啟動時也檢查一次
+// 服務器啟動後執行一次（續期 + 過期檢查）
 setTimeout(async () => {
   try {
-    console.log('🚀 服務器啟動，檢查過期的VIP會員...');
-    await checkExpiredMemberships();
+    console.log('🚀 服務器啟動，執行會員狀態檢查（續期 + 過期）...');
+    await runDailyMembershipJobs();
   } catch (error) {
-    console.error('❌ 啟動時檢查過期會員失敗:', error);
+    console.error('❌ 啟動時會員任務失敗:', error);
   }
 }, 10000); // 延遲10秒執行，確保MongoDB連接已建立
 

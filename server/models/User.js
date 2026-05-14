@@ -102,14 +102,14 @@ userSchema.methods.checkMembershipStatus = function() {
   return this.membershipLevel === 'vip';
 };
 
-// 設置VIP會員
+// 設置VIP會員（與 server/constants/vipMembership.js 週期一致）
 userSchema.methods.setVipMembership = function() {
-  const now = new Date();
-  const expiryDate = new Date(now.getTime() + (180 * 24 * 60 * 60 * 1000)); // 180天後
-  
+  const { VIP_PERIOD_MS } = require('../constants/vipMembership');
+  const expiryDate = new Date(Date.now() + VIP_PERIOD_MS);
+
   this.membershipLevel = 'vip';
   this.membershipExpiry = expiryDate;
-  
+
   return this.save();
 };
 
