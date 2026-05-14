@@ -3,6 +3,9 @@ import api from '../../services/api';
 import EdmTemplatesPanel from './EdmTemplatesPanel';
 import EdmMailingListsPanel from './EdmMailingListsPanel';
 
+/** 後端會逐封寄出，500 封遠超 axios 預設 10s，故單獨拉長（仍受反向代理／瀏覽器限制） */
+const EDM_SEND_TIMEOUT_MS = 30 * 60 * 1000;
+
 const defaultBodyHtml = `<p style="margin:0 0 12px;">您好，</p>
 <p style="margin:0 0 12px;">感謝一直支持 <strong>PickleVibes</strong>！我們有新消息想與你分享。</p>
 <p style="margin:0;">祝運動愉快！</p>`;
@@ -379,7 +382,7 @@ const EdmSend: React.FC = () => {
     setMsg(null);
     setResult(null);
     try {
-      const res = await api.post('/edm/send', buildPayload());
+      const res = await api.post('/edm/send', buildPayload(), { timeout: EDM_SEND_TIMEOUT_MS });
       setMsg(res.data?.message || '已送出');
       setResult(res.data?.data || null);
     } catch (e: any) {
@@ -998,6 +1001,9 @@ const EdmSend: React.FC = () => {
           <label className="block text-sm font-medium text-gray-700 mb-1">頁尾說明</label>
           <input className="input-field w-full" value={footerNote} onChange={(e) => setFooterNote(e.target.value)} />
         </div>
+        <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-md px-3 py-2">
+          大量收件時後端會逐封寄出，可能需數分鐘；請勿關閉此頁。若仍中斷，請檢查 Apache／Nginx 的 proxy 逾時設定。
+        </p>
         <button type="button" className="btn-primary" disabled={busy || !canSubmit} onClick={() => void submit()}>
           {busy ? '發送中…' : '發送 EDM'}
         </button>
