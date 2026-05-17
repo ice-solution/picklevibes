@@ -17,8 +17,20 @@ const {
   MAX_USER_IDS
 } = require('../utils/edmRecipients');
 const { mergeEdmContentFromTemplate, mailingListToResolveBody } = require('../utils/edmFromResources');
+const { syncUsersToSendGridMarketing, shouldUseSendGridEdm } = require('../services/sendgridService');
 
 const router = express.Router();
+
+// @route   GET /api/edm/config
+// @desc    後台用：是否啟用 SendGrid EDM（決定前端是否強制 bodyHtml）
+// @access  Private (Admin)
+router.get('/config', auth, adminAuth, (req, res) => {
+  res.json({
+    data: {
+      sendgridEdm: shouldUseSendGridEdm()
+    }
+  });
+});
 
 const edmSendLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -571,7 +583,13 @@ router.post(
       }
 
       const content = mergeEdmContentFromTemplate(templateDoc, req.body);
-      if (!String(content.subject || '').trim()) {
+      const useSendGridEdm = shouldUseSendGridEdm();
+
+      let subject = String(content.subject || '').trim();
+      if (!subject && useSendGridEdm) {
+        subject = String(process.env.SENDGRID_EDM_DEFAULT_SUBJECT || 'PickleVibes 消息').trim() || 'PickleVibes';
+      }
+      if (!String(subject || '').trim()) {
         return res.status(400).json({ message: '請提供主旨，或選擇 EDM 範本' });
       }
 
@@ -580,12 +598,15 @@ router.post(
       if (!bodyHtml && bodyText) {
         bodyHtml = plainTextToEmailHtml(bodyText);
       }
-      if (!bodyHtml) {
+      if (!bodyHtml && !useSendGridEdm) {
         return res.status(400).json({ message: '請提供 bodyHtml／bodyText，或選擇含內文的 EDM 範本' });
       }
+      if (!bodyHtml) {
+        bodyHtml = '';
+      }
 
-      const subject = String(content.subject).trim();
-      const headline = String(content.headline || '').trim() || subject;
+      const subjectFinal = String(subject).trim();
+      const headline = String(content.headline || '').trim() || subjectFinal;
       const preheader = String(content.preheader || '').trim();
       const ctaUrl = String(content.ctaUrl || '').trim();
       const ctaLabel = String(content.ctaLabel || '').trim();
@@ -605,7 +626,7 @@ router.post(
       const campaign = await EdmCampaign.create({
         createdBy: req.user._id,
         status: 'sending',
-        subject,
+        subject: subjectFinal,
         headline,
         preheader,
         bodyHtml,
@@ -626,7 +647,7 @@ router.post(
       try {
         result = await emailService.sendEdmNewsletter({
           recipients: emails,
-          subject,
+          subject: subjectFinal,
           headline,
           preheader: preheader || undefined,
           bodyHtml,
@@ -664,7 +685,9 @@ router.post(
 
       const statusCode = result.failed > 0 ? 207 : 200;
       res.status(statusCode).json({
-        message: 'EDM 已處理',
+        message: result.aborted
+          ? 'EDM 已中止：偵測到 SMTP／SendGrid 會話或節流錯誤，其餘收件人未再寄送（請稍後再試或檢查郵件設定）'
+          : 'EDM 已處理',
         data: {
           campaignId: String(campaign._id),
           total: emails.length,
@@ -672,11 +695,50 @@ router.post(
           recipientsThisBatch: emails,
           sent: result.sent,
           failed: result.failed,
-          errors: result.errors || []
+          errors: result.errors || [],
+          aborted: Boolean(result.aborted),
+          abortReason: result.abortReason || undefined,
+          provider: result.provider || 'smtp'
         }
       });
     } catch (error) {
       console.error('EDM send 錯誤:', error);
+      res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+    }
+  }
+);
+
+// @route   POST /api/edm/marketing/sync-users
+// @desc    將 MongoDB 內啟用用戶同步至 SendGrid Marketing Contacts（分批 upsert）
+// @access  Private (Admin)
+router.post(
+  '/marketing/sync-users',
+  auth,
+  adminAuth,
+  [
+    body('batchSize').optional().isInt({ min: 1, max: 1000 }).withMessage('batchSize 須為 1–1000'),
+    body('maxUsers').optional().isInt({ min: 1, max: 500000 }).withMessage('maxUsers 須為 1–500000')
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return res.status(400).json({ message: errors.array()[0].msg });
+
+      const batchSize = parseInt(req.body?.batchSize, 10) || 400;
+      const maxUsers = parseInt(req.body?.maxUsers, 10) || 50000;
+
+      const data = await syncUsersToSendGridMarketing({ batchSize, maxUsers });
+      res.json({
+        message:
+          data.errors?.length > 0
+            ? '聯絡人同步未完成（請檢查 API Key 權限與回應內容）'
+            : '已將用戶分批提交至 SendGrid Marketing Contacts（後台非同步處理，請至 SendGrid 查看 job 狀態）',
+        data
+      });
+    } catch (e) {
+      const status = e.status || 500;
+      if (status !== 500) return res.status(status).json({ message: e.message });
+      console.error('SendGrid marketing sync 錯誤:', e);
       res.status(500).json({ message: '服務器錯誤，請稍後再試' });
     }
   }

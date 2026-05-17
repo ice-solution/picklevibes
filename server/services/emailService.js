@@ -15,6 +15,25 @@ function getNoticeRecipientEmail() {
   return pick(process.env.NOTICE_EMAIL) || pick(process.env.EMAIL_USER) || pick(process.env.GMAIL_USER);
 }
 
+/**
+ * SMTP 會話／認證／節流類錯誤：不應再對下一個收件人呼叫 sendMail，否則易加重 Gmail 454 鎖定。
+ * 單一地址 550 等不屬此類，可繼續下一封。
+ */
+function isEdmSmtpSessionAbortError(err) {
+  if (!err || typeof err !== 'object') return false;
+  const rc = Number(err.responseCode);
+  if (rc === 454 || rc === 421 || rc === 432 || rc === 535 || rc === 534) return true;
+  const blob = `${err.message || ''} ${err.response || ''}`.toLowerCase();
+  if (/too many login attempts|invalid login|try again later|temporarily unavailable/.test(blob)) return true;
+  if (/authentication failed|eauth|454[\s.-]*4\.7\.0|535-5\.7\.|534-5\.7\./.test(blob)) return true;
+  if (err.code === 'EAUTH') return true;
+  return false;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 class EmailService {
   constructor() {
     this.transporter = null;
@@ -2269,11 +2288,60 @@ PickleVibes 團隊
     try {
       const { buildEdmHtml, normalizeRecipients, stripHtml } = require('../utils/edmTemplate');
       const list = normalizeRecipients(recipients).sort((a, b) => a.localeCompare(b));
-      if (!list.length) return { success: false, error: '收件人為空', sent: 0, failed: 0, errors: [] };
+      if (!list.length) {
+        return {
+          success: false,
+          error: '收件人為空',
+          sent: 0,
+          failed: 0,
+          errors: [],
+          aborted: false,
+          abortReason: '',
+          provider: 'smtp'
+        };
+      }
 
       const mongoose = require('mongoose');
       const EdmSendLog = require('../models/EdmSendLog');
       const uidMap = userIdByEmail && typeof userIdByEmail === 'object' ? userIdByEmail : {};
+
+      const { shouldUseSendGridEdm, sendEdmViaSendGridDynamicTemplate } = require('./sendgridService');
+      if (shouldUseSendGridEdm()) {
+        const User = require('../models/User');
+        const nameByEmail = {};
+        const ids = [...new Set(Object.values(uidMap).map(String).filter(Boolean))];
+        if (ids.length) {
+          const users = await User.find({ _id: { $in: ids } })
+            .select('email name')
+            .lean();
+          for (const u of users) {
+            nameByEmail[String(u.email).toLowerCase()] = u.name || '';
+          }
+        }
+        const unresolved = list.filter((e) => nameByEmail[e] === undefined);
+        if (unresolved.length) {
+          const more = await User.find({ email: { $in: unresolved } })
+            .select('email name')
+            .lean();
+          for (const u of more) {
+            nameByEmail[String(u.email).toLowerCase()] = u.name || '';
+          }
+        }
+        return await sendEdmViaSendGridDynamicTemplate({
+          recipients: list,
+          subject,
+          headline,
+          preheader,
+          bodyHtml,
+          bodyText,
+          ctaUrl,
+          ctaLabel,
+          footerNote,
+          campaignId,
+          userIdByEmail: uidMap,
+          nameByEmail
+        });
+      }
 
       const flushFailedAll = async (errorMessage) => {
         if (!campaignId) return;
@@ -2303,7 +2371,10 @@ PickleVibes 團隊
           error: '郵件服務未初始化',
           sent: 0,
           failed: list.length,
-          errors: list.map((to) => ({ to, error: '郵件服務未初始化' }))
+          errors: list.map((to) => ({ to, error: '郵件服務未初始化' })),
+          aborted: false,
+          abortReason: '',
+          provider: 'smtp'
         };
       }
 
@@ -2322,12 +2393,17 @@ PickleVibes 團隊
         ? String(bodyText).trim()
         : stripHtml(bodyHtml || subject);
 
+      const smtpGapMs = Math.max(50, parseInt(process.env.EDM_SEND_GAP_MS || '300', 10));
+      let consecutiveSoftFail = 0;
       let sent = 0;
       const errors = [];
       const sendLogs = [];
-      for (const to of list) {
+      let aborted = false;
+      let abortReason = '';
+
+      for (let i = 0; i < list.length; i += 1) {
+        const to = list[i];
         const now = new Date();
-        let mailErr = null;
         try {
           await this.transporter.sendMail({
             from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
@@ -2337,6 +2413,7 @@ PickleVibes 團隊
             html
           });
           sent += 1;
+          consecutiveSoftFail = 0;
           if (campaignId) {
             const row = {
               campaign: campaignId,
@@ -2349,9 +2426,9 @@ PickleVibes 團隊
             if (uid) row.user = new mongoose.Types.ObjectId(String(uid));
             sendLogs.push(row);
           }
-          await new Promise((r) => setTimeout(r, 120));
+          await sleep(smtpGapMs);
         } catch (e) {
-          mailErr = e.message || String(e);
+          const mailErr = e.message || String(e);
           errors.push({ to, error: mailErr });
           if (campaignId) {
             const row = {
@@ -2365,6 +2442,36 @@ PickleVibes 團隊
             if (uid) row.user = new mongoose.Types.ObjectId(String(uid));
             sendLogs.push(row);
           }
+
+          if (isEdmSmtpSessionAbortError(e)) {
+            aborted = true;
+            abortReason = mailErr;
+            const skipNote = '未嘗試寄送（SMTP 會話錯誤已中止，避免重複登入）';
+            const remaining = list.slice(i + 1);
+            for (const rem of remaining) {
+              errors.push({ to: rem, error: `${skipNote}: ${mailErr}` });
+              if (campaignId) {
+                const row = {
+                  campaign: campaignId,
+                  email: rem,
+                  status: 'failed',
+                  errorMessage: `${skipNote}: ${mailErr}`,
+                  sentAt: new Date()
+                };
+                const uid = uidMap[rem];
+                if (uid) row.user = new mongoose.Types.ObjectId(String(uid));
+                sendLogs.push(row);
+              }
+            }
+            console.error(
+              `❌ EDM 已中止：SMTP 會話/認證錯誤，不再呼叫 sendMail。已成功 ${sent} 封，略過 ${remaining.length} 封。`
+            );
+            break;
+          }
+
+          consecutiveSoftFail += 1;
+          const backoff = Math.min(30000, smtpGapMs * 2 ** Math.min(consecutiveSoftFail, 8));
+          await sleep(backoff);
         }
       }
 
@@ -2380,11 +2487,14 @@ PickleVibes 團隊
         success: errors.length === 0,
         sent,
         failed: errors.length,
-        errors
+        errors,
+        aborted,
+        abortReason: aborted ? abortReason : '',
+        provider: 'smtp'
       };
     } catch (error) {
       console.error('❌ EDM 發送失敗:', error.message);
-      return { success: false, error: error.message, sent: 0, failed: 0, errors: [] };
+      return { success: false, error: error.message, sent: 0, failed: 0, errors: [], aborted: false, abortReason: '', provider: 'smtp' };
     }
   }
 

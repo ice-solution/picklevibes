@@ -149,6 +149,12 @@ mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/picklevib
   } catch (error) {
     console.error('❌ 載入假期資料失敗:', error);
   }
+  try {
+    const { resumePendingRedeemBatchJobs } = require('./services/redeemBatchGenerator');
+    await resumePendingRedeemBatchJobs();
+  } catch (error) {
+    console.error('❌ 恢復兌換碼批次任務失敗:', error);
+  }
 })
 .catch(err => console.error('❌ 數據庫連接失敗:', err));
 

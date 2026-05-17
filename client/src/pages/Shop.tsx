@@ -1,14 +1,15 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SEO from '../components/SEO/SEO';
 import axios from 'axios';
-import { 
+import {
   ShoppingBagIcon,
   MagnifyingGlassIcon,
   ShoppingCartIcon
 } from '@heroicons/react/24/outline';
+
 interface Product {
   _id: string;
   name: string;
@@ -32,24 +33,57 @@ interface Category {
   description?: string;
 }
 
+function buildShopSearchParams(opts: {
+  category?: string;
+  search?: string;
+  page?: number;
+}): string {
+  const p = new URLSearchParams();
+  if (opts.category) p.set('category', opts.category);
+  if (opts.search?.trim()) p.set('search', opts.search.trim());
+  if (opts.page && opts.page > 1) p.set('page', String(opts.page));
+  const s = p.toString();
+  return s ? `?${s}` : '';
+}
+
 const Shop: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const selectedCategory = searchParams.get('category') || '';
+  const searchTerm = searchParams.get('search') || '';
+  const currentPage = Math.max(1, parseInt(searchParams.get('page') || '1', 10) || 1);
+
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCategory, setSelectedCategory] = useState<string>('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [cartCount, setCartCount] = useState(0);
   const { user } = useAuth();
 
+  const updateShopParams = useCallback(
+    (patch: { category?: string; search?: string; page?: number }, replace = false) => {
+      const category =
+        patch.category !== undefined ? patch.category : selectedCategory;
+      const search = patch.search !== undefined ? patch.search : searchTerm;
+      const page = patch.page !== undefined ? patch.page : currentPage;
+      const next = new URLSearchParams();
+      if (category) next.set('category', category);
+      if (search.trim()) next.set('search', search.trim());
+      if (page > 1) next.set('page', String(page));
+      setSearchParams(next, { replace });
+    },
+    [selectedCategory, searchTerm, currentPage, setSearchParams]
+  );
+
   useEffect(() => {
-    fetchCategories();
-    fetchProducts();
-    if (user) {
-      fetchCartCount();
-    }
+    void fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    void fetchProducts();
+    if (user) fetchCartCount();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPage, selectedCategory, searchTerm, user]);
 
   const fetchCategories = async () => {
@@ -68,11 +102,11 @@ const Shop: React.FC = () => {
         page: currentPage.toString(),
         limit: '12'
       });
-      
+
       if (selectedCategory) {
         params.append('category', selectedCategory);
       }
-      
+
       if (searchTerm) {
         params.append('search', searchTerm);
       }
@@ -87,7 +121,7 @@ const Shop: React.FC = () => {
     }
   };
 
-  const fetchCartCount = async () => {
+  const fetchCartCount = () => {
     try {
       const cart = JSON.parse(localStorage.getItem('cart') || '[]');
       setCartCount(cart.length);
@@ -99,7 +133,7 @@ const Shop: React.FC = () => {
   const getImageUrl = (imagePath: string) => {
     if (!imagePath) return '/logo.jpg';
     if (imagePath.startsWith('http')) return imagePath;
-    
+
     const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
     const base = apiUrl.replace(/\/$/, '');
     return `${base}/uploads/${imagePath}`;
@@ -117,8 +151,8 @@ const Shop: React.FC = () => {
     }
 
     const cart = JSON.parse(localStorage.getItem('cart') || '[]');
-    const existingItem = cart.find((item: any) => item.productId === product._id);
-    
+    const existingItem = cart.find((item: { productId: string }) => item.productId === product._id);
+
     if (existingItem) {
       existingItem.quantity += 1;
     } else {
@@ -136,90 +170,126 @@ const Shop: React.FC = () => {
     alert('已加入購物車');
   };
 
+  const activeCategoryName =
+    selectedCategory === ''
+      ? '全部'
+      : categories.find((c) => c._id === selectedCategory)?.name || '';
+
   return (
     <>
-      <SEO 
-        title="線上商店 - PickleVibes"
-        description="選購優質匹克球用品和裝備"
-      />
-      <div className="min-h-screen bg-gray-50 py-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="mb-8">
+      <SEO title="線上商店 - PickleVibes" description="選購優質匹克球用品和裝備" />
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="min-h-screen bg-gray-50 py-8"
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
+        >
+          <motion.div className="mb-8">
             <h1 className="text-4xl font-bold text-gray-900 mb-2">線上商店</h1>
             <p className="text-gray-600">選購優質匹克球用品和裝備</p>
-          </div>
+          </motion.div>
 
-          {/* 搜索和分類篩選 */}
-          <div className="mb-6 flex flex-col md:flex-row gap-4">
-            <div className="flex-1 relative">
-              <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+          {/* 搜尋（獨立一行，避免與分類橫向捲動擠在一起） */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+            }}
+            className="mb-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="relative max-w-xl"
+            >
+              <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none shrink-0" />
               <input
-                type="text"
+                type="search"
                 placeholder="搜索產品..."
                 value={searchTerm}
                 onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1);
+                  updateShopParams({ search: e.target.value, page: 1 }, true);
                 }}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                className="w-full pl-10 pr-4 py-2.5 border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
-            </div>
-            <div className="flex gap-2 overflow-x-auto pb-2">
-              <button
-                onClick={() => {
-                  setSelectedCategory('');
-                  setCurrentPage(1);
-                }}
-                className={`px-4 py-2 rounded-lg whitespace-nowrap ${
+            </motion.div>
+          </form>
+
+          {/* 分類：換行排列、可分享 URL，無橫向捲動 */}
+          <motion.nav
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            aria-label="商品分類"
+            className="mb-8"
+          >
+            <p className="text-xs text-gray-500 mb-2">
+              目前分類：<span className="font-medium text-gray-800">{activeCategoryName}</span>
+              {selectedCategory ? (
+                <span className="text-gray-400 ml-1"></span>
+              ) : null}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                to={`/shop${buildShopSearchParams({ search: searchTerm })}`}
+                className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
                   selectedCategory === ''
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-white text-gray-700 hover:bg-gray-100'
+                    ? 'bg-primary-600 text-white border-primary-600'
+                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
                 }`}
               >
                 全部
-              </button>
-              {categories.map((category) => (
-                <button
-                  key={category._id}
-                  onClick={() => {
-                    setSelectedCategory(category._id);
-                    setCurrentPage(1);
-                  }}
-                  className={`px-4 py-2 rounded-lg whitespace-nowrap ${
-                    selectedCategory === category._id
-                      ? 'bg-primary-600 text-white'
-                      : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {category.name}
-                </button>
-              ))}
+              </Link>
+              {categories.map((category) => {
+                const active = selectedCategory === category._id;
+                return (
+                  <Link
+                    key={category._id}
+                    to={`/shop${buildShopSearchParams({ category: category._id, search: searchTerm })}`}
+                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-colors max-w-full ${
+                      active
+                        ? 'bg-primary-600 text-white border-primary-600'
+                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
+                    }`}
+                    title={category.name}
+                  >
+                    <span className="line-clamp-2 text-left">{category.name}</span>
+                  </Link>
+                );
+              })}
             </div>
-          </div>
+          </motion.nav>
 
-          {/* 購物車按鈕 */}
           {user && (
             <Link
               to="/cart"
               className="fixed bottom-8 right-8 bg-primary-600 text-white p-4 rounded-full shadow-lg hover:bg-primary-700 transition-colors z-50"
             >
-              <div className="relative">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.3, type: 'spring' }}
+                className="relative"
+              >
                 <ShoppingCartIcon className="w-6 h-6" />
                 {cartCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                     {cartCount}
                   </span>
                 )}
-              </div>
+              </motion.div>
             </Link>
           )}
 
-          {/* 產品列表 */}
           {loading ? (
-            <div className="text-center py-12">
-              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+            <motion.div className="text-center py-12">
+              <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
               <p className="mt-4 text-gray-600">載入中...</p>
-            </div>
+            </motion.div>
           ) : products.length === 0 ? (
             <div className="text-center py-12">
               <ShoppingBagIcon className="w-16 h-16 text-gray-400 mx-auto mb-4" />
@@ -228,19 +298,23 @@ const Shop: React.FC = () => {
           ) : (
             <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {products.map((product) => (
+                {products.map((product, index) => (
                   <motion.div
                     key={product._id}
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.05 }}
                     className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow"
                   >
                     <Link to={`/shop/${product._id}`}>
-                      <div className="relative aspect-square overflow-hidden bg-gray-100">
+                      <motion.div
+                        whileHover={{ scale: 1.02 }}
+                        className="relative aspect-square overflow-hidden bg-gray-100"
+                      >
                         <img
                           src={getImageUrl(product.images[0])}
                           alt={product.name}
-                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full object-cover"
                         />
                         {product.discountPrice && (
                           <span className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-sm font-semibold">
@@ -248,86 +322,102 @@ const Shop: React.FC = () => {
                           </span>
                         )}
                         {product.stock === 0 && (
-                          <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+                          <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center"
+                          >
                             <span className="text-white font-semibold">缺貨</span>
-                          </div>
+                          </motion.div>
                         )}
-                      </div>
+                      </motion.div>
                     </Link>
                     <div className="p-4">
                       <Link to={`/shop/${product._id}`}>
-                        <h3 className="font-semibold text-lg mb-2 hover:text-primary-600">
-                          {product.name}
-                        </h3>
+                        <h3 className="font-semibold text-lg mb-2 hover:text-primary-600">{product.name}</h3>
                       </Link>
-                      <p className="text-gray-600 text-sm mb-3 line-clamp-2">
-                        {product.description}
-                      </p>
-                      <div className="flex flex-col gap-3">
-                        <div>
+                      <p className="text-gray-600 text-sm mb-3 line-clamp-2">{product.description}</p>
+                      <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.2 }}
+                        className="flex flex-col gap-3"
+                      >
+                        <motion.div whileHover={{ scale: 1.02 }}>
                           {product.discountPrice ? (
-                            <div>
+                            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }}>
                               <span className="text-red-600 font-bold text-lg">
                                 HK${product.discountPrice.toFixed(2)}
                               </span>
                               <span className="text-gray-400 line-through ml-2 text-sm">
                                 HK${product.price.toFixed(2)}
                               </span>
-                            </div>
+                            </motion.div>
                           ) : (
-                            <span className="text-gray-900 font-bold text-lg">
-                              HK${product.price.toFixed(2)}
-                            </span>
+                            <span className="text-gray-900 font-bold text-lg">HK${product.price.toFixed(2)}</span>
                           )}
-                        </div>
-                        <button
+                        </motion.div>
+                        <motion.button
                           type="button"
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
                           onClick={() => addToCart(product)}
                           disabled={product.stock === 0}
                           className="w-full px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                         >
                           {product.isClothing ? '選擇尺碼' : '加入購物車'}
-                        </button>
-                      </div>
+                        </motion.button>
+                      </motion.div>
                     </div>
                   </motion.div>
                 ))}
               </div>
 
-              {/* 分頁 */}
               {totalPages > 1 && (
-                <div className="mt-8 flex justify-center gap-2">
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                  >
-                    上一頁
-                  </button>
-                  <span className="px-4 py-2">
+                <div className="mt-8 flex justify-center gap-2 flex-wrap">
+                  {currentPage > 1 ? (
+                    <Link
+                      to={`/shop${buildShopSearchParams({
+                        category: selectedCategory,
+                        search: searchTerm,
+                        page: currentPage - 1
+                      })}`}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 bg-white"
+                    >
+                      上一頁
+                    </Link>
+                  ) : (
+                    <span className="px-4 py-2 border border-gray-200 rounded-lg text-gray-400 bg-gray-50 cursor-not-allowed">
+                      上一頁
+                    </span>
+                  )}
+                  <span className="px-4 py-2 flex items-center">
                     第 {currentPage} / {totalPages} 頁
                   </span>
-                  <button
-                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
-                  >
-                    下一頁
-                  </button>
+                  {currentPage < totalPages ? (
+                    <Link
+                      to={`/shop${buildShopSearchParams({
+                        category: selectedCategory,
+                        search: searchTerm,
+                        page: currentPage + 1
+                      })}`}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 bg-white"
+                    >
+                      下一頁
+                    </Link>
+                  ) : (
+                    <span className="px-4 py-2 border border-gray-200 rounded-lg text-gray-400 bg-gray-50 cursor-not-allowed">
+                      下一頁
+                    </span>
+                  )}
                 </div>
               )}
             </>
           )}
-        </div>
-      </div>
+        </motion.div>
+      </motion.div>
     </>
   );
 };
 
 export default Shop;
-
-
-
-
-
-

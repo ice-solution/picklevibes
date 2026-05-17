@@ -1,12 +1,22 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const XLSX = require('xlsx');
 const { body, validationResult } = require('express-validator');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
+const RedeemBatchJob = require('../models/RedeemBatchJob');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
+const {
+  normalizeTemplate,
+  scheduleRedeemBatchJob,
+  SYNC_MAX_QUANTITY,
+  BULK_MIN_QUANTITY,
+  BULK_MAX_QUANTITY,
+} = require('../services/redeemBatchGenerator');
 const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
+const COMMISSION_RATE_VALUES = ['0', '5', '10', 0, 5, 10];
 
 function escapeRegex(input) {
   return String(input).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -225,8 +235,8 @@ router.post('/admin/create', [
   auth,
   adminAuth,
   body('isIndependentCode').optional().isBoolean().withMessage('isIndependentCode必須是布林值'),
-  body('commissionRate').optional().isIn(['5', '10', 5, 10]).withMessage('佣金比例只能選擇 5 或 10'),
-  body('quantity').optional().isInt({ min: 1, max: 100 }).withMessage('生成數量必須是 1-100'),
+  body('commissionRate').optional().isIn(COMMISSION_RATE_VALUES).withMessage('佣金比例只能選擇 0、5 或 10'),
+  body('quantity').optional().isInt({ min: 1, max: SYNC_MAX_QUANTITY }).withMessage(`生成數量必須是 1-${SYNC_MAX_QUANTITY}（超過請使用背景批次）`),
   body('code').optional().trim().notEmpty().withMessage('兌換碼不能為空'),
   body('name').trim().notEmpty().withMessage('兌換碼名稱不能為空'),
   body('type').isIn(['fixed', 'percentage']).withMessage('類型必須是 fixed 或 percentage'),
@@ -265,8 +275,14 @@ router.post('/admin/create', [
 
     const quantity =
       req.body.quantity != null && String(req.body.quantity).trim() !== ''
-        ? Math.max(1, Math.min(parseInt(req.body.quantity, 10) || 1, 100))
+        ? Math.max(1, Math.min(parseInt(req.body.quantity, 10) || 1, SYNC_MAX_QUANTITY))
         : 1;
+
+    if (isIndependentCode && quantity > SYNC_MAX_QUANTITY) {
+      return res.status(400).json({
+        message: `一次同步最多建立 ${SYNC_MAX_QUANTITY} 個；請使用 POST /api/redeem/admin/batch-jobs 建立更多兌換碼`,
+      });
+    }
 
     // 獨立兌換碼：一次生成 N 個唯一碼
     if (isIndependentCode) {
@@ -387,6 +403,133 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
   }
 });
 
+const redeemTemplateValidators = [
+  body('name').trim().notEmpty().withMessage('兌換碼名稱不能為空'),
+  body('type').isIn(['fixed', 'percentage']).withMessage('類型必須是 fixed 或 percentage'),
+  body('value').isFloat({ min: 0 }).withMessage('折扣值必須大於等於0'),
+  body('minAmount').optional().isFloat({ min: 0 }).withMessage('最低消費金額不能為負數'),
+  body('maxDiscount').optional().isFloat({ min: 0 }).withMessage('最大折扣金額不能為負數'),
+  body('commissionRate').optional().isIn(COMMISSION_RATE_VALUES).withMessage('佣金比例只能選擇 0、5 或 10'),
+  body('validUntil').isISO8601().withMessage('請提供有效的到期日期'),
+  body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+  body('restrictedCode').optional().trim(),
+];
+
+// @route   POST /api/redeem/admin/batch-jobs
+// @desc    背景批次建立獨立兌換碼（>100 張，最多 10000）
+// @access  Private (Admin)
+router.post('/admin/batch-jobs', [
+  auth,
+  adminAuth,
+  body('isIndependentCode').custom((v) => v === true || v === 'true').withMessage('背景批次僅支援獨立兌換碼'),
+  body('quantity').isInt({ min: BULK_MIN_QUANTITY, max: BULK_MAX_QUANTITY })
+    .withMessage(`背景批次數量必須是 ${BULK_MIN_QUANTITY}-${BULK_MAX_QUANTITY}`),
+  ...redeemTemplateValidators,
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const quantity = parseInt(req.body.quantity, 10);
+    const batchId = new mongoose.Types.ObjectId();
+    const template = normalizeTemplate(req.body, req.user.id);
+
+    const job = await RedeemBatchJob.create({
+      batchId,
+      quantity,
+      template,
+      createdBy: req.user.id,
+      status: 'pending',
+    });
+
+    scheduleRedeemBatchJob(job._id);
+
+    return res.status(202).json({
+      message: '兌換碼批次建立任務已提交，將於後台處理',
+      jobId: job._id,
+      batchId,
+      quantity,
+      status: 'pending',
+    });
+  } catch (error) {
+    console.error('提交兌換碼批次任務錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/redeem/admin/batch-jobs/:jobId
+// @desc    查詢背景批次任務狀態
+// @access  Private (Admin)
+router.get('/admin/batch-jobs/:jobId', [auth, adminAuth], async (req, res) => {
+  try {
+    const job = await RedeemBatchJob.findById(req.params.jobId)
+      .select('-template')
+      .lean();
+    if (!job) {
+      return res.status(404).json({ message: '找不到此任務' });
+    }
+    res.json({ job });
+  } catch (error) {
+    console.error('查詢兌換碼批次任務錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/redeem/admin/batch/:batchId/export
+// @desc    匯出批次兌換碼為 XLSX
+// @access  Private (Admin)
+router.get('/admin/batch/:batchId/export', [auth, adminAuth], async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    if (!batchId || !mongoose.Types.ObjectId.isValid(batchId)) {
+      return res.status(400).json({ message: '無效的 batchId' });
+    }
+
+    const sample = await RedeemCode.findOne({ batchId }).select('name').lean();
+    if (!sample) {
+      return res.status(404).json({ message: '找不到此批次' });
+    }
+
+    const codes = await RedeemCode.find({ batchId })
+      .select('code name isActive totalUsed usageLimit validUntil createdAt')
+      .sort({ code: 1 })
+      .lean();
+
+    const rows = codes.map((row) => ({
+      兌換碼: row.code,
+      名稱: row.name,
+      狀態: row.isActive ? '啟用' : '禁用',
+      已使用次數: row.totalUsed ?? 0,
+      使用上限: row.usageLimit ?? 1,
+      有效期至: row.validUntil ? new Date(row.validUntil).toISOString().slice(0, 10) : '',
+      建立時間: row.createdAt ? new Date(row.createdAt).toISOString() : '',
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(rows);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '兌換碼');
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+    const safeName = String(sample.name || 'batch').replace(/[^\w\u4e00-\u9fff-]+/g, '_').slice(0, 40);
+    const filename = `redeem-${safeName}-${String(batchId).slice(-6)}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.send(buffer);
+  } catch (error) {
+    console.error('匯出批次兌換碼錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/redeem/admin/groups
 // @desc    以 batchId 群組顯示（僅管理員）
 // @access  Private (Admin)
@@ -484,7 +627,7 @@ router.put('/admin/batch/:batchId', [
   body('value').optional().isFloat({ min: 0 }).withMessage('折扣值必須大於等於0'),
   body('minAmount').optional().isFloat({ min: 0 }).withMessage('最低消費金額不能為負數'),
   body('maxDiscount').optional().isFloat({ min: 0 }).withMessage('最大折扣金額不能為負數'),
-  body('commissionRate').optional().isIn(['5', '10', 5, 10]).withMessage('佣金比例只能選擇 5 或 10'),
+  body('commissionRate').optional().isIn(COMMISSION_RATE_VALUES).withMessage('佣金比例只能選擇 0、5 或 10'),
   body('validFrom').optional().isISO8601().withMessage('請提供有效的開始日期'),
   body('validUntil').optional().isISO8601().withMessage('請提供有效的到期日期'),
   body('isActive').optional().isBoolean().withMessage('狀態必須是布林值'),
@@ -568,7 +711,7 @@ router.put('/admin/:id', [
   auth,
   adminAuth,
   body('isIndependentCode').optional().isBoolean().withMessage('isIndependentCode必須是布林值'),
-  body('commissionRate').optional().isIn(['5', '10', 5, 10]).withMessage('佣金比例只能選擇 5 或 10'),
+  body('commissionRate').optional().isIn(COMMISSION_RATE_VALUES).withMessage('佣金比例只能選擇 0、5 或 10'),
   body('code').optional().trim().notEmpty().withMessage('兌換碼不能為空'),
   body('name').optional().trim().notEmpty().withMessage('兌換碼名稱不能為空'),
   body('type').optional().isIn(['fixed', 'percentage']).withMessage('類型必須是 fixed 或 percentage'),

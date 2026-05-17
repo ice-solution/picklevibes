@@ -123,7 +123,29 @@ const EdmSend: React.FC = () => {
       orderedBy?: string;
     };
     errors?: { to: string; error: string }[];
+    aborted?: boolean;
+    abortReason?: string;
+    provider?: string;
   } | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [edmUseSendGrid, setEdmUseSendGrid] = useState(false);
+
+  useEffect(() => {
+    if (edmView !== 'send') return;
+    let cancel = false;
+    void (async () => {
+      try {
+        const res = await api.get('/edm/config');
+        if (!cancel) setEdmUseSendGrid(Boolean(res.data?.data?.sendgridEdm));
+      } catch {
+        if (!cancel) setEdmUseSendGrid(false);
+      }
+    })();
+    return () => {
+      cancel = true;
+    };
+  }, [edmView]);
 
   const fetchCampaigns = useCallback(async () => {
     setCampaignsLoading(true);
@@ -392,7 +414,9 @@ const EdmSend: React.FC = () => {
     }
   };
 
-  const hasMailContent = Boolean(selectedTemplateId) || (subject.trim().length > 0 && bodyHtml.trim().length > 0);
+  const hasMailContent = edmUseSendGrid
+    ? true
+    : Boolean(selectedTemplateId) || (subject.trim().length > 0 && bodyHtml.trim().length > 0);
   let hasRecipients = Boolean(selectedMailingListId);
   if (!hasRecipients) {
     hasRecipients =
@@ -402,6 +426,24 @@ const EdmSend: React.FC = () => {
           ? selectedUsers.length > 0
           : roleUser || roleCoach || roleAdmin;
   }
+
+  const syncMarketingContacts = async () => {
+    setSyncBusy(true);
+    setSyncMsg(null);
+    try {
+      const res = await api.post('/edm/marketing/sync-users', { batchSize: 400, maxUsers: 50000 }, { timeout: 600000 });
+      const d = res.data?.data;
+      const summary = d
+        ? `已處理約 ${d.totalSynced ?? 0} 筆、批次 ${d.batches ?? 0}；job_id：${(d.jobIds || []).slice(0, 3).join(', ') || '—'}`
+        : '';
+      setSyncMsg(`${res.data?.message || '完成'} ${summary}`.trim());
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      setSyncMsg(err?.response?.data?.message || err?.message || '同步失敗');
+    } finally {
+      setSyncBusy(false);
+    }
+  };
 
   const canSubmit = hasMailContent && hasRecipients;
 
@@ -416,9 +458,18 @@ const EdmSend: React.FC = () => {
           <h2 className="text-xl font-semibold text-gray-900">EDM</h2>
           <p className="text-sm text-gray-600 mt-1">
             {edmView === 'send' ? (
-              <>
-                先建立<strong>範本</strong>與<strong>發送列表</strong>可重複使用；發送時選擇範本／列表（可再覆寫內文）。單次寄送仍會寫入<strong>寄送紀錄</strong>。
-              </>
+              edmUseSendGrid ? (
+                <>
+                  目前後端已啟用 <strong>SendGrid Dynamic Template</strong>：寄信版面以 SendGrid 範本為主，請<strong>至少設定收件人</strong>即可發送。
+                  主旨／HTML 為<strong>選填</strong>（會傳入範本變數；未填主旨時伺服器使用預設字串）。其他通知郵件仍可能使用 Gmail SMTP，與 EDM 無關。
+                </>
+              ) : (
+                <>
+                  先建立<strong>範本</strong>與<strong>發送列表</strong>可重複使用；發送時選擇範本／列表（可再覆寫內文）。單次寄送仍會寫入<strong>寄送紀錄</strong>。
+                  若伺服器已設定 <code className="text-xs">SENDGRID_API_KEY</code>、<code className="text-xs">SENDGRID_EDM_TEMPLATE_ID</code>、
+                  <code className="text-xs">SENDGRID_FROM_EMAIL</code>，EDM 會改以 SendGrid Dynamic Template 寄出（範本變數請見後端 <code className="text-xs">sendgridService.js</code> 註解）。
+                </>
+              )
             ) : edmView === 'templates' ? (
               <>建立可重用的郵件內容（主旨、HTML、CTA 等），之後在「發送」選用。</>
             ) : edmView === 'lists' ? (
@@ -455,6 +506,21 @@ const EdmSend: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {edmView === 'send' ? (
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 space-y-2">
+          <div>
+            <span className="font-semibold text-slate-900">SendGrid Marketing 聯絡人</span>
+            ：將 MongoDB 內<strong> isActive=true </strong>的用戶以 email／姓名分批 upsert 至 SendGrid（需 API Key 含
+            <code className="mx-1 text-xs bg-white px-1 rounded border">marketing.contacts</code>
+            寫入權限）。可選在 .env 設定 <code className="text-xs">SENDGRID_MARKETING_LIST_IDS</code> 附加至指定列表。
+          </div>
+          <button type="button" className="btn-outline text-sm py-1.5 px-3" disabled={syncBusy} onClick={() => void syncMarketingContacts()}>
+            {syncBusy ? '同步中…' : '同步用戶至 SendGrid'}
+          </button>
+          {syncMsg ? <p className="text-xs text-slate-700 whitespace-pre-wrap break-words">{syncMsg}</p> : null}
+        </div>
+      ) : null}
 
       {edmView === 'templates' ? (
         <EdmTemplatesPanel
@@ -662,14 +728,25 @@ const EdmSend: React.FC = () => {
       {edmView === 'send' && msg && (
         <div
           className={`rounded-lg px-4 py-3 text-sm ${
-            result?.failed ? 'bg-amber-50 text-amber-900 border border-amber-100' : 'bg-green-50 text-green-800 border border-green-100'
+            result?.aborted
+              ? 'bg-red-50 text-red-900 border border-red-100'
+              : result?.failed
+                ? 'bg-amber-50 text-amber-900 border border-amber-100'
+                : 'bg-green-50 text-green-800 border border-green-100'
           }`}
         >
           {msg}
           {result ? (
             <div className="mt-2 font-mono text-xs space-y-1">
+              {result.aborted ? (
+                <div className="text-red-800 font-sans font-medium">
+                  已中止後續 SMTP：其餘收件人未再嘗試寄送（避免 Gmail 454 等鎖定）。
+                  {result.abortReason ? <span className="block mt-1 font-mono text-[11px] opacity-90">{result.abortReason}</span> : null}
+                </div>
+              ) : null}
               <div>
                 模式：{result.recipientMeta?.mode || '—'} · 本批寄送 {result.total ?? '—'} 封 · 成功 {result.sent} / 失敗 {result.failed}
+                {result.provider ? ` · 通道：${result.provider}` : null}
               </div>
               {result.recipientMeta?.mode === 'roles' ? (
                 <div>

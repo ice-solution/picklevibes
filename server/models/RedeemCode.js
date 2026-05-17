@@ -62,10 +62,10 @@ const redeemCodeSchema = new mongoose.Schema({
     default: false,
     description: '若為 true，每個兌換碼只能使用一次（全域）'
   },
-  // 佣金比例（5% 或 10%），使用時會依「用戶真正付款的金額」計算佣金並記錄
+  // 佣金比例（0%、5% 或 10%），使用時會依「用戶真正付款的金額」計算佣金並記錄
   commissionRate: {
     type: Number,
-    enum: [5, 10],
+    enum: [0, 5, 10],
     default: null
   },
   // 有效期

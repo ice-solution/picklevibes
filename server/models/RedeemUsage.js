@@ -40,7 +40,7 @@ const redeemUsageSchema = new mongoose.Schema({
   // 佣金資訊（依 redeemCode.commissionRate 計算）
   commissionRate: {
     type: Number,
-    enum: [5, 10],
+    enum: [0, 5, 10],
     default: null
   },
   commissionAmount: {

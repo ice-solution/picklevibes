@@ -8,7 +8,8 @@ import {
   CurrencyDollarIcon,
   EyeIcon,
   PencilIcon,
-  TrashIcon
+  TrashIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
@@ -75,6 +76,9 @@ interface RedeemCodeGroup {
   totalDiscount: number;
 }
 
+const SYNC_MAX_QUANTITY = 100;
+const BULK_MAX_QUANTITY = 10000;
+
 const RedeemCodeManagement: React.FC = () => {
   const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([]);
   const [redeemGroups, setRedeemGroups] = useState<RedeemCodeGroup[]>([]);
@@ -124,6 +128,8 @@ const RedeemCodeManagement: React.FC = () => {
   const [usagePage, setUsagePage] = useState(1);
   const [usageTotalPages, setUsageTotalPages] = useState(1);
   const [usageTotal, setUsageTotal] = useState(0);
+  const [exportingBatchId, setExportingBatchId] = useState<string | null>(null);
+
   const [formData, setFormData] = useState({
     code: '',
     name: '',
@@ -476,6 +482,31 @@ const RedeemCodeManagement: React.FC = () => {
     }
   };
 
+  const handleExportBatch = async (batchId: string, batchName?: string) => {
+    try {
+      setExportingBatchId(batchId);
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`/redeem/admin/batch/${batchId}/export`, {
+        responseType: 'blob',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      const safeName = (batchName || 'batch').replace(/[^\w\u4e00-\u9fff-]+/g, '_');
+      link.download = `redeem-codes-${safeName}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (error: any) {
+      console.error('匯出批次兌換碼失敗:', error);
+      alert(error.response?.data?.message || '匯出失敗');
+    } finally {
+      setExportingBatchId(null);
+    }
+  };
+
   const handleCreateRedeemCode = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -493,15 +524,28 @@ const RedeemCodeManagement: React.FC = () => {
         delete (submitData as any).code;
       }
 
-      const res = await axios.post('/redeem/admin/create', submitData);
+      const useBackgroundJob =
+        formData.isIndependentCode && formData.quantity > SYNC_MAX_QUANTITY;
 
-      // 獨立兌換碼批次：把實際生成的 code 顯示給管理員
-      const createdCodes: string[] = Array.isArray(res.data?.redeemCodes)
-        ? res.data.redeemCodes.map((c: any) => c?.code).filter(Boolean)
-        : [];
+      if (useBackgroundJob) {
+        const res = await axios.post('/redeem/admin/batch-jobs', submitData);
+        alert(
+          `已提交背景任務，將建立 ${formData.quantity} 個兌換碼。\n` +
+          `任務 ID：${res.data.jobId}\n` +
+          `完成後請在「群組顯示」查看並匯出。`
+        );
+      } else {
+        const res = await axios.post('/redeem/admin/create', submitData);
 
-      if (formData.isIndependentCode && createdCodes.length > 0) {
-        alert(`已生成 ${createdCodes.length} 個兌換碼：\n\n${createdCodes.join(', ')}`);
+        const createdCodes: string[] = Array.isArray(res.data?.redeemCodes)
+          ? res.data.redeemCodes.map((c: any) => c?.code).filter(Boolean)
+          : [];
+
+        if (formData.isIndependentCode && createdCodes.length > 0 && createdCodes.length <= 20) {
+          alert(`已生成 ${createdCodes.length} 個兌換碼：\n\n${createdCodes.join(', ')}`);
+        } else if (formData.isIndependentCode && createdCodes.length > 20) {
+          alert(`已生成 ${createdCodes.length} 個兌換碼，請至「群組顯示」查看明細或匯出。`);
+        }
       }
       
       // 重置表單
@@ -795,6 +839,15 @@ const RedeemCodeManagement: React.FC = () => {
                         >
                           批次修改
                         </button>
+                        <button
+                          onClick={() => handleExportBatch(g._id, g.name)}
+                          disabled={exportingBatchId === g._id}
+                          className="inline-flex items-center text-emerald-600 hover:text-emerald-800 hover:underline disabled:opacity-50"
+                          title="匯出此批次全部兌換碼為 XLSX"
+                        >
+                          <ArrowDownTrayIcon className="w-4 h-4 mr-0.5" />
+                          {exportingBatchId === g._id ? '匯出中…' : '匯出 XLSX'}
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -924,12 +977,26 @@ const RedeemCodeManagement: React.FC = () => {
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
             <h3 className="text-lg font-medium text-gray-900">批次兌換碼明細</h3>
-            <button
-              onClick={handleBackToGroups}
-              className="text-sm text-gray-600 hover:text-gray-900 hover:underline"
-            >
-              返回群組列表
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const group = redeemGroups.find((g) => g._id === selectedBatchId);
+                  handleExportBatch(selectedBatchId, group?.name);
+                }}
+                disabled={exportingBatchId === selectedBatchId}
+                className="inline-flex items-center px-3 py-1.5 text-sm text-emerald-700 border border-emerald-300 rounded-md hover:bg-emerald-50 disabled:opacity-50"
+              >
+                <ArrowDownTrayIcon className="w-4 h-4 mr-1" />
+                {exportingBatchId === selectedBatchId ? '匯出中…' : '匯出 XLSX'}
+              </button>
+              <button
+                onClick={handleBackToGroups}
+                className="text-sm text-gray-600 hover:text-gray-900 hover:underline"
+              >
+                返回群組列表
+              </button>
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1129,6 +1196,7 @@ const RedeemCodeManagement: React.FC = () => {
                   onChange={(e) => setGroupFormData({ ...groupFormData, commissionRate: parseInt(e.target.value) })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
+                  <option value={0}>0%</option>
                   <option value={5}>5%</option>
                   <option value={10}>10%</option>
                 </select>
@@ -1280,13 +1348,15 @@ const RedeemCodeManagement: React.FC = () => {
                       <input
                         type="number"
                         min={1}
-                        max={100}
+                        max={BULK_MAX_QUANTITY}
                         value={formData.quantity}
                         onChange={(e) => setFormData({ ...formData, quantity: parseInt(e.target.value) || 1 })}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                         required
                       />
-                      <p className="text-xs text-gray-500 mt-1">一次最多生成 100 個（避免大量寫入影響效能）。</p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        1–{SYNC_MAX_QUANTITY} 個即時建立；超過 {SYNC_MAX_QUANTITY} 個將於後台背景建立（最多 {BULK_MAX_QUANTITY} 個），完成後於「群組顯示」查看或匯出。
+                      </p>
                     </div>
                   )}
                 </div>
@@ -1362,6 +1432,7 @@ const RedeemCodeManagement: React.FC = () => {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   disabled={false}
                 >
+                  <option value={0}>0%</option>
                   <option value={5}>5%</option>
                   <option value={10}>10%</option>
                 </select>
@@ -1745,7 +1816,7 @@ const RedeemCodeManagement: React.FC = () => {
                             HK$ {usage.finalAmount.toLocaleString()}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-gray-900">
-                            {usage.commissionRate ? `${usage.commissionRate}%` : '—'}
+                            {usage.commissionRate != null ? `${usage.commissionRate}%` : '—'}
                           </td>
                           <td className="px-4 py-3 whitespace-nowrap text-right text-sm text-yellow-700 font-medium">
                             {usage.commissionAmount != null ? usage.commissionAmount.toLocaleString() : '—'}
