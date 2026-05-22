@@ -54,6 +54,12 @@ const activitySchema = new mongoose.Schema({
     enum: ['upcoming', 'ongoing', 'completed', 'cancelled'],
     default: 'upcoming'
   },
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    default: null,
+    index: true,
+  },
   location: {
     type: String,
     required: [true, '活動地點為必填項目'],

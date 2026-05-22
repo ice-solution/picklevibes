@@ -6,6 +6,10 @@ const fs = require('fs').promises;
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
 const { auth, adminAuth } = require('../middleware/auth');
+const {
+  normalizeTimeSlots,
+  syncLegacyPricingFromSlots,
+} = require('../utils/courtPricing');
 const { courtUpload, processCourtImage, deleteFile } = require('../middleware/upload');
 
 // 為批量 API 創建專門的速率限制
@@ -42,7 +46,7 @@ function calculateDuration(startTime, endTime) {
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { type, available, all } = req.query;
+    const { type, available, all, store: storeId } = req.query;
     
     let query = {};
     
@@ -57,8 +61,12 @@ router.get('/', async (req, res) => {
     if (type) {
       query.type = type;
     }
+
+    if (storeId && String(storeId).trim() !== '') {
+      query.store = String(storeId).trim();
+    }
     
-    const courts = await Court.find(query).sort({ number: 1 });
+    const courts = await Court.find(query).populate('store', 'name slug address enableHikAccess').sort({ number: 1 });
     
     // 如果請求可用場地，過濾掉維護中的場地
     if (available === 'true') {
@@ -302,8 +310,9 @@ router.post('/', [
   auth,
   adminAuth,
   body('name').trim().isLength({ min: 1, max: 50 }).withMessage('場地名稱必須在1-50個字符之間'),
+  body('store').notEmpty().withMessage('請選擇店鋪'),
   body('number').isInt({ min: 1 }).withMessage('場地編號必須是正整數'),
-  body('type').isIn(['competition', 'training', 'solo', 'dink']).withMessage('場地類型必須是 competition, training, solo 或 dink'),
+  body('type').isIn(['competition', 'training', 'solo', 'dink', 'full_venue']).withMessage('場地類型無效'),
   body('capacity').isInt({ min: 2, max: 8 }).withMessage('場地容量必須在2-8人之間'),
   body('pricing.peakHour').isFloat({ min: 0 }).withMessage('高峰時段價格不能為負數'),
   body('pricing.offPeak').isFloat({ min: 0 }).withMessage('非高峰時段價格不能為負數')
@@ -326,10 +335,60 @@ router.post('/', [
     });
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ message: '場地編號已存在' });
+      return res.status(400).json({ message: '此店鋪內場地編號已存在' });
     }
     
     console.error('創建場地錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PUT /api/courts/:id/pricing
+// @desc    更新場地時段價格（僅影響新預約）
+// @access  Private (Admin)
+router.put('/:id/pricing', [
+  auth,
+  adminAuth,
+  body('timeSlots').isArray({ min: 1 }).withMessage('至少需要一個時段'),
+  body('timeSlots.*.startTime').notEmpty().withMessage('開始時間不能為空'),
+  body('timeSlots.*.endTime').notEmpty().withMessage('結束時間不能為空'),
+  body('timeSlots.*.name').trim().notEmpty().withMessage('時段名稱不能為空'),
+  body('timeSlots.*.price').isFloat({ min: 0 }).withMessage('價格不能為負數'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const court = await Court.findById(req.params.id);
+    if (!court) {
+      return res.status(404).json({ message: '場地不存在' });
+    }
+
+    let timeSlots;
+    try {
+      timeSlots = normalizeTimeSlots(req.body.timeSlots);
+    } catch (e) {
+      return res.status(400).json({ message: e.message });
+    }
+
+    const legacy = syncLegacyPricingFromSlots(timeSlots);
+    court.pricing.timeSlots = timeSlots;
+    court.pricing.peakHour = legacy.peakHour;
+    court.pricing.offPeak = legacy.offPeak;
+    court.markModified('pricing');
+    await court.save();
+
+    res.json({
+      message: '時段價格已更新（僅影響新預約）',
+      court,
+    });
+  } catch (error) {
+    console.error('更新場地價格錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
@@ -340,7 +399,9 @@ router.post('/', [
 router.put('/:id', [
   auth,
   adminAuth,
+  body('store').optional().notEmpty().withMessage('請選擇店鋪'),
   body('name').optional().trim().isLength({ min: 1, max: 50 }).withMessage('場地名稱必須在1-50個字符之間'),
+  body('number').optional().isInt({ min: 1 }).withMessage('場地編號必須是正整數'),
   body('capacity').optional().isInt({ min: 2, max: 8 }).withMessage('場地容量必須在2-8人之間'),
   body('pricing.peakHour').optional().isFloat({ min: 0 }).withMessage('高峰時段價格不能為負數'),
   body('pricing.offPeak').optional().isFloat({ min: 0 }).withMessage('非高峰時段價格不能為負數')
@@ -358,7 +419,7 @@ router.put('/:id', [
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    );
+    ).populate('store', 'name slug address enableHikAccess');
 
     if (!court) {
       return res.status(404).json({ message: '場地不存在' });
@@ -369,6 +430,9 @@ router.put('/:id', [
       court
     });
   } catch (error) {
+    if (error.code === 11000) {
+      return res.status(400).json({ message: '此店鋪內場地編號已存在' });
+    }
     console.error('更新場地錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }

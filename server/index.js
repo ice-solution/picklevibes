@@ -164,6 +164,7 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
 app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
+app.use('/api/stores', require('./routes/stores'));
 app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
 app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes
 app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes

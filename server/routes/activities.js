@@ -158,19 +158,22 @@ async function getActivityVenueBookingIdList(activityId, previousTitle) {
 
 /** 荔枝角固定場地活動：要佔用的場地清單（包場=三場；單一場地=一場） */
 async function getActivityTargetCourts(activity) {
+  const storeFilter = activity.store ? { store: activity.store } : {};
   const mode = activity.venueHoldMode || 'full_venue';
   if (mode === 'single_court') {
     if (!activity.venueHoldCourtId) return [];
     const c = await Court.findOne({
       _id: activity.venueHoldCourtId,
       isActive: true,
-      type: { $in: ['competition', 'training', 'solo'] }
+      type: { $in: ['competition', 'training', 'solo'] },
+      ...storeFilter,
     });
     return c ? [c] : [];
   }
   return Court.find({
     isActive: true,
-    type: { $in: ['competition', 'training', 'solo'] }
+    type: { $in: ['competition', 'training', 'solo'] },
+    ...storeFilter,
   });
 }
 
@@ -223,6 +226,7 @@ async function createActivityVenueBookings({ activity, adminUser }) {
 
   const bookingDocs = targetCourts.map((court) => ({
     user: adminUser._id,
+    store: court.store || activity.store || null,
     court: court._id,
     relatedActivity: activity._id,
     venueBundleId,

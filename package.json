@@ -18,7 +18,9 @@
     "smart-sync": "node server/scripts/smartSyncGoogleCalendar.js",
     "sync-today": "node server/scripts/smartSyncGoogleCalendar.js --today",
     "sync-month": "node server/scripts/smartSyncGoogleCalendar.js --month",
-    "manage-sync": "node manage-sync.js"
+    "manage-sync": "node manage-sync.js",
+    "export-users-sendgrid-csv": "node server/scripts/exportUsersCsvForSendgrid.js",
+    "migrate-stores": "node server/scripts/migrateDefaultStore.js"
   },
   "keywords": [
     "pickleball",

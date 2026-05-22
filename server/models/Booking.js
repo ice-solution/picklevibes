@@ -6,6 +6,11 @@ const bookingSchema = new mongoose.Schema({
     ref: 'User',
     required: [true, '用戶為必填項目']
   },
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    index: true,
+  },
   court: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Court',

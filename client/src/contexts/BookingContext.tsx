@@ -2,8 +2,20 @@ import React, { createContext, useContext, useState, useCallback, useMemo, useRe
 import axios from 'axios';
 import apiConfig from '../config/api';
 
+export const BOOKING_STORE_STORAGE_KEY = 'picklevibes_selected_store_id';
+
+export interface StoreSummary {
+  _id: string;
+  name: string;
+  slug: string;
+  address: string;
+  phone?: string;
+  enableHikAccess?: boolean;
+}
+
 interface Court {
   _id: string;
+  store?: string | { _id: string; name: string };
   name: string;
   number: number;
   type: 'competition' | 'training' | 'solo' | 'dink' | 'full_venue';
@@ -74,6 +86,8 @@ interface Booking {
 }
 
 interface BookingContextType {
+  stores: StoreSummary[];
+  selectedStore: StoreSummary | null;
   courts: Court[];
   bookings: Booking[];
   selectedCourt: Court | null;
@@ -86,8 +100,10 @@ interface BookingContextType {
   error: string | null;
   
   // Actions
-  fetchCourts: () => Promise<void>;
+  fetchStores: () => Promise<void>;
+  fetchCourts: (storeId?: string) => Promise<void>;
   fetchBookings: () => Promise<void>;
+  setSelectedStore: (store: StoreSummary | null) => void;
   checkAvailability: (courtId: string, date: string, startTime: string, endTime: string) => Promise<any>;
   checkBatchAvailability: (courtId: string, date: string, timeSlots: Array<{startTime: string, endTime: string}>) => Promise<any>;
   checkSoloCourtAvailability: (date: string, startTime: string, endTime: string) => Promise<boolean>;
@@ -114,6 +130,8 @@ interface CreateBookingData {
 const BookingContext = createContext<BookingContextType | undefined>(undefined);
 
 export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [stores, setStores] = useState<StoreSummary[]>([]);
+  const [selectedStore, setSelectedStoreState] = useState<StoreSummary | null>(null);
   const [courts, setCourts] = useState<Court[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
@@ -129,29 +147,54 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
   const fetchingCourts = useRef(false);
   const fetchingBookings = useRef(false);
 
-  const fetchCourts = useCallback(async () => {
-    // 防止重複調用
+  const fetchStores = useCallback(async () => {
+    try {
+      const response = await axios.get('/stores');
+      const list: StoreSummary[] = response.data.stores || [];
+      setStores(list);
+      const savedId = localStorage.getItem(BOOKING_STORE_STORAGE_KEY);
+      if (savedId) {
+        const remembered = list.find((s) => s._id === savedId);
+        if (remembered) setSelectedStoreState(remembered);
+      }
+    } catch (error: any) {
+      console.error('獲取店鋪失敗:', error);
+      setError(error.response?.data?.message || '獲取店鋪失敗');
+    }
+  }, []);
+
+  const setSelectedStore = useCallback((store: StoreSummary | null) => {
+    setSelectedStoreState(store);
+    if (store) {
+      localStorage.setItem(BOOKING_STORE_STORAGE_KEY, store._id);
+    } else {
+      localStorage.removeItem(BOOKING_STORE_STORAGE_KEY);
+    }
+    setSelectedCourt(null);
+    setSelectedDate('');
+    setSelectedTimeSlot(null);
+  }, []);
+
+  const fetchCourts = useCallback(async (storeId?: string) => {
     if (fetchingCourts.current) {
-      console.log('fetchCourts already in progress, skipping...');
       return;
     }
-    
+    const sid = storeId ?? selectedStore?._id;
+    const url = sid ? `/courts?store=${sid}` : '/courts?all=true';
+
     try {
       fetchingCourts.current = true;
       setLoading(true);
-      console.log('開始獲取場地信息...');
-      const response = await axios.get('/courts');
-      console.log('場地信息獲取成功:', response.data.courts.length, '個場地');
-      setCourts(response.data.courts);
+      const response = await axios.get(url);
+      setCourts(response.data.courts || []);
     } catch (error: any) {
       console.error('獲取場地信息失敗:', error);
       setError(error.response?.data?.message || '獲取場地信息失敗');
     } finally {
       setLoading(false);
       fetchingCourts.current = false;
-      console.log('fetchCourts 完成，重置標誌');
     }
-  }, []);
+  }, [selectedStore?._id]);
 
   const fetchBookings = useCallback(async () => {
     // 防止重複調用
@@ -207,7 +250,17 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       console.log('🔍 檢查單人場可用性:', { date, startTime, endTime });
       
       // 找到單人場
-      const soloCourt = courts.find(court => court.type === 'solo');
+      const selectedStoreId = selectedCourt
+        ? (typeof selectedCourt.store === 'object' ? selectedCourt.store?._id : selectedCourt.store)
+        : selectedStore?._id;
+      const soloCourt = courts.find(
+        (court) =>
+          court.type === 'solo' &&
+          (!selectedStoreId ||
+            (typeof court.store === 'object'
+              ? court.store?._id === selectedStoreId
+              : court.store === selectedStoreId))
+      );
       if (!soloCourt) {
         console.log('❌ 找不到單人場');
         setSoloCourtAvailable(false);
@@ -240,7 +293,7 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       setSoloCourtAvailable(false);
       return false;
     }
-  }, [courts]);
+  }, [courts, selectedCourt, selectedStore?._id]);
 
   const createBooking = useCallback(async (bookingData: CreateBookingData): Promise<Booking> => {
     try {
@@ -277,6 +330,8 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
   const clearError = useCallback(() => setError(null), []);
 
   const value = useMemo(() => ({
+    stores,
+    selectedStore,
     courts,
     bookings,
     selectedCourt,
@@ -287,8 +342,10 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     soloCourtAvailable,
     loading,
     error,
+    fetchStores,
     fetchCourts,
     fetchBookings,
+    setSelectedStore,
     checkAvailability,
     checkBatchAvailability,
     checkSoloCourtAvailability,
@@ -301,6 +358,8 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     setIncludeSoloCourt,
     clearError
   }), [
+    stores,
+    selectedStore,
     courts,
     bookings,
     selectedCourt,
@@ -311,8 +370,10 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     soloCourtAvailable,
     loading,
     error,
+    fetchStores,
     fetchCourts,
     fetchBookings,
+    setSelectedStore,
     checkAvailability,
     checkBatchAvailability,
     checkSoloCourtAvailability,
