@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, type Location } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { getPostAuthRedirectPath } from '../utils/authRedirect';
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -14,8 +15,17 @@ const Login: React.FC = () => {
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
 
-  const { login } = useAuth();
+  const { login, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const redirectFrom = (location.state as { from?: Location } | null)?.from;
+
+  // 已登入則直接回到原本要去的頁面（例如 game join）
+  useEffect(() => {
+    if (!authLoading && user) {
+      navigate(getPostAuthRedirectPath(redirectFrom), { replace: true });
+    }
+  }, [authLoading, user, redirectFrom, navigate]);
 
   // 載入頁面時檢查是否有儲存的 email
   useEffect(() => {
@@ -77,7 +87,7 @@ const Login: React.FC = () => {
         localStorage.removeItem('rememberedEmail');
       }
       
-      navigate('/my-bookings');
+      navigate(getPostAuthRedirectPath(redirectFrom), { replace: true });
     } catch (error: any) {
       setErrors({ general: error.message });
     } finally {
@@ -107,6 +117,7 @@ const Login: React.FC = () => {
             或者{' '}
             <Link
               to="/register"
+              state={redirectFrom ? { from: redirectFrom } : undefined}
               className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
             >
               創建新帳戶
