@@ -246,8 +246,8 @@ bookingSchema.index({ relatedActivity: 1 });
 bookingSchema.index({ user: 1, date: 1 });
 bookingSchema.index({ status: 1, date: 1 });
 
-// 檢查時間衝突（excludeId：單筆排除；excludeIds：多筆排除，例如活動佔用之多場地預約）
-bookingSchema.statics.checkTimeConflict = async function(
+// 找出與指定時段重疊的預約（excludeId／excludeIds：更新或活動佔場時排除自身）
+bookingSchema.statics.findTimeConflicts = async function(
   courtId,
   date,
   startTime,
@@ -255,40 +255,31 @@ bookingSchema.statics.checkTimeConflict = async function(
   excludeId = null,
   excludeIds = null
 ) {
-  const bookingDate = new Date(date);
-  
-  // 確保 courtId 是 ObjectId 類型
+  const {
+    getHKCalendarYMD,
+    hkYmdToBookingUtcMidnight,
+    addDaysToYmd,
+    bookingRangeUtcMs,
+    rangesOverlap,
+    resolveHKYmd
+  } = require('../utils/bookingDateTime');
+
   const courtObjectId = typeof courtId === 'string' ? new mongoose.Types.ObjectId(courtId) : courtId;
-  
-  // 計算新預約的結束日期
-  const timeToMinutes = (time) => {
-    // 處理 24:00 的情況
-    if (time === '24:00') {
-      return 24 * 60; // 1440 分鐘
-    }
-    const [hour, minute] = time.split(':').map(Number);
-    return hour * 60 + minute;
-  };
-  
-  const newStartMinutes = timeToMinutes(startTime);
-  const newEndMinutes = timeToMinutes(endTime);
-  const isOvernight = newEndMinutes <= newStartMinutes;
-  
-  const newEndDate = new Date(bookingDate);
-  if (isOvernight) {
-    newEndDate.setDate(newEndDate.getDate() + 1);
-  }
-  
-  // 查找可能衝突的預約：當天或下一天
+
+  const ymdHk = resolveHKYmd(date);
+  const { startMs: newStartMs, endMs: newEndMs } = bookingRangeUtcMs(ymdHk, startTime, endTime);
+
+  const prevYmd = addDaysToYmd(ymdHk, -1);
+  const nextYmd = addDaysToYmd(ymdHk, 1);
   const query = {
     court: courtObjectId,
     status: { $in: ['confirmed', 'pending'] },
-    $or: [
-      { date: bookingDate }, // 當天的預約
-      { date: newEndDate }   // 跨天預約可能影響下一天
-    ]
+    date: {
+      $gte: hkYmdToBookingUtcMidnight(prevYmd),
+      $lte: hkYmdToBookingUtcMidnight(nextYmd)
+    }
   };
-  
+
   const mergedExclude = [];
   if (excludeId) mergedExclude.push(excludeId);
   if (Array.isArray(excludeIds)) mergedExclude.push(...excludeIds);
@@ -304,26 +295,39 @@ bookingSchema.statics.checkTimeConflict = async function(
   if (oidList.length) {
     query._id = { $nin: oidList };
   }
-  
-  const conflictingBookings = await this.find(query);
-  
-  // 將日期和時間轉換為 timestamp 以便精確比較
-  const newStartTimestamp = bookingDate.getTime() + newStartMinutes * 60 * 1000;
-  const newEndTimestamp = newEndDate.getTime() + newEndMinutes * 60 * 1000;
-  
-  return conflictingBookings.some(booking => {
-    const bookingStartMinutes = timeToMinutes(booking.startTime);
-    const bookingEndMinutes = timeToMinutes(booking.endTime);
-    
-    // 使用 endDate 如果存在，否則假設與 date 相同
-    const bookingEndDate = booking.endDate || booking.date;
-    
-    const bookingStartTimestamp = booking.date.getTime() + bookingStartMinutes * 60 * 1000;
-    const bookingEndTimestamp = bookingEndDate.getTime() + bookingEndMinutes * 60 * 1000;
-    
-    // 檢查是否有時間重疊
-    return (newStartTimestamp < bookingEndTimestamp && newEndTimestamp > bookingStartTimestamp);
+
+  const candidateBookings = await this.find(query)
+    .populate('user', 'name email')
+    .populate('relatedActivity', 'title');
+
+  return candidateBookings.filter((booking) => {
+    const bookingYmd = getHKCalendarYMD(booking.date);
+    const { startMs, endMs } = bookingRangeUtcMs(
+      bookingYmd,
+      booking.startTime,
+      booking.endTime
+    );
+    return rangesOverlap(newStartMs, newEndMs, startMs, endMs);
   });
+};
+
+bookingSchema.statics.checkTimeConflict = async function(
+  courtId,
+  date,
+  startTime,
+  endTime,
+  excludeId = null,
+  excludeIds = null
+) {
+  const conflicts = await this.findTimeConflicts(
+    courtId,
+    date,
+    startTime,
+    endTime,
+    excludeId,
+    excludeIds
+  );
+  return conflicts.length > 0;
 };
 
 // 計算總價格

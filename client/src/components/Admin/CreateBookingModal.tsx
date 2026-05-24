@@ -29,6 +29,19 @@ interface Court {
   capacity: number;
 }
 
+interface BookingConflictDetail {
+  bookingId: string;
+  courtName: string;
+  courtType: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  statusLabel: string;
+  userName: string;
+  source: string;
+  summary: string;
+}
+
 interface CreateBookingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,6 +50,27 @@ interface CreateBookingModalProps {
   selectedCourt?: string;
   selectedTime?: string;
 }
+
+const BookingConflictList: React.FC<{ conflicts: BookingConflictDetail[] }> = ({
+  conflicts
+}) => (
+  <ul className="mt-3 space-y-2 text-left">
+    {conflicts.map((c) => (
+      <li
+        key={c.bookingId}
+        className="text-sm bg-white/80 border border-red-200 rounded-lg px-3 py-2"
+      >
+        <div className="font-medium text-red-900">{c.courtName}</div>
+        <div className="text-red-800 mt-0.5">
+          {c.date} {c.startTime}–{c.endTime}
+        </div>
+        <div className="text-red-700 text-xs mt-1">
+          {c.source} · {c.userName} · {c.statusLabel}
+        </div>
+      </li>
+    ))}
+  </ul>
+);
 
 const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   isOpen,
@@ -48,6 +82,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [conflictDetails, setConflictDetails] = useState<BookingConflictDetail[]>([]);
   
   // 表單數據
   const [formData, setFormData] = useState({
@@ -129,7 +164,43 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   };
 
 
+  const applyApiError = (err: any, fallback: string) => {
+    const data = err?.response?.data;
+    const conflicts: BookingConflictDetail[] = data?.conflicts || [];
+    setConflictDetails(conflicts);
+    setError(data?.message || err?.message || fallback);
+  };
+
+  const checkFullVenueAvailability = async (): Promise<boolean> => {
+    if (!formData.date || !formData.startTime || !formData.endTime) {
+      setError('請先選擇日期與時段');
+      return false;
+    }
+    try {
+      const res = await axios.post('/full-venue/check-availability', {
+        date: formData.date,
+        startTime: formData.startTime,
+        endTime: formData.endTime
+      });
+      const conflicts: BookingConflictDetail[] = res.data?.data?.conflicts || [];
+      if (!res.data?.data?.available) {
+        setConflictDetails(conflicts);
+        setError('以下時段已有預約，無法包場：');
+        return false;
+      }
+      setConflictDetails([]);
+      return true;
+    } catch (err: any) {
+      applyApiError(err, '檢查包場可用性失敗');
+      return false;
+    }
+  };
+
   const handleInputChange = (field: string, value: any) => {
+    if (['date', 'startTime', 'endTime', 'courtId'].includes(field)) {
+      setConflictDetails([]);
+      if (field !== 'courtId') setError(null);
+    }
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -168,6 +239,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   const handleFullVenueBooking = async () => {
     setLoading(true);
     setError(null);
+    setConflictDetails([]);
     setShowFullVenueConfirm(false);
     // 不要重置 fullVenueStep，讓它保持當前狀態直到完成
 
@@ -242,7 +314,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       
     } catch (error: any) {
       console.error('包場預約創建失敗:', error);
-      setError(error.response?.data?.message || error.message || '包場預約創建失敗');
+      applyApiError(error, '包場預約創建失敗');
     } finally {
       setLoading(false);
     }
@@ -356,7 +428,10 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           {error && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-              {error}
+              <p>{error}</p>
+              {conflictDetails.length > 0 && (
+                <BookingConflictList conflicts={conflictDetails} />
+              )}
             </div>
           )}
 
@@ -608,6 +683,13 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                   <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
                     <ExclamationTriangleIcon className="h-6 w-6 text-red-600" />
                   </div>
+
+                  {error && conflictDetails.length > 0 && (
+                    <div className="mb-4 text-left bg-red-50 border border-red-200 text-red-700 px-3 py-3 rounded-lg">
+                      <p className="text-sm font-medium">{error}</p>
+                      <BookingConflictList conflicts={conflictDetails} />
+                    </div>
+                  )}
                   
                   {fullVenueStep === 'price' && (
                     <div>
@@ -638,6 +720,9 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                       </h3>
                       <p className="text-sm text-gray-500 mb-4">
                         您確定要包場嗎？這將創建3個場地的預約。
+                      </p>
+                      <p className="text-xs text-gray-600">
+                        {formData.date} {formData.startTime}–{formData.endTime}
                       </p>
                     </div>
                   )}
@@ -674,6 +759,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                       onClick={() => {
                         setShowFullVenueConfirm(false);
                         setFullVenueStep('price');
+                        setError(null);
+                        setConflictDetails([]);
                         setFormData(prev => ({ ...prev, courtId: '' }));
                       }}
                       className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -681,22 +768,25 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                       取消
                     </button>
                     <button
-                      onClick={(e) => {
+                      type="button"
+                      disabled={loading}
+                      onClick={async (e) => {
                         e.preventDefault();
                         e.stopPropagation();
-                        console.log('按鈕點擊，當前步驟:', fullVenueStep);
                         if (fullVenueStep === 'price') {
-                          console.log('進入確認步驟');
+                          setLoading(true);
+                          setError(null);
+                          const ok = await checkFullVenueAvailability();
+                          setLoading(false);
+                          if (!ok) return;
                           setFullVenueStep('confirm');
                         } else if (fullVenueStep === 'confirm') {
-                          console.log('進入積分步驟');
                           setFullVenueStep('points');
                         } else if (fullVenueStep === 'points') {
-                          console.log('執行包場預約');
-                          handleFullVenueBooking();
+                          await handleFullVenueBooking();
                         }
                       }}
-                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
                     >
                       {fullVenueStep === 'price' ? '繼續' : fullVenueStep === 'confirm' ? '繼續' : '確認包場'}
                     </button>

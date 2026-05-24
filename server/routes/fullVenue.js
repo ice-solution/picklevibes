@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth');
 const fullVenueService = require('../services/fullVenueService');
 const User = require('../models/User');
 const accessControlService = require('../services/accessControlService');
+const { normalizeBookingDateInput } = require('../utils/bookingDateTime');
 
 // 創建包場預約
 router.post('/create', auth, async (req, res) => {
@@ -31,7 +32,7 @@ router.post('/create', auth, async (req, res) => {
 
     // 創建包場預約
     const result = await fullVenueService.createFullVenueBooking({
-      date: new Date(date),
+      date: normalizeBookingDateInput(date),
       startTime,
       endTime,
       duration: parseInt(duration),
@@ -93,9 +94,11 @@ router.post('/create', auth, async (req, res) => {
 
   } catch (error) {
     console.error('創建包場預約失敗:', error);
-    res.status(500).json({
+    const status = error.statusCode === 409 ? 409 : 500;
+    res.status(status).json({
       success: false,
-      message: error.message || '創建包場預約失敗'
+      message: error.message || '創建包場預約失敗',
+      conflicts: error.conflicts || []
     });
   }
 });
@@ -180,7 +183,7 @@ router.post('/check-availability', auth, async (req, res) => {
     }
 
     const conflictCheck = await fullVenueService.checkTimeConflicts(
-      new Date(date),
+      normalizeBookingDateInput(date),
       startTime,
       endTime
     );
@@ -189,7 +192,7 @@ router.post('/check-availability', auth, async (req, res) => {
       success: true,
       data: {
         available: !conflictCheck.hasConflict,
-        conflicts: conflictCheck.conflictDetails
+        conflicts: conflictCheck.conflicts || []
       }
     });
 

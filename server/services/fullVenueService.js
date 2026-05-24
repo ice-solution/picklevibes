@@ -2,6 +2,73 @@ const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Court = require('../models/Court');
 const User = require('../models/User');
+const {
+  normalizeBookingDateInput,
+  getHKCalendarYMD
+} = require('../utils/bookingDateTime');
+
+function describeBookingConflict(booking, court) {
+  const ymd = getHKCalendarYMD(booking.date);
+  const userName =
+    booking.user?.name ||
+    booking.players?.[0]?.name ||
+    '（未知用戶）';
+
+  let source = '一般預約';
+  if (booking.relatedActivity) {
+    const title =
+      typeof booking.relatedActivity === 'object' && booking.relatedActivity.title
+        ? booking.relatedActivity.title
+        : '';
+    source = title ? `活動佔場：${title}` : '活動佔場';
+  } else if (booking.venueBundleKind === 'activity_hold') {
+    source = '活動佔場';
+  } else if (
+    booking.venueBundleKind === 'full_venue' ||
+    booking.isFullVenue ||
+    (booking.specialRequests && String(booking.specialRequests).includes('包場'))
+  ) {
+    source = '包場預約';
+  } else if (
+    booking.specialRequests &&
+    String(booking.specialRequests).includes('活動')
+  ) {
+    source = '活動佔場';
+  }
+
+  const statusLabel =
+    booking.status === 'pending'
+      ? '待確認'
+      : booking.status === 'confirmed'
+        ? '已確認'
+        : booking.status;
+
+  return {
+    bookingId: String(booking._id),
+    courtId: String(court._id),
+    courtName: court.name,
+    courtType: court.type,
+    date: ymd,
+    startTime: booking.startTime,
+    endTime: booking.endTime,
+    status: booking.status,
+    statusLabel,
+    userName,
+    source,
+    summary: `${court.name} · ${ymd} ${booking.startTime}–${booking.endTime} · ${source} · ${userName}（${statusLabel}）`
+  };
+}
+
+function buildConflictError(conflictCheck) {
+  const err = new Error(
+    conflictCheck.conflictDetails.length
+      ? `時間衝突：${conflictCheck.conflictDetails.map((c) => c.summary).join('；')}`
+      : '時間衝突'
+  );
+  err.statusCode = 409;
+  err.conflicts = conflictCheck.conflicts;
+  return err;
+}
 
 class FullVenueService {
   /**
@@ -25,10 +92,17 @@ class FullVenueService {
       
       const courts = [soloCourt, trainingCourt, competitionCourt];
 
+      const bookingDate = normalizeBookingDateInput(bookingData.date);
+      bookingData.date = bookingDate;
+
       // 檢查時間衝突
-      const conflictCheck = await this.checkTimeConflicts(bookingData.date, bookingData.startTime, bookingData.endTime);
+      const conflictCheck = await this.checkTimeConflicts(
+        bookingDate,
+        bookingData.startTime,
+        bookingData.endTime
+      );
       if (conflictCheck.hasConflict) {
-        throw new Error(`時間衝突：${conflictCheck.conflictDetails.join(', ')}`);
+        throw buildConflictError(conflictCheck);
       }
 
       // 處理積分扣除（如果指定了）
@@ -148,26 +222,30 @@ class FullVenueService {
       }
       
       const courts = [soloCourt, trainingCourt, competitionCourt];
-      
-      // 使用 Booking 模型的標準時間衝突檢查方法
       const conflicts = [];
-      
-      // 檢查每個場地是否有時間衝突
+      const seenBookingIds = new Set();
+
+      const normalizedDate = normalizeBookingDateInput(date);
+
       for (const court of courts) {
-        const hasConflict = await Booking.checkTimeConflict(court._id, date, startTime, endTime);
-        if (hasConflict) {
-          conflicts.push({
-            court: court.name,
-            type: court.type
-          });
+        const overlapping = await Booking.findTimeConflicts(
+          court._id,
+          normalizedDate,
+          startTime,
+          endTime
+        );
+        for (const booking of overlapping) {
+          const key = String(booking._id);
+          if (seenBookingIds.has(key)) continue;
+          seenBookingIds.add(key);
+          conflicts.push(describeBookingConflict(booking, court));
         }
       }
 
       return {
         hasConflict: conflicts.length > 0,
-        conflictDetails: conflicts.map(conflict => 
-          `${conflict.court} (${conflict.type})`
-        )
+        conflicts,
+        conflictDetails: conflicts
       };
 
     } catch (error) {
