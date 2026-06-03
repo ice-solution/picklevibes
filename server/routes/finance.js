@@ -29,7 +29,8 @@ router.get('/summary', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const data = await computeFinanceSummary({ fromYmd, toYmd });
+    const storeId = req.query.store || req.query.storeId || null;
+    const data = await computeFinanceSummary({ fromYmd, toYmd, storeId: storeId || undefined });
     res.json({ success: true, data });
   } catch (error) {
     console.error('財務摘要錯誤:', error);
@@ -51,8 +52,13 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
+    const storeId = req.query.store || req.query.storeId || null;
     const typeFilter = req.query.type; // recognized | excluded | venue | shop
-    const { lines, fromYmd: f, toYmd: t } = await computeIncomeLines({ fromYmd, toYmd });
+    const { lines, fromYmd: f, toYmd: t } = await computeIncomeLines({
+      fromYmd,
+      toYmd,
+      storeId: storeId || undefined
+    });
 
     let filtered = lines;
     if (typeFilter === 'recognized') filtered = lines.filter((l) => l.lineType === 'recognized');
@@ -60,17 +66,18 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
     else if (typeFilter === 'venue') filtered = lines.filter((l) => l.source === 'venue');
     else if (typeFilter === 'shop') filtered = lines.filter((l) => l.source === 'shop');
 
-    const recognized = lines.filter((l) => l.lineType === 'recognized');
+    const recognizedInView = filtered.filter((l) => l.lineType === 'recognized');
 
     res.json({
       success: true,
       data: {
         period: { fromYmd: f, toYmd: t },
+        storeId: storeId || null,
         lines: filtered,
         totals: {
           lineCount: filtered.length,
-          recognizedTotal: recognized.reduce((s, l) => s + l.recognized, 0),
-          nominalTotal: recognized.reduce((s, l) => s + l.nominal, 0)
+          recognizedTotal: recognizedInView.reduce((s, l) => s + l.recognized, 0),
+          nominalTotal: recognizedInView.reduce((s, l) => s + l.nominal, 0)
         }
       }
     });
@@ -90,13 +97,16 @@ router.get('/summary-xlsx', [auth, adminAuth], async (req, res) => {
     const fromYmd = parseYmd(req.query.from, defaultFrom);
     const toYmd = parseYmd(req.query.to, today);
 
+    const storeId = req.query.store || req.query.storeId || null;
     const [data, { lines }] = await Promise.all([
-      computeFinanceSummary({ fromYmd, toYmd }),
-      computeIncomeLines({ fromYmd, toYmd })
+      computeFinanceSummary({ fromYmd, toYmd, storeId: storeId || undefined }),
+      computeIncomeLines({ fromYmd, toYmd, storeId: storeId || undefined })
     ]);
 
+    const storeLabel = data.selectedStore?.name || '全部店鋪';
     const summaryRows = [
       { 項目: '期間', 數值: `${fromYmd} 至 ${toYmd}` },
+      { 項目: '店鋪', 數值: storeLabel },
       { 項目: '場地名目收入（積分）', 數值: data.venue.nominalTotal },
       { 項目: '場地認列收入', 數值: data.venue.recognizedTotal },
       { 項目: '場地扣除（派送積分折算）', 數值: data.venue.giftPointsExcluded },
@@ -108,18 +118,17 @@ router.get('/summary-xlsx', [auth, adminAuth], async (req, res) => {
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), '損益摘要');
-    XLSX.utils.book_append_sheet(
-      wb,
-      XLSX.utils.json_to_sheet(
-        data.venue.byStore.map((r) => ({
-          店鋪: r.store,
-          預約數: r.count,
-          名目收入: r.nominal,
-          認列收入: r.recognized
-        }))
-      ),
-      '場地按店'
-    );
+    const storeSheetRows = (data.byStoreBreakdown || data.venue.byStore).map((r) => ({
+      店鋪: r.store,
+      認列預約數: r.count,
+      免扣款筆數: r.excludedCount ?? 0,
+      名目收入: r.nominal,
+      認列收入: r.recognized,
+      免扣款參考: r.adminWaivedListPrice ?? 0
+    }));
+    if (storeSheetRows.length > 0) {
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(storeSheetRows), '各店匯總');
+    }
     XLSX.utils.book_append_sheet(
       wb,
       XLSX.utils.json_to_sheet(
@@ -144,7 +153,7 @@ router.get('/summary-xlsx', [auth, adminAuth], async (req, res) => {
     );
 
     const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    const filename = `損益報表_${fromYmd}_${toYmd}.xlsx`;
+    const filename = `損益報表_${storeLabel}_${fromYmd}_${toYmd}.xlsx`.replace(/\s+/g, '_');
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
     res.send(buf);

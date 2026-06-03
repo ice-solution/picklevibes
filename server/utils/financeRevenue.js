@@ -150,40 +150,55 @@ function paymentMethodLabel(method) {
   return method || '積分';
 }
 
+function filterLinesForStore(lines, storeId) {
+  if (!storeId) return lines;
+  return lines.filter((l) => {
+    if (l.source === 'shop') return false;
+    return l.storeId && String(l.storeId) === String(storeId);
+  });
+}
+
 /**
  * 收入明細列（認列 + 不計收入）
- * @param {{ fromYmd: string, toYmd: string }} opts
+ * @param {{ fromYmd: string, toYmd: string, storeId?: string }} opts
  */
 async function computeIncomeLines(opts) {
-  const { fromYmd, toYmd } = opts;
+  const { fromYmd, toYmd, storeId } = opts;
   const start = hkStartOfDayInstant(fromYmd);
   const end = hkEndOfDayInstant(toYmd);
 
   const Booking = require('../models/Booking');
   const Order = require('../models/Order');
 
-  const bookings = await Booking.find({
+  const bookingQuery = {
     status: { $in: ['confirmed', 'completed'] },
     date: { $gte: start, $lte: end }
-  })
+  };
+  if (storeId) {
+    bookingQuery.store = storeId;
+  }
+
+  const bookings = await Booking.find(bookingQuery)
     .select(
       'user store court date startTime endTime duration status pricing payment noUserBalanceDebited bypassRestrictions isFullVenue venueBundleKind relatedActivity createdAt'
     )
-    .populate('store', 'name code')
+    .populate('store', 'name slug code')
     .populate('court', 'name type')
     .populate('user', 'name email phone')
     .sort({ date: 1, startTime: 1 })
     .lean();
 
-  const orders = await Order.find({
-    pointsChargedAt: { $gte: start, $lte: end },
-    pointsChargedAmount: { $gt: 0 },
-    status: { $nin: ['cancelled'] }
-  })
-    .select('user orderNumber pointsChargedAmount pointsChargedAt status items subtotal total')
-    .populate('user', 'name email phone')
-    .sort({ pointsChargedAt: -1 })
-    .lean();
+  const orders = storeId
+    ? []
+    : await Order.find({
+        pointsChargedAt: { $gte: start, $lte: end },
+        pointsChargedAmount: { $gt: 0 },
+        status: { $nin: ['cancelled'] }
+      })
+        .select('user orderNumber pointsChargedAmount pointsChargedAt status items subtotal total')
+        .populate('user', 'name email phone')
+        .sort({ pointsChargedAt: -1 })
+        .lean();
 
   const userIds = new Set();
   bookings.forEach((b) => b.user && userIds.add(String(b.user._id || b.user)));
@@ -194,6 +209,7 @@ async function computeIncomeLines(opts) {
 
   for (const b of bookings) {
     const method = b.payment?.method || 'points';
+    const storeIdLine = b.store?._id ? String(b.store._id) : null;
     const storeName = b.store?.name || '未指定店鋪';
     const courtName = b.court?.name || '';
     const user = b.user;
@@ -213,6 +229,7 @@ async function computeIncomeLines(opts) {
         incomeDate,
         category: '場地租賃',
         description: `${courtName} ${timeSlot}`.trim(),
+        storeId: storeIdLine,
         store: storeName,
         court: courtName,
         orderNumber: null,
@@ -248,6 +265,7 @@ async function computeIncomeLines(opts) {
       incomeDate,
       category: '場地租賃',
       description: `${courtName} ${timeSlot}`.trim(),
+      storeId: storeIdLine,
       store: storeName,
       court: courtName,
       orderNumber: null,
@@ -279,7 +297,8 @@ async function computeIncomeLines(opts) {
       incomeDate: formatHkYmd(o.pointsChargedAt),
       category: '網店銷售',
       description: itemSummary || o.orderNumber,
-      store: null,
+      storeId: null,
+      store: '全公司（網店）',
       court: null,
       orderNumber: o.orderNumber,
       userName: user?.name || '',
@@ -317,12 +336,41 @@ function aggregateFromLines(lines) {
 
   const byStore = new Map();
   venueRecognized.forEach((l) => {
-    const k = l.store || '未指定店鋪';
-    if (!byStore.has(k)) byStore.set(k, { nominal: 0, recognized: 0, count: 0 });
+    const k = l.storeId || l.store || '未指定店鋪';
+    if (!byStore.has(k)) {
+      byStore.set(k, {
+        storeId: l.storeId || null,
+        store: l.store || '未指定店鋪',
+        nominal: 0,
+        recognized: 0,
+        count: 0,
+        excludedCount: 0,
+        adminWaivedListPrice: 0
+      });
+    }
     const row = byStore.get(k);
     row.nominal += l.nominal;
     row.recognized += l.recognized;
     row.count += 1;
+  });
+
+  excluded.forEach((l) => {
+    if (l.source !== 'venue') return;
+    const k = l.storeId || l.store || '未指定店鋪';
+    if (!byStore.has(k)) {
+      byStore.set(k, {
+        storeId: l.storeId || null,
+        store: l.store || '未指定店鋪',
+        nominal: 0,
+        recognized: 0,
+        count: 0,
+        excludedCount: 0,
+        adminWaivedListPrice: 0
+      });
+    }
+    const row = byStore.get(k);
+    row.excludedCount += 1;
+    row.adminWaivedListPrice += l.nominal;
   });
 
   const byPaymentMethod = new Map();
@@ -353,12 +401,17 @@ function aggregateFromLines(lines) {
           .filter((l) => l.paymentMethod === '積分')
           .reduce((s, l) => s + l.nominal, 0)
       ),
-      byStore: [...byStore.entries()].map(([store, v]) => ({
-        store,
-        count: v.count,
-        nominal: round2(v.nominal),
-        recognized: round2(v.recognized)
-      })),
+      byStore: [...byStore.values()]
+        .map((v) => ({
+          storeId: v.storeId,
+          store: v.store,
+          count: v.count,
+          excludedCount: v.excludedCount,
+          adminWaivedListPrice: round2(v.adminWaivedListPrice),
+          nominal: round2(v.nominal),
+          recognized: round2(v.recognized)
+        }))
+        .sort((a, b) => b.recognized - a.recognized),
       byPaymentMethod: [...byPaymentMethod.entries()].map(([method, v]) => ({
         method,
         count: v.count,
@@ -381,15 +434,37 @@ function aggregateFromLines(lines) {
 }
 
 /**
- * @param {{ fromYmd: string, toYmd: string }} opts
+ * 各店鋪場地收入匯總（不含網店）
+ */
+async function computePerStoreSummaries(opts) {
+  const { lines } = await computeIncomeLines({ fromYmd: opts.fromYmd, toYmd: opts.toYmd });
+  const agg = aggregateFromLines(lines);
+  return agg.venue.byStore;
+}
+
+/**
+ * @param {{ fromYmd: string, toYmd: string, storeId?: string }} opts
  */
 async function computeFinanceSummary(opts) {
-  const { fromYmd, toYmd } = opts;
+  const { fromYmd, toYmd, storeId } = opts;
   const start = hkStartOfDayInstant(fromYmd);
   const end = hkEndOfDayInstant(toYmd);
 
-  const { lines } = await computeIncomeLines({ fromYmd, toYmd });
+  const Store = require('../models/Store');
+  let selectedStore = null;
+  if (storeId) {
+    selectedStore = await Store.findById(storeId).select('name slug').lean();
+  }
+
+  const { lines } = await computeIncomeLines({ fromYmd, toYmd, storeId });
   const agg = aggregateFromLines(lines);
+
+  const allStoreLines = storeId
+    ? null
+    : await computeIncomeLines({ fromYmd, toYmd });
+  const byStoreAll = storeId
+    ? null
+    : aggregateFromLines(allStoreLines.lines).venue.byStore;
 
   const rechargeStats = await Recharge.aggregate([
     { $match: { status: 'completed' } },
@@ -426,6 +501,14 @@ async function computeFinanceSummary(opts) {
   return {
     timezone: HK_TZ,
     period: { fromYmd, toYmd },
+    storeId: storeId || null,
+    selectedStore: selectedStore
+      ? { id: String(selectedStore._id), name: selectedStore.name, slug: selectedStore.slug }
+      : null,
+    byStoreBreakdown: byStoreAll,
+    shopScopeNote: storeId
+      ? '網店收入為全公司共用，選定單一店鋪時不計入網店。'
+      : '網店收入不分店鋪，列於「全公司（網店）」。',
     methodology: {
       venueDateBasis: '預約出租日（香港時間）',
       venueStatuses: ['confirmed', 'completed'],
@@ -464,5 +547,7 @@ module.exports = {
   getBookingNominalCharge,
   computeIncomeLines,
   aggregateFromLines,
-  computeFinanceSummary
+  computeFinanceSummary,
+  computePerStoreSummaries,
+  filterLinesForStore
 };

@@ -4,11 +4,29 @@ import {
   DocumentArrowDownIcon,
   CalculatorIcon,
   ArrowPathIcon,
-  InformationCircleIcon
+  InformationCircleIcon,
+  BuildingStorefrontIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 
 type LineType = 'all' | 'recognized' | 'excluded' | 'venue' | 'shop';
+
+interface StoreOption {
+  _id: string;
+  name: string;
+  slug?: string;
+  isActive?: boolean;
+}
+
+interface StoreBreakdown {
+  storeId: string | null;
+  store: string;
+  count: number;
+  excludedCount?: number;
+  adminWaivedListPrice?: number;
+  nominal: number;
+  recognized: number;
+}
 
 interface IncomeLine {
   id: string;
@@ -17,6 +35,7 @@ interface IncomeLine {
   incomeDate: string;
   category: string;
   description: string;
+  storeId: string | null;
   store: string | null;
   court: string | null;
   orderNumber: string | null;
@@ -32,12 +51,17 @@ interface IncomeLine {
 }
 
 interface FinanceSummary {
+  storeId: string | null;
+  selectedStore: { id: string; name: string; slug?: string } | null;
+  byStoreBreakdown: StoreBreakdown[] | null;
+  shopScopeNote?: string;
   totals: { revenueRecognized: number; revenueNominal: number; giftPointsExcluded: number };
   venue: {
     recognizedTotal: number;
     bookingCount: number;
     excludedCount: number;
     adminWaivedListPrice: number;
+    byStore?: StoreBreakdown[];
   };
   shop: { recognizedTotal: number; orderCount: number };
   rechargeInPeriod: {
@@ -76,6 +100,8 @@ const AccountingManagement: React.FC = () => {
   const yearStart = `${today.slice(0, 4)}-01-01`;
   const [fromYmd, setFromYmd] = useState(yearStart);
   const [toYmd, setToYmd] = useState(today);
+  const [storeId, setStoreId] = useState('');
+  const [stores, setStores] = useState<StoreOption[]>([]);
   const [typeTab, setTypeTab] = useState<LineType>('recognized');
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(false);
@@ -83,14 +109,27 @@ const AccountingManagement: React.FC = () => {
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [lines, setLines] = useState<IncomeLine[]>([]);
 
+  useEffect(() => {
+    api.get('/stores/admin/all').then((r) => setStores(r.data.stores || [])).catch(() => {});
+  }, []);
+
+  const storeParams = useMemo(
+    () => ({
+      from: fromYmd,
+      to: toYmd,
+      ...(storeId ? { store: storeId } : {})
+    }),
+    [fromYmd, toYmd, storeId]
+  );
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const typeParam = typeTab === 'all' ? undefined : typeTab;
       const [summaryRes, linesRes] = await Promise.all([
-        api.get('/finance/summary', { params: { from: fromYmd, to: toYmd } }),
+        api.get('/finance/summary', { params: storeParams }),
         api.get('/finance/income-lines', {
-          params: { from: fromYmd, to: toYmd, ...(typeParam ? { type: typeParam } : {}) }
+          params: { ...storeParams, ...(typeParam ? { type: typeParam } : {}) }
         })
       ]);
       setSummary(summaryRes.data?.data || null);
@@ -103,11 +142,13 @@ const AccountingManagement: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [fromYmd, toYmd, typeTab]);
+  }, [storeParams, typeTab]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const storeBreakdown = summary?.byStoreBreakdown || summary?.venue?.byStore || [];
 
   const filteredLines = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -144,7 +185,7 @@ const AccountingManagement: React.FC = () => {
     setExporting(true);
     try {
       const res = await api.get('/finance/summary-xlsx', {
-        params: { from: fromYmd, to: toYmd },
+        params: storeParams,
         responseType: 'blob'
       });
       const blob = new Blob([res.data], {
@@ -153,7 +194,11 @@ const AccountingManagement: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `會計收入明細_${fromYmd}_${toYmd}.xlsx`;
+      const storeName =
+        stores.find((s) => s._id === storeId)?.name ||
+        summary?.selectedStore?.name ||
+        '全部店鋪';
+      a.download = `會計收入_${storeName}_${fromYmd}_${toYmd}.xlsx`;
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -166,6 +211,11 @@ const AccountingManagement: React.FC = () => {
     }
   };
 
+  const selectedStoreName =
+    summary?.selectedStore?.name ||
+    stores.find((s) => s._id === storeId)?.name ||
+    (storeId ? '—' : '全部店鋪（含網店）');
+
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <div>
@@ -174,11 +224,27 @@ const AccountingManagement: React.FC = () => {
           會計 · 收入明細
         </h2>
         <p className="text-gray-600 mt-1">
-          列出每筆認列收入；場地以<strong>出租日</strong>為準，網店以<strong>扣款日</strong>為準。
+          場地收入按<strong>店鋪</strong>與<strong>出租日</strong>分開計算；網店為全公司共用，僅在「全部店鋪」時顯示。
         </p>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-end gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">店鋪</label>
+          <select
+            value={storeId}
+            onChange={(e) => setStoreId(e.target.value)}
+            className="min-w-[220px] px-3 py-2 border rounded-lg bg-white"
+          >
+            <option value="">全部店鋪（含網店匯總）</option>
+            {stores.map((s) => (
+              <option key={s._id} value={s._id}>
+                {s.name}
+                {s.isActive === false ? '（未上線）' : ''}
+              </option>
+            ))}
+          </select>
+        </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>
           <input
@@ -227,19 +293,36 @@ const AccountingManagement: React.FC = () => {
         </button>
       </div>
 
+      <p className="text-sm text-gray-600 flex items-center gap-2">
+        <BuildingStorefrontIcon className="w-4 h-4" />
+        目前檢視：<span className="font-semibold text-gray-900">{selectedStoreName}</span>
+      </p>
+
+      {summary?.shopScopeNote && storeId && (
+        <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+          {summary.shopScopeNote}
+        </p>
+      )}
+
       {summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <div className="bg-white border rounded-lg p-4">
-            <p className="text-xs text-gray-500">總認列收入</p>
-            <p className="text-xl font-bold text-primary-700">HK$ {fmt(summary.totals.revenueRecognized)}</p>
+            <p className="text-xs text-gray-500">認列收入（{selectedStoreName}）</p>
+            <p className="text-xl font-bold text-primary-700">
+              HK$ {fmt(summary.totals.revenueRecognized)}
+            </p>
           </div>
           <div className="bg-white border rounded-lg p-4">
             <p className="text-xs text-gray-500">場地（{summary.venue.bookingCount} 筆）</p>
             <p className="text-xl font-bold">HK$ {fmt(summary.venue.recognizedTotal)}</p>
           </div>
           <div className="bg-white border rounded-lg p-4">
-            <p className="text-xs text-gray-500">網店（{summary.shop.orderCount} 筆）</p>
-            <p className="text-xl font-bold">HK$ {fmt(summary.shop.recognizedTotal)}</p>
+            <p className="text-xs text-gray-500">
+              網店（{summary.shop.orderCount} 筆）{storeId ? '—' : ''}
+            </p>
+            <p className="text-xl font-bold">
+              {storeId ? '—' : `HK$ ${fmt(summary.shop.recognizedTotal)}`}
+            </p>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
             <p className="text-xs text-amber-800">免扣款不計（{summary.venue.excludedCount} 筆）</p>
@@ -250,13 +333,79 @@ const AccountingManagement: React.FC = () => {
         </div>
       )}
 
+      {!storeId && storeBreakdown.length > 0 && (
+        <div className="bg-white rounded-xl border overflow-hidden">
+          <div className="px-4 py-3 border-b font-semibold flex items-center justify-between">
+            <span>各店鋪收入匯總（場地）</span>
+            <span className="text-xs font-normal text-gray-500">點擊列可篩選該店明細</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-left text-gray-600">
+                <tr>
+                  <th className="px-4 py-2">店鋪</th>
+                  <th className="px-4 py-2 text-right">認列筆數</th>
+                  <th className="px-4 py-2 text-right">免扣款</th>
+                  <th className="px-4 py-2 text-right">名目</th>
+                  <th className="px-4 py-2 text-right">認列收入</th>
+                </tr>
+              </thead>
+              <tbody>
+                {storeBreakdown.map((row) => (
+                  <tr
+                    key={row.storeId || row.store}
+                    className="border-t hover:bg-primary-50 cursor-pointer"
+                    onClick={() => row.storeId && setStoreId(row.storeId)}
+                  >
+                    <td className="px-4 py-2 font-medium">{row.store}</td>
+                    <td className="px-4 py-2 text-right">{row.count}</td>
+                    <td className="px-4 py-2 text-right text-amber-700">
+                      {row.excludedCount ?? 0}
+                    </td>
+                    <td className="px-4 py-2 text-right">{fmt(row.nominal)}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-primary-800">
+                      {fmt(row.recognized)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot className="bg-gray-100 font-semibold">
+                <tr>
+                  <td className="px-4 py-2">場地小計</td>
+                  <td className="px-4 py-2 text-right">
+                    {storeBreakdown.reduce((s, r) => s + r.count, 0)}
+                  </td>
+                  <td className="px-4 py-2 text-right">—</td>
+                  <td className="px-4 py-2 text-right">
+                    {fmt(storeBreakdown.reduce((s, r) => s + r.nominal, 0))}
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {fmt(storeBreakdown.reduce((s, r) => s + r.recognized, 0))}
+                  </td>
+                </tr>
+                {summary && (
+                  <tr className="border-t">
+                    <td className="px-4 py-2">＋ 全公司網店</td>
+                    <td className="px-4 py-2 text-right">{summary.shop.orderCount}</td>
+                    <td className="px-4 py-2 text-right">—</td>
+                    <td className="px-4 py-2 text-right">—</td>
+                    <td className="px-4 py-2 text-right">{fmt(summary.shop.recognizedTotal)}</td>
+                  </tr>
+                )}
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2 border-b border-gray-200 pb-1">
         {TYPE_TABS.map((t) => (
           <button
             key={t.id}
             type="button"
             onClick={() => setTypeTab(t.id)}
-            className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors ${
+            disabled={storeId !== '' && t.id === 'shop'}
+            className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors disabled:opacity-40 ${
               typeTab === t.id
                 ? 'border-primary-600 text-primary-700 bg-primary-50'
                 : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -270,7 +419,7 @@ const AccountingManagement: React.FC = () => {
       <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-900 flex gap-2">
         <InformationCircleIcon className="w-5 h-5 flex-shrink-0 mt-0.5" />
         <span>
-          「不計收入」= 管理員 bypass 免扣款預約；「認列收入」中積分消費已扣除派送／贈送積分比例。有價比例欄顯示該用戶累計付費積分佔比。
+          場地收入依店鋪分開；積分認列已扣除派送比例。「全部店鋪」可對照上表各店匯總；選單店後明細僅顯示該店場地預約。
         </span>
       </div>
 
@@ -280,9 +429,10 @@ const AccountingManagement: React.FC = () => {
             <thead className="bg-gray-50 text-left text-gray-600 sticky top-0 z-10">
               <tr>
                 <th className="px-3 py-2 whitespace-nowrap">收入日期</th>
+                <th className="px-3 py-2">店鋪</th>
                 <th className="px-3 py-2">類別</th>
                 <th className="px-3 py-2">摘要</th>
-                <th className="px-3 py-2">店鋪／訂單</th>
+                <th className="px-3 py-2">場地／訂單</th>
                 <th className="px-3 py-2">用戶</th>
                 <th className="px-3 py-2">付款</th>
                 <th className="px-3 py-2 text-right">名目</th>
@@ -294,13 +444,13 @@ const AccountingManagement: React.FC = () => {
             <tbody>
               {loading && filteredLines.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                     載入中…
                   </td>
                 </tr>
               ) : filteredLines.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                  <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                     此條件下沒有資料
                   </td>
                 </tr>
@@ -313,19 +463,21 @@ const AccountingManagement: React.FC = () => {
                     }`}
                   >
                     <td className="px-3 py-2 whitespace-nowrap">{row.incomeDate}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{row.store || '—'}</td>
                     <td className="px-3 py-2">{row.category}</td>
-                    <td className="px-3 py-2 max-w-[200px] truncate" title={row.description}>
+                    <td className="px-3 py-2 max-w-[180px] truncate" title={row.description}>
                       {row.description}
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      {row.store && <div>{row.store}</div>}
-                      {row.court && <div className="text-gray-500">{row.court}</div>}
+                      {row.court && <div>{row.court}</div>}
                       {row.orderNumber && <div>{row.orderNumber}</div>}
                     </td>
                     <td className="px-3 py-2">
                       <div>{row.userName || '—'}</div>
                       {row.userEmail && (
-                        <div className="text-xs text-gray-400 truncate max-w-[140px]">{row.userEmail}</div>
+                        <div className="text-xs text-gray-400 truncate max-w-[120px]">
+                          {row.userEmail}
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{row.paymentMethod}</td>
@@ -336,7 +488,7 @@ const AccountingManagement: React.FC = () => {
                     <td className="px-3 py-2 text-right text-gray-500">
                       {row.giftExcluded > 0 ? fmt(row.giftExcluded) : '—'}
                     </td>
-                    <td className="px-3 py-2 text-xs text-gray-500 max-w-[160px]">
+                    <td className="px-3 py-2 text-xs text-gray-500 max-w-[140px]">
                       {row.excludeReason ||
                         (row.paidPointsRatio != null && row.paymentMethod === '積分'
                           ? `有價 ${(row.paidPointsRatio * 100).toFixed(0)}%`
@@ -349,9 +501,8 @@ const AccountingManagement: React.FC = () => {
             {filteredLines.length > 0 && (
               <tfoot className="bg-gray-100 font-semibold text-sm sticky bottom-0">
                 <tr>
-                  <td colSpan={6} className="px-3 py-3">
-                    小計（{tableFooter.count} 筆
-                    {typeTab === 'recognized' || typeTab === 'venue' || typeTab === 'shop' ? '，僅認列' : ''}）
+                  <td colSpan={7} className="px-3 py-3">
+                    小計（{tableFooter.count} 筆）
                   </td>
                   <td className="px-3 py-3 text-right">{fmt(tableFooter.nominal)}</td>
                   <td className="px-3 py-3 text-right text-primary-800">
