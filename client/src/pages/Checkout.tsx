@@ -6,7 +6,11 @@ import ProtectedRoute from '../components/Auth/ProtectedRoute';
 import SEO from '../components/SEO/SEO';
 import RedeemCodeInput from '../components/Common/RedeemCodeInput';
 import axios from 'axios';
-import { CLOTHING_SIZE_OPTIONS } from '../constants/clothingSizes';
+import {
+  getVariantStock,
+  getEffectiveVariantMode,
+  requiresVariantSelection
+} from '../constants/productVariants';
 import { 
   CheckCircleIcon,
   XCircleIcon
@@ -18,6 +22,7 @@ interface CartItem {
   price: number;
   image: string;
   quantity: number;
+  color?: string;
   size?: string;
 }
 
@@ -116,16 +121,25 @@ const Checkout: React.FC = () => {
         alert(`產品 ${cartItem.name} 不存在`);
         return;
       }
-      if (product.stock < cartItem.quantity) {
-        alert(`產品 ${cartItem.name} 庫存不足`);
-        return;
-      }
-      if (product.isClothing) {
-        const sz = (cartItem.size || '').trim().toUpperCase();
-        if (!(CLOTHING_SIZE_OPTIONS as readonly string[]).includes(sz)) {
-          alert(`請為「${cartItem.name}」選擇有效尺碼（XS–XL）`);
+      const mode = getEffectiveVariantMode(product);
+      if (requiresVariantSelection(product)) {
+        if (mode === 'color' && !cartItem.color) {
+          alert(`請為「${cartItem.name}」選擇顏色`);
           return;
         }
+        if (mode === 'size' && !cartItem.size) {
+          alert(`請為「${cartItem.name}」選擇尺碼`);
+          return;
+        }
+        if (mode === 'color_size' && (!cartItem.color || !cartItem.size)) {
+          alert(`請為「${cartItem.name}」選擇顏色與尺碼`);
+          return;
+        }
+      }
+      const available = getVariantStock(product, cartItem.color, cartItem.size);
+      if (available < cartItem.quantity) {
+        alert(`產品 ${cartItem.name} 庫存不足`);
+        return;
       }
     }
 
@@ -135,6 +149,7 @@ const Checkout: React.FC = () => {
         items: cartItems.map(item => ({
           productId: item.productId,
           quantity: item.quantity,
+          ...(item.color ? { color: item.color } : {}),
           ...(item.size ? { size: item.size } : {})
         })),
         shippingAddress,
@@ -260,9 +275,10 @@ const Checkout: React.FC = () => {
                   <h2 className="text-xl font-bold mb-4">訂單摘要</h2>
                   <div className="space-y-3 mb-6">
                     {cartItems.map((item) => (
-                      <div key={`${item.productId}-${item.size ?? ''}`} className="flex justify-between text-sm">
+                      <div key={`${item.productId}-${item.color ?? ''}-${item.size ?? ''}`} className="flex justify-between text-sm">
                         <span>
                           {item.name}
+                          {item.color ? `（${item.color}）` : ''}
                           {item.size ? `（${item.size}）` : ''} x {item.quantity}
                         </span>
                         <span>{Math.round(item.price * item.quantity)} 積分</span>

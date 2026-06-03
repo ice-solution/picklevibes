@@ -170,6 +170,7 @@ app.use('/api/payments', require('./routes/payments'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
 app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
+app.use('/api/stores', require('./routes/stores'));
 app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
 app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes
 app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes
@@ -190,6 +191,7 @@ app.use('/api/categories', require('./routes/categories')); // Added categories 
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/reports', require('./routes/reports')); // Added orders routes
+app.use('/api/finance', require('./routes/finance'));
 app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'));
 app.use('/api/edm', require('./routes/edm'));
 

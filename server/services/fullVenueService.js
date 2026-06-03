@@ -81,13 +81,21 @@ class FullVenueService {
     try {
       console.log('🏢 開始創建包場預約...');
 
-      // 獲取包場需要的3個特定場地
-      const soloCourt = await Court.findOne({ type: 'solo', isActive: true });
-      const trainingCourt = await Court.findOne({ type: 'training', isActive: true });
-      const competitionCourt = await Court.findOne({ type: 'competition', isActive: true });
+      const storeId = options.storeId;
+      if (!storeId) {
+        throw new Error('請選擇店鋪');
+      }
+
+      const courtQuery = { store: storeId };
+      if (!options.includeInactive) {
+        courtQuery.isActive = true;
+      }
+      const soloCourt = await Court.findOne({ type: 'solo', ...courtQuery });
+      const trainingCourt = await Court.findOne({ type: 'training', ...courtQuery });
+      const competitionCourt = await Court.findOne({ type: 'competition', ...courtQuery });
       
       if (!soloCourt || !trainingCourt || !competitionCourt) {
-        throw new Error('找不到包場所需的場地（單人場、訓練場、比賽場）');
+        throw new Error('此店鋪找不到包場所需的場地（單人場、訓練場、比賽場）');
       }
       
       const courts = [soloCourt, trainingCourt, competitionCourt];
@@ -95,11 +103,11 @@ class FullVenueService {
       const bookingDate = normalizeBookingDateInput(bookingData.date);
       bookingData.date = bookingDate;
 
-      // 檢查時間衝突
       const conflictCheck = await this.checkTimeConflicts(
         bookingDate,
         bookingData.startTime,
-        bookingData.endTime
+        bookingData.endTime,
+        storeId
       );
       if (conflictCheck.hasConflict) {
         throw buildConflictError(conflictCheck);
@@ -122,6 +130,7 @@ class FullVenueService {
         const courtPrice = court.getPriceForTime(bookingData.startTime, bookingData.date);
         const courtBooking = new Booking({
           user: user._id,
+          store: storeId,
           court: court._id,
           date: bookingData.date,
           startTime: bookingData.startTime,
@@ -210,15 +219,21 @@ class FullVenueService {
    * @param {String} endTime - 結束時間
    * @returns {Object} 衝突檢查結果
    */
-  async checkTimeConflicts(date, startTime, endTime) {
+  async checkTimeConflicts(date, startTime, endTime, storeId) {
     try {
-      // 獲取包場需要的3個特定場地
-      const soloCourt = await Court.findOne({ type: 'solo', isActive: true });
-      const trainingCourt = await Court.findOne({ type: 'training', isActive: true });
-      const competitionCourt = await Court.findOne({ type: 'competition', isActive: true });
+      if (!storeId) {
+        throw new Error('請選擇店鋪');
+      }
+      const courtQuery = { store: storeId };
+      if (!options.includeInactive) {
+        courtQuery.isActive = true;
+      }
+      const soloCourt = await Court.findOne({ type: 'solo', ...courtQuery });
+      const trainingCourt = await Court.findOne({ type: 'training', ...courtQuery });
+      const competitionCourt = await Court.findOne({ type: 'competition', ...courtQuery });
       
       if (!soloCourt || !trainingCourt || !competitionCourt) {
-        throw new Error('找不到包場所需的場地（單人場、訓練場、比賽場）');
+        throw new Error('此店鋪找不到包場所需的場地（單人場、訓練場、比賽場）');
       }
       
       const courts = [soloCourt, trainingCourt, competitionCourt];

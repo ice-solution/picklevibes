@@ -139,10 +139,23 @@ router.put('/tier', [
 // @access  Public
 router.get('/hotnews', async (req, res) => {
   try {
-    const data = await Config.getHotNews();
+    const data = await Config.getHotNewsForPublic();
     res.json({ data });
   } catch (error) {
     console.error('取得 hotnews 設定錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/config/hotnews/admin
+// @desc    管理員取得全部 HotNews（含隱藏項目）
+// @access  Private(Admin)
+router.get('/hotnews/admin', auth, adminAuth, async (req, res) => {
+  try {
+    const data = await Config.getHotNews();
+    res.json({ data });
+  } catch (error) {
+    console.error('取得 hotnews 管理資料錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
@@ -160,7 +173,8 @@ router.put('/hotnews', [
   body('items.*.shortDescription').optional().isString().isLength({ max: 280 }),
   body('items.*.description').optional().isString().isLength({ max: 8000 }),
   body('items.*.heroBannerUrl').optional().isString().isLength({ max: 2048 }),
-  body('items.*.sortOrder').optional().isInt({ min: 0, max: 999 })
+  body('items.*.sortOrder').optional().isInt({ min: 0, max: 999 }),
+  body('items.*.visible').optional().isBoolean().withMessage('visible 必須為 true 或 false')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

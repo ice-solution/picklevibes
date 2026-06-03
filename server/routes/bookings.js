@@ -7,7 +7,13 @@ const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
 const whatsappService = require('../services/whatsappService');
-const accessControlService = require('../services/accessControlService');
+const {
+  sendBookingNotification,
+  applyTempAuthToBooking,
+  sendWhatsAppBookingConfirmationStub,
+  resendBookingNotification,
+} = require('../services/bookingNotificationService');
+const Store = require('../models/Store');
 const Config = require('../models/Config');
 const { collectBundledBookingIds } = require('../utils/bookingBundle');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
@@ -104,9 +110,21 @@ router.post('/', [
       return res.status(404).json({ message: '場地不存在' });
     }
 
-    // 僅「管理員權限」繞過時不檢查 isAvailable；未勾選時與一般用戶相同
-    if (!bypassRestrictions && !courtDoc.isAvailable()) {
-      return res.status(400).json({ message: '場地目前不可用' });
+    const isAdminBooking = req.user.role === 'admin';
+
+    // 後台建單：停用場地仍可預約，僅擋維護中；一般用戶仍檢查 isActive
+    if (!bypassRestrictions) {
+      if (isAdminBooking) {
+        const m = courtDoc.maintenance;
+        if (m?.isUnderMaintenance && m.maintenanceStart && m.maintenanceEnd) {
+          const now = new Date();
+          if (now >= m.maintenanceStart && now <= m.maintenanceEnd) {
+            return res.status(400).json({ message: '場地維護中' });
+          }
+        }
+      } else if (!courtDoc.isAvailable()) {
+        return res.status(400).json({ message: '場地目前不可用' });
+      }
     }
 
     const bookingDate = new Date(date);
@@ -316,6 +334,7 @@ router.post('/', [
     
     const bookingData = {
       user: userObjectId,
+      store: courtDoc.store,
       court: courtObjectId,
       date: bookingDate,
       endDate: calculatedEndDate,
@@ -403,7 +422,9 @@ router.post('/', [
       console.log('🔍 創建單人場預約記錄...');
       
       // 找到單人場
-      const soloCourt = await Court.findOne({ type: 'solo' });
+      const soloQuery = { type: 'solo', store: courtDoc.store };
+      if (!isAdminBooking) soloQuery.isActive = true;
+      const soloCourt = await Court.findOne(soloQuery);
       if (!soloCourt) {
         console.error('❌ 找不到單人場');
         return res.status(500).json({ message: '找不到單人場' });
@@ -441,6 +462,7 @@ router.post('/', [
       
       const soloCourtBookingData = {
         user: soloUserObjectId,
+        store: courtDoc.store,
         court: soloCourtObjectId,
         date: bookingDate,
         endDate: calculatedEndDate,
@@ -516,41 +538,24 @@ router.post('/', [
       // 不影響預約創建，只記錄錯誤
     }
 
-    // 處理開門系統流程
+    const storeDoc = await Store.findById(courtDoc.store).lean();
+
     try {
-      const visitorData = {
-        name: booking.players[0]?.name || bookingUser.name,
-        email: booking.players[0]?.email || bookingUser.email,
-        phone: booking.players[0]?.phone || bookingUser.phone
-      };
-
-      const bookingData = {
-        bookingId: booking._id.toString(),
-        date: booking.date,
-        startTime: booking.startTime,
-        endTime: booking.endTime,
-        courtName: courtDoc.name,
-        courtNumber: courtDoc.number
-      };
-
-      const accessControlResult = await accessControlService.processAccessControl(visitorData, bookingData);
-      console.log('✅ 開門系統流程處理完成');
-      
-      // 保存 tempAuth 數據到 Booking
-      if (accessControlResult && accessControlResult.tempAuth) {
-        booking.tempAuth = {
-          code: accessControlResult.tempAuth.code || null,
-          password: accessControlResult.tempAuth.password || null,
-          startTime: accessControlResult.tempAuth.startTime || null,
-          endTime: accessControlResult.tempAuth.endTime || null,
-          createdAt: new Date()
-        };
-        await booking.save();
-        console.log('✅ 臨時授權數據已保存到預約記錄');
+      const notifyResult = await sendBookingNotification({
+        booking,
+        courtDoc,
+        store: storeDoc,
+        userFallback: bookingUser,
+      });
+      if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
+        await applyTempAuthToBooking(booking, notifyResult.accessControlResult);
+        console.log('✅ 門禁／開門郵件流程完成');
+      } else {
+        console.log('✅ 預約確認郵件已發送（無門禁）');
       }
-    } catch (accessControlError) {
-      console.error('❌ 開門系統流程處理失敗:', accessControlError);
-      // 不影響預約創建，只記錄錯誤
+      await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
+    } catch (notifyError) {
+      console.error('❌ 預約通知發送失敗:', notifyError);
     }
 
     // 準備響應數據
@@ -757,21 +762,25 @@ router.get('/admin/all', [
   adminAuth
 ], async (req, res) => {
   try {
-    const { 
-      status, 
-      court, 
-      date, 
+    const {
+      status,
+      court,
+      store,
+      date,
       dateFrom,
       dateTo,
-      page = 1, 
+      page = 1,
       limit = 20,
       sort: sortParam
     } = req.query;
-    
+
     let query = {};
-    
+
     if (status) query.status = status;
     if (court) query.court = court;
+    if (store && String(store).trim() !== '') {
+      query.store = String(store).trim();
+    }
     if (date) {
       const startDate = new Date(date);
       const endDate = new Date(date);
@@ -792,7 +801,12 @@ router.get('/admin/all', [
 
     const bookings = await Booking.find(query)
       .populate('user', 'name email phone')
-      .populate('court', 'name number type')
+      .populate('store', 'name slug')
+      .populate({
+        path: 'court',
+        select: 'name number type store',
+        populate: { path: 'store', select: 'name slug' }
+      })
       .populate('adminNotes.createdBy', 'name email')
       .sort({ date: sortDir, startTime: sortDir })
       .limit(limitNum)
@@ -1124,109 +1138,29 @@ router.post('/:id/confirm', auth, async (req, res) => {
 router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
   try {
     const { id } = req.params;
-    
-    // 查找預約記錄
+
     const booking = await Booking.findById(id)
       .populate('user', 'name email phone')
-      .populate('court', 'name number type');
-    
+      .populate('court', 'name number type store');
+
     if (!booking) {
       return res.status(404).json({ message: '預約記錄不存在' });
     }
-    
-    // 準備訪問者數據
-    const visitorData = {
-      name: booking.players[0]?.name || booking.user.name,
-      email: booking.players[0]?.email || booking.user.email,
-      phone: booking.players[0]?.phone || booking.user.phone
-    };
-    
-    // 準備預約數據
-    const bookingData = {
-      bookingId: booking._id.toString(),
-      date: booking.date,
-      endDate: booking.endDate || null, // 傳入 endDate 用於判斷跨天
-      startTime: booking.startTime,
-      endTime: booking.endTime,
-      courtName: booking.court.name,
-      courtNumber: booking.court.number
-    };
-    
-    let qrCodeData = null;
-    let password = null;
-    let tempAuthCreated = false;
-    
-    // 檢查是否有 tempAuth 數據
-    if (!booking.tempAuth || !booking.tempAuth.code) {
-      // 如果沒有 tempAuth，重新創建
-      console.log('⚠️ 預約記錄沒有 tempAuth 數據，正在重新創建...');
-      
-      try {
-        // 調用 API 創建臨時授權
-        const tempAuth = await accessControlService.createTempAuth(visitorData, bookingData);
-        
-        if (tempAuth && tempAuth.code) {
-          // 處理二維碼數據
-          qrCodeData = tempAuth.code;
-          password = tempAuth.password;
-          
-          // 計算開始和結束時間（ISO 格式）
-          const earlyStartTime = accessControlService.subtractMinutes(bookingData.startTime, 15);
-          const usePreviousDayForEarly = accessControlService._timeToMinutes(earlyStartTime) > accessControlService._timeToMinutes(bookingData.startTime);
-          const startTimeISO = accessControlService.convertToISOString(bookingData.date, earlyStartTime, null, null, usePreviousDayForEarly);
-          const endTimeISO = accessControlService.convertToISOString(
-            bookingData.date, 
-            bookingData.endTime, 
-            bookingData.endDate || null, 
-            earlyStartTime
-          );
-          
-          // 保存新創建的 tempAuth 數據到 Booking
-          booking.tempAuth = {
-            code: tempAuth.code || null,
-            password: tempAuth.password || null,
-            startTime: startTimeISO || null,
-            endTime: endTimeISO || null,
-            createdAt: new Date()
-          };
-          await booking.save();
-          console.log('✅ 臨時授權數據已重新創建並保存到預約記錄');
-          
-          tempAuthCreated = true;
-        } else {
-          throw new Error('創建臨時授權失敗：未返回有效數據');
-        }
-      } catch (createError) {
-        console.error('❌ 重新創建 tempAuth 失敗:', createError);
-        return res.status(500).json({ 
-          message: '重新創建臨時授權失敗，無法發送郵件',
-          error: createError.message 
-        });
-      }
-    } else {
-      // 使用已保存的 tempAuth 數據
-      qrCodeData = booking.tempAuth.code;
-      password = booking.tempAuth.password;
-    }
-    
-    // 發送郵件
-    await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
-    
-    const message = tempAuthCreated 
-      ? '臨時授權已重新創建，開門通知郵件已發送'
-      : '開門通知郵件已重新發送';
-    
-    res.json({ 
-      message: message,
-      email: visitorData.email,
-      tempAuthCreated: tempAuthCreated
+
+    const result = await resendBookingNotification(booking);
+    const visitorEmail = booking.players[0]?.email || booking.user?.email;
+
+    res.json({
+      message: result.message,
+      email: visitorEmail,
+      tempAuthCreated: result.tempAuthCreated,
+      mode: result.mode,
     });
-    
   } catch (error) {
-    console.error('重發開門通知郵件錯誤:', error);
-    res.status(500).json({ 
+    console.error('重發預約通知郵件錯誤:', error);
+    res.status(500).json({
       message: '重發郵件失敗，請稍後再試',
-      error: error.message 
+      error: error.message,
     });
   }
 });

@@ -96,7 +96,8 @@ const DEFAULT_HOTNEWS = {
       shortDescription: '點擊查看活動與場地公告。',
       description: '我們會在這裡發布最新活動、賽事與場地公告。',
       heroBannerUrl: '',
-      sortOrder: 0
+      sortOrder: 0,
+      visible: true
     }
   ]
 };
@@ -116,7 +117,8 @@ function normalizeHotNewsItems(rawItems) {
       const heroBannerUrl =
         it && it.heroBannerUrl != null ? String(it.heroBannerUrl).trim().slice(0, 2048) : '';
       const sortOrder = typeof it?.sortOrder === 'number' && Number.isFinite(it.sortOrder) ? it.sortOrder : i;
-      return { id, title, shortDescription, description, heroBannerUrl, sortOrder };
+      const visible = it?.visible !== false;
+      return { id, title, shortDescription, description, heroBannerUrl, sortOrder, visible };
     })
     .filter((it) => it.title.length > 0)
     .sort((a, b) => a.sortOrder - b.sortOrder)
@@ -154,7 +156,8 @@ function migrateLegacyHotNews(v) {
           shortDescription: short,
           description: desc || short,
           heroBannerUrl: v.heroBannerUrl != null ? String(v.heroBannerUrl).trim() : '',
-          sortOrder: 0
+          sortOrder: 0,
+          visible: true
         }
       ])
     };
@@ -164,6 +167,18 @@ function migrateLegacyHotNews(v) {
     items: []
   };
 }
+
+/** 首頁僅回傳已啟用區塊且單則 visible 的列表 */
+configSchema.statics.getHotNewsForPublic = async function () {
+  const data = await this.getHotNews();
+  if (!data.enabled) {
+    return { enabled: false, items: [] };
+  }
+  return {
+    enabled: true,
+    items: data.items.filter((it) => it.visible !== false)
+  };
+};
 
 configSchema.statics.getHotNews = async function () {
   let doc = await this.findOne({ key: 'hotnews' });

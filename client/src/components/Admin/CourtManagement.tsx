@@ -13,8 +13,15 @@ import {
   ExclamationTriangleIcon,
   PhotoIcon,
   TrashIcon,
-  StarIcon
+  StarIcon,
+  BanknotesIcon,
+  PlusIcon,
+  PencilIcon,
+  BuildingStorefrontIcon,
 } from '@heroicons/react/24/outline';
+import CourtPricingModal from './CourtPricingModal';
+import CourtFormModal from './CourtFormModal';
+import { PricingTimeSlot, resolveTimeSlotsFromCourt } from '../../constants/courtPricing';
 
 interface CourtImage {
   _id: string;
@@ -30,6 +37,7 @@ interface Court {
   type: string;
   description: string;
   capacity: number;
+  store?: string | { _id: string; name: string };
   isActive: boolean;
   maintenance: {
     isUnderMaintenance: boolean;
@@ -38,9 +46,10 @@ interface Court {
     maintenanceReason?: string;
   };
   pricing: {
-    offPeak: number;
-    peakHour: number;
-    owlTime: number;
+    offPeak?: number;
+    peakHour?: number;
+    owlTime?: number;
+    timeSlots?: PricingTimeSlot[];
   };
   amenities: string[];
   operatingHours: {
@@ -51,7 +60,14 @@ interface Court {
   updatedAt: string;
 }
 
+interface StoreOption {
+  _id: string;
+  name: string;
+}
+
 const CourtManagement: React.FC = () => {
+  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [storeFilter, setStoreFilter] = useState<string>('');
   const [courts, setCourts] = useState<Court[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,16 +75,34 @@ const CourtManagement: React.FC = () => {
   const [uploading, setUploading] = useState<string | null>(null);
   const [selectedCourt, setSelectedCourt] = useState<Court | null>(null);
   const [showImageModal, setShowImageModal] = useState(false);
+  const [pricingCourt, setPricingCourt] = useState<Court | null>(null);
+  const [showPricingModal, setShowPricingModal] = useState(false);
+  const [formCourt, setFormCourt] = useState<Court | null>(null);
+  const [showFormModal, setShowFormModal] = useState(false);
+
+  useEffect(() => {
+    fetchStores();
+  }, []);
 
   useEffect(() => {
     fetchCourts();
-  }, []);
+  }, [storeFilter]);
+
+  const fetchStores = async () => {
+    try {
+      const res = await axios.get('/stores/admin/all');
+      setStores(res.data.stores || []);
+    } catch (e) {
+      console.error('載入店鋪失敗', e);
+    }
+  };
 
   const fetchCourts = async () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await axios.get('/courts?all=true');
+      const q = storeFilter ? `?all=true&store=${storeFilter}` : '?all=true';
+      const response = await axios.get(`/courts${q}`);
       setCourts(response.data.courts);
     } catch (error: any) {
       console.error('獲取場地列表失敗:', error);
@@ -265,6 +299,35 @@ const CourtManagement: React.FC = () => {
     setShowImageModal(true);
   };
 
+  const openPricingModal = (court: Court) => {
+    setPricingCourt(court);
+    setShowPricingModal(true);
+  };
+
+  const formatPricingSummary = (court: Court) => {
+    const slots = resolveTimeSlotsFromCourt(court);
+    return slots
+      .map((s) => `${s.name} ${s.startTime}–${s.endTime} ${s.price}`)
+      .join(' · ');
+  };
+
+  const getStoreName = (court: Court) => {
+    if (!court.store) return '未指派店鋪';
+    if (typeof court.store === 'object') return court.store.name;
+    const found = stores.find((s) => s._id === court.store);
+    return found?.name || '未知店鋪';
+  };
+
+  const openCreateForm = () => {
+    setFormCourt(null);
+    setShowFormModal(true);
+  };
+
+  const openEditForm = (court: Court) => {
+    setFormCourt(court);
+    setShowFormModal(true);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -286,6 +349,31 @@ const CourtManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm font-medium text-gray-700">店鋪篩選</label>
+          <select
+            value={storeFilter}
+            onChange={(e) => setStoreFilter(e.target.value)}
+            className="border border-gray-300 rounded-md px-3 py-2 text-sm"
+          >
+            <option value="">全部店鋪</option>
+            {stores.map((s) => (
+              <option key={s._id} value={s._id}>{s.name}</option>
+            ))}
+          </select>
+        </div>
+        <button
+          type="button"
+          onClick={openCreateForm}
+          disabled={stores.length === 0}
+          className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
+        >
+          <PlusIcon className="w-5 h-5" />
+          新增場地
+        </button>
+      </div>
 
       {/* 場地統計 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -413,6 +501,11 @@ const CourtManagement: React.FC = () => {
               {/* 場地信息 */}
               <div className="space-y-3">
                 <div className="flex items-center text-sm text-gray-600">
+                  <BuildingStorefrontIcon className="w-4 h-4 mr-2 flex-shrink-0" />
+                  <span>{getStoreName(court)}</span>
+                </div>
+
+                <div className="flex items-center text-sm text-gray-600">
                   <UserGroupIcon className="w-4 h-4 mr-2" />
                   <span>容量: {court.capacity} 人</span>
                 </div>
@@ -422,11 +515,13 @@ const CourtManagement: React.FC = () => {
                   <span>營業時間: {getOperatingHoursText(court)}</span>
                 </div>
 
-                <div className="flex items-center text-sm text-gray-600">
-                  <CurrencyDollarIcon className="w-4 h-4 mr-2" />
-                  <span>
-                    價格: {court.pricing?.offPeak || 0} - {court.pricing?.peakHour || 0} 積分/小時
-                  </span>
+                <div className="text-sm text-gray-600">
+                  <div className="flex items-start">
+                    <CurrencyDollarIcon className="w-4 h-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span className="line-clamp-3" title={formatPricingSummary(court)}>
+                      {formatPricingSummary(court)}
+                    </span>
+                  </div>
                 </div>
 
                 {court.description && (
@@ -481,6 +576,24 @@ const CourtManagement: React.FC = () => {
                 </button>
                 
                 <button
+                  type="button"
+                  onClick={() => openEditForm(court)}
+                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-indigo-800 bg-indigo-100 rounded-md hover:bg-indigo-200 transition-colors"
+                >
+                  <PencilIcon className="w-4 h-4 mr-2" />
+                  編輯場地／店鋪
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => openPricingModal(court)}
+                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-amber-800 bg-amber-100 rounded-md hover:bg-amber-200 transition-colors"
+                >
+                  <BanknotesIcon className="w-4 h-4 mr-2" />
+                  編輯時段價格
+                </button>
+
+                <button
                   onClick={() => openImageModal(court)}
                   className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 transition-colors"
                 >
@@ -505,12 +618,36 @@ const CourtManagement: React.FC = () => {
                 <li>停用的場地將不會出現在預約選項中</li>
                 <li>已確認的預約不會因場地停用而自動取消</li>
                 <li>場地狀態變更會立即生效</li>
+                <li>「新增場地」或「編輯場地／店鋪」可設定所屬店鋪；同店內編號不可重複</li>
+                <li>「編輯時段價格」可設定貓頭鷹、非繁忙、繁忙等時段；變更僅影響新預約</li>
                 <li>圖片必須為 1920x1280 像素，支持 JPEG、PNG、WEBP 格式</li>
               </ul>
             </div>
           </div>
         </div>
       </div>
+
+      <CourtFormModal
+        court={formCourt}
+        stores={stores}
+        isOpen={showFormModal}
+        defaultStoreId={storeFilter}
+        onClose={() => {
+          setShowFormModal(false);
+          setFormCourt(null);
+        }}
+        onSaved={fetchCourts}
+      />
+
+      <CourtPricingModal
+        court={pricingCourt}
+        isOpen={showPricingModal}
+        onClose={() => {
+          setShowPricingModal(false);
+          setPricingCourt(null);
+        }}
+        onSaved={fetchCourts}
+      />
 
       {/* 圖片管理模態框 */}
       {showImageModal && selectedCourt && (

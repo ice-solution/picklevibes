@@ -11,6 +11,7 @@ import {
   ClockIcon,
   UserIcon,
   MapPinIcon,
+  BuildingStorefrontIcon,
   EyeIcon,
   XMarkIcon,
   PlusIcon,
@@ -20,8 +21,15 @@ import {
   TrashIcon
 } from '@heroicons/react/24/outline';
 
+interface StoreRef {
+  _id: string;
+  name: string;
+  slug?: string;
+}
+
 interface Booking {
   _id: string;
+  store?: StoreRef | string;
   user: {
     _id: string;
     name: string;
@@ -33,6 +41,7 @@ interface Booking {
     name: string;
     number: string;
     type: string;
+    store?: StoreRef | string;
   };
   date: string;
   startTime: string;
@@ -96,6 +105,18 @@ function addDaysToYmd(ymd: string, days: number): string {
   return getHongKongCalendarYmd(new Date(noonMs + days * 86400000));
 }
 
+function resolveBookingStoreName(booking: Booking): string {
+  const fromBooking = booking.store;
+  if (fromBooking && typeof fromBooking === 'object' && fromBooking.name) {
+    return fromBooking.name;
+  }
+  const fromCourt = booking.court?.store;
+  if (fromCourt && typeof fromCourt === 'object' && fromCourt.name) {
+    return fromCourt.name;
+  }
+  return '（未指派店鋪）';
+}
+
 /** 預約結束時間（香港）；24:00 為翌日 00:00（HKT）；跨日時段則加一日 */
 function hkBookingEndToUtcMs(ymd: string, endTime: string, startMs: number): number {
   if (endTime === '24:00') {
@@ -120,6 +141,8 @@ const BookingCalendar: React.FC = () => {
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedCourt, setSelectedCourt] = useState<string>('');
   const [selectedTime, setSelectedTime] = useState<string>('');
+  const [stores, setStores] = useState<StoreRef[]>([]);
+  const [storeFilterId, setStoreFilterId] = useState<string>('');
   const [resendingEmail, setResendingEmail] = useState(false);
   const [newNoteContent, setNewNoteContent] = useState<string>('');
   const [addingNote, setAddingNote] = useState(false);
@@ -143,6 +166,9 @@ const BookingCalendar: React.FC = () => {
           params.append('dateFrom', r.start);
           params.append('dateTo', r.end);
         }
+        if (storeFilterId) {
+          params.append('store', storeFilterId);
+        }
         const response = await axios.get(`/bookings/admin/all?${params.toString()}`);
         setBookings(response.data.bookings);
       } catch (error: any) {
@@ -154,8 +180,15 @@ const BookingCalendar: React.FC = () => {
         }
       }
     },
-    []
+    [storeFilterId]
   );
+
+  useEffect(() => {
+    axios
+      .get('/stores/admin/all')
+      .then((r) => setStores(r.data.stores || []))
+      .catch(() => setStores([]));
+  }, []);
 
   const refetchBookings = useCallback(
     () => fetchBookings(calendarRangeRef.current ?? undefined, { silent: true }),
@@ -186,7 +219,7 @@ const BookingCalendar: React.FC = () => {
   /** 掛載時必抓一次：若僅依賴 FullCalendar 的 datesSet，部分情況下不會觸發，loading 會永遠為 true */
   useEffect(() => {
     fetchBookings(undefined, { silent: false });
-  }, [fetchBookings]);
+  }, [fetchBookings, storeFilterId]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -306,9 +339,14 @@ const BookingCalendar: React.FC = () => {
       }
     }
 
+    const storeLabel = resolveBookingStoreName(booking);
+    const title = storeFilterId
+      ? `${booking.court.name} - ${booking.user.name}`
+      : `[${storeLabel}] ${booking.court.name} - ${booking.user.name}`;
+
     return {
       id: booking._id,
-      title: `${booking.court.name} - ${booking.user.name}`,
+      title,
       start: startDate,
       end: endDate,
       backgroundColor: getCourtTypeColor(booking.court.type, booking.status),
@@ -322,7 +360,7 @@ const BookingCalendar: React.FC = () => {
       }
     };
       }),
-    [bookings]
+    [bookings, storeFilterId]
   );
 
   const getStatusText = (status: string) => {
@@ -499,7 +537,26 @@ const BookingCalendar: React.FC = () => {
       {/* 視圖切換和圖例 */}
       <div className="bg-white rounded-lg shadow-sm p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-          {/* 視圖切換 */}
+          {/* 店鋪篩選 + 視圖切換 */}
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+            <div className="flex items-center gap-2">
+              <BuildingStorefrontIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
+              <select
+                value={storeFilterId}
+                onChange={(e) => {
+                  setStoreFilterId(e.target.value);
+                  lastFetchedRangeKeyRef.current = '';
+                }}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-md bg-white min-w-[200px]"
+              >
+                <option value="">全部店鋪</option>
+                {stores.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
           <div className="flex space-x-2">
             <button
               onClick={() => handleViewChange('dayGridMonth')}
@@ -531,6 +588,7 @@ const BookingCalendar: React.FC = () => {
             >
               日視圖
             </button>
+          </div>
           </div>
         </div>
 
@@ -662,6 +720,14 @@ const BookingCalendar: React.FC = () => {
                 </div>
               </div>
               
+              <div>
+                <label className="block text-sm font-medium text-gray-700">店鋪</label>
+                <p className="text-sm text-gray-900 flex items-center gap-1 mt-0.5">
+                  <BuildingStorefrontIcon className="w-4 h-4 text-primary-600" />
+                  {resolveBookingStoreName(selectedBooking)}
+                </p>
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">場地</label>
@@ -924,6 +990,7 @@ const BookingCalendar: React.FC = () => {
           selectedDate={selectedDate}
           selectedCourt={selectedCourt}
           selectedTime={selectedTime}
+          initialStoreId={storeFilterId || undefined}
         />
       )}
     </div>

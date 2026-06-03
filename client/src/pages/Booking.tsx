@@ -3,6 +3,8 @@ import { motion } from 'framer-motion';
 import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
+import StoreSelector from '../components/Booking/StoreSelector';
+import type { StoreSummary } from '../contexts/BookingContext';
 import CourtSelector from '../components/Booking/CourtSelector';
 import DateSelector from '../components/Booking/DateSelector';
 import TimeSlotSelector from '../components/Booking/TimeSlotSelector';
@@ -13,6 +15,8 @@ import { CalendarDaysIcon, ClockIcon, UsersIcon } from '@heroicons/react/24/outl
 
 const Booking: React.FC = () => {
   const { 
+    stores,
+    selectedStore,
     selectedCourt, 
     selectedDate, 
     selectedTimeSlot, 
@@ -21,7 +25,9 @@ const Booking: React.FC = () => {
     soloCourtAvailable,
     loading,
     error,
+    fetchStores,
     fetchCourts,
+    setSelectedStore,
     setSelectedCourt,
     setSelectedDate,
     setSelectedTimeSlot,
@@ -54,8 +60,14 @@ const Booking: React.FC = () => {
   const stableAvailability = useMemo(() => availability, [availability]);
 
   useEffect(() => {
-    fetchCourts();
-  }, [fetchCourts]); // 添加 fetchCourts 依賴
+    fetchStores();
+  }, [fetchStores]);
+
+  useEffect(() => {
+    if (selectedStore?._id) {
+      fetchCourts(selectedStore._id);
+    }
+  }, [selectedStore?._id, fetchCourts]);
 
   // 載入預約設定（依 role 的可預約天數）
   useEffect(() => {
@@ -92,19 +104,21 @@ const Booking: React.FC = () => {
     : (maxAdvanceDaysByRole.user ?? 7);
 
   const steps = [
-    { id: 1, name: '選擇場地', icon: CalendarDaysIcon },
-    { id: 2, name: '選擇日期', icon: CalendarDaysIcon },
-    { id: 3, name: '選擇時間', icon: ClockIcon },
-    { id: 4, name: '填寫信息', icon: UsersIcon },
-    { id: 5, name: '確認預約', icon: CalendarDaysIcon }
+    { id: 1, name: '選擇店鋪', icon: CalendarDaysIcon },
+    { id: 2, name: '選擇場地', icon: CalendarDaysIcon },
+    { id: 3, name: '選擇日期', icon: CalendarDaysIcon },
+    { id: 4, name: '選擇時間', icon: ClockIcon },
+    { id: 5, name: '填寫信息', icon: UsersIcon },
+    { id: 6, name: '確認預約', icon: CalendarDaysIcon }
   ];
 
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return selectedCourt !== null;
-      case 2: return selectedDate !== '';
-      case 3: return selectedTimeSlot !== null;
-      case 4: return bookingFormData.totalPlayers > 0 && 
+      case 1: return selectedStore !== null;
+      case 2: return selectedCourt !== null;
+      case 3: return selectedDate !== '';
+      case 4: return selectedTimeSlot !== null;
+      case 5: return bookingFormData.totalPlayers > 0 && 
                      bookingFormData.contactName.trim() !== '' &&
                      bookingFormData.contactEmail.trim() !== '' &&
                      bookingFormData.contactPhone.trim() !== '';
@@ -113,7 +127,7 @@ const Booking: React.FC = () => {
   };
 
   const nextStep = () => {
-    if (canProceed() && currentStep < 5) {
+    if (canProceed() && currentStep < 6) {
       setCurrentStep(currentStep + 1);
       // 滾動到頂部
       window.scrollTo({
@@ -138,6 +152,7 @@ const Booking: React.FC = () => {
     setSelectedCourt(null);
     setSelectedDate('');
     setSelectedTimeSlot(null);
+    // 保留 selectedStore（含 localStorage 記憶）
     setBookingFormData({
       totalPlayers: 1,
       contactName: '',
@@ -253,13 +268,25 @@ const Booking: React.FC = () => {
             <div className="lg:col-span-2">
               <div className="bg-white rounded-2xl shadow-lg p-8">
                 {currentStep === 1 && (
+                  <StoreSelector
+                    stores={stores}
+                    selectedStore={selectedStore}
+                    onSelect={(s: StoreSummary) => {
+                      setSelectedStore(s);
+                      fetchCourts(s._id);
+                    }}
+                    loading={loading && stores.length === 0}
+                  />
+                )}
+
+                {currentStep === 2 && (
                   <CourtSelector
                     onSelect={setSelectedCourt}
                     selectedCourt={selectedCourt}
                   />
                 )}
 
-                {currentStep === 2 && (
+                {currentStep === 3 && (
                   <DateSelector
                     onSelect={setSelectedDate}
                     selectedDate={selectedDate}
@@ -267,7 +294,7 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {currentStep === 3 && (
+                {currentStep === 4 && (
                   <TimeSlotSelector
                     court={selectedCourt}
                     date={selectedDate}
@@ -277,7 +304,7 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {currentStep === 4 && (
+                {currentStep === 5 && (
                   <PlayerForm
                     formData={bookingFormData}
                     onFormDataChange={handlePlayerFormChange}
@@ -285,7 +312,7 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {currentStep === 5 && (
+                {currentStep === 6 && (
                   <BookingSummary
                     court={selectedCourt}
                     date={selectedDate}
@@ -298,11 +325,13 @@ const Booking: React.FC = () => {
                     includeSoloCourt={includeSoloCourt}
                     soloCourtAvailable={soloCourtAvailable}
                     onToggleSoloCourt={setIncludeSoloCourt}
+                    storeName={selectedStore?.name}
+                    storeAddress={selectedStore?.address}
                   />
                 )}
 
                 {/* Navigation Buttons */}
-                {currentStep < 5 && (
+                {currentStep < 6 && (
                   <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
                     <button
                       onClick={prevStep}

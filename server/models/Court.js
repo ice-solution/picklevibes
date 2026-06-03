@@ -17,6 +17,12 @@ function isStartTimeInPricingSlot(startTime, slot) {
 }
 
 const courtSchema = new mongoose.Schema({
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    required: [true, '店鋪為必填項目'],
+    index: true,
+  },
   name: {
     type: String,
     required: [true, '場地名稱為必填項目'],
@@ -26,7 +32,6 @@ const courtSchema = new mongoose.Schema({
   number: {
     type: Number,
     required: [true, '場地編號為必填項目'],
-    unique: true,
     min: [1, '場地編號必須大於0']
   },
   type: {
@@ -99,6 +104,9 @@ const courtSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+courtSchema.index({ store: 1, number: 1 }, { unique: true });
+courtSchema.index({ store: 1, isActive: 1, type: 1 });
 
 // 檢查場地是否在維護中
 courtSchema.methods.isAvailable = function() {

@@ -6,7 +6,11 @@ const pdfService = require('./pdfService');
 
 function orderItemDisplayName(item) {
   if (!item || !item.name) return '';
-  return item.size ? `${item.name}（尺碼：${item.size}）` : item.name;
+  const parts = [];
+  if (item.color) parts.push(`顏色：${item.color}`);
+  if (item.size) parts.push(`尺碼：${item.size}`);
+  if (parts.length === 0) return item.name;
+  return `${item.name}（${parts.join(' · ')}）`;
 }
 
 /** 內部通知收件人：優先 NOTICE_EMAIL（.env），否則 EMAIL_USER，再否則 GMAIL_USER */
@@ -699,6 +703,92 @@ class EmailService {
     } catch (error) {
       console.error('❌ 發送開門通知郵件失敗:', error.message);
       throw new Error(`發送開門通知郵件失敗: ${error.message}`);
+    }
+  }
+
+  /**
+   * 無門禁店鋪：僅預約確認（不含 QR／密碼）
+   */
+  async generateBookingConfirmationEmailTemplate(visitorData, bookingData, store = null) {
+    const { name } = visitorData;
+    const { date, startTime, endTime, courtName, storeName, storeAddress, storePhone } = bookingData;
+
+    const bookingDate = new Date(date).toLocaleDateString('zh-TW', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      weekday: 'long',
+    });
+
+    const locationLine = storeName
+      ? `${storeName}${storeAddress ? ` · ${storeAddress}` : ''}`
+      : (storeAddress || '請見預約詳情');
+
+    return {
+      subject: `🏓 PickleVibes 場地預約確認 - ${courtName}`,
+      html: `
+        <!DOCTYPE html>
+        <html lang="zh-TW">
+        <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="font-family:'Microsoft JhengHei',Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5">
+          <div style="background:#fff;padding:30px;border-radius:10px">
+            <h1 style="color:#4CAF50;text-align:center;margin:0 0 20px">PickleVibes 預約確認</h1>
+            <p>親愛的 ${name}，</p>
+            <p>您的場地預約已確認，詳情如下：</p>
+            <table style="width:100%;border-collapse:collapse;margin:20px 0">
+              <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">店鋪</td><td style="padding:8px;border-bottom:1px solid #eee">${locationLine}</td></tr>
+              <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">場地</td><td style="padding:8px;border-bottom:1px solid #eee">${courtName}</td></tr>
+              <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">日期</td><td style="padding:8px;border-bottom:1px solid #eee">${bookingDate}</td></tr>
+              <tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">時間</td><td style="padding:8px;border-bottom:1px solid #eee">${startTime} - ${endTime}</td></tr>
+              ${storePhone ? `<tr><td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold">聯絡電話</td><td style="padding:8px;border-bottom:1px solid #eee">${storePhone}</td></tr>` : ''}
+            </table>
+            <p style="background:#f8f9fa;padding:15px;border-radius:8px;margin:20px 0">
+              請於預約時段準時到場。此店鋪暫不提供自動門禁密碼，如有疑問請聯絡場地。
+            </p>
+            <p style="text-align:center;color:#666;font-size:14px;margin-top:30px">
+              感謝您選擇 PickleVibes<br>info@picklevibes.hk
+            </p>
+          </div>
+        </body>
+        </html>
+      `,
+      text: `PickleVibes 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。`,
+    };
+  }
+
+  async sendBookingConfirmationEmail(visitorData, bookingData, store = null) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+      const emailTemplate = await this.generateBookingConfirmationEmailTemplate(
+        visitorData,
+        bookingData,
+        store
+      );
+      const attachments = [];
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo',
+        });
+      }
+      const mailOptions = {
+        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        to: visitorData.email,
+        subject: emailTemplate.subject,
+        html: emailTemplate.html,
+        text: emailTemplate.text,
+        attachments,
+      };
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log('✅ 預約確認郵件發送成功:', result.messageId);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送預約確認郵件失敗:', error.message);
+      throw new Error(`發送預約確認郵件失敗: ${error.message}`);
     }
   }
 

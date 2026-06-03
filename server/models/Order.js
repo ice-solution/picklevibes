@@ -25,7 +25,13 @@ const orderItemSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
-  /** 衣服類商品尺碼；非衣服為 null */
+  /** 規格：顏色（可選） */
+  color: {
+    type: String,
+    default: null,
+    trim: true
+  },
+  /** 規格：尺碼（可選） */
   size: {
     type: String,
     default: null,

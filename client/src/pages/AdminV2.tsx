@@ -7,6 +7,7 @@ import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
 import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
 import CourtManagement from '../components/Admin/CourtManagement';
+import StoreManagement from '../components/Admin/StoreManagement';
 import UserManagement from '../components/Admin/UserManagement';
 import TierManagement from '../components/Admin/TierManagement';
 import VlogManagement from '../components/Admin/VlogManagement';
@@ -26,6 +27,7 @@ import BookingConfig from '../components/Admin/BookingConfig';
 import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
+import AccountingManagement from '../components/Admin/AccountingManagement';
 import EdmSend from '../components/Admin/EdmSend';
 
 import {
@@ -45,7 +47,9 @@ import {
   Cog6ToothIcon,
   DocumentChartBarIcon,
   ChatBubbleLeftRightIcon,
-  EnvelopeIcon
+  EnvelopeIcon,
+  BuildingStorefrontIcon,
+  CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -64,13 +68,13 @@ const AdminV2: React.FC = () => {
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab) setActiveTab(tab);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [searchParams]);
 
   const tabs: Tab[] = useMemo(() => ([
     { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon, element: <BookingManagement /> },
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
     { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
+    { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: <StoreManagement /> },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
     { id: 'users', name: '用戶管理', icon: UsersIcon, element: <UserManagement /> },
     { id: 'tiers', name: 'Tier 管理', icon: TagIcon, element: <TierManagement /> },
@@ -91,7 +95,8 @@ const AdminV2: React.FC = () => {
     { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon, element: <BulkUpgrade /> },
     { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon, element: <MaintenanceControl /> },
     { id: 'analytics', name: '數據分析', icon: DocumentChartBarIcon, element: <AnalyticsDashboard /> },
-    { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement /> }
+    { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement /> },
+    { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> }
   ]), []);
 
   const current = useMemo(() => tabs.find((t) => t.id === activeTab) || tabs[0], [tabs, activeTab]);
@@ -134,35 +139,38 @@ const AdminV2: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="bg-gray-50 h-[calc(100dvh-4rem)] flex flex-col overflow-hidden">
       {/* Mobile drawer */}
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 w-[18rem] bg-white shadow-xl border-r border-gray-200">
-            <div className="flex items-center justify-between px-4 h-14 border-b border-gray-200">
+          <div className="absolute inset-y-0 left-0 w-[18rem] max-w-[85vw] bg-white shadow-xl border-r border-gray-200 flex flex-col">
+            <div className="flex-shrink-0 flex items-center justify-between px-4 h-14 border-b border-gray-200">
               <div className="font-bold text-gray-900">Admin</div>
               <button type="button" className="p-2 rounded-md hover:bg-gray-50" onClick={() => setMobileOpen(false)}>
                 <XMarkIcon className="w-6 h-6 text-gray-700" />
               </button>
             </div>
-            <Nav onSelect={() => setMobileOpen(false)} />
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+              <Nav onSelect={() => setMobileOpen(false)} />
+            </div>
           </div>
         </div>
       ) : null}
 
-      <div className="flex">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Desktop sidebar */}
-        <aside className="hidden lg:block w-72 min-h-screen bg-white border-r border-gray-200">
-          <div className="h-16 flex items-center px-5 border-b border-gray-200">
+        <aside className="hidden lg:flex lg:flex-col lg:w-72 lg:shrink-0 bg-white border-r border-gray-200 min-h-0">
+          <div className="flex-shrink-0 h-16 flex items-center px-5 border-b border-gray-200">
             <div className="font-bold text-gray-900">Admin Panel</div>
           </div>
-          <Nav />
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            <Nav />
+          </div>
         </aside>
 
-        <div className="flex-1 min-w-0">
-          {/* Topbar */}
-          <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6">
+        <div className="flex flex-col flex-1 min-w-0 min-h-0">
+          <header className="flex-shrink-0 h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 sm:px-6">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 type="button"
@@ -183,8 +191,7 @@ const AdminV2: React.FC = () => {
             </div>
           </header>
 
-          {/* Content */}
-          <main className="p-4 sm:p-6">
+          <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6">
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
               {current.element}
             </motion.div>

@@ -10,6 +10,7 @@ import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import CourtManagement from '../components/Admin/CourtManagement';
+import StoreManagement from '../components/Admin/StoreManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
 import MaintenanceControl from '../components/Admin/MaintenanceControl';
 import BulkUpgrade from '../components/Admin/BulkUpgrade';
@@ -76,7 +77,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'coach-requests', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'game-leaderboard', 'edm', 'redeem', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'coach-requests', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'game-leaderboard', 'edm', 'redeem', 'stores', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -131,6 +132,7 @@ const Admin: React.FC = () => {
     { id: 'game-leaderboard', name: '排行榜', icon: DocumentChartBarIcon },
     { id: 'edm', name: 'EDM 發送', icon: EnvelopeIcon },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon },
+    { id: 'stores', name: '店鋪管理', icon: UserGroupIcon },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon },
     { id: 'activities', name: '活動管理', icon: CalendarIcon },
     { id: 'regular-activities', name: '恆常活動管理', icon: CalendarIcon },
@@ -291,6 +293,16 @@ const Admin: React.FC = () => {
                 transition={{ duration: 0.3 }}
               >
                 <CoachScheduleRequestManagement />
+              </motion.div>
+            )}
+
+            {activeTab === 'stores' && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+              >
+                <StoreManagement />
               </motion.div>
             )}
 

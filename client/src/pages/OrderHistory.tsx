@@ -25,6 +25,7 @@ interface OrderItem {
   price: number;
   quantity: number;
   subtotal: number;
+  color?: string | null;
   size?: string | null;
 }
 
@@ -206,8 +207,12 @@ const OrderHistory: React.FC = () => {
                           />
                           <div className="flex-1">
                             <p className="font-medium text-lg">{item.name}</p>
-                            {item.size && (
-                              <p className="text-sm text-gray-500">尺碼：{item.size}</p>
+                            {(item.color || item.size) && (
+                              <p className="text-sm text-gray-500">
+                                {item.color && `顏色：${item.color}`}
+                                {item.color && item.size && ' · '}
+                                {item.size && `尺碼：${item.size}`}
+                              </p>
                             )}
                             <p className="text-sm text-gray-600">
                               數量：{item.quantity} × HK${item.price.toFixed(2)}
@@ -359,8 +364,12 @@ const OrderHistory: React.FC = () => {
                           />
                           <div className="flex-1">
                             <p className="font-medium">{item.name}</p>
-                            {item.size && (
-                              <p className="text-sm text-gray-500">尺碼：{item.size}</p>
+                            {(item.color || item.size) && (
+                              <p className="text-sm text-gray-500">
+                                {item.color && `顏色：${item.color}`}
+                                {item.color && item.size && ' · '}
+                                {item.size && `尺碼：${item.size}`}
+                              </p>
                             )}
                             <p className="text-sm text-gray-600">
                               數量：{item.quantity} × HK${item.price.toFixed(2)}

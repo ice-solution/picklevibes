@@ -32,6 +32,8 @@ interface BookingSummaryProps {
   includeSoloCourt?: boolean;
   soloCourtAvailable?: boolean;
   onToggleSoloCourt?: (include: boolean) => void;
+  storeName?: string;
+  storeAddress?: string;
 }
 
 const BookingSummary: React.FC<BookingSummaryProps> = ({
@@ -46,7 +48,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   onEditBooking,
   includeSoloCourt = false,
   soloCourtAvailable = false,
-  onToggleSoloCourt
+  onToggleSoloCourt,
+  storeName,
+  storeAddress,
 }) => {
   const { createBooking } = useBooking();
   const { user } = useAuth();
@@ -267,6 +271,16 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           )}
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {storeName && (
+              <div className="flex items-center gap-3 md:col-span-2">
+                <MapPinIcon className="w-5 h-5 text-primary-600" />
+                <div>
+                  <p className="text-sm text-gray-500">店鋪</p>
+                  <p className="font-medium">{storeName}</p>
+                  {storeAddress && <p className="text-sm text-gray-600">{storeAddress}</p>}
+                </div>
+              </div>
+            )}
             <div className="flex items-center gap-3">
               <MapPinIcon className="w-5 h-5 text-primary-600" />
               <div>

@@ -3,13 +3,19 @@ const router = express.Router();
 const { auth } = require('../middleware/auth');
 const fullVenueService = require('../services/fullVenueService');
 const User = require('../models/User');
-const accessControlService = require('../services/accessControlService');
 const { normalizeBookingDateInput } = require('../utils/bookingDateTime');
+const {
+  sendBookingNotification,
+  applyTempAuthToBooking,
+} = require('../services/bookingNotificationService');
+const Court = require('../models/Court');
+const Store = require('../models/Store');
+const { isFullVenueEnabledForStore } = require('../utils/storeFeatures');
 
 // 創建包場預約
 router.post('/create', auth, async (req, res) => {
   try {
-    const { date, startTime, endTime, duration, players, totalPlayers, notes, userId, bypassRestrictions } = req.body;
+    const { date, startTime, endTime, duration, players, totalPlayers, notes, userId, bypassRestrictions, storeId } = req.body;
     // 如果是管理員創建，使用指定的userId，否則使用當前用戶
     const targetUserId = userId || req.user.id;
 
@@ -31,6 +37,22 @@ router.post('/create', auth, async (req, res) => {
     }
 
     // 創建包場預約
+    const resolvedStoreId = storeId || req.body.store;
+    if (!resolvedStoreId) {
+      return res.status(400).json({ success: false, message: '請選擇店鋪' });
+    }
+
+    const storeDoc = await Store.findById(resolvedStoreId).select('slug name');
+    if (!storeDoc) {
+      return res.status(404).json({ success: false, message: '店鋪不存在' });
+    }
+    if (!isFullVenueEnabledForStore(storeDoc)) {
+      return res.status(400).json({
+        success: false,
+        message: `${storeDoc.name} 暫不開放包場預約`
+      });
+    }
+
     const result = await fullVenueService.createFullVenueBooking({
       date: normalizeBookingDateInput(date),
       startTime,
@@ -41,49 +63,28 @@ router.post('/create', auth, async (req, res) => {
       notes
     }, user, {
       pointsDeduction: req.body.pointsDeduction || 0,
-      bypassRestrictions: bypassRestrictions
+      bypassRestrictions: bypassRestrictions,
+      storeId: resolvedStoreId,
+      includeInactive: req.user.role === 'admin',
     });
 
-    // 發送QR碼郵件（使用第一個預約記錄）
     try {
-      const visitorData = {
-        name: players[0]?.name || user.name,
-        email: players[0]?.email || user.email,
-        phone: players[0]?.phone || user.phone
-      };
-      
       const firstBooking = result.bookings[0];
-      const bookingData = {
-        id: firstBooking._id,
-        date: firstBooking.date,
-        startTime: firstBooking.startTime,
-        endTime: firstBooking.endTime,
-        courtName: '包場預約 - 所有場地',
-        totalPrice: result.totalPrice
-      };
-
-      const accessControlResult = await accessControlService.processAccessControl(visitorData, bookingData);
-      console.log('📧 包場QR碼郵件發送成功');
-      
-      // 保存 tempAuth 數據到第一個預約記錄
-      if (accessControlResult && accessControlResult.tempAuth && result.bookings && result.bookings.length > 0) {
+      const courtDoc = await Court.findById(firstBooking.court);
+      const notifyResult = await sendBookingNotification({
+        booking: firstBooking,
+        courtDoc,
+        userFallback: user,
+        emailOverrides: { courtName: '包場預約 - 所有場地' },
+      });
+      if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
         const Booking = require('../models/Booking');
-        const firstBooking = await Booking.findById(result.bookings[0]._id);
-        if (firstBooking) {
-          firstBooking.tempAuth = {
-            code: accessControlResult.tempAuth.code || null,
-            password: accessControlResult.tempAuth.password || null,
-            startTime: accessControlResult.tempAuth.startTime || null,
-            endTime: accessControlResult.tempAuth.endTime || null,
-            createdAt: new Date()
-          };
-          await firstBooking.save();
-          console.log('✅ 包場臨時授權數據已保存到預約記錄');
-        }
+        const b = await Booking.findById(firstBooking._id);
+        await applyTempAuthToBooking(b, notifyResult.accessControlResult);
       }
+      console.log('📧 包場預約通知已發送');
     } catch (emailError) {
-      console.error('❌ 包場QR碼郵件發送失敗:', emailError);
-      // 不影響預約創建，只記錄錯誤
+      console.error('❌ 包場預約通知發送失敗:', emailError);
     }
 
     res.json({

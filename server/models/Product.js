@@ -48,7 +48,22 @@ const productSchema = new mongoose.Schema({
     default: 0,
     min: [0, '庫存不能為負數']
   },
-  /** 為 true 時，結帳必須選擇尺碼（XS–XL） */
+  /**
+   * 規格模式：none | size | color | color_size
+   * 有 variants 時依此模式；舊 isClothing 無 variants 仍為僅尺碼 + 商品級庫存
+   */
+  variantMode: {
+    type: String,
+    enum: ['none', 'size', 'color', 'color_size'],
+    default: 'none'
+  },
+  variants: [{
+    sku: { type: String, trim: true },
+    color: { type: String, default: null, trim: true },
+    size: { type: String, default: null, trim: true },
+    stock: { type: Number, default: 0, min: [0, '庫存不能為負數'] }
+  }],
+  /** 為 true 時，結帳必須選擇尺碼（XS–XL）；與 variantMode size/color_size 同步 */
   isClothing: {
     type: Boolean,
     default: false

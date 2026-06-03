@@ -5,25 +5,32 @@ const QRCode = require('qrcode');
 class AccessControlService {
   constructor() {
     this.baseURL = 'https://isgp-team.hikcentralconnect.com/api/hccgw/platform/v1';
-    this.token = null;
-    this.tokenExpiry = null;
+    this.tokenCache = new Map();
+  }
+
+  _cacheKey(hikConfig) {
+    return hikConfig?.appKey || process.env.HIKKEY || 'default';
   }
 
   /**
    * 獲取訪問令牌
+   * @param {object} [hikConfig] - { appKey, secretKey, accessLevelId }
    */
-  async getToken() {
+  async getToken(hikConfig = null) {
     try {
-      // 如果已有有效令牌，直接返回
-      if (this.token && this.tokenExpiry && new Date() < this.tokenExpiry) {
-        return this.token;
+      const appKey = hikConfig?.appKey || process.env.HIKKEY;
+      const secretKey = hikConfig?.secretKey || process.env.HIKSECRET;
+      const cacheKey = this._cacheKey(hikConfig);
+      const cached = this.tokenCache.get(cacheKey);
+      if (cached?.token && cached?.tokenExpiry && new Date() < cached.tokenExpiry) {
+        return cached.token;
       }
 
       console.log('🔑 正在獲取門禁系統訪問令牌...');
       
       const response = await axios.post(`${this.baseURL}/token/get`, {
-        appKey: process.env.HIKKEY,
-        secretKey: process.env.HIKSECRET
+        appKey,
+        secretKey,
       });
 
       console.log('🔍 門禁系統 API 響應:', JSON.stringify(response.data, null, 2));
@@ -41,12 +48,13 @@ class AccessControlService {
       }
 
       if (accessToken) {
-        this.token = accessToken;
-        // 設置令牌過期時間（通常為2小時，提前5分鐘刷新）
-        this.tokenExpiry = new Date(Date.now() + (2 * 60 * 60 * 1000) - (5 * 60 * 1000));
+        this.tokenCache.set(cacheKey, {
+          token: accessToken,
+          tokenExpiry: new Date(Date.now() + (2 * 60 * 60 * 1000) - (5 * 60 * 1000)),
+        });
         
         console.log('✅ 門禁系統訪問令牌獲取成功');
-        return this.token;
+        return accessToken;
       } else {
         throw new Error(`門禁系統返回的令牌格式不正確。響應數據: ${JSON.stringify(response.data)}`);
       }
@@ -154,9 +162,10 @@ class AccessControlService {
   /**
    * 創建臨時授權
    */
-  async createTempAuth(visitorData, bookingData) {
+  async createTempAuth(visitorData, bookingData, hikConfig = null) {
     try {
-      const token = await this.getToken();
+      const token = await this.getToken(hikConfig);
+      const accessLevelId = hikConfig?.accessLevelId || process.env.HIKACCESSLEVELID;
       
       // 將開始時間提前15分鐘，讓用戶可以提早進場
       const earlyStartTime = this.subtractMinutes(bookingData.startTime, 15);
@@ -189,7 +198,7 @@ class AccessControlService {
         startTime: startTime,
         endTime: endTime,
         clientLocalTime: startTime,
-        alIds: [process.env.HIKACCESSLEVELID]
+        alIds: [accessLevelId]
       };
 
       console.log('📤 發送請求數據:', requestBody);
@@ -361,15 +370,15 @@ class AccessControlService {
   /**
    * 完整的開門流程
    */
-  async processAccessControl(visitorData, bookingData) {
+  async processAccessControl(visitorData, bookingData, hikConfig = null) {
     try {
       console.log('🚪 開始處理開門系統流程...');
       
       // 1. 獲取令牌
-      await this.getToken();
+      await this.getToken(hikConfig);
       
       // 2. 創建臨時授權
-      const tempAuth = await this.createTempAuth(visitorData, bookingData);
+      const tempAuth = await this.createTempAuth(visitorData, bookingData, hikConfig);
       
       // 3. 處理二維碼數據
       let qrCodeData = null;
