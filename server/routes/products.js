@@ -3,6 +3,33 @@ const { body, validationResult } = require('express-validator');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
 const { auth, adminAuth } = require('../middleware/auth');
+const {
+  parseVariantsInput,
+  validateVariantsForMode,
+  syncProductStockFromVariants
+} = require('../utils/productVariants');
+
+function applyVariantFields(body) {
+  const variantMode = body.variantMode || 'none';
+  const parsed = parseVariantsInput(body.variants);
+  if (parsed.error) {
+    return { error: parsed.error };
+  }
+  const validated = validateVariantsForMode(variantMode, parsed.variants);
+  if (validated.error) {
+    return { error: validated.error };
+  }
+
+  const isClothing = variantMode === 'size' || variantMode === 'color_size';
+  const productFields = {
+    variantMode,
+    variants: validated.variants,
+    isClothing: body.isClothing === true || body.isClothing === 'true' || isClothing
+  };
+  if (isClothing) productFields.isClothing = true;
+
+  return { productFields };
+}
 const { createUploadConfig, processImage, deleteFile } = require('../middleware/upload');
 const path = require('path');
 
@@ -138,17 +165,32 @@ router.post('/', [
       return res.status(400).json({ message: '折扣價格必須小於原價' });
     }
 
+    const variantApply = applyVariantFields(req.body);
+    if (variantApply.error) {
+      images.forEach(imagePath => {
+        const fullPath = path.join(__dirname, '../../uploads', imagePath);
+        deleteFile(fullPath);
+      });
+      return res.status(400).json({ message: variantApply.error });
+    }
+
     const productData = {
-      ...req.body,
+      name: req.body.name,
+      description: req.body.description,
+      details: req.body.details,
+      category: req.body.category,
       images,
       price: parseFloat(req.body.price),
       discountPrice: req.body.discountPrice ? parseFloat(req.body.discountPrice) : null,
       stock: req.body.stock ? parseInt(req.body.stock) : 0,
       sortOrder: req.body.sortOrder ? parseInt(req.body.sortOrder) : 0,
-      isClothing: req.body.isClothing === true || req.body.isClothing === 'true'
+      variantMode: variantApply.productFields.variantMode,
+      variants: variantApply.productFields.variants,
+      isClothing: variantApply.productFields.isClothing
     };
 
     const product = new Product(productData);
+    syncProductStockFromVariants(product);
     await product.save();
 
     res.status(201).json({
@@ -269,8 +311,30 @@ router.put('/:id', [
     }
     if (updateData.stock !== undefined) updateData.stock = parseInt(updateData.stock);
     if (updateData.sortOrder !== undefined) updateData.sortOrder = parseInt(updateData.sortOrder);
-    if (updateData.isClothing !== undefined) {
+    if (req.body.variantMode !== undefined || req.body.variants !== undefined) {
+      const variantApply = applyVariantFields({
+        variantMode: req.body.variantMode ?? product.variantMode,
+        variants: req.body.variants ?? JSON.stringify(product.variants || []),
+        isClothing: req.body.isClothing
+      });
+      if (variantApply.error) {
+        if (req.files && req.files.length > 0) {
+          req.files.forEach(file => deleteFile(file.path));
+        }
+        return res.status(400).json({ message: variantApply.error });
+      }
+      updateData.variantMode = variantApply.productFields.variantMode;
+      updateData.variants = variantApply.productFields.variants;
+      updateData.isClothing = variantApply.productFields.isClothing;
+    } else if (updateData.isClothing !== undefined) {
       updateData.isClothing = updateData.isClothing === true || updateData.isClothing === 'true';
+    }
+
+    if (updateData.stock === undefined && updateData.variants) {
+      const tmp = product.toObject();
+      tmp.variants = updateData.variants;
+      tmp.variantMode = updateData.variantMode ?? product.variantMode;
+      updateData.stock = (updateData.variants || []).reduce((s, v) => s + (v.stock || 0), 0);
     }
 
     const updatedProduct = await Product.findByIdAndUpdate(
@@ -278,6 +342,11 @@ router.put('/:id', [
       updateData,
       { new: true, runValidators: true }
     );
+
+    if (updatedProduct && (updatedProduct.variants || []).length > 0) {
+      syncProductStockFromVariants(updatedProduct);
+      await updatedProduct.save();
+    }
 
     res.json({
       message: '產品更新成功',

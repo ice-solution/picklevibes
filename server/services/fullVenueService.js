@@ -19,7 +19,10 @@ class FullVenueService {
         throw new Error('請選擇店鋪');
       }
 
-      const courtQuery = { isActive: true, store: storeId };
+      const courtQuery = { store: storeId };
+      if (!options.includeInactive) {
+        courtQuery.isActive = true;
+      }
       const soloCourt = await Court.findOne({ type: 'solo', ...courtQuery });
       const trainingCourt = await Court.findOne({ type: 'training', ...courtQuery });
       const competitionCourt = await Court.findOne({ type: 'competition', ...courtQuery });
@@ -151,7 +154,10 @@ class FullVenueService {
       if (!storeId) {
         throw new Error('請選擇店鋪');
       }
-      const courtQuery = { isActive: true, store: storeId };
+      const courtQuery = { store: storeId };
+      if (!options.includeInactive) {
+        courtQuery.isActive = true;
+      }
       const soloCourt = await Court.findOne({ type: 'solo', ...courtQuery });
       const trainingCourt = await Court.findOne({ type: 'training', ...courtQuery });
       const competitionCourt = await Court.findOne({ type: 'competition', ...courtQuery });

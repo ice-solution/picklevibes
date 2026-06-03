@@ -13,6 +13,14 @@ import {
 import axios from 'axios';
 import api from '../../services/api';
 import { useShopConfig } from '../../contexts/ShopConfigContext';
+import { CLOTHING_SIZE_OPTIONS } from '../../constants/clothingSizes';
+import {
+  VariantMode,
+  ProductVariant,
+  VARIANT_MODE_OPTIONS,
+  getEffectiveVariantMode,
+  buildVariantRows
+} from '../../constants/productVariants';
 
 interface Product {
   _id: string;
@@ -30,7 +38,24 @@ interface Product {
   isActive: boolean;
   sortOrder: number;
   isClothing?: boolean;
+  variantMode?: VariantMode;
+  variants?: ProductVariant[];
 }
+
+const emptyProductForm = () => ({
+  name: '',
+  description: '',
+  details: '',
+  category: '',
+  price: '',
+  discountPrice: '',
+  stock: '',
+  sortOrder: 0,
+  variantMode: 'none' as VariantMode,
+  variants: [] as ProductVariant[],
+  variantColorInput: '',
+  variantSizeInput: ''
+});
 
 interface Category {
   _id: string;
@@ -51,17 +76,7 @@ const ShopManagement: React.FC = () => {
   // 產品相關狀態
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
-  const [productFormData, setProductFormData] = useState({
-    name: '',
-    description: '',
-    details: '',
-    category: '',
-    price: '',
-    discountPrice: '',
-    stock: '',
-    sortOrder: 0,
-    isClothing: false
-  });
+  const [productFormData, setProductFormData] = useState(emptyProductForm);
   const [productImages, setProductImages] = useState<File[]>([]);
   const [productErrors, setProductErrors] = useState<{[key: string]: string}>({});
 
@@ -178,6 +193,15 @@ const ShopManagement: React.FC = () => {
   // 產品管理函數
   const handleProductSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (
+      productFormData.variantMode !== 'none' &&
+      productFormData.variants.length === 0 &&
+      !productFormData.stock
+    ) {
+      alert('請產生 SKU 組合並填寫庫存，或填寫商品庫存（舊制）');
+      return;
+    }
     
     const formDataToSend = new FormData();
     formDataToSend.append('name', productFormData.name);
@@ -188,9 +212,28 @@ const ShopManagement: React.FC = () => {
     if (productFormData.discountPrice) {
       formDataToSend.append('discountPrice', productFormData.discountPrice);
     }
-    formDataToSend.append('stock', productFormData.stock);
+    const totalVariantStock = productFormData.variants.reduce((s, v) => s + (v.stock || 0), 0);
+    formDataToSend.append('variantMode', productFormData.variantMode);
+    formDataToSend.append(
+      'variants',
+      JSON.stringify(
+        productFormData.variantMode === 'none'
+          ? []
+          : productFormData.variants.map((v) => ({
+              sku: v.sku || '',
+              color: v.color ?? null,
+              size: v.size ?? null,
+              stock: v.stock ?? 0
+            }))
+      )
+    );
+    formDataToSend.append(
+      'stock',
+      productFormData.variantMode === 'none'
+        ? productFormData.stock
+        : String(totalVariantStock)
+    );
     formDataToSend.append('sortOrder', productFormData.sortOrder.toString());
-    formDataToSend.append('isClothing', productFormData.isClothing ? 'true' : 'false');
     
     productImages.forEach((image) => {
       formDataToSend.append('images', image);
@@ -210,7 +253,7 @@ const ShopManagement: React.FC = () => {
       
       setShowProductModal(false);
       setEditingProduct(null);
-      setProductFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0, isClothing: false });
+      setProductFormData(emptyProductForm());
       setProductImages([]);
       fetchData();
     } catch (error: any) {
@@ -220,6 +263,12 @@ const ShopManagement: React.FC = () => {
 
   const handleProductEdit = (product: Product) => {
     setEditingProduct(product);
+    const mode: VariantMode =
+      product.variantMode && product.variantMode !== 'none'
+        ? product.variantMode
+        : product.isClothing
+          ? 'size'
+          : 'none';
     setProductFormData({
       name: product.name,
       description: product.description,
@@ -229,9 +278,39 @@ const ShopManagement: React.FC = () => {
       discountPrice: product.discountPrice?.toString() || '',
       stock: product.stock.toString(),
       sortOrder: product.sortOrder,
-      isClothing: !!product.isClothing
+      variantMode: mode as VariantMode,
+      variants: (product.variants || []).map((v) => ({
+        sku: v.sku || '',
+        color: v.color ?? null,
+        size: v.size ?? null,
+        stock: v.stock ?? 0
+      })),
+      variantColorInput: '',
+      variantSizeInput: ''
     });
     setShowProductModal(true);
+  };
+
+  const generateVariantRows = () => {
+    const colors = productFormData.variantColorInput
+      .split(/[,，、]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const sizes =
+      productFormData.variantSizeInput.trim() !== ''
+        ? productFormData.variantSizeInput.split(/[,，、]/).map((s) => s.trim()).filter(Boolean)
+        : [...CLOTHING_SIZE_OPTIONS];
+    const rows = buildVariantRows(
+      productFormData.variantMode,
+      colors,
+      sizes,
+      productFormData.variants
+    );
+    if (rows.length === 0) {
+      alert('請輸入顏色或尺碼後再產生組合');
+      return;
+    }
+    setProductFormData((prev) => ({ ...prev, variants: rows }));
   };
 
   const handleProductDelete = async (id: string) => {
@@ -341,7 +420,7 @@ const ShopManagement: React.FC = () => {
                 <button
                   onClick={() => {
                     setEditingProduct(null);
-                    setProductFormData({ name: '', description: '', details: '', category: '', price: '', discountPrice: '', stock: '', sortOrder: 0, isClothing: false });
+                    setProductFormData(emptyProductForm());
                     setProductImages([]);
                     setShowProductModal(true);
                   }}
@@ -373,8 +452,11 @@ const ShopManagement: React.FC = () => {
                           {product.isActive ? '啟用' : '停用'}
                         </span>
                       </div>
-                      {product.isClothing && (
-                        <p className="text-xs text-primary-600 font-medium mb-1">衣服（需選尺碼）</p>
+                      {getEffectiveVariantMode(product) !== 'none' && (
+                        <p className="text-xs text-primary-600 font-medium mb-1">
+                          規格：{VARIANT_MODE_OPTIONS.find((o) => o.value === getEffectiveVariantMode(product))?.label}
+                          {(product.variants?.length ?? 0) > 0 && ` · ${product.variants!.length} SKU`}
+                        </p>
                       )}
                       <div className="flex space-x-2 mt-4">
                         <button
@@ -560,17 +642,143 @@ const ShopManagement: React.FC = () => {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">庫存</label>
-                  <input
-                    type="number"
-                    value={productFormData.stock}
-                    onChange={(e) => setProductFormData({ ...productFormData, stock: e.target.value })}
-                    className="w-full px-3 py-2 border rounded-lg"
-                  />
+              <div>
+                <label className="block text-sm font-medium mb-1">規格模式</label>
+                <select
+                  value={productFormData.variantMode}
+                  onChange={(e) => {
+                    const variantMode = e.target.value as VariantMode;
+                    setProductFormData({
+                      ...productFormData,
+                      variantMode,
+                      variants: variantMode === 'none' ? [] : productFormData.variants
+                    });
+                  }}
+                  className="w-full px-3 py-2 border rounded-lg"
+                >
+                  {VARIANT_MODE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {productFormData.variantMode !== 'none' && (
+                <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                  <p className="text-sm font-medium text-gray-800">SKU 組合（每組獨立庫存）</p>
+                  {(productFormData.variantMode === 'color' || productFormData.variantMode === 'color_size') && (
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">顏色（逗號分隔，例：黑,白,藍）</label>
+                      <input
+                        type="text"
+                        value={productFormData.variantColorInput}
+                        onChange={(e) => setProductFormData({ ...productFormData, variantColorInput: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                        placeholder="黑, 白, 藍"
+                      />
+                    </div>
+                  )}
+                  {(productFormData.variantMode === 'size' || productFormData.variantMode === 'color_size') && (
+                    <div>
+                      <label className="block text-xs text-gray-600 mb-1">
+                        尺碼（留空則用 XS–XL；或自訂逗號分隔）
+                      </label>
+                      <input
+                        type="text"
+                        value={productFormData.variantSizeInput}
+                        onChange={(e) => setProductFormData({ ...productFormData, variantSizeInput: e.target.value })}
+                        className="w-full px-3 py-2 border rounded-lg text-sm"
+                        placeholder="XS, S, M, L, XL"
+                      />
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={generateVariantRows}
+                    className="text-sm px-3 py-1.5 bg-white border border-primary-300 text-primary-700 rounded-lg hover:bg-primary-50"
+                  >
+                    產生／更新組合列
+                  </button>
+                  {productFormData.variants.length > 0 ? (
+                    <div className="overflow-x-auto max-h-56 overflow-y-auto">
+                      <table className="w-full text-sm border-collapse">
+                        <thead>
+                          <tr className="text-left text-gray-600 border-b">
+                            {productFormData.variantMode !== 'size' && <th className="py-1 pr-2">顏色</th>}
+                            {productFormData.variantMode !== 'color' && <th className="py-1 pr-2">尺碼</th>}
+                            <th className="py-1 pr-2">SKU</th>
+                            <th className="py-1">庫存</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {productFormData.variants.map((row, idx) => (
+                            <tr key={idx} className="border-b border-gray-100">
+                              {productFormData.variantMode !== 'size' && (
+                                <td className="py-1 pr-2">{row.color || '—'}</td>
+                              )}
+                              {productFormData.variantMode !== 'color' && (
+                                <td className="py-1 pr-2">{row.size || '—'}</td>
+                              )}
+                              <td className="py-1 pr-2">
+                                <input
+                                  type="text"
+                                  value={row.sku || ''}
+                                  onChange={(e) => {
+                                    const variants = [...productFormData.variants];
+                                    variants[idx] = { ...variants[idx], sku: e.target.value };
+                                    setProductFormData({ ...productFormData, variants });
+                                  }}
+                                  className="w-24 px-2 py-1 border rounded text-xs"
+                                  placeholder="選填"
+                                />
+                              </td>
+                              <td className="py-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  value={row.stock}
+                                  onChange={(e) => {
+                                    const variants = [...productFormData.variants];
+                                    variants[idx] = { ...variants[idx], stock: parseInt(e.target.value, 10) || 0 };
+                                    setProductFormData({ ...productFormData, variants });
+                                  }}
+                                  className="w-20 px-2 py-1 border rounded text-xs"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-amber-700">請輸入顏色／尺碼後按「產生組合列」，並填寫各 SKU 庫存。</p>
+                  )}
+                  <p className="text-xs text-gray-500">
+                    總庫存：{productFormData.variants.reduce((s, v) => s + (v.stock || 0), 0)}
+                  </p>
                 </div>
-                <div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                {(productFormData.variantMode === 'none' || productFormData.variants.length === 0) && (
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      {productFormData.variantMode !== 'none' ? '商品庫存（未建 SKU 前）' : '庫存'}
+                    </label>
+                    <input
+                      type="number"
+                      value={productFormData.stock}
+                      onChange={(e) => setProductFormData({ ...productFormData, stock: e.target.value })}
+                      className="w-full px-3 py-2 border rounded-lg"
+                    />
+                  </div>
+                )}
+                <div
+                  className={
+                    productFormData.variantMode === 'none' || productFormData.variants.length === 0
+                      ? ''
+                      : 'col-span-2'
+                  }
+                >
                   <label className="block text-sm font-medium mb-1">排序</label>
                   <input
                     type="number"
@@ -580,15 +788,6 @@ const ShopManagement: React.FC = () => {
                   />
                 </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={productFormData.isClothing}
-                  onChange={(e) => setProductFormData({ ...productFormData, isClothing: e.target.checked })}
-                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                />
-                <span className="text-sm font-medium text-gray-800">衣服（結帳時需選擇尺碼：XS–XL）</span>
-              </label>
               <div>
                 <label className="block text-sm font-medium mb-1">產品圖片 *</label>
                 <input

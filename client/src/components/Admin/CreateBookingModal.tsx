@@ -13,6 +13,7 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
+import { isFullVenueEnabledForStoreSlug } from '../../constants/storeFeatures';
 
 interface User {
   _id: string;
@@ -27,6 +28,7 @@ interface Court {
   number: string;
   type: string;
   capacity: number;
+  isActive?: boolean;
 }
 
 interface CreateBookingModalProps {
@@ -36,6 +38,8 @@ interface CreateBookingModalProps {
   selectedDate?: string;
   selectedCourt?: string;
   selectedTime?: string;
+  /** 從日曆店鋪篩選帶入預設店鋪 */
+  initialStoreId?: string;
 }
 
 const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
@@ -44,7 +48,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   onBookingCreated,
   selectedDate,
   selectedCourt,
-  selectedTime
+  selectedTime,
+  initialStoreId
 }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,15 +81,24 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   
 
   // 數據選項
-  const [stores, setStores] = useState<{ _id: string; name: string }[]>([]);
+  const [stores, setStores] = useState<{ _id: string; name: string; slug?: string; isActive?: boolean }[]>([]);
   const [storeId, setStoreId] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
+
+  const selectedStore = stores.find((s) => s._id === storeId);
+  const fullVenueEnabled = isFullVenueEnabledForStoreSlug(selectedStore?.slug);
 
   useEffect(() => {
     if (isOpen) {
       axios.get('/stores/admin/all').then((r) => setStores(r.data.stores || [])).catch(() => {});
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen && initialStoreId) {
+      setStoreId(initialStoreId);
+    }
+  }, [isOpen, initialStoreId]);
 
   useEffect(() => {
     if (isOpen && storeId) {
@@ -280,6 +294,10 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         throw new Error('請填寫參與者姓名');
       }
 
+      if (formData.courtId === 'full_venue' && !fullVenueEnabled) {
+        throw new Error('此店鋪暫不開放包場預約');
+      }
+
       // 如果選擇了包場，顯示確認對話框
       if (formData.courtId === 'full_venue') {
         // 確保所有必填字段都已填寫
@@ -411,7 +429,9 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
             >
               <option value="">請選擇店鋪</option>
               {stores.map((s) => (
-                <option key={s._id} value={s._id}>{s.name}</option>
+                <option key={s._id} value={s._id}>
+                  {s.name}{s.isActive === false ? '（未上線）' : ''}
+                </option>
               ))}
             </select>
           </div>
@@ -435,10 +455,16 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                 .map(court => (
                   <option key={court._id} value={court._id}>
                     {court.name} ({court.number}號場) - {court.type}
+                    {court.isActive === false ? ' [停用]' : ''}
                   </option>
                 ))}
-              <option value="full_venue">🏢 包場 (所有場地)</option>
+              {fullVenueEnabled && (
+                <option value="full_venue">🏢 包場 (所有場地)</option>
+              )}
             </select>
+            {storeId && !fullVenueEnabled && (
+              <p className="mt-1 text-xs text-amber-700">此店鋪暫不開放包場預約。</p>
+            )}
           </div>
 
           {/* 日期選擇 */}

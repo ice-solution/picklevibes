@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,6 +10,17 @@ import {
   CheckCircleIcon
 } from '@heroicons/react/24/outline';
 import { CLOTHING_SIZE_OPTIONS } from '../constants/clothingSizes';
+import {
+  VariantMode,
+  ProductVariant,
+  getEffectiveVariantMode,
+  usesVariantStock,
+  getTotalStock,
+  getVariantStock,
+  getAvailableColors,
+  getAvailableSizes,
+  cartLineKey
+} from '../constants/productVariants';
 
 interface Product {
   _id: string;
@@ -26,6 +37,8 @@ interface Product {
   stock: number;
   currentPrice: number;
   isClothing?: boolean;
+  variantMode?: VariantMode;
+  variants?: ProductVariant[];
 }
 
 const ProductDetail: React.FC = () => {
@@ -36,6 +49,7 @@ const ProductDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [quantity, setQuantity] = useState(1);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const [selectedColor, setSelectedColor] = useState('');
   const [selectedSize, setSelectedSize] = useState('');
 
   useEffect(() => {
@@ -44,11 +58,56 @@ const ProductDetail: React.FC = () => {
     }
   }, [id]);
 
+  const variantMode = product ? getEffectiveVariantMode(product) : 'none';
+  const hasVariantStock = product ? usesVariantStock(product) : false;
+
+  const availableColors = useMemo(() => {
+    if (!product) return [];
+    if (hasVariantStock) return getAvailableColors(product, selectedSize || null);
+    if (variantMode === 'color' || variantMode === 'color_size') return [];
+    return [];
+  }, [product, hasVariantStock, variantMode, selectedSize]);
+
+  const availableSizes = useMemo(() => {
+    if (!product) return [];
+    if (hasVariantStock) return getAvailableSizes(product, selectedColor || null);
+    if (variantMode === 'size' || variantMode === 'color_size') {
+      return [...CLOTHING_SIZE_OPTIONS];
+    }
+    return [];
+  }, [product, hasVariantStock, variantMode, selectedColor]);
+
+  const currentStock = useMemo(() => {
+    if (!product) return 0;
+    if (hasVariantStock) {
+      return getVariantStock(product, selectedColor || null, selectedSize || null);
+    }
+    return getTotalStock(product);
+  }, [product, hasVariantStock, selectedColor, selectedSize]);
+
+  useEffect(() => {
+    setQuantity(1);
+  }, [selectedColor, selectedSize]);
+
+  useEffect(() => {
+    if (selectedColor && availableColors.length > 0 && !availableColors.includes(selectedColor)) {
+      setSelectedColor('');
+    }
+  }, [availableColors, selectedColor]);
+
+  useEffect(() => {
+    if (selectedSize && availableSizes.length > 0 && !availableSizes.includes(selectedSize)) {
+      setSelectedSize('');
+    }
+  }, [availableSizes, selectedSize]);
+
   const fetchProduct = async () => {
     try {
       setLoading(true);
       const response = await axios.get(`/products/${id}`);
       setProduct(response.data);
+      setSelectedColor('');
+      setSelectedSize('');
     } catch (error) {
       console.error('獲取產品詳情失敗:', error);
       alert('產品不存在');
@@ -67,6 +126,39 @@ const ProductDetail: React.FC = () => {
     return `${base}/uploads/${imagePath}`;
   };
 
+  const validateSelection = (): boolean => {
+    if (!product) return false;
+    if (variantMode === 'color' && !selectedColor) {
+      alert('請選擇顏色');
+      return false;
+    }
+    if (variantMode === 'size' && !selectedSize) {
+      alert('請選擇尺碼');
+      return false;
+    }
+    if (variantMode === 'color_size') {
+      if (!selectedColor) {
+        alert('請選擇顏色');
+        return false;
+      }
+      if (!selectedSize) {
+        alert('請選擇尺碼');
+        return false;
+      }
+    }
+    if (hasVariantStock && currentStock < 1) {
+      alert('此規格目前缺貨');
+      return false;
+    }
+    return true;
+  };
+
+  const buildCartLine = () => {
+    const color = variantMode === 'color' || variantMode === 'color_size' ? selectedColor : undefined;
+    const size = variantMode === 'size' || variantMode === 'color_size' ? selectedSize : undefined;
+    return { color, size };
+  };
+
   const addToCart = () => {
     if (!user) {
       alert('請先登錄');
@@ -75,17 +167,14 @@ const ProductDetail: React.FC = () => {
     }
 
     if (!product) return;
+    if (!validateSelection()) return;
 
-    if (product.isClothing && !selectedSize) {
-      alert('請選擇尺碼');
-      return;
-    }
-
-    const size = product.isClothing ? selectedSize : undefined;
+    const { color, size } = buildCartLine();
     const cart = JSON.parse(localStorage.getItem('cart') || '[]');
+    const key = cartLineKey(product._id, color, size);
     const existingItem = cart.find(
-      (item: any) =>
-        item.productId === product._id && (item.size || '') === (size || '')
+      (item: { productId: string; color?: string; size?: string }) =>
+        cartLineKey(item.productId, item.color, item.size) === key
     );
     
     if (existingItem) {
@@ -94,10 +183,11 @@ const ProductDetail: React.FC = () => {
       const line: Record<string, unknown> = {
         productId: product._id,
         name: product.name,
-        price: product.currentPrice,
+        price: product.currentPrice ?? product.discountPrice ?? product.price,
         image: product.images[0],
         quantity: quantity
       };
+      if (color) line.color = color;
       if (size) line.size = size;
       cart.push(line);
     }
@@ -114,35 +204,27 @@ const ProductDetail: React.FC = () => {
     }
 
     if (!product) return;
+    if (!validateSelection()) return;
 
-    if (product.isClothing && !selectedSize) {
-      alert('請選擇尺碼');
-      return;
-    }
-
-    const size = product.isClothing ? selectedSize : undefined;
+    const { color, size } = buildCartLine();
     const line: Record<string, unknown> = {
       productId: product._id,
       name: product.name,
-      price: product.currentPrice,
+      price: product.currentPrice ?? product.discountPrice ?? product.price,
       image: product.images[0],
       quantity: quantity
     };
+    if (color) line.color = color;
     if (size) line.size = size;
 
-    const cart = [line];
-
-    localStorage.setItem('cart', JSON.stringify(cart));
+    localStorage.setItem('cart', JSON.stringify([line]));
     navigate('/checkout');
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
-          <p className="mt-4 text-gray-600">載入中...</p>
-        </div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
       </div>
     );
   }
@@ -150,6 +232,23 @@ const ProductDetail: React.FC = () => {
   if (!product) {
     return null;
   }
+
+  const displayStock = hasVariantStock
+    ? (variantMode === 'color_size' && selectedColor && selectedSize
+        ? currentStock
+        : getTotalStock(product))
+    : getTotalStock(product);
+
+  const canAdd =
+    displayStock > 0 &&
+    (variantMode === 'none' ||
+      (variantMode === 'color' && !!selectedColor) ||
+      (variantMode === 'size' && !!selectedSize) ||
+      (variantMode === 'color_size' && !!selectedColor && !!selectedSize));
+
+  const maxQty = hasVariantStock && (selectedColor || selectedSize)
+    ? currentStock
+    : displayStock;
 
   return (
     <>
@@ -169,30 +268,25 @@ const ProductDetail: React.FC = () => {
 
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8">
-              {/* 圖片區域 */}
               <div>
-                <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden mb-4">
-                  <img
-                    src={getImageUrl(product.images[selectedImageIndex])}
-                    alt={product.name}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
+                <img
+                  src={getImageUrl(product.images[selectedImageIndex])}
+                  alt={product.name}
+                  className="w-full h-96 object-cover rounded-lg"
+                />
                 {product.images.length > 1 && (
-                  <div className="grid grid-cols-4 gap-2">
-                    {product.images.map((image, index) => (
+                  <div className="flex gap-2 mt-4 overflow-x-auto">
+                    {product.images.map((img, index) => (
                       <button
                         key={index}
                         onClick={() => setSelectedImageIndex(index)}
-                        className={`aspect-square rounded-lg overflow-hidden border-2 ${
-                          selectedImageIndex === index
-                            ? 'border-primary-600'
-                            : 'border-gray-200'
+                        className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 ${
+                          selectedImageIndex === index ? 'border-primary-600' : 'border-transparent'
                         }`}
                       >
                         <img
-                          src={getImageUrl(image)}
-                          alt={`${product.name} ${index + 1}`}
+                          src={getImageUrl(img)}
+                          alt=""
                           className="w-full h-full object-cover"
                         />
                       </button>
@@ -201,7 +295,6 @@ const ProductDetail: React.FC = () => {
                 )}
               </div>
 
-              {/* 產品信息 */}
               <div>
                 <Link
                   to={`/shop?category=${product.category._id}`}
@@ -240,22 +333,52 @@ const ProductDetail: React.FC = () => {
                   </div>
                 )}
 
-                {product.isClothing && (
+                {(variantMode === 'color' || variantMode === 'color_size') && (
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">顏色 *</label>
+                    {hasVariantStock && availableColors.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {availableColors.map((c) => (
+                          <button
+                            key={c}
+                            type="button"
+                            onClick={() => setSelectedColor(c)}
+                            className={`px-4 py-2 rounded-lg border text-sm ${
+                              selectedColor === c
+                                ? 'border-primary-600 bg-primary-50 text-primary-800'
+                                : 'border-gray-300 hover:border-primary-400'
+                            }`}
+                          >
+                            {c}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-500">暫無可選顏色</p>
+                    )}
+                  </div>
+                )}
+
+                {(variantMode === 'size' || variantMode === 'color_size') && (
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-2">尺碼 *</label>
-                    <select
-                      value={selectedSize}
-                      onChange={(e) => setSelectedSize(e.target.value)}
-                      className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                      required
-                    >
-                      <option value="">請選擇尺碼</option>
-                      {CLOTHING_SIZE_OPTIONS.map((sz) => (
-                        <option key={sz} value={sz}>
+                    <div className="flex flex-wrap gap-2">
+                      {(hasVariantStock ? availableSizes : [...CLOTHING_SIZE_OPTIONS]).map((sz) => (
+                        <button
+                          key={sz}
+                          type="button"
+                          onClick={() => setSelectedSize(sz)}
+                          disabled={hasVariantStock && !availableSizes.includes(sz)}
+                          className={`px-4 py-2 rounded-lg border text-sm min-w-[3rem] ${
+                            selectedSize === sz
+                              ? 'border-primary-600 bg-primary-50 text-primary-800'
+                              : 'border-gray-300 hover:border-primary-400'
+                          } disabled:opacity-40 disabled:cursor-not-allowed`}
+                        >
                           {sz}
-                        </option>
+                        </button>
                       ))}
-                    </select>
+                    </div>
                   </div>
                 )}
 
@@ -273,15 +396,15 @@ const ProductDetail: React.FC = () => {
                         {quantity}
                       </span>
                       <button
-                        onClick={() => setQuantity(prev => Math.min(product.stock, prev + 1))}
+                        onClick={() => setQuantity(prev => Math.min(maxQty || 1, prev + 1))}
                         className="px-4 py-2 hover:bg-gray-100"
-                        disabled={quantity >= product.stock}
+                        disabled={quantity >= maxQty}
                       >
                         +
                       </button>
                     </div>
                     <span className="ml-4 text-gray-600">
-                      庫存：{product.stock}
+                      庫存：{hasVariantStock && selectedColor && selectedSize ? currentStock : displayStock}
                     </span>
                   </div>
                 </div>
@@ -289,7 +412,7 @@ const ProductDetail: React.FC = () => {
                 <div className="flex gap-4">
                   <button
                     onClick={addToCart}
-                    disabled={product.stock === 0}
+                    disabled={!canAdd}
                     className="flex-1 flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   >
                     <ShoppingCartIcon className="w-5 h-5 mr-2" />
@@ -297,14 +420,14 @@ const ProductDetail: React.FC = () => {
                   </button>
                   <button
                     onClick={buyNow}
-                    disabled={product.stock === 0}
+                    disabled={!canAdd}
                     className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
                   >
                     立即購買
                   </button>
                 </div>
 
-                {product.stock === 0 && (
+                {displayStock === 0 && (
                   <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600">
                     此產品目前缺貨
                   </div>
@@ -319,9 +442,3 @@ const ProductDetail: React.FC = () => {
 };
 
 export default ProductDetail;
-
-
-
-
-
-

@@ -6,7 +6,11 @@ const pdfService = require('./pdfService');
 
 function orderItemDisplayName(item) {
   if (!item || !item.name) return '';
-  return item.size ? `${item.name}（尺碼：${item.size}）` : item.name;
+  const parts = [];
+  if (item.color) parts.push(`顏色：${item.color}`);
+  if (item.size) parts.push(`尺碼：${item.size}`);
+  if (parts.length === 0) return item.name;
+  return `${item.name}（${parts.join(' · ')}）`;
 }
 
 /** 內部通知收件人：優先 NOTICE_EMAIL（.env），否則 EMAIL_USER，再否則 GMAIL_USER */

@@ -9,6 +9,7 @@ import {
   MagnifyingGlassIcon,
   ShoppingCartIcon
 } from '@heroicons/react/24/outline';
+import { requiresVariantSelection } from '../constants/productVariants';
 interface Product {
   _id: string;
   name: string;
@@ -111,7 +112,7 @@ const Shop: React.FC = () => {
       return;
     }
 
-    if (product.isClothing) {
+    if (requiresVariantSelection(product)) {
       navigate(`/shop/${product._id}`);
       return;
     }
@@ -286,7 +287,7 @@ const Shop: React.FC = () => {
                           disabled={product.stock === 0}
                           className="w-full px-4 py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
                         >
-                          {product.isClothing ? '選擇尺碼' : '加入購物車'}
+                          {requiresVariantSelection(product) ? '選擇規格' : '加入購物車'}
                         </button>
                       </div>
                     </div>

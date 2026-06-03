@@ -110,9 +110,21 @@ router.post('/', [
       return res.status(404).json({ message: '場地不存在' });
     }
 
-    // 僅「管理員權限」繞過時不檢查 isAvailable；未勾選時與一般用戶相同
-    if (!bypassRestrictions && !courtDoc.isAvailable()) {
-      return res.status(400).json({ message: '場地目前不可用' });
+    const isAdminBooking = req.user.role === 'admin';
+
+    // 後台建單：停用場地仍可預約，僅擋維護中；一般用戶仍檢查 isActive
+    if (!bypassRestrictions) {
+      if (isAdminBooking) {
+        const m = courtDoc.maintenance;
+        if (m?.isUnderMaintenance && m.maintenanceStart && m.maintenanceEnd) {
+          const now = new Date();
+          if (now >= m.maintenanceStart && now <= m.maintenanceEnd) {
+            return res.status(400).json({ message: '場地維護中' });
+          }
+        }
+      } else if (!courtDoc.isAvailable()) {
+        return res.status(400).json({ message: '場地目前不可用' });
+      }
     }
 
     const bookingDate = new Date(date);
@@ -410,7 +422,9 @@ router.post('/', [
       console.log('🔍 創建單人場預約記錄...');
       
       // 找到單人場
-      const soloCourt = await Court.findOne({ type: 'solo', store: courtDoc.store, isActive: true });
+      const soloQuery = { type: 'solo', store: courtDoc.store };
+      if (!isAdminBooking) soloQuery.isActive = true;
+      const soloCourt = await Court.findOne(soloQuery);
       if (!soloCourt) {
         console.error('❌ 找不到單人場');
         return res.status(500).json({ message: '找不到單人場' });
@@ -748,21 +762,25 @@ router.get('/admin/all', [
   adminAuth
 ], async (req, res) => {
   try {
-    const { 
-      status, 
-      court, 
-      date, 
+    const {
+      status,
+      court,
+      store,
+      date,
       dateFrom,
       dateTo,
-      page = 1, 
+      page = 1,
       limit = 20,
       sort: sortParam
     } = req.query;
-    
+
     let query = {};
-    
+
     if (status) query.status = status;
     if (court) query.court = court;
+    if (store && String(store).trim() !== '') {
+      query.store = String(store).trim();
+    }
     if (date) {
       const startDate = new Date(date);
       const endDate = new Date(date);
@@ -783,7 +801,12 @@ router.get('/admin/all', [
 
     const bookings = await Booking.find(query)
       .populate('user', 'name email phone')
-      .populate('court', 'name number type')
+      .populate('store', 'name slug')
+      .populate({
+        path: 'court',
+        select: 'name number type store',
+        populate: { path: 'store', select: 'name slug' }
+      })
       .populate('adminNotes.createdBy', 'name email')
       .sort({ date: sortDir, startTime: sortDir })
       .limit(limitNum)

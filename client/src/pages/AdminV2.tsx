@@ -27,6 +27,7 @@ import BookingConfig from '../components/Admin/BookingConfig';
 import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
+import AccountingManagement from '../components/Admin/AccountingManagement';
 import EdmSend from '../components/Admin/EdmSend';
 
 import {
@@ -48,6 +49,7 @@ import {
   ChatBubbleLeftRightIcon,
   EnvelopeIcon,
   BuildingStorefrontIcon,
+  CurrencyDollarIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -93,7 +95,8 @@ const AdminV2: React.FC = () => {
     { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon, element: <BulkUpgrade /> },
     { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon, element: <MaintenanceControl /> },
     { id: 'analytics', name: '數據分析', icon: DocumentChartBarIcon, element: <AnalyticsDashboard /> },
-    { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement /> }
+    { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement /> },
+    { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> }
   ]), []);
 
   const current = useMemo(() => tabs.find((t) => t.id === activeTab) || tabs[0], [tabs, activeTab]);

@@ -10,6 +10,7 @@ type HotNewsItem = {
   description: string;
   heroBannerUrl: string;
   sortOrder: number;
+  visible: boolean;
 };
 
 type FormState = {
@@ -24,7 +25,8 @@ function newItem(): HotNewsItem {
     shortDescription: '',
     description: '',
     heroBannerUrl: '',
-    sortOrder: 0
+    sortOrder: 0,
+    visible: true
   };
 }
 
@@ -38,12 +40,18 @@ const HotNewsManagement: React.FC = () => {
   const fetchData = async () => {
     setLoading(true);
     try {
-      const res = await axios.get('/config/hotnews');
+      const res = await axios.get('/config/hotnews/admin');
       const d = res.data?.data as FormState | undefined;
       if (d) {
         setForm({
           enabled: d.enabled !== false,
-          items: Array.isArray(d.items) && d.items.length ? d.items.map((it, i) => ({ ...it, sortOrder: i })) : [newItem()]
+          items: Array.isArray(d.items) && d.items.length
+            ? d.items.map((it, i) => ({
+                ...it,
+                sortOrder: i,
+                visible: it.visible !== false
+              }))
+            : [newItem()]
         });
       }
     } catch (e) {
@@ -66,7 +74,11 @@ const HotNewsManagement: React.FC = () => {
     try {
       await axios.put('/config/hotnews', {
         enabled: form.enabled,
-        items: valid.map((it, i) => ({ ...it, sortOrder: i }))
+        items: valid.map((it, i) => ({
+          ...it,
+          sortOrder: i,
+          visible: it.visible !== false
+        }))
       });
       alert('已保存');
       await fetchData();
@@ -121,7 +133,7 @@ const HotNewsManagement: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-gray-900">HotNews 管理</h2>
           <p className="text-gray-600 mt-1 text-sm">
-            可新增多則。首頁 banner 顯示<strong>短描述</strong>；用戶點擊後以彈層顯示完整內容（上方為 banner）。
+            可新增多則，用上下箭頭調整順序；每則可獨立「顯示／隱藏」。首頁 banner 顯示<strong>短描述</strong>；點擊後以彈層顯示完整內容。
           </p>
         </div>
         <div className="flex gap-2">
@@ -152,7 +164,23 @@ const HotNewsManagement: React.FC = () => {
         {form.items.map((item, index) => (
           <div key={item.id} className="rounded-xl border border-gray-200 p-4 sm:p-5 bg-gray-50/80">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <span className="text-sm font-semibold text-gray-700">第 {index + 1} 則</span>
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm font-semibold text-gray-700">第 {index + 1} 則</span>
+                {!item.visible ? (
+                  <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                    已隱藏
+                  </span>
+                ) : null}
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={item.visible}
+                    onChange={(e) => patchItem(index, { visible: e.target.checked })}
+                    className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
+                  />
+                  顯示於首頁
+                </label>
+              </div>
               <div className="flex items-center gap-1">
                 <button
                   type="button"

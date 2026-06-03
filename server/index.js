@@ -185,6 +185,7 @@ app.use('/api/categories', require('./routes/categories')); // Added categories 
 app.use('/api/orders', require('./routes/orders'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/reports', require('./routes/reports')); // Added orders routes
+app.use('/api/finance', require('./routes/finance'));
 app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'));
 app.use('/api/edm', require('./routes/edm'));
 

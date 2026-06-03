@@ -7,7 +7,71 @@ const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const emailService = require('../services/emailService');
-const { normalizeClothingSize } = require('../utils/clothingSizes');
+const {
+  validateVariantSelection,
+  usesVariantStock,
+  normalizeColor,
+  normalizeSize,
+  syncProductStockFromVariants
+} = require('../utils/productVariants');
+
+async function adjustProductStock(productId, quantity, color, size, delta) {
+  const product = await Product.findById(productId);
+  if (!product) return;
+
+  if (usesVariantStock(product)) {
+    const colorNorm = normalizeColor(color);
+    const sizeNorm = normalizeSize(size);
+    const updated = await Product.findOneAndUpdate(
+      {
+        _id: productId,
+        variants: {
+          $elemMatch: {
+            color: colorNorm,
+            size: sizeNorm
+          }
+        }
+      },
+      { $inc: { 'variants.$.stock': delta } },
+      { new: true }
+    );
+    if (updated) {
+      syncProductStockFromVariants(updated);
+      await updated.save();
+    }
+    return;
+  }
+
+  await Product.findByIdAndUpdate(productId, { $inc: { stock: delta } });
+}
+
+async function restoreOrderItemStock(item) {
+  const product = await Product.findById(item.product);
+  if (!product) return;
+
+  if (usesVariantStock(product)) {
+    const updated = await Product.findOneAndUpdate(
+      {
+        _id: item.product,
+        variants: {
+          $elemMatch: {
+            color: normalizeColor(item.color),
+            size: normalizeSize(item.size)
+          }
+        }
+      },
+      { $inc: { 'variants.$.stock': item.quantity } },
+      { new: true }
+    );
+    if (updated) {
+      syncProductStockFromVariants(updated);
+      await updated.save();
+    }
+    return;
+  }
+
+  await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
+}
 const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -53,7 +117,20 @@ router.post('/', [
         return res.status(400).json({ message: `產品 ${product.name} 已下架` });
       }
 
-      if (product.stock < item.quantity) {
+      const selection = validateVariantSelection(product, {
+        color: item.color,
+        size: item.size
+      });
+      if (!selection.ok) {
+        return res.status(400).json({ message: selection.message });
+      }
+
+      let availableStock = product.stock;
+      if (usesVariantStock(product) && selection.variant) {
+        availableStock = selection.variant.stock;
+      }
+
+      if (availableStock < item.quantity) {
         return res.status(400).json({ message: `產品 ${product.name} 庫存不足` });
       }
 
@@ -64,28 +141,14 @@ router.post('/', [
       const itemSubtotal = price * item.quantity;
       subtotal += itemSubtotal;
 
-      let sizeForOrder = null;
-      if (product.isClothing) {
-        const normalized = normalizeClothingSize(item.size);
-        if (!normalized) {
-          return res.status(400).json({
-            message: `產品「${product.name}」請選擇有效尺碼（XS、S、M、L、XL）`
-          });
-        }
-        sizeForOrder = normalized;
-      } else if (item.size !== undefined && item.size !== null && String(item.size).trim() !== '') {
-        return res.status(400).json({
-          message: `產品「${product.name}」無需填寫尺碼`
-        });
-      }
-
       orderItems.push({
         product: product._id,
         name: product.name,
         price: price,
         quantity: item.quantity,
         subtotal: itemSubtotal,
-        size: sizeForOrder
+        color: selection.color,
+        size: selection.size
       });
     }
 
@@ -149,11 +212,17 @@ router.post('/', [
 
     await order.save();
 
-    // 更新產品庫存
-    for (const item of items) {
-      await Product.findByIdAndUpdate(item.productId, {
-        $inc: { stock: -item.quantity }
-      });
+    // 更新產品庫存（含規格 SKU）
+    for (let i = 0; i < items.length; i++) {
+      const reqItem = items[i];
+      const orderItem = orderItems[i];
+      await adjustProductStock(
+        reqItem.productId,
+        reqItem.quantity,
+        orderItem.color,
+        orderItem.size,
+        -reqItem.quantity
+      );
     }
 
     // 記錄兌換碼使用
@@ -422,11 +491,9 @@ router.put('/:id/cancel', [auth, adminAuth], async (req, res) => {
       });
     }
 
-    // 1. 恢復產品庫存
+    // 1. 恢復產品庫存（含規格 SKU）
     for (const item of order.items) {
-      await Product.findByIdAndUpdate(item.product, {
-        $inc: { stock: item.quantity }
-      });
+      await restoreOrderItemStock(item);
     }
 
     // 2. 退還積分：後台確認扣款（pointsChargedAmount）或舊制下單即扣（pointsDeducted）

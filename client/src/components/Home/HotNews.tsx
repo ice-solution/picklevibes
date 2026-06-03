@@ -11,6 +11,7 @@ export type HotNewsItem = {
   description: string;
   heroBannerUrl: string;
   sortOrder: number;
+  visible?: boolean;
 };
 
 type HotNewsPayload = {
@@ -80,9 +81,8 @@ const HotNews: React.FC = () => {
 
   if (!loaded) return null;
 
-  if (data?.enabled === false || !data?.items?.length) return null;
-
-  const items = data.items;
+  const items = (data?.items || []).filter((it) => it.visible !== false);
+  if (data?.enabled === false || !items.length) return null;
 
   return (
     <section className="bg-white">

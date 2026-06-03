@@ -19,9 +19,31 @@ export const SOLO_TWO_SLOTS: PricingTimeSlot[] = [
   { startTime: '16:00', endTime: '23:00', price: 380, name: '繁忙時間' },
 ];
 
+/** iSQUARE：平日 10–16 / 16–24、假日（無貓頭鷹時段） */
+export const ISQUARE_COMPETITION_TRAINING_SLOTS: PricingTimeSlot[] = [
+  { startTime: '10:00', endTime: '16:00', price: 380, name: '非繁忙時間' },
+  { startTime: '16:00', endTime: '24:00', price: 600, name: '繁忙時間' },
+  { startTime: '10:00', endTime: '24:00', price: 680, name: '紅日' },
+];
+
+export const ISQUARE_SOLO_SLOTS: PricingTimeSlot[] = [
+  { startTime: '10:00', endTime: '16:00', price: 250, name: '非繁忙時間' },
+  { startTime: '16:00', endTime: '24:00', price: 320, name: '繁忙時間' },
+  { startTime: '10:00', endTime: '24:00', price: 380, name: '紅日' },
+];
+
+export const ISQUARE_DINK_SLOTS: PricingTimeSlot[] = [
+  { startTime: '10:00', endTime: '16:00', price: 150, name: '非繁忙時間' },
+  { startTime: '16:00', endTime: '24:00', price: 200, name: '繁忙時間' },
+  { startTime: '10:00', endTime: '24:00', price: 280, name: '紅日' },
+];
+
 export function getDefaultSlotsForCourtType(type: string): PricingTimeSlot[] {
   if (type === 'solo') {
     return SOLO_TWO_SLOTS.map((s) => ({ ...s }));
+  }
+  if (type === 'dink') {
+    return ISQUARE_DINK_SLOTS.map((s) => ({ ...s }));
   }
   return STANDARD_FOUR_SLOTS.map((s) => ({ ...s }));
 }

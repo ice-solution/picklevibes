@@ -26,6 +26,7 @@ interface Order {
     price: number;
     quantity: number;
     subtotal: number;
+    color?: string | null;
     size?: string | null;
   }>;
   subtotal: number;
@@ -263,6 +264,7 @@ const OrderManagement: React.FC = () => {
                   <div key={index} className="flex justify-between py-2 border-b">
                     <span>
                       {item.name}
+                      {item.color ? `（${item.color}）` : ''}
                       {item.size ? `（${item.size}）` : ''} x {item.quantity}
                     </span>
                     <span>HK${item.subtotal.toFixed(2)}</span>

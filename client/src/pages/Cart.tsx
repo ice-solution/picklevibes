@@ -10,7 +10,15 @@ import {
   ShoppingCartIcon,
   ArrowLeftIcon
 } from '@heroicons/react/24/outline';
-import { CLOTHING_SIZE_OPTIONS } from '../constants/clothingSizes';
+import {
+  cartLineKey,
+  requiresVariantSelection,
+  getEffectiveVariantMode,
+  getAvailableColors,
+  getAvailableSizes,
+  formatVariantLabel,
+  ProductWithVariants
+} from '../constants/productVariants';
 
 interface CartItem {
   productId: string;
@@ -18,19 +26,19 @@ interface CartItem {
   price: number;
   image: string;
   quantity: number;
-  /** 衣服類商品尺碼 */
+  color?: string;
   size?: string;
 }
 
 function lineKey(item: CartItem): string {
-  return `${item.productId}::${item.size ?? ''}`;
+  return cartLineKey(item.productId, item.color, item.size);
 }
 
 const Cart: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [clothingByProductId, setClothingByProductId] = useState<Record<string, boolean>>({});
+  const [productMeta, setProductMeta] = useState<Record<string, ProductWithVariants>>({});
 
   useEffect(() => {
     if (user) {
@@ -46,7 +54,7 @@ const Cart: React.FC = () => {
   useEffect(() => {
     const ids = Array.from(new Set(cartItems.map((i) => i.productId)));
     if (ids.length === 0) {
-      setClothingByProductId({});
+      setProductMeta({});
       return;
     }
     let cancelled = false;
@@ -54,13 +62,13 @@ const Cart: React.FC = () => {
       try {
         const results = await Promise.all(ids.map((id) => axios.get(`/products/${id}`)));
         if (cancelled) return;
-        const map: Record<string, boolean> = {};
+        const map: Record<string, ProductWithVariants> = {};
         results.forEach((r, i) => {
-          map[ids[i]] = !!r.data?.isClothing;
+          map[ids[i]] = r.data;
         });
-        setClothingByProductId(map);
+        setProductMeta(map);
       } catch {
-        if (!cancelled) setClothingByProductId({});
+        if (!cancelled) setProductMeta({});
       }
     })();
     return () => {
@@ -91,12 +99,15 @@ const Cart: React.FC = () => {
     persistCart(updatedCart);
   };
 
-  const updateClothingSize = (item: CartItem, newSize: string) => {
-    if (!newSize) return;
-    if ((item.size || '') === newSize) return;
+  const updateCartVariant = (item: CartItem, patch: { color?: string; size?: string }) => {
+    const newColor = patch.color !== undefined ? patch.color : item.color;
+    const newSize = patch.size !== undefined ? patch.size : item.size;
+    const newKey = cartLineKey(item.productId, newColor, newSize);
+    if (newKey === lineKey(item)) return;
+
     const others = cartItems.filter((row) => lineKey(row) !== lineKey(item));
     const merge = others.find(
-      (row) => row.productId === item.productId && (row.size || '') === newSize
+      (row) => cartLineKey(row.productId, row.color, row.size) === newKey
     );
     if (merge) {
       persistCart(
@@ -109,7 +120,9 @@ const Cart: React.FC = () => {
     } else {
       persistCart(
         cartItems.map((row) =>
-          lineKey(row) === lineKey(item) ? { ...row, size: newSize } : row
+          lineKey(row) === lineKey(item)
+            ? { ...row, color: newColor || undefined, size: newSize || undefined }
+            : row
         )
       );
     }
@@ -174,27 +187,51 @@ const Cart: React.FC = () => {
                         />
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg mb-1">{item.name}</h3>
-                          {clothingByProductId[item.productId] && (
-                            <div className="mt-1 flex flex-wrap items-center gap-2">
-                              <label className="text-sm text-gray-600">尺碼</label>
-                              <select
-                                value={item.size || ''}
-                                onChange={(e) => {
-                                  const v = e.target.value;
-                                  if (!v) return;
-                                  updateClothingSize(item, v);
-                                }}
-                                className="text-sm border border-gray-300 rounded-lg px-2 py-1 bg-white"
-                              >
-                                <option value="">請選擇</option>
-                                {CLOTHING_SIZE_OPTIONS.map((sz) => (
-                                  <option key={sz} value={sz}>
-                                    {sz}
-                                  </option>
-                                ))}
-                              </select>
-                            </div>
+                          {(item.color || item.size) && (
+                            <p className="text-sm text-gray-500 mb-1">
+                              {formatVariantLabel(item.color, item.size)}
+                            </p>
                           )}
+                          {productMeta[item.productId] && requiresVariantSelection(productMeta[item.productId]) && (() => {
+                            const p = productMeta[item.productId];
+                            const mode = getEffectiveVariantMode(p);
+                            const colors = getAvailableColors(p, item.size);
+                            const sizes = getAvailableSizes(p, item.color);
+                            return (
+                              <div className="mt-1 flex flex-wrap items-center gap-2">
+                                {(mode === 'color' || mode === 'color_size') && colors.length > 0 && (
+                                  <>
+                                    <label className="text-sm text-gray-600">顏色</label>
+                                    <select
+                                      value={item.color || ''}
+                                      onChange={(e) => updateCartVariant(item, { color: e.target.value })}
+                                      className="text-sm border border-gray-300 rounded-lg px-2 py-1 bg-white"
+                                    >
+                                      <option value="">請選擇</option>
+                                      {colors.map((c) => (
+                                        <option key={c} value={c}>{c}</option>
+                                      ))}
+                                    </select>
+                                  </>
+                                )}
+                                {(mode === 'size' || mode === 'color_size') && sizes.length > 0 && (
+                                  <>
+                                    <label className="text-sm text-gray-600">尺碼</label>
+                                    <select
+                                      value={item.size || ''}
+                                      onChange={(e) => updateCartVariant(item, { size: e.target.value })}
+                                      className="text-sm border border-gray-300 rounded-lg px-2 py-1 bg-white"
+                                    >
+                                      <option value="">請選擇</option>
+                                      {sizes.map((sz) => (
+                                        <option key={sz} value={sz}>{sz}</option>
+                                      ))}
+                                    </select>
+                                  </>
+                                )}
+                              </div>
+                            );
+                          })()}
                           <p className="text-gray-600">HK${item.price.toFixed(2)}</p>
                         </div>
                         <div className="flex items-center space-x-4">

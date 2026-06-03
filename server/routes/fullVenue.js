@@ -8,6 +8,8 @@ const {
   applyTempAuthToBooking,
 } = require('../services/bookingNotificationService');
 const Court = require('../models/Court');
+const Store = require('../models/Store');
+const { isFullVenueEnabledForStore } = require('../utils/storeFeatures');
 
 // 創建包場預約
 router.post('/create', auth, async (req, res) => {
@@ -39,6 +41,17 @@ router.post('/create', auth, async (req, res) => {
       return res.status(400).json({ success: false, message: '請選擇店鋪' });
     }
 
+    const storeDoc = await Store.findById(resolvedStoreId).select('slug name');
+    if (!storeDoc) {
+      return res.status(404).json({ success: false, message: '店鋪不存在' });
+    }
+    if (!isFullVenueEnabledForStore(storeDoc)) {
+      return res.status(400).json({
+        success: false,
+        message: `${storeDoc.name} 暫不開放包場預約`
+      });
+    }
+
     const result = await fullVenueService.createFullVenueBooking({
       date: new Date(date),
       startTime,
@@ -51,6 +64,7 @@ router.post('/create', auth, async (req, res) => {
       pointsDeduction: req.body.pointsDeduction || 0,
       bypassRestrictions: bypassRestrictions,
       storeId: resolvedStoreId,
+      includeInactive: req.user.role === 'admin',
     });
 
     try {
