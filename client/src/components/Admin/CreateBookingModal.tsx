@@ -195,12 +195,17 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   };
 
   const checkFullVenueAvailability = async (): Promise<boolean> => {
+    if (!storeId) {
+      setError('請先選擇店鋪');
+      return false;
+    }
     if (!formData.date || !formData.startTime || !formData.endTime) {
       setError('請先選擇日期與時段');
       return false;
     }
     try {
       const res = await axios.post('/full-venue/check-availability', {
+        storeId,
         date: formData.date,
         startTime: formData.startTime,
         endTime: formData.endTime

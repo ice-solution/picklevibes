@@ -174,7 +174,12 @@ router.put('/:id/cancel', auth, async (req, res) => {
 // 檢查包場時間可用性
 router.post('/check-availability', auth, async (req, res) => {
   try {
-    const { date, startTime, endTime } = req.body;
+    const { date, startTime, endTime, storeId } = req.body;
+    const resolvedStoreId = storeId || req.body.store;
+
+    if (!resolvedStoreId) {
+      return res.status(400).json({ success: false, message: '請選擇店鋪' });
+    }
 
     if (!date || !startTime || !endTime) {
       return res.status(400).json({
@@ -183,10 +188,23 @@ router.post('/check-availability', auth, async (req, res) => {
       });
     }
 
+    const storeDoc = await Store.findById(resolvedStoreId).select('slug name');
+    if (!storeDoc) {
+      return res.status(404).json({ success: false, message: '店鋪不存在' });
+    }
+    if (!isFullVenueEnabledForStore(storeDoc)) {
+      return res.status(400).json({
+        success: false,
+        message: `${storeDoc.name} 暫不開放包場預約`
+      });
+    }
+
     const conflictCheck = await fullVenueService.checkTimeConflicts(
       normalizeBookingDateInput(date),
       startTime,
-      endTime
+      endTime,
+      resolvedStoreId,
+      { includeInactive: req.user.role === 'admin' }
     );
 
     res.json({

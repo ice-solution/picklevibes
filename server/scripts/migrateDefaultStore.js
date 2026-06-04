@@ -39,22 +39,54 @@ async function main() {
   );
   console.log(`✅ 已更新 ${courtResult.modifiedCount} 個場地的 store`);
 
+  // 場地若仍無 store，一律掛預設店（舊資料）
+  const courtOrphanResult = await Court.updateMany(
+    { $or: [{ store: { $exists: false } }, { store: null }] },
+    { $set: { store: store._id } }
+  );
+  if (courtOrphanResult.modifiedCount > 0) {
+    console.log(`✅ 已補上 ${courtOrphanResult.modifiedCount} 個仍缺 store 的場地`);
+  }
+
   const courts = await Court.find({}).select('_id store');
   const courtStoreMap = new Map(courts.map((c) => [String(c._id), c.store]));
 
-  const bookings = await Booking.find({
+  const bookingsMissingStore = await Booking.find({
     $or: [{ store: { $exists: false } }, { store: null }],
   }).select('_id court');
 
-  let bookingUpdated = 0;
-  for (const b of bookings) {
+  const bulkOps = [];
+  let bookingNoCourt = 0;
+  for (const b of bookingsMissingStore) {
     const storeId = courtStoreMap.get(String(b.court));
     if (storeId) {
-      await Booking.updateOne({ _id: b._id }, { $set: { store: storeId } });
-      bookingUpdated += 1;
+      bulkOps.push({
+        updateOne: {
+          filter: { _id: b._id },
+          update: { $set: { store: storeId } }
+        }
+      });
+    } else {
+      bookingNoCourt += 1;
     }
   }
-  console.log(`✅ 已更新 ${bookingUpdated} 筆預約的 store`);
+
+  if (bulkOps.length > 0) {
+    const bulkResult = await Booking.bulkWrite(bulkOps, { ordered: false });
+    console.log(`✅ 已更新 ${bulkResult.modifiedCount} 筆預約的 store（由場地推斷）`);
+  }
+
+  if (bookingNoCourt > 0) {
+    console.log(`⚠️  ${bookingNoCourt} 筆預約找不到場地／店鋪，請人工檢查`);
+  }
+
+  const stillMissing = await Booking.countDocuments({
+    $or: [{ store: { $exists: false } }, { store: null }],
+    status: { $in: ['confirmed', 'completed'] }
+  });
+  if (stillMissing > 0) {
+    console.log(`⚠️  仍有 ${stillMissing} 筆有效預約沒有 store（會計將顯示「未指定店鋪」）`);
+  }
 
   try {
     await Court.collection.dropIndex('number_1');

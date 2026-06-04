@@ -219,7 +219,7 @@ class FullVenueService {
    * @param {String} endTime - 結束時間
    * @returns {Object} 衝突檢查結果
    */
-  async checkTimeConflicts(date, startTime, endTime, storeId) {
+  async checkTimeConflicts(date, startTime, endTime, storeId, options = {}) {
     try {
       if (!storeId) {
         throw new Error('請選擇店鋪');

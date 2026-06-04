@@ -141,6 +141,25 @@ async function buildUserRechargePools(userIds, endInstant) {
   return pools;
 }
 
+/** 預約店鋪：優先 booking.store，否則從 court.store 推斷（舊資料常缺 booking.store） */
+function resolveBookingStore(booking) {
+  const storeDoc =
+    booking.store && typeof booking.store === 'object' && booking.store._id
+      ? booking.store
+      : booking.court &&
+          typeof booking.court === 'object' &&
+          booking.court.store &&
+          typeof booking.court.store === 'object'
+        ? booking.court.store
+        : null;
+
+  return {
+    storeId: storeDoc?._id ? String(storeDoc._id) : null,
+    storeName: storeDoc?.name || '未指定店鋪',
+    inferredFromCourt: !booking.store?._id && !!storeDoc
+  };
+}
+
 function paymentMethodLabel(method) {
   if (method === 'points') return '積分';
   if (method === 'admin_waived') return '管理員免扣款';
@@ -183,7 +202,11 @@ async function computeIncomeLines(opts) {
       'user store court date startTime endTime duration status pricing payment noUserBalanceDebited bypassRestrictions isFullVenue venueBundleKind relatedActivity createdAt'
     )
     .populate('store', 'name slug code')
-    .populate('court', 'name type')
+    .populate({
+      path: 'court',
+      select: 'name type store',
+      populate: { path: 'store', select: 'name slug' }
+    })
     .populate('user', 'name email phone')
     .sort({ date: 1, startTime: 1 })
     .lean();
@@ -209,8 +232,7 @@ async function computeIncomeLines(opts) {
 
   for (const b of bookings) {
     const method = b.payment?.method || 'points';
-    const storeIdLine = b.store?._id ? String(b.store._id) : null;
-    const storeName = b.store?.name || '未指定店鋪';
+    const { storeId: storeIdLine, storeName } = resolveBookingStore(b);
     const courtName = b.court?.name || '';
     const user = b.user;
     const userName = user?.name || '';

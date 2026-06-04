@@ -333,6 +333,16 @@ const AccountingManagement: React.FC = () => {
         </div>
       )}
 
+      {!storeId && storeBreakdown.some((r) => r.store === '未指定店鋪' || !r.storeId) && (
+        <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 text-sm text-amber-900">
+          <strong>出現「未指定店鋪」：</strong>多為多店功能上線前的舊預約，資料庫裡
+          <code className="mx-1 bg-amber-100 px-1 rounded">booking.store</code>
+          尚未填寫。請在伺服器對 production DB 執行一次{' '}
+          <code className="bg-amber-100 px-1 rounded">npm run migrate-stores</code>
+          （不會清空資料）。報表已會嘗試從場地推斷店鋪；執行遷移後數字會更準確。
+        </div>
+      )}
+
       {!storeId && storeBreakdown.length > 0 && (
         <div className="bg-white rounded-xl border overflow-hidden">
           <div className="px-4 py-3 border-b font-semibold flex items-center justify-between">
