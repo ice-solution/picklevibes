@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { TUYA_BASE_URL_OPTIONS } from '../../constants/tuyaRegions';
 
 interface Store {
   _id: string;
@@ -14,6 +15,13 @@ interface Store {
   hikKey?: string;
   hikSecret?: string;
   hikAccessLevelId?: string;
+  enableTuyaAutomation?: boolean;
+  tuyaAccessKey?: string;
+  tuyaSecretKey?: string;
+  tuyaBaseUrl?: string;
+  tuyaPreBufferMinutes?: number;
+  tuyaPostBufferMinutes?: number;
+  tuyaMergeGapMinutes?: number;
 }
 
 const emptyForm = {
@@ -27,6 +35,13 @@ const emptyForm = {
   hikKey: '',
   hikSecret: '',
   hikAccessLevelId: '',
+  enableTuyaAutomation: false,
+  tuyaAccessKey: '',
+  tuyaSecretKey: '',
+  tuyaBaseUrl: 'https://openapi.tuyacn.com',
+  tuyaPreBufferMinutes: 15,
+  tuyaPostBufferMinutes: 15,
+  tuyaMergeGapMinutes: 0,
 };
 
 const StoreManagement: React.FC = () => {
@@ -73,6 +88,13 @@ const StoreManagement: React.FC = () => {
       hikKey: s.hikKey || '',
       hikSecret: s.hikSecret || '',
       hikAccessLevelId: s.hikAccessLevelId || '',
+      enableTuyaAutomation: Boolean(s.enableTuyaAutomation),
+      tuyaAccessKey: s.tuyaAccessKey || '',
+      tuyaSecretKey: s.tuyaSecretKey || '',
+      tuyaBaseUrl: s.tuyaBaseUrl || 'https://openapi.tuyacn.com',
+      tuyaPreBufferMinutes: s.tuyaPreBufferMinutes ?? 15,
+      tuyaPostBufferMinutes: s.tuyaPostBufferMinutes ?? 15,
+      tuyaMergeGapMinutes: s.tuyaMergeGapMinutes ?? 0,
     });
     setShowForm(true);
   };
@@ -86,6 +108,13 @@ const StoreManagement: React.FC = () => {
         hikKey: form.hikKey || null,
         hikSecret: form.hikSecret || null,
         hikAccessLevelId: form.hikAccessLevelId || null,
+        enableTuyaAutomation: form.enableTuyaAutomation,
+        tuyaAccessKey: form.tuyaAccessKey || null,
+        tuyaSecretKey: form.tuyaSecretKey || null,
+        tuyaBaseUrl: form.tuyaBaseUrl || 'https://openapi.tuyacn.com',
+        tuyaPreBufferMinutes: Number(form.tuyaPreBufferMinutes) || 15,
+        tuyaPostBufferMinutes: Number(form.tuyaPostBufferMinutes) || 15,
+        tuyaMergeGapMinutes: Number(form.tuyaMergeGapMinutes) || 0,
       };
       if (editing) {
         await axios.put(`/stores/${editing._id}`, payload);
@@ -114,7 +143,7 @@ const StoreManagement: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">店鋪管理</h2>
-          <p className="text-gray-600">管理分店資料與門禁（HIK）設定</p>
+          <p className="text-gray-600">管理分店資料、門禁（HIK）與 Tuya 智能家居憑證</p>
         </div>
         <button
           type="button"
@@ -134,6 +163,7 @@ const StoreManagement: React.FC = () => {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">地址</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">門禁</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">智能設備</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
             </tr>
           </thead>
@@ -148,6 +178,7 @@ const StoreManagement: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm">{s.enableHikAccess ? 'HIK' : '僅確認信'}</td>
+                <td className="px-4 py-3 text-sm">{s.enableTuyaAutomation ? 'Tuya' : '—'}</td>
                 <td className="px-4 py-3 text-right">
                   <button type="button" onClick={() => openEdit(s)} className="text-indigo-600 hover:text-indigo-800">
                     <PencilIcon className="w-5 h-5 inline" />
@@ -161,7 +192,7 @@ const StoreManagement: React.FC = () => {
 
       {showForm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg p-6 w-full max-w-xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">{editing ? '編輯店鋪' : '新增店鋪'}</h3>
             <form onSubmit={handleSubmit} className="space-y-3">
               <input className="w-full border rounded-md px-3 py-2" placeholder="名稱 *" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
@@ -181,6 +212,42 @@ const StoreManagement: React.FC = () => {
                   <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK App Key（留空用全域 .env）" value={form.hikKey} onChange={(e) => setForm({ ...form, hikKey: e.target.value })} />
                   <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK Secret" value={form.hikSecret} onChange={(e) => setForm({ ...form, hikSecret: e.target.value })} />
                   <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK Access Level ID" value={form.hikAccessLevelId} onChange={(e) => setForm({ ...form, hikAccessLevelId: e.target.value })} />
+                </>
+              )}
+              <hr className="border-gray-200" />
+              <p className="text-sm font-medium text-gray-800">Tuya 智能家居（店鋪級 API 憑證）</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input type="checkbox" checked={form.enableTuyaAutomation} onChange={(e) => setForm({ ...form, enableTuyaAutomation: e.target.checked })} />
+                啟用 Tuya 自動燈控
+              </label>
+              {form.enableTuyaAutomation && (
+                <>
+                  <select
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={form.tuyaBaseUrl}
+                    onChange={(e) => setForm({ ...form, tuyaBaseUrl: e.target.value })}
+                  >
+                    {TUYA_BASE_URL_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                  <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="Tuya Access ID（留空用 .env TUYA_ACCESS_KEY）" value={form.tuyaAccessKey} onChange={(e) => setForm({ ...form, tuyaAccessKey: e.target.value })} />
+                  <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="Tuya Access Secret" value={form.tuyaSecretKey} onChange={(e) => setForm({ ...form, tuyaSecretKey: e.target.value })} />
+                  <div className="grid grid-cols-3 gap-2 text-sm">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">預熱（分）</label>
+                      <input type="number" min={0} max={120} className="w-full border rounded-md px-2 py-1.5" value={form.tuyaPreBufferMinutes} onChange={(e) => setForm({ ...form, tuyaPreBufferMinutes: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">緩衝（分）</label>
+                      <input type="number" min={0} max={120} className="w-full border rounded-md px-2 py-1.5" value={form.tuyaPostBufferMinutes} onChange={(e) => setForm({ ...form, tuyaPostBufferMinutes: Number(e.target.value) })} />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">合併空隙（分）</label>
+                      <input type="number" min={0} max={60} className="w-full border rounded-md px-2 py-1.5" value={form.tuyaMergeGapMinutes} onChange={(e) => setForm({ ...form, tuyaMergeGapMinutes: Number(e.target.value) })} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">預熱／緩衝／合併參數供之後自動排程使用；設備 Device ID 在「場地管理 → 智能設備」設定。</p>
                 </>
               )}
               <div className="flex gap-2 pt-2">

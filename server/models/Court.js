@@ -100,7 +100,34 @@ const courtSchema = new mongoose.Schema({
     url: String,
     alt: String,
     isPrimary: { type: Boolean, default: false }
-  }]
+  }],
+  /** 場地級 Tuya 設備（一場可多掣：燈、冷氣等） */
+  enableTuyaAutomation: {
+    type: Boolean,
+    default: false,
+  },
+  tuyaDevices: [{
+    deviceId: {
+      type: String,
+      required: true,
+      trim: true,
+    },
+    label: {
+      type: String,
+      trim: true,
+      default: '設備',
+    },
+    /** 涂鴉 DP code，單路開關常見 switch_1（見 tyua-sample.js） */
+    switchCode: {
+      type: String,
+      trim: true,
+      default: 'switch_1',
+    },
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+  }],
 }, {
   timestamps: true
 });

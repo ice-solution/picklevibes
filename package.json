@@ -21,7 +21,8 @@
     "manage-sync": "node manage-sync.js",
     "export-users-sendgrid-csv": "node server/scripts/exportUsersCsvForSendgrid.js",
     "migrate-stores": "node server/scripts/migrateDefaultStore.js",
-    "setup-isquare": "node server/scripts/setupIsquareStore.js"
+    "setup-isquare": "node server/scripts/setupIsquareStore.js",
+    "batch-recharge": "node server/scripts/batchManualRecharge.js"
   },
   "keywords": [
     "pickleball",
@@ -33,6 +34,7 @@
   "license": "MIT",
   "dependencies": {
     "@sendgrid/mail": "^8.1.6",
+    "@tuya/tuya-connector-nodejs": "^2.1.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",

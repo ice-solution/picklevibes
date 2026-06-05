@@ -55,6 +55,21 @@ const storeSchema = new mongoose.Schema({
   hikKey: { type: String, default: null },
   hikSecret: { type: String, default: null },
   hikAccessLevelId: { type: String, default: null },
+  /** Tuya 智能家居（店鋪級 API 憑證，設備綁在 Court） */
+  enableTuyaAutomation: {
+    type: Boolean,
+    default: false,
+  },
+  tuyaAccessKey: { type: String, default: null },
+  tuyaSecretKey: { type: String, default: null },
+  tuyaBaseUrl: {
+    type: String,
+    default: 'https://openapi.tuyacn.com',
+  },
+  /** 預約自動開關參數（Phase 2 排程用） */
+  tuyaPreBufferMinutes: { type: Number, default: 15, min: 0, max: 120 },
+  tuyaPostBufferMinutes: { type: Number, default: 15, min: 0, max: 120 },
+  tuyaMergeGapMinutes: { type: Number, default: 0, min: 0, max: 60 },
 }, {
   timestamps: true,
 });
