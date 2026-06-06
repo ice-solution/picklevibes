@@ -57,9 +57,16 @@ const productSchema = new mongoose.Schema({
     enum: ['none', 'size', 'color', 'color_size'],
     default: 'none'
   },
+  /** 顏色選項（名稱、hex、該色專屬圖片）；variantMode 含 color 時使用 */
+  colorOptions: [{
+    name: { type: String, required: true, trim: true },
+    hex: { type: String, trim: true, default: '#cccccc' },
+    images: [{ type: String }],
+  }],
   variants: [{
     sku: { type: String, trim: true },
     color: { type: String, default: null, trim: true },
+    colorHex: { type: String, default: null, trim: true },
     size: { type: String, default: null, trim: true },
     stock: { type: Number, default: 0, min: [0, '庫存不能為負數'] }
   }],

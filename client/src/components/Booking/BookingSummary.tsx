@@ -521,8 +521,11 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               <h4 className="font-semibold text-yellow-800 mb-2">重要提醒</h4>
               <ul className="text-sm text-yellow-700 space-y-1">
                 <li>• 請提前15分鐘到達場地</li>
-                <li>• 如需取消，請至少提前48小時通知</li>
-                <li>• 請攜帶有效的身份證明文件</li>
+                <li>
+                  • ‼️避免穿著黑底運動鞋，造成污漬將會收取每一條鞋痕
+                  <span className="text-red-600 font-semibold text-[1.2em]">$100</span>
+                  清潔費‼️
+                </li>
                 <li>• 場地內禁止吸煙和飲酒</li>
               </ul>
             </div>

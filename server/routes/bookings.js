@@ -17,6 +17,7 @@ const Store = require('../models/Store');
 const Config = require('../models/Config');
 const { collectBundledBookingIds } = require('../utils/bookingBundle');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
+const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 
 const router = express.Router();
 
@@ -558,6 +559,10 @@ router.post('/', [
       console.error('❌ 預約通知發送失敗:', notifyError);
     }
 
+    const tuyaCourtIds = [booking.court];
+    if (soloCourtBooking?.court) tuyaCourtIds.push(soloCourtBooking.court);
+    scheduleTuyaCourtsSync(tuyaCourtIds, 'booking_created');
+
     // 準備響應數據
     const responseData = {
       message: '預約創建成功',
@@ -1026,6 +1031,11 @@ router.put('/:id/cancel', [
       // 不影響預約取消，只記錄錯誤
     }
 
+    scheduleTuyaCourtsSync(
+      bundleBookings.map((b) => b.court),
+      'booking_cancelled'
+    );
+
     res.json({
       message:
         bundledIds.length > 1
@@ -1060,6 +1070,8 @@ router.put('/:id/status', [
     if (!booking) {
       return res.status(404).json({ message: '預約不存在' });
     }
+
+    scheduleTuyaCourtSync(booking.court, 'booking_status_updated');
 
     res.json({
       message: '預約狀態更新成功',

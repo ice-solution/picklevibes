@@ -1,5 +1,6 @@
 const { TuyaContext } = require('@tuya/tuya-connector-nodejs');
 const { getStoreTuyaConfig, isTuyaConfigured } = require('../utils/storeTuyaConfig');
+const { logTuya } = require('../utils/tuyaActionLog');
 
 /** 依店鋪快取 TuyaContext（避免每次 new） */
 const clientCache = new Map();
@@ -65,7 +66,173 @@ function getActiveCourtDevices(court) {
 }
 
 /**
- * 對場地所有啟用設備下達同一開關狀態
+ * 從 Tuya status API 回傳解析開關狀態
+ * @returns {boolean|null} true=開, false=關, null=讀取失敗或找不到 DP
+ */
+function parseSwitchFromStatus(statusResponse, switchCode = 'switch_1') {
+  if (!statusResponse?.success) return null;
+  const list = statusResponse.result;
+  if (!Array.isArray(list)) return null;
+
+  const entry = list.find((item) => item.code === switchCode);
+  if (!entry) return null;
+
+  const { value } = entry;
+  if (typeof value === 'boolean') return value;
+  if (value === 'true' || value === 1 || value === '1') return true;
+  if (value === 'false' || value === 0 || value === '0') return false;
+  return null;
+}
+
+async function getDeviceSwitchState(store, { deviceId, switchCode = 'switch_1' }) {
+  const status = await getDeviceStatus(store, deviceId);
+  return parseSwitchFromStatus(status, switchCode);
+}
+
+/**
+ * 讀取場地所有設備實際開關狀態
+ */
+async function getCourtDevicesState(store, court) {
+  const devices = getActiveCourtDevices(court);
+  const results = [];
+  for (const device of devices) {
+    const switchCode = device.switchCode || 'switch_1';
+    let isOn = null;
+    try {
+      isOn = await getDeviceSwitchState(store, {
+        deviceId: device.deviceId,
+        switchCode,
+      });
+    } catch (err) {
+      results.push({
+        deviceId: device.deviceId,
+        label: device.label,
+        switchCode,
+        isOn: null,
+        readError: err.message,
+      });
+      continue;
+    }
+    results.push({
+      deviceId: device.deviceId,
+      label: device.label,
+      switchCode,
+      isOn,
+    });
+  }
+  return results;
+}
+
+/**
+ * 對照目標狀態與硬件，僅對不一致的設備下指令
+ */
+async function reconcileCourtDevices(store, court, turnOn, { reason = 'reconcile' } = {}) {
+  const devices = getActiveCourtDevices(court);
+  if (!devices.length) {
+    throw new Error('此場地未啟用智能家居或未設定設備');
+  }
+
+  const targetOn = Boolean(turnOn);
+  const courtId = String(court._id);
+  const courtName = court.name;
+  const results = [];
+  let changed = 0;
+  let unchanged = 0;
+  let readFailed = 0;
+
+  for (const device of devices) {
+    const switchCode = device.switchCode || 'switch_1';
+    let actualOn = null;
+
+    try {
+      actualOn = await getDeviceSwitchState(store, {
+        deviceId: device.deviceId,
+        switchCode,
+      });
+    } catch (err) {
+      readFailed += 1;
+      logTuya('warn', `⚠️ Tuya [${courtName}] 讀取 ${device.label || device.deviceId} 失敗，將嘗試${targetOn ? '開' : '關'}`, {
+        courtId,
+        courtName,
+        reason,
+        deviceId: device.deviceId,
+        deviceLabel: device.label,
+        switchCode,
+        action: 'read_failed',
+        targetOn,
+        error: err.message,
+      });
+    }
+
+    if (actualOn === targetOn) {
+      unchanged += 1;
+      logTuya('info', `💡 Tuya [${courtName}] ${device.label || device.deviceId} 已是${targetOn ? '開' : '關'}（無需變更）`, {
+        courtId,
+        courtName,
+        reason,
+        deviceId: device.deviceId,
+        deviceLabel: device.label,
+        switchCode,
+        action: 'unchanged',
+        actualOn,
+        targetOn,
+      }, { silent: true });
+      results.push({
+        deviceId: device.deviceId,
+        label: device.label,
+        switchCode,
+        action: 'unchanged',
+        actualOn,
+        targetOn,
+      });
+      continue;
+    }
+
+    const control = await setDeviceSwitch(store, {
+      deviceId: device.deviceId,
+      switchCode,
+      turnOn: targetOn,
+    });
+    changed += 1;
+    logTuya('info', `💡 Tuya [${courtName}] ${device.label || device.deviceId} ${actualOn == null ? '未知→' : (actualOn ? '開→' : '關→')}${targetOn ? '開' : '關'}`, {
+      courtId,
+      courtName,
+      reason,
+      deviceId: device.deviceId,
+      deviceLabel: device.label,
+      switchCode,
+      action: targetOn ? 'on' : 'off',
+      actualOn,
+      targetOn,
+    });
+    results.push({
+      deviceId: device.deviceId,
+      label: device.label,
+      switchCode,
+      action: targetOn ? 'on' : 'off',
+      actualOn,
+      targetOn,
+      success: true,
+      control,
+    });
+  }
+
+  let action = 'unchanged';
+  if (changed > 0) action = targetOn ? 'on' : 'off';
+  else if (readFailed > 0 && unchanged === 0) action = 'error';
+
+  return {
+    action,
+    targetOn,
+    changed,
+    unchanged,
+    readFailed,
+    devices: results,
+  };
+}
+
+/**
+ * 對場地所有啟用設備下達同一開關狀態（不查硬件，供後台手動測試）
  */
 async function setCourtDevices(store, court, turnOn) {
   const devices = getActiveCourtDevices(court);
@@ -103,6 +270,10 @@ function assertStoreTuyaReady(store) {
 module.exports = {
   getTuyaClient,
   getDeviceStatus,
+  parseSwitchFromStatus,
+  getDeviceSwitchState,
+  getCourtDevicesState,
+  reconcileCourtDevices,
   setDeviceSwitch,
   setCourtDevices,
   getActiveCourtDevices,

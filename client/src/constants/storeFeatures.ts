@@ -5,6 +5,6 @@ export function isStoreSlugIsquare(slug?: string | null): boolean {
   return String(slug || '').trim().toLowerCase() === STORE_SLUG_ISQUARE;
 }
 
-export function isFullVenueEnabledForStoreSlug(slug?: string | null): boolean {
-  return !isStoreSlugIsquare(slug);
+export function isFullVenueEnabledForStoreSlug(_slug?: string | null): boolean {
+  return true;
 }

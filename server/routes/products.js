@@ -5,11 +5,49 @@ const Category = require('../models/Category');
 const { auth, adminAuth } = require('../middleware/auth');
 const {
   parseVariantsInput,
+  parseColorOptionsInput,
   validateVariantsForMode,
-  syncProductStockFromVariants
+  validateColorOptionsForMode,
+  syncVariantsColorHex,
+  syncProductStockFromVariants,
+  getPrimaryProductImages
 } = require('../utils/productVariants');
 
-function applyVariantFields(body) {
+function fileToRelativePath(file) {
+  const relativePath = path.relative(path.join(__dirname, '../../uploads'), file.path);
+  return relativePath.replace(/\\/g, '/');
+}
+
+function groupUploadedFiles(files = []) {
+  const mainImages = [];
+  const colorImagesByIndex = {};
+  for (const file of files) {
+    if (file.fieldname === 'images') {
+      mainImages.push(fileToRelativePath(file));
+      continue;
+    }
+    const match = file.fieldname.match(/^colorImages_(\d+)$/);
+    if (match) {
+      const idx = parseInt(match[1], 10);
+      if (!colorImagesByIndex[idx]) colorImagesByIndex[idx] = [];
+      colorImagesByIndex[idx].push(fileToRelativePath(file));
+    }
+  }
+  return { mainImages, colorImagesByIndex };
+}
+
+function mergeColorOptionsWithUploads(colorOptions, colorImagesByIndex, { replace = false } = {}) {
+  return (colorOptions || []).map((opt, index) => {
+    const uploaded = colorImagesByIndex[index] || [];
+    const kept = replace ? (opt.images || []) : (opt.images || []);
+    return {
+      ...opt,
+      images: [...kept, ...uploaded],
+    };
+  });
+}
+
+function applyVariantFields(body, { colorOptions: mergedColorOptions } = {}) {
   const variantMode = body.variantMode || 'none';
   const parsed = parseVariantsInput(body.variants);
   if (parsed.error) {
@@ -20,10 +58,27 @@ function applyVariantFields(body) {
     return { error: validated.error };
   }
 
+  const colorParsed = parseColorOptionsInput(body.colorOptions);
+  if (colorParsed.error) {
+    return { error: colorParsed.error };
+  }
+  const colorOptions = mergedColorOptions || colorParsed.colorOptions;
+  const colorValidated = validateColorOptionsForMode(
+    variantMode,
+    colorOptions,
+    validated.variants
+  );
+  if (colorValidated.error) {
+    return { error: colorValidated.error };
+  }
+
+  const variants = syncVariantsColorHex(validated.variants, colorValidated.colorOptions);
+
   const isClothing = variantMode === 'size' || variantMode === 'color_size';
   const productFields = {
     variantMode,
-    variants: validated.variants,
+    variants,
+    colorOptions: colorValidated.colorOptions,
     isClothing: body.isClothing === true || body.isClothing === 'true' || isClothing
   };
   if (isClothing) productFields.isClothing = true;
@@ -106,7 +161,7 @@ router.get('/:id', async (req, res) => {
 router.post('/', [
   auth,
   adminAuth,
-  productUpload.array('images', 5),
+  productUpload.any(),
   processProductImage,
   body('name').trim().notEmpty().withMessage('產品名稱為必填項目'),
   body('description').optional().trim(),
@@ -144,34 +199,40 @@ router.post('/', [
       return res.status(404).json({ message: '分類不存在' });
     }
 
-    // 處理圖片路徑
-    const images = req.files ? req.files.map(file => {
-      // 返回相對於 uploads 目錄的路徑
-      const relativePath = path.relative(path.join(__dirname, '../../uploads'), file.path);
-      return relativePath.replace(/\\/g, '/'); // 統一使用正斜杠
-    }) : [];
-
-    if (images.length === 0) {
-      return res.status(400).json({ message: '至少需要上傳一張圖片' });
+    const { mainImages, colorImagesByIndex } = groupUploadedFiles(req.files || []);
+    const colorParsed = parseColorOptionsInput(req.body.colorOptions);
+    if (colorParsed.error) {
+      if (req.files?.length) req.files.forEach((file) => deleteFile(file.path));
+      return res.status(400).json({ message: colorParsed.error });
     }
+    const mergedColorOptions = mergeColorOptionsWithUploads(
+      colorParsed.colorOptions,
+      colorImagesByIndex,
+      { replace: true }
+    );
 
     // 驗證折扣價格
     if (req.body.discountPrice && parseFloat(req.body.discountPrice) >= parseFloat(req.body.price)) {
-      // 刪除已上傳的圖片
-      images.forEach(imagePath => {
-        const fullPath = path.join(__dirname, '../../uploads', imagePath);
-        deleteFile(fullPath);
-      });
+      if (req.files?.length) req.files.forEach((file) => deleteFile(file.path));
       return res.status(400).json({ message: '折扣價格必須小於原價' });
     }
 
-    const variantApply = applyVariantFields(req.body);
+    const variantApply = applyVariantFields(req.body, { colorOptions: mergedColorOptions });
     if (variantApply.error) {
-      images.forEach(imagePath => {
-        const fullPath = path.join(__dirname, '../../uploads', imagePath);
-        deleteFile(fullPath);
-      });
+      if (req.files?.length) req.files.forEach((file) => deleteFile(file.path));
       return res.status(400).json({ message: variantApply.error });
+    }
+
+    const needsColor = ['color', 'color_size'].includes(variantApply.productFields.variantMode);
+    const images = needsColor
+      ? getPrimaryProductImages({ colorOptions: variantApply.productFields.colorOptions, images: mainImages })
+      : mainImages;
+
+    if (!images.length) {
+      if (req.files?.length) req.files.forEach((file) => deleteFile(file.path));
+      return res.status(400).json({
+        message: needsColor ? '每個顏色請至少上傳一張圖片' : '至少需要上傳一張圖片',
+      });
     }
 
     const productData = {
@@ -186,6 +247,7 @@ router.post('/', [
       sortOrder: req.body.sortOrder ? parseInt(req.body.sortOrder) : 0,
       variantMode: variantApply.productFields.variantMode,
       variants: variantApply.productFields.variants,
+      colorOptions: variantApply.productFields.colorOptions,
       isClothing: variantApply.productFields.isClothing
     };
 
@@ -215,7 +277,7 @@ router.post('/', [
 router.put('/:id', [
   auth,
   adminAuth,
-  productUpload.array('images', 5),
+  productUpload.any(),
   processProductImage,
   body('name').optional().trim().notEmpty().withMessage('產品名稱不能為空'),
   body('description').optional().trim(),
@@ -267,25 +329,21 @@ router.put('/:id', [
       }
     }
 
-    // 處理新上傳的圖片
-    if (req.files && req.files.length > 0) {
-      const newImages = req.files.map(file => {
-        const relativePath = path.relative(path.join(__dirname, '../../uploads'), file.path);
-        return relativePath.replace(/\\/g, '/');
-      });
-
-      // 如果提供了新圖片，替換舊圖片
-      if (req.body.replaceImages === 'true') {
-        // 刪除舊圖片
-        product.images.forEach(imagePath => {
-          const fullPath = path.join(__dirname, '../../uploads', imagePath);
-          deleteFile(fullPath);
-        });
-        req.body.images = newImages;
-      } else {
-        // 追加新圖片
-        req.body.images = [...product.images, ...newImages];
+    const { mainImages, colorImagesByIndex } = groupUploadedFiles(req.files || []);
+    let mergedColorOptions;
+    if (req.body.colorOptions !== undefined || Object.keys(colorImagesByIndex).length > 0) {
+      const colorParsed = parseColorOptionsInput(
+        req.body.colorOptions ?? JSON.stringify(product.colorOptions || [])
+      );
+      if (colorParsed.error) {
+        if (req.files?.length) req.files.forEach((file) => deleteFile(file.path));
+        return res.status(400).json({ message: colorParsed.error });
       }
+      mergedColorOptions = mergeColorOptionsWithUploads(
+        colorParsed.colorOptions,
+        colorImagesByIndex,
+        { replace: false }
+      );
     }
 
     // 驗證折扣價格
@@ -305,37 +363,67 @@ router.put('/:id', [
 
     // 更新產品
     const updateData = { ...req.body };
+    delete updateData.variants;
+    delete updateData.colorOptions;
+    delete updateData.variantMode;
     if (updateData.price) updateData.price = parseFloat(updateData.price);
     if (updateData.discountPrice !== undefined) {
       updateData.discountPrice = updateData.discountPrice ? parseFloat(updateData.discountPrice) : null;
     }
     if (updateData.stock !== undefined) updateData.stock = parseInt(updateData.stock);
     if (updateData.sortOrder !== undefined) updateData.sortOrder = parseInt(updateData.sortOrder);
-    if (req.body.variantMode !== undefined || req.body.variants !== undefined) {
-      const variantApply = applyVariantFields({
-        variantMode: req.body.variantMode ?? product.variantMode,
-        variants: req.body.variants ?? JSON.stringify(product.variants || []),
-        isClothing: req.body.isClothing
-      });
+    const variantFieldsTouched =
+      req.body.variantMode !== undefined
+      || req.body.variants !== undefined
+      || req.body.colorOptions !== undefined
+      || mergedColorOptions !== undefined;
+
+    if (variantFieldsTouched) {
+      const variantApply = applyVariantFields(
+        {
+          variantMode: req.body.variantMode ?? product.variantMode,
+          variants: req.body.variants ?? JSON.stringify(product.variants || []),
+          colorOptions: req.body.colorOptions ?? JSON.stringify(product.colorOptions || []),
+          isClothing: req.body.isClothing,
+        },
+        { colorOptions: mergedColorOptions }
+      );
       if (variantApply.error) {
-        if (req.files && req.files.length > 0) {
-          req.files.forEach(file => deleteFile(file.path));
-        }
+        if (req.files?.length) req.files.forEach((file) => deleteFile(file.path));
         return res.status(400).json({ message: variantApply.error });
       }
       updateData.variantMode = variantApply.productFields.variantMode;
       updateData.variants = variantApply.productFields.variants;
+      updateData.colorOptions = variantApply.productFields.colorOptions;
       updateData.isClothing = variantApply.productFields.isClothing;
+
+      const needsColor = ['color', 'color_size'].includes(variantApply.productFields.variantMode);
+      if (needsColor) {
+        updateData.images = getPrimaryProductImages({
+          colorOptions: variantApply.productFields.colorOptions,
+          images: product.images,
+        });
+      }
     } else if (updateData.isClothing !== undefined) {
       updateData.isClothing = updateData.isClothing === true || updateData.isClothing === 'true';
     }
 
+    if (mainImages.length > 0) {
+      if (req.body.replaceImages === 'true') {
+        product.images.forEach((imagePath) => {
+          deleteFile(path.join(__dirname, '../../uploads', imagePath));
+        });
+        updateData.images = mainImages;
+      } else {
+        updateData.images = [...(updateData.images || product.images), ...mainImages];
+      }
+    }
+
     if (updateData.stock === undefined && updateData.variants) {
-      const tmp = product.toObject();
-      tmp.variants = updateData.variants;
-      tmp.variantMode = updateData.variantMode ?? product.variantMode;
       updateData.stock = (updateData.variants || []).reduce((s, v) => s + (v.stock || 0), 0);
     }
+
+    delete updateData.replaceImages;
 
     const updatedProduct = await Product.findByIdAndUpdate(
       req.params.id,
@@ -375,10 +463,12 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
       return res.status(404).json({ message: '產品不存在' });
     }
 
-    // 刪除產品圖片
-    product.images.forEach(imagePath => {
-      const fullPath = path.join(__dirname, '../../uploads', imagePath);
-      deleteFile(fullPath);
+    const imagePaths = new Set(product.images || []);
+    (product.colorOptions || []).forEach((opt) => {
+      (opt.images || []).forEach((p) => imagePaths.add(p));
+    });
+    imagePaths.forEach((imagePath) => {
+      deleteFile(path.join(__dirname, '../../uploads', imagePath));
     });
 
     await Product.findByIdAndDelete(req.params.id);

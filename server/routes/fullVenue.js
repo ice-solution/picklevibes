@@ -87,6 +87,12 @@ router.post('/create', auth, async (req, res) => {
       console.error('❌ 包場預約通知發送失敗:', emailError);
     }
 
+    const { scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
+    scheduleTuyaCourtsSync(
+      (result.bookings || []).map((b) => b.court),
+      'full_venue_created'
+    );
+
     res.json({
       success: true,
       data: result,

@@ -4,6 +4,8 @@ const { auth, adminAuth } = require('../middleware/auth');
 const Store = require('../models/Store');
 const Court = require('../models/Court');
 const tuyaService = require('../services/tuyaService');
+const tuyaSchedulerService = require('../services/tuyaSchedulerService');
+const tuyaScheduler = require('../scheduler/tuyaScheduler');
 
 const router = express.Router();
 
@@ -164,6 +166,74 @@ router.post('/devices/test', [
     console.error('測試 Tuya 設備錯誤:', error);
     res.status(500).json({ message: error.message || 'Tuya 測試失敗' });
   }
+});
+
+// @route   POST /api/tuya/sync/run
+// @desc    手動觸發全店 Tuya 燈控同步（依預約排程）
+// @access  Private (Admin)
+router.post('/sync/run', [auth, adminAuth], async (req, res) => {
+  try {
+    const result = await tuyaSchedulerService.syncAllCourts({ reason: 'admin_manual' });
+    res.json({
+      success: true,
+      message: `已同步 ${result.synced} 個場地`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('手動 Tuya 同步錯誤:', error);
+    res.status(500).json({ message: error.message || '同步失敗' });
+  }
+});
+
+// @route   POST /api/tuya/courts/:courtId/sync
+// @desc    手動觸發單一場地 Tuya 燈控同步
+// @access  Private (Admin)
+router.post('/courts/:courtId/sync', [auth, adminAuth], async (req, res) => {
+  try {
+    const result = await tuyaSchedulerService.syncCourtById(req.params.courtId, {
+      reason: 'admin_manual',
+    });
+    res.json({
+      success: true,
+      message: result.skipped ? '場地未啟用自動燈控，已略過' : '場地同步完成',
+      result,
+    });
+  } catch (error) {
+    console.error('手動場地 Tuya 同步錯誤:', error);
+    res.status(500).json({ message: error.message || '同步失敗' });
+  }
+});
+
+// @route   GET /api/tuya/sync/status
+// @desc    查詢 Tuya 排程狀態與各場地快取
+// @access  Private (Admin)
+router.get('/sync/status', [auth, adminAuth], async (req, res) => {
+  res.json({
+    success: true,
+    scheduler: tuyaScheduler.getStatus(),
+  });
+});
+
+// @route   GET /api/tuya/sync/logs
+// @desc    查詢 Tuya 動作日誌（debug，記憶體保留最近 500 筆）
+// @access  Private (Admin)
+router.get('/sync/logs', [auth, adminAuth], async (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit, 10) || 100, 500);
+  const courtId = req.query.courtId ? String(req.query.courtId) : undefined;
+  const sinceId = req.query.sinceId ? parseInt(req.query.sinceId, 10) : undefined;
+  res.json({
+    success: true,
+    logs: tuyaSchedulerService.getTuyaActionLog({ limit, courtId, sinceId }),
+    maxEntries: 500,
+  });
+});
+
+// @route   DELETE /api/tuya/sync/logs
+// @desc    清空 Tuya 動作日誌（debug）
+// @access  Private (Admin)
+router.delete('/sync/logs', [auth, adminAuth], async (req, res) => {
+  tuyaSchedulerService.clearTuyaActionLog();
+  res.json({ success: true, message: '日誌已清空' });
 });
 
 module.exports = router;

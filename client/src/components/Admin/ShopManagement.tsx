@@ -17,10 +17,26 @@ import { CLOTHING_SIZE_OPTIONS } from '../../constants/clothingSizes';
 import {
   VariantMode,
   ProductVariant,
+  ColorOption,
   VARIANT_MODE_OPTIONS,
   getEffectiveVariantMode,
-  buildVariantRows
+  buildVariantRows,
+  normalizeHex
 } from '../../constants/productVariants';
+
+interface ColorOptionForm {
+  name: string;
+  hex: string;
+  existingImages: string[];
+  newFiles: File[];
+}
+
+const emptyColorOption = (): ColorOptionForm => ({
+  name: '',
+  hex: '#cccccc',
+  existingImages: [],
+  newFiles: []
+});
 
 interface Product {
   _id: string;
@@ -40,6 +56,7 @@ interface Product {
   isClothing?: boolean;
   variantMode?: VariantMode;
   variants?: ProductVariant[];
+  colorOptions?: ColorOption[];
 }
 
 const emptyProductForm = () => ({
@@ -53,9 +70,11 @@ const emptyProductForm = () => ({
   sortOrder: 0,
   variantMode: 'none' as VariantMode,
   variants: [] as ProductVariant[],
-  variantColorInput: '',
+  colorOptions: [] as ColorOptionForm[],
   variantSizeInput: ''
 });
+
+const usesColorMode = (mode: VariantMode) => mode === 'color' || mode === 'color_size';
 
 interface Category {
   _id: string;
@@ -202,6 +221,27 @@ const ShopManagement: React.FC = () => {
       alert('請產生 SKU 組合並填寫庫存，或填寫商品庫存（舊制）');
       return;
     }
+
+    if (usesColorMode(productFormData.variantMode)) {
+      if (productFormData.colorOptions.length === 0) {
+        alert('請至少新增一個顏色');
+        return;
+      }
+      for (const opt of productFormData.colorOptions) {
+        if (!opt.name.trim()) {
+          alert('請為每個顏色填寫名稱');
+          return;
+        }
+        const totalImages = opt.existingImages.length + opt.newFiles.length;
+        if (!editingProduct && totalImages === 0) {
+          alert(`顏色「${opt.name}」請至少上傳一張圖片`);
+          return;
+        }
+      }
+    } else if (!editingProduct && productImages.length === 0) {
+      alert('請上傳至少一張產品圖片');
+      return;
+    }
     
     const formDataToSend = new FormData();
     formDataToSend.append('name', productFormData.name);
@@ -235,9 +275,28 @@ const ShopManagement: React.FC = () => {
     );
     formDataToSend.append('sortOrder', productFormData.sortOrder.toString());
     
-    productImages.forEach((image) => {
-      formDataToSend.append('images', image);
-    });
+    const colorMode = usesColorMode(productFormData.variantMode);
+    if (colorMode) {
+      formDataToSend.append(
+        'colorOptions',
+        JSON.stringify(
+          productFormData.colorOptions.map((opt) => ({
+            name: opt.name.trim(),
+            hex: normalizeHex(opt.hex),
+            images: opt.existingImages
+          }))
+        )
+      );
+      productFormData.colorOptions.forEach((opt, index) => {
+        opt.newFiles.forEach((file) => {
+          formDataToSend.append(`colorImages_${index}`, file);
+        });
+      });
+    } else {
+      productImages.forEach((image) => {
+        formDataToSend.append('images', image);
+      });
+    }
 
     try {
       if (editingProduct) {
@@ -255,6 +314,7 @@ const ShopManagement: React.FC = () => {
       setEditingProduct(null);
       setProductFormData(emptyProductForm());
       setProductImages([]);
+      setProductErrors({});
       fetchData();
     } catch (error: any) {
       alert(error.response?.data?.message || '操作失敗');
@@ -282,29 +342,66 @@ const ShopManagement: React.FC = () => {
       variants: (product.variants || []).map((v) => ({
         sku: v.sku || '',
         color: v.color ?? null,
+        colorHex: v.colorHex ?? null,
         size: v.size ?? null,
         stock: v.stock ?? 0
       })),
-      variantColorInput: '',
+      colorOptions: (product.colorOptions || []).map((o) => ({
+        name: o.name,
+        hex: normalizeHex(o.hex),
+        existingImages: o.images || [],
+        newFiles: []
+      })),
       variantSizeInput: ''
     });
+    setProductImages([]);
     setShowProductModal(true);
   };
 
+  const updateColorOption = (index: number, patch: Partial<ColorOptionForm>) => {
+    setProductFormData((prev) => ({
+      ...prev,
+      colorOptions: prev.colorOptions.map((opt, i) => (i === index ? { ...opt, ...patch } : opt))
+    }));
+  };
+
+  const addColorOption = () => {
+    setProductFormData((prev) => ({
+      ...prev,
+      colorOptions: [...prev.colorOptions, emptyColorOption()]
+    }));
+  };
+
+  const removeColorOption = (index: number) => {
+    setProductFormData((prev) => ({
+      ...prev,
+      colorOptions: prev.colorOptions.filter((_, i) => i !== index)
+    }));
+  };
+
   const generateVariantRows = () => {
-    const colors = productFormData.variantColorInput
-      .split(/[,，、]/)
-      .map((s) => s.trim())
-      .filter(Boolean);
+    const colors = usesColorMode(productFormData.variantMode)
+      ? productFormData.colorOptions.map((o) => o.name.trim()).filter(Boolean)
+      : [];
     const sizes =
       productFormData.variantSizeInput.trim() !== ''
         ? productFormData.variantSizeInput.split(/[,，、]/).map((s) => s.trim()).filter(Boolean)
         : [...CLOTHING_SIZE_OPTIONS];
+    if (usesColorMode(productFormData.variantMode) && colors.length === 0) {
+      alert('請先新增至少一個顏色（含名稱與色碼）');
+      return;
+    }
+    const colorOptsForBuild: ColorOption[] = productFormData.colorOptions.map((o) => ({
+      name: o.name.trim(),
+      hex: normalizeHex(o.hex),
+      images: [...o.existingImages]
+    }));
     const rows = buildVariantRows(
       productFormData.variantMode,
       colors,
       sizes,
-      productFormData.variants
+      productFormData.variants,
+      colorOptsForBuild
     );
     if (rows.length === 0) {
       alert('請輸入顏色或尺碼後再產生組合');
@@ -651,7 +748,10 @@ const ShopManagement: React.FC = () => {
                     setProductFormData({
                       ...productFormData,
                       variantMode,
-                      variants: variantMode === 'none' ? [] : productFormData.variants
+                      variants: variantMode === 'none' ? [] : productFormData.variants,
+                      colorOptions: usesColorMode(variantMode)
+                        ? (productFormData.colorOptions.length ? productFormData.colorOptions : [emptyColorOption()])
+                        : []
                     });
                   }}
                   className="w-full px-3 py-2 border rounded-lg"
@@ -665,16 +765,76 @@ const ShopManagement: React.FC = () => {
               {productFormData.variantMode !== 'none' && (
                 <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
                   <p className="text-sm font-medium text-gray-800">SKU 組合（每組獨立庫存）</p>
-                  {(productFormData.variantMode === 'color' || productFormData.variantMode === 'color_size') && (
-                    <div>
-                      <label className="block text-xs text-gray-600 mb-1">顏色（逗號分隔，例：黑,白,藍）</label>
-                      <input
-                        type="text"
-                        value={productFormData.variantColorInput}
-                        onChange={(e) => setProductFormData({ ...productFormData, variantColorInput: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-lg text-sm"
-                        placeholder="黑, 白, 藍"
-                      />
+                  {usesColorMode(productFormData.variantMode) && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <label className="block text-xs font-medium text-gray-700">顏色選項（色碼 + 專屬圖片）</label>
+                        <button
+                          type="button"
+                          onClick={addColorOption}
+                          className="text-xs px-2 py-1 border border-primary-300 text-primary-700 rounded hover:bg-primary-50"
+                        >
+                          + 新增顏色
+                        </button>
+                      </div>
+                      {productFormData.colorOptions.map((opt, index) => (
+                        <div key={index} className="border border-gray-200 rounded-lg p-3 bg-white space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs text-gray-500">顏色 #{index + 1}</span>
+                            {productFormData.colorOptions.length > 1 && (
+                              <button
+                                type="button"
+                                onClick={() => removeColorOption(index)}
+                                className="text-xs text-red-600 hover:text-red-800"
+                              >
+                                移除
+                              </button>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-[auto_1fr] gap-3 items-center">
+                            <div className="flex flex-col items-center gap-1">
+                              <input
+                                type="color"
+                                value={normalizeHex(opt.hex)}
+                                onChange={(e) => updateColorOption(index, { hex: e.target.value })}
+                                className="w-12 h-12 rounded border border-gray-300 cursor-pointer p-0.5"
+                                title="選擇顏色"
+                              />
+                              <span className="text-[10px] font-mono text-gray-500">{normalizeHex(opt.hex)}</span>
+                            </div>
+                            <input
+                              type="text"
+                              value={opt.name}
+                              onChange={(e) => updateColorOption(index, { name: e.target.value })}
+                              placeholder="顏色名稱，例：玫瑰粉"
+                              className="w-full px-3 py-2 border rounded-lg text-sm"
+                            />
+                          </div>
+                          {opt.existingImages.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                              {opt.existingImages.map((img, imgIdx) => (
+                                <div key={imgIdx} className="relative w-14 h-14 rounded border overflow-hidden">
+                                  <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          <input
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={(e) => updateColorOption(index, {
+                              newFiles: Array.from(e.target.files || [])
+                            })}
+                            className="w-full text-xs"
+                          />
+                          <p className="text-[10px] text-gray-500">
+                            {opt.newFiles.length > 0
+                              ? `已選 ${opt.newFiles.length} 張新圖`
+                              : '每個顏色至少一張圖片（新商品必傳；編輯可保留現有圖）'}
+                          </p>
+                        </div>
+                      ))}
                     </div>
                   )}
                   {(productFormData.variantMode === 'size' || productFormData.variantMode === 'color_size') && (
@@ -788,16 +948,22 @@ const ShopManagement: React.FC = () => {
                   />
                 </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">產品圖片 *</label>
-                <input
-                  type="file"
-                  multiple
-                  accept="image/*"
-                  onChange={(e) => setProductImages(Array.from(e.target.files || []))}
-                  className="w-full px-3 py-2 border rounded-lg"
-                />
-              </div>
+              {!usesColorMode(productFormData.variantMode) ? (
+                <div>
+                  <label className="block text-sm font-medium mb-1">產品圖片 *</label>
+                  <input
+                    type="file"
+                    multiple
+                    accept="image/*"
+                    onChange={(e) => setProductImages(Array.from(e.target.files || []))}
+                    className="w-full px-3 py-2 border rounded-lg"
+                  />
+                </div>
+              ) : (
+                <p className="text-xs text-gray-500 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+                  此商品使用顏色規格：請在上方各顏色區塊上傳對應圖片（列表縮圖會用第一個顏色的首圖）。
+                </p>
+              )}
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"

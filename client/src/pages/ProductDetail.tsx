@@ -13,12 +13,15 @@ import { CLOTHING_SIZE_OPTIONS } from '../constants/clothingSizes';
 import {
   VariantMode,
   ProductVariant,
+  ColorOption,
   getEffectiveVariantMode,
   usesVariantStock,
   getTotalStock,
   getVariantStock,
   getAvailableColors,
   getAvailableSizes,
+  getAvailableColorOptions,
+  getImagesForColor,
   cartLineKey
 } from '../constants/productVariants';
 
@@ -39,6 +42,7 @@ interface Product {
   isClothing?: boolean;
   variantMode?: VariantMode;
   variants?: ProductVariant[];
+  colorOptions?: ColorOption[];
 }
 
 const ProductDetail: React.FC = () => {
@@ -68,6 +72,20 @@ const ProductDetail: React.FC = () => {
     return [];
   }, [product, hasVariantStock, variantMode, selectedSize]);
 
+  const availableColorOptions = useMemo(() => {
+    if (!product) return [];
+    return getAvailableColorOptions(product, selectedSize || null).filter((o) => o.available);
+  }, [product, selectedSize]);
+
+  const displayImages = useMemo(() => {
+    if (!product) return [];
+    if ((variantMode === 'color' || variantMode === 'color_size') && selectedColor) {
+      const colorImages = getImagesForColor(product, selectedColor);
+      if (colorImages.length > 0) return colorImages;
+    }
+    return product.images || [];
+  }, [product, variantMode, selectedColor]);
+
   const availableSizes = useMemo(() => {
     if (!product) return [];
     if (hasVariantStock) return getAvailableSizes(product, selectedColor || null);
@@ -87,6 +105,7 @@ const ProductDetail: React.FC = () => {
 
   useEffect(() => {
     setQuantity(1);
+    setSelectedImageIndex(0);
   }, [selectedColor, selectedSize]);
 
   useEffect(() => {
@@ -184,7 +203,7 @@ const ProductDetail: React.FC = () => {
         productId: product._id,
         name: product.name,
         price: product.currentPrice ?? product.discountPrice ?? product.price,
-        image: product.images[0],
+        image: (color ? getImagesForColor(product, color)[0] : product.images[0]) || product.images[0],
         quantity: quantity
       };
       if (color) line.color = color;
@@ -211,7 +230,7 @@ const ProductDetail: React.FC = () => {
       productId: product._id,
       name: product.name,
       price: product.currentPrice ?? product.discountPrice ?? product.price,
-      image: product.images[0],
+      image: (color ? getImagesForColor(product, color)[0] : product.images[0]) || product.images[0],
       quantity: quantity
     };
     if (color) line.color = color;
@@ -270,13 +289,13 @@ const ProductDetail: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8">
               <div>
                 <img
-                  src={getImageUrl(product.images[selectedImageIndex])}
+                  src={getImageUrl(displayImages[selectedImageIndex] || product.images[0])}
                   alt={product.name}
                   className="w-full h-96 object-cover rounded-lg"
                 />
-                {product.images.length > 1 && (
+                {displayImages.length > 1 && (
                   <div className="flex gap-2 mt-4 overflow-x-auto">
-                    {product.images.map((img, index) => (
+                    {displayImages.map((img, index) => (
                       <button
                         key={index}
                         onClick={() => setSelectedImageIndex(index)}
@@ -336,7 +355,34 @@ const ProductDetail: React.FC = () => {
                 {(variantMode === 'color' || variantMode === 'color_size') && (
                   <div className="mb-6">
                     <label className="block text-sm font-medium text-gray-700 mb-2">顏色 *</label>
-                    {hasVariantStock && availableColors.length > 0 ? (
+                    {availableColorOptions.length > 0 ? (
+                      <div className="flex flex-wrap gap-3 items-center">
+                        {availableColorOptions.map((opt) => (
+                          <button
+                            key={opt.name}
+                            type="button"
+                            title={`${opt.name} (${opt.hex})`}
+                            onClick={() => setSelectedColor(opt.name)}
+                            className={`w-9 h-9 rounded-md border-2 transition-all ${
+                              selectedColor === opt.name
+                                ? 'border-gray-900 ring-2 ring-offset-1 ring-gray-400 scale-110'
+                                : 'border-gray-300 hover:border-gray-500'
+                            }`}
+                            style={{ backgroundColor: opt.hex }}
+                          />
+                        ))}
+                        {selectedColor && (
+                          <span className="text-sm text-gray-600 ml-1">
+                            {selectedColor}
+                            {availableColorOptions.find((o) => o.name === selectedColor)?.hex && (
+                              <span className="ml-2 font-mono text-xs text-gray-400">
+                                {availableColorOptions.find((o) => o.name === selectedColor)?.hex}
+                              </span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                    ) : hasVariantStock && availableColors.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {availableColors.map((c) => (
                           <button

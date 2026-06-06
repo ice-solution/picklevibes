@@ -19,7 +19,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   onAvailabilityChange
 }) => {
   const { checkAvailability, checkBatchAvailability } = useBooking();
-  const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number }>>([]);
+  const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number; slotName?: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(60); // 默認1小時
   const [currentTime, setCurrentTime] = useState(new Date()); // 添加當前時間狀態
@@ -116,7 +116,8 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
       const availability = await checkAvailability(court._id, date, slot.start, slot.end);
       return {
         available: availability.available,
-        price: availability.pricing?.totalPrice || 0
+        price: availability.pricing?.totalPrice || 0,
+        slotName: availability.pricing?.slotName
       };
     } catch (error) {
       console.error('檢查可用性失敗:', error);
@@ -173,7 +174,8 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
             return {
               ...slot,
               available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
-              price: availability.pricing?.totalPrice || 0
+              price: availability.pricing?.totalPrice || 0,
+              slotName: availability.pricing?.slotName
             };
           });
           
@@ -189,7 +191,8 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               return { 
                 ...slot, 
                 available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
-                price: availability.price 
+                price: availability.price,
+                slotName: availability.slotName
               };
             })
           ).then((results) => {
@@ -340,7 +343,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               
               {slot.available && slot.price > 0 && (
                 <div className="text-xs font-semibold mt-1">
-                  {slot.price} 積分
+                  {slot.price} 積分{slot.slotName === '貓頭鷹時間' ? ' 🦉' : ''}
                 </div>
               )}
               
@@ -381,6 +384,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
         <p>• 深灰色時段表示已過期（不能預約過去的時間）</p>
         <p>• 淺灰色時段表示已被預約</p>
         <p>• 價格可能因高峰時段而有所不同</p>
+        <p>• 🦉 表示貓頭鷹時段（深夜優惠價）</p>
       </div>
     </div>
   );

@@ -8,6 +8,98 @@ function normalizeColor(raw) {
   return s === '' ? null : s;
 }
 
+function normalizeHex(raw) {
+  const s = String(raw || '').trim();
+  if (/^#[0-9A-Fa-f]{6}$/.test(s)) return s.toLowerCase();
+  if (/^[0-9A-Fa-f]{6}$/.test(s)) return `#${s.toLowerCase()}`;
+  return '#cccccc';
+}
+
+function parseColorOptionsInput(raw) {
+  if (!raw) return { colorOptions: [] };
+  let parsed = raw;
+  if (typeof raw === 'string') {
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return { error: '顏色選項資料格式無效' };
+    }
+  }
+  if (!Array.isArray(parsed)) {
+    return { error: '顏色選項必須為陣列' };
+  }
+  const colorOptions = parsed
+    .map((row) => ({
+      name: normalizeColor(row.name),
+      hex: normalizeHex(row.hex),
+      images: Array.isArray(row.images)
+        ? row.images.map((img) => String(img).trim()).filter(Boolean)
+        : [],
+    }))
+    .filter((row) => row.name);
+  return { colorOptions };
+}
+
+function syncVariantsColorHex(variants, colorOptions) {
+  const hexByName = new Map(
+    (colorOptions || []).map((o) => [normalizeColor(o.name), o.hex])
+  );
+  return (variants || []).map((v) => ({
+    ...v,
+    colorHex: v.color ? hexByName.get(normalizeColor(v.color)) || v.colorHex || null : null,
+  }));
+}
+
+function validateColorOptionsForMode(variantMode, colorOptions, variants) {
+  const needsColor = variantMode === 'color' || variantMode === 'color_size';
+  if (!needsColor) {
+    if (colorOptions && colorOptions.length > 0) {
+      return { error: '未啟用顏色規格時不可設定顏色選項' };
+    }
+    return { ok: true, colorOptions: [] };
+  }
+  if (!colorOptions || colorOptions.length === 0) {
+    return { error: '請至少設定一個顏色（含名稱、色碼與圖片）' };
+  }
+  const names = new Set();
+  for (const opt of colorOptions) {
+    if (names.has(opt.name)) {
+      return { error: `顏色名稱重複：${opt.name}` };
+    }
+    names.add(opt.name);
+    if (!opt.images || opt.images.length === 0) {
+      return { error: `顏色「${opt.name}」請至少上傳一張圖片` };
+    }
+  }
+  if (variants && variants.length > 0) {
+    for (const v of variants) {
+      const c = normalizeColor(v.color);
+      if (c && !names.has(c)) {
+        return { error: `SKU 顏色「${c}」未在顏色選項中定義` };
+      }
+    }
+  }
+  return { ok: true, colorOptions };
+}
+
+function getColorOption(product, colorName) {
+  const name = normalizeColor(colorName);
+  if (!name || !product) return null;
+  return (product.colorOptions || []).find((o) => normalizeColor(o.name) === name) || null;
+}
+
+function getImagesForColor(product, colorName) {
+  const opt = getColorOption(product, colorName);
+  if (opt?.images?.length) return opt.images;
+  return product?.images || [];
+}
+
+function getPrimaryProductImages(product) {
+  const firstColor = (product?.colorOptions || [])[0];
+  if (firstColor?.images?.length) return firstColor.images;
+  return product?.images || [];
+}
+
 function normalizeSize(raw) {
   if (raw === undefined || raw === null) return null;
   const fromClothing = normalizeClothingSize(raw);
@@ -145,6 +237,7 @@ function parseVariantsInput(raw) {
     variants.push({
       sku: sku || undefined,
       color,
+      colorHex: row.colorHex ? normalizeHex(row.colorHex) : null,
       size,
       stock
     });
@@ -205,6 +298,7 @@ module.exports = {
   VARIANT_MODES,
   CLOTHING_SIZES,
   normalizeColor,
+  normalizeHex,
   normalizeSize,
   getEffectiveVariantMode,
   usesVariantStock,
@@ -214,6 +308,12 @@ module.exports = {
   getVariantStock,
   validateVariantSelection,
   parseVariantsInput,
+  parseColorOptionsInput,
+  syncVariantsColorHex,
+  validateColorOptionsForMode,
+  getColorOption,
+  getImagesForColor,
+  getPrimaryProductImages,
   validateVariantsForMode,
   syncProductStockFromVariants,
   requiresVariantSelection

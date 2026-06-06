@@ -253,6 +253,10 @@ setTimeout(async () => {
 const calendarScheduler = require('./scheduler/calendarScheduler');
 calendarScheduler.start();
 
+// Tuya 燈控自動排程（Phase 2）
+const tuyaScheduler = require('./scheduler/tuyaScheduler');
+tuyaScheduler.start();
+
 // 啟動智能Google Calendar同步
 const ScheduledSync = require('./scripts/scheduledSync');
 const scheduledSync = new ScheduledSync();
