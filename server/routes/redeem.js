@@ -15,6 +15,9 @@ const {
 } = require('../services/redeemBatchGenerator');
 const { auth, adminAuth } = require('../middleware/auth');
 
+const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
+const { normalizeApplicablePricingSlots } = require('../utils/redeemPricingSlots');
+
 const router = express.Router();
 const COMMISSION_RATE_VALUES = ['0', '5', '10', 0, 5, 10];
 
@@ -28,6 +31,14 @@ function normalizeSearchQ(qRaw) {
   if (!q) return null;
   // 避免過長 regex 造成效能問題
   return q.slice(0, 64);
+}
+
+function sanitizeRedeemPayload(body) {
+  const data = { ...body };
+  if (Array.isArray(data.applicablePricingSlots)) {
+    data.applicablePricingSlots = normalizeApplicablePricingSlots(data.applicablePricingSlots);
+  }
+  return data;
 }
 
 // 獨立兌換碼：6 位（字母+數字混合），至少包含一個字母與一個數字
@@ -70,7 +81,11 @@ router.post('/validate', [
   body('code').trim().notEmpty().withMessage('兌換碼不能為空'),
   body('amount').isFloat({ min: 0 }).withMessage('金額必須大於等於0'),
   body('orderType').isIn(['booking', 'recharge', 'activity', 'product', 'eshop']).withMessage('訂單類型必須是 booking、recharge、activity、product 或 eshop'),
-  body('restrictedCode').optional().trim()
+  body('restrictedCode').optional().trim(),
+  body('courtId').optional().isMongoId().withMessage('請提供有效的場地ID'),
+  body('date').optional().isISO8601().withMessage('請提供有效的日期'),
+  body('startTime').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的開始時間'),
+  body('pricingSlotName').optional().trim(),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -81,7 +96,7 @@ router.post('/validate', [
       });
     }
 
-    const { code, amount, orderType, restrictedCode } = req.body;
+    const { code, amount, orderType, courtId, date, startTime, pricingSlotName } = req.body;
 
     // 查找兌換碼
     const redeemCode = await RedeemCode.findOne({ 
@@ -118,6 +133,14 @@ router.post('/validate', [
       return res.status(400).json({ message: '您已超過此兌換碼的使用次數限制' });
     }
 
+    await assertRedeemCodePricingSlotAllowed(redeemCode, {
+      orderType,
+      courtId,
+      date,
+      startTime,
+      pricingSlotName,
+    });
+
     // 計算折扣
     const discountAmount = redeemCode.calculateDiscount(amount);
     const finalAmount = amount - discountAmount;
@@ -137,7 +160,10 @@ router.post('/validate', [
 
   } catch (error) {
     console.error('驗證兌換碼錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+    const status = error?.statusCode || 500;
+    res.status(status).json({
+      message: status === 500 ? '服務器錯誤，請稍後再試' : error.message,
+    });
   }
 });
 
@@ -256,6 +282,7 @@ router.post('/admin/create', [
   body('userUsageLimit').optional().isInt({ min: 1 }).withMessage('每用戶使用次數限制必須是正整數'),
   body('validUntil').isISO8601().withMessage('請提供有效的到期日期'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+  body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
   body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {
@@ -291,7 +318,7 @@ router.post('/admin/create', [
       for (let i = 0; i < quantity; i += 1) {
         const generatedCode = await generateUniqueIndependentRedeemCode();
 
-        const redeemCodeData = {
+        const redeemCodeData = sanitizeRedeemPayload({
           ...req.body,
           code: generatedCode,
           batchId,
@@ -302,7 +329,7 @@ router.post('/admin/create', [
           userUsageLimit: 1,
           createdBy: req.user.id,
           validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
-        };
+        });
 
         const redeemCode = new RedeemCode(redeemCodeData);
         await redeemCode.save();
@@ -321,7 +348,7 @@ router.post('/admin/create', [
       return res.status(400).json({ message: '兌換碼不能為空' });
     }
 
-    const redeemCodeData = {
+    const redeemCodeData = sanitizeRedeemPayload({
       ...req.body,
       code: finalCode,
       isIndependentCode,
@@ -330,7 +357,7 @@ router.post('/admin/create', [
       userUsageLimit: req.body.userUsageLimit,
       createdBy: req.user.id,
       validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
-    };
+    });
 
     const redeemCode = new RedeemCode(redeemCodeData);
     await redeemCode.save();
@@ -369,6 +396,9 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
 
     if (batchId && String(batchId).trim() !== '') {
       query.batchId = String(batchId).trim();
+    } else if (req.query.standaloneOnly === 'true') {
+      // 非群組列表：只顯示不屬於任何批次的兌換碼
+      query.batchId = null;
     }
 
     const q = normalizeSearchQ(qRaw);
@@ -412,6 +442,7 @@ const redeemTemplateValidators = [
   body('commissionRate').optional().isIn(COMMISSION_RATE_VALUES).withMessage('佣金比例只能選擇 0、5 或 10'),
   body('validUntil').isISO8601().withMessage('請提供有效的到期日期'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+  body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
   body('restrictedCode').optional().trim(),
 ];
 
@@ -653,7 +684,7 @@ router.put('/admin/batch/:batchId', [
       return res.status(404).json({ message: '找不到此批次' });
     }
 
-    const update = { ...req.body };
+    const update = sanitizeRedeemPayload({ ...req.body });
 
     // 正規化 commissionRate
     if (update.commissionRate === '' || update.commissionRate == null) {
@@ -731,6 +762,7 @@ router.put('/admin/:id', [
   body('userUsageLimit').optional().isInt({ min: 1 }).withMessage('每用戶使用次數限制必須是正整數'),
   body('validUntil').optional().isISO8601().withMessage('請提供有效的到期日期'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+  body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
   body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {
@@ -742,7 +774,7 @@ router.put('/admin/:id', [
       });
     }
 
-    const update = { ...req.body };
+    const update = sanitizeRedeemPayload({ ...req.body });
     if (update.code) update.code = String(update.code).trim().toUpperCase();
     if (update.commissionRate === '' || update.commissionRate == null) {
       update.commissionRate = null;

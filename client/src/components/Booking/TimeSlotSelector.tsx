@@ -226,7 +226,8 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
         pricing: {
           totalPrice: slot.price,
           duration: selectedDuration,
-          basePrice: slot.price
+          basePrice: slot.price,
+          slotName: (slot as any).slotName,
         }
       });
     }

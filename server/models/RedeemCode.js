@@ -97,6 +97,11 @@ const redeemCodeSchema = new mongoose.Schema({
     enum: ['booking', 'recharge', 'activity', 'product', 'eshop', 'all'],
     default: 'all'
   }],
+  /** 預約時段限制（空陣列 = 不限時段）；僅 orderType=booking 時檢查 */
+  applicablePricingSlots: [{
+    type: String,
+    enum: ['貓頭鷹時間', '非繁忙時間', '繁忙時間', '紅日'],
+  }],
   // 專用代碼限制（如果設置，則只能在此代碼指定的地方使用）
   // 如果為空或 null，則可以在所有 applicableTypes 指定的地方使用
   // 如果設置了，則需要檢查是否匹配當前使用場景

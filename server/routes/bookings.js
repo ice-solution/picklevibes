@@ -17,6 +17,7 @@ const Store = require('../models/Store');
 const Config = require('../models/Config');
 const { collectBundledBookingIds } = require('../utils/bookingBundle');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
+const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 
 const router = express.Router();
@@ -265,6 +266,13 @@ router.post('/', [
             throw new Error('此兌換碼不適用於預約場地');
           }
 
+          await assertRedeemCodePricingSlotAllowed(redeemCode, {
+            orderType: 'booking',
+            courtId: courtDoc._id,
+            date: bookingDate,
+            startTime,
+          });
+
           // 檢查用戶是否可以使用
           const canUse = await redeemCode.canUserUse(bookingUserId);
           if (canUse) {
@@ -298,7 +306,9 @@ router.post('/', [
         }
       } catch (error) {
         console.error('兌換碼處理錯誤:', error);
-        // 兌換碼處理失敗不影響預約創建
+        return res.status(400).json({
+          message: error.message || '兌換碼無法用於此預約',
+        });
       }
     }
     

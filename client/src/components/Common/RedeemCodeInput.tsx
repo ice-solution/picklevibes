@@ -16,6 +16,12 @@ interface RedeemCodeInputProps {
   onRedeemRemoved: () => void;
   className?: string;
   restrictedCode?: string; // 專用代碼，用於限制使用場景
+  bookingContext?: {
+    courtId?: string;
+    date?: string;
+    startTime?: string;
+    pricingSlotName?: string;
+  };
 }
 
 interface RedeemData {
@@ -34,7 +40,8 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
   onRedeemApplied,
   onRedeemRemoved,
   className = '',
-  restrictedCode
+  restrictedCode,
+  bookingContext,
 }) => {
   const { t } = useTranslation();
   const [code, setCode] = useState('');
@@ -56,7 +63,11 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
         code: code.trim(),
         amount,
         orderType,
-        restrictedCode: restrictedCode || undefined
+        restrictedCode: restrictedCode || undefined,
+        courtId: bookingContext?.courtId,
+        date: bookingContext?.date,
+        startTime: bookingContext?.startTime,
+        pricingSlotName: bookingContext?.pricingSlotName,
       });
 
       if (response.data.valid) {

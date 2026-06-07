@@ -12,6 +12,7 @@ import {
   ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { PRICING_SLOT_NAMES } from '../../constants/courtPricing';
 
 interface RedeemCode {
   _id: string;
@@ -33,6 +34,7 @@ interface RedeemCode {
   totalUsed: number;
   totalDiscount: number;
   applicableTypes: string[];
+  applicablePricingSlots?: string[];
   restrictedCode?: string;
   createdAt: string;
 }
@@ -146,6 +148,7 @@ const RedeemCodeManagement: React.FC = () => {
     validFrom: new Date().toISOString().split('T')[0],
     validUntil: '',
     applicableTypes: ['all'] as string[],
+    applicablePricingSlots: [] as string[],
     restrictedCode: '' // 專用代碼限制
   });
 
@@ -189,6 +192,8 @@ const RedeemCodeManagement: React.FC = () => {
         params.append('status', status);
       }
       if (searchQ.trim()) params.append('q', searchQ.trim());
+      // 非群組模式：只顯示不屬於批次的兌換碼
+      params.append('standaloneOnly', 'true');
 
       const response = await axios.get(`/redeem/admin/list?${params}`);
       setRedeemCodes(response.data.redeemCodes);
@@ -387,6 +392,7 @@ const RedeemCodeManagement: React.FC = () => {
       validFrom: new Date(code.validFrom).toISOString().split('T')[0],
       validUntil: new Date(code.validUntil).toISOString().split('T')[0],
       applicableTypes: code.applicableTypes,
+      applicablePricingSlots: code.applicablePricingSlots || [],
       restrictedCode: (code as any).restrictedCode || ''
     });
     setEditingCode(code);
@@ -468,6 +474,7 @@ const RedeemCodeManagement: React.FC = () => {
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
         applicableTypes: ['all'],
+        applicablePricingSlots: [],
         restrictedCode: ''
       });
       
@@ -565,6 +572,7 @@ const RedeemCodeManagement: React.FC = () => {
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
         applicableTypes: ['all'],
+        applicablePricingSlots: [],
         restrictedCode: ''
       });
       
@@ -873,6 +881,7 @@ const RedeemCodeManagement: React.FC = () => {
             <h3 className="text-lg font-medium text-gray-900">
               兌換碼列表
             </h3>
+            <p className="text-sm text-gray-500">不含批次／獨立兌換碼群組內的碼；批次請用「群組顯示」查看</p>
           </div>
         </div>
         
@@ -921,6 +930,11 @@ const RedeemCodeManagement: React.FC = () => {
                     </div>
                     {code.minAmount > 0 && (
                       <div className="text-xs text-gray-500">最低消費 HK${code.minAmount}</div>
+                    )}
+                    {code.applicablePricingSlots && code.applicablePricingSlots.length > 0 && (
+                      <div className="text-xs text-indigo-600 mt-1">
+                        時段：{code.applicablePricingSlots.join('、')}
+                      </div>
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -1622,6 +1636,41 @@ const RedeemCodeManagement: React.FC = () => {
                   適用範圍二選一：<strong>全部適用</strong>（無限制）或<strong>勾選特定類型</strong>（僅在勾選的類型中使用）。只限商城 = 僅限線上商店／商品訂單。
                 </p>
               </div>
+
+              {(formData.applicableTypes.includes('all') || formData.applicableTypes.includes('booking')) && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    適用預約時段（不勾選 = 不限時段）
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {PRICING_SLOT_NAMES.map((slotName) => (
+                      <label key={slotName} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={formData.applicablePricingSlots.includes(slotName)}
+                          onChange={(e) => {
+                            const slots = [...formData.applicablePricingSlots];
+                            if (e.target.checked) {
+                              slots.push(slotName);
+                            } else {
+                              const idx = slots.indexOf(slotName);
+                              if (idx > -1) slots.splice(idx, 1);
+                            }
+                            setFormData({ ...formData, applicablePricingSlots: slots });
+                          }}
+                          className="mr-2"
+                        />
+                        <span className="text-sm text-gray-700">
+                          {slotName}{slotName === '貓頭鷹時間' ? ' 🦉' : ''}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    例如只勾選「貓頭鷹時間」及「非繁忙時間」，則繁忙時段無法使用此兌換碼。
+                  </p>
+                </div>
+              )}
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button

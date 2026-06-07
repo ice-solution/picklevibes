@@ -414,6 +414,12 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               onRedeemApplied={handleRedeemApplied}
               onRedeemRemoved={handleRedeemRemoved}
               restrictedCode="booking"
+              bookingContext={{
+                courtId: court?._id,
+                date,
+                startTime: timeSlot?.start,
+                pricingSlotName: availability?.pricing?.slotName,
+              }}
             />
           </div>
         )}
