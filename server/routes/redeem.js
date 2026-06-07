@@ -616,6 +616,7 @@ router.get('/admin/groups', [auth, adminAuth], async (req, res) => {
             validUntil: { $first: '$validUntil' },
             isActive: { $first: '$isActive' },
             applicableTypes: { $first: '$applicableTypes' },
+            applicablePricingSlots: { $first: '$applicablePricingSlots' },
             createdAt: { $first: '$createdAt' },
             totalCodes: { $sum: 1 },
             totalUsed: { $sum: '$totalUsed' },
@@ -663,6 +664,7 @@ router.put('/admin/batch/:batchId', [
   body('validUntil').optional().isISO8601().withMessage('請提供有效的到期日期'),
   body('isActive').optional().isBoolean().withMessage('狀態必須是布林值'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
+  body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);

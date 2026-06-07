@@ -72,6 +72,7 @@ interface RedeemCodeGroup {
   validUntil: string;
   isActive: boolean;
   applicableTypes: string[];
+  applicablePricingSlots?: string[];
   createdAt: string;
   totalCodes: number;
   totalUsed: number;
@@ -80,6 +81,55 @@ interface RedeemCodeGroup {
 
 const SYNC_MAX_QUANTITY = 100;
 const BULK_MAX_QUANTITY = 10000;
+
+function ApplicablePricingSlotsPicker({
+  applicableTypes,
+  value,
+  onChange,
+}: {
+  applicableTypes: string[];
+  value: string[];
+  onChange: (slots: string[]) => void;
+}) {
+  if (!applicableTypes.includes('all') && !applicableTypes.includes('booking')) {
+    return null;
+  }
+
+  return (
+    <div className="mt-3 p-4 bg-indigo-50 border border-indigo-200 rounded-lg">
+      <label className="block text-sm font-semibold text-indigo-900 mb-2">
+        適用預約時段
+      </label>
+      <p className="text-xs text-indigo-700 mb-3">
+        不勾選任何時段 = 預約場地不限時段；有勾選則只能在所選時段使用
+      </p>
+      <div className="grid grid-cols-2 gap-2">
+        {PRICING_SLOT_NAMES.map((slotName) => (
+          <label key={slotName} className="flex items-center">
+            <input
+              type="checkbox"
+              checked={value.includes(slotName)}
+              onChange={(e) => {
+                const slots = [...value];
+                if (e.target.checked) {
+                  slots.push(slotName);
+                } else {
+                  const idx = slots.indexOf(slotName);
+                  if (idx > -1) slots.splice(idx, 1);
+                }
+                onChange(slots);
+              }}
+              className="mr-2"
+            />
+            <span className="text-sm text-gray-800">
+              {slotName}{slotName === '貓頭鷹時間' ? ' 🦉' : ''}
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 const RedeemCodeManagement: React.FC = () => {
   const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([]);
@@ -105,6 +155,7 @@ const RedeemCodeManagement: React.FC = () => {
     validFrom: new Date().toISOString().split('T')[0],
     validUntil: '',
     applicableTypes: ['all'] as string[],
+    applicablePricingSlots: [] as string[],
   });
   
   // 分頁狀態
@@ -344,6 +395,7 @@ const RedeemCodeManagement: React.FC = () => {
       validFrom: new Date(g.validFrom).toISOString().split('T')[0],
       validUntil: new Date(g.validUntil).toISOString().split('T')[0],
       applicableTypes: Array.isArray(g.applicableTypes) ? g.applicableTypes : ['all'],
+      applicablePricingSlots: Array.isArray(g.applicablePricingSlots) ? g.applicablePricingSlots : [],
     });
     setShowGroupEditModal(true);
   };
@@ -1296,6 +1348,11 @@ const RedeemCodeManagement: React.FC = () => {
                     </>
                   )}
                 </div>
+                <ApplicablePricingSlotsPicker
+                  applicableTypes={groupFormData.applicableTypes}
+                  value={groupFormData.applicablePricingSlots}
+                  onChange={(slots) => setGroupFormData({ ...groupFormData, applicablePricingSlots: slots })}
+                />
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
@@ -1632,45 +1689,15 @@ const RedeemCodeManagement: React.FC = () => {
                     </>
                   )}
                 </div>
+                <ApplicablePricingSlotsPicker
+                  applicableTypes={formData.applicableTypes}
+                  value={formData.applicablePricingSlots}
+                  onChange={(slots) => setFormData({ ...formData, applicablePricingSlots: slots })}
+                />
                 <p className="text-xs text-gray-500 mt-1">
                   適用範圍二選一：<strong>全部適用</strong>（無限制）或<strong>勾選特定類型</strong>（僅在勾選的類型中使用）。只限商城 = 僅限線上商店／商品訂單。
                 </p>
               </div>
-
-              {(formData.applicableTypes.includes('all') || formData.applicableTypes.includes('booking')) && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    適用預約時段（不勾選 = 不限時段）
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {PRICING_SLOT_NAMES.map((slotName) => (
-                      <label key={slotName} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={formData.applicablePricingSlots.includes(slotName)}
-                          onChange={(e) => {
-                            const slots = [...formData.applicablePricingSlots];
-                            if (e.target.checked) {
-                              slots.push(slotName);
-                            } else {
-                              const idx = slots.indexOf(slotName);
-                              if (idx > -1) slots.splice(idx, 1);
-                            }
-                            setFormData({ ...formData, applicablePricingSlots: slots });
-                          }}
-                          className="mr-2"
-                        />
-                        <span className="text-sm text-gray-700">
-                          {slotName}{slotName === '貓頭鷹時間' ? ' 🦉' : ''}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1">
-                    例如只勾選「貓頭鷹時間」及「非繁忙時間」，則繁忙時段無法使用此兌換碼。
-                  </p>
-                </div>
-              )}
 
               <div className="flex justify-end space-x-3 pt-4">
                 <button
