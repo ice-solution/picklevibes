@@ -207,7 +207,12 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       window.location.href = '/my-bookings';
     } catch (error: any) {
       console.error('❌ 支付流程錯誤:', error);
-      alert(error.message || '預約失敗，請稍後再試');
+      const message = error.message || '預約失敗，請稍後再試';
+      if (message.includes('積分餘額不足')) {
+        navigate('/recharge', { state: { from: '/booking', reason: 'insufficient_balance' } });
+        return;
+      }
+      alert(message);
     } finally {
       setIsSubmitting(false);
     }
