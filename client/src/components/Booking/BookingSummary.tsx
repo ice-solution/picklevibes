@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
@@ -54,7 +53,6 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
 }) => {
   const { createBooking } = useBooking();
   const { user } = useAuth();
-  const navigate = useNavigate();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [specialRequests, setSpecialRequests] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -207,9 +205,15 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       window.location.href = '/my-bookings';
     } catch (error: any) {
       console.error('❌ 支付流程錯誤:', error);
-      const message = error.message || '預約失敗，請稍後再試';
-      if (message.includes('積分餘額不足')) {
-        navigate('/recharge', { state: { from: '/booking', reason: 'insufficient_balance' } });
+      const message = error?.message || '預約失敗，請稍後再試';
+      const isInsufficientBalance =
+        error?.isInsufficientBalance === true ||
+        message.includes('積分餘額不足') ||
+        message.includes('餘額不足');
+
+      if (isInsufficientBalance) {
+        // 使用硬跳轉，避免 React Router 在部分情況下未導向充值頁
+        window.location.assign('/recharge?from=booking&reason=insufficient_balance');
         return;
       }
       alert(message);

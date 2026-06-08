@@ -303,7 +303,11 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       setBookings(prev => [newBooking, ...prev]);
       return newBooking;
     } catch (error: any) {
-      throw new Error(error.response?.data?.message || '創建預約失敗');
+      const message = error.response?.data?.message || '創建預約失敗';
+      const bookingError = new Error(message) as Error & { isInsufficientBalance?: boolean };
+      bookingError.isInsufficientBalance =
+        message.includes('積分餘額不足') || message.includes('餘額不足');
+      throw bookingError;
     } finally {
       setLoading(false);
     }
