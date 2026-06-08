@@ -212,7 +212,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         message.includes('餘額不足');
 
       if (isInsufficientBalance) {
-        // 使用硬跳轉，避免 React Router 在部分情況下未導向充值頁
+        alert('積分餘額不足，請先充值後再完成預約。');
         window.location.assign('/recharge?from=booking&reason=insufficient_balance');
         return;
       }
