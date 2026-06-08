@@ -9,7 +9,7 @@ const {
   addDaysToYmd,
 } = require('../utils/bookingDateTime');
 const { bookingsToLightWindows, isWithinLightWindows } = require('../utils/tuyaLightWindows');
-const { getTuyaActionLog, clearTuyaActionLog } = require('../utils/tuyaActionLog');
+const { logTuya, getTuyaActionLog, clearTuyaActionLog } = require('../utils/tuyaActionLog');
 
 const TZ = 'Asia/Hong_Kong';
 const ACTIVE_STATUSES = ['confirmed', 'pending'];
