@@ -769,6 +769,79 @@ router.delete('/:id/admin-notes/:noteId', [
   }
 });
 
+function buildAdminBookingDateQuery({ date, dateFrom, dateTo } = {}) {
+  if (date) {
+    const startDate = new Date(date);
+    const endDate = new Date(date);
+    endDate.setDate(endDate.getDate() + 1);
+    return { date: { $gte: startDate, $lt: endDate } };
+  }
+  if (dateFrom && dateTo) {
+    const df = new Date(dateFrom);
+    const dt = new Date(dateTo);
+    return {
+      $or: [
+        { date: { $gte: df, $lte: dt } },
+        { endDate: { $gte: df, $lte: dt } },
+        { $and: [{ date: { $lte: dt } }, { endDate: { $gte: df } }] },
+      ],
+    };
+  }
+  return null;
+}
+
+// @route   GET /api/bookings/admin/calendar
+// @desc    管理員日曆視圖（僅可見日期範圍、精簡欄位）
+// @access  Private (Admin)
+router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
+  try {
+    const { store, dateFrom, dateTo } = req.query;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: '請提供 dateFrom 與 dateTo' });
+    }
+
+    const dateQuery = buildAdminBookingDateQuery({ dateFrom, dateTo });
+    const query = { ...dateQuery };
+    if (store && String(store).trim() !== '') {
+      query.store = String(store).trim();
+    }
+
+    const bookings = await Booking.find(query)
+      .select(
+        'date startTime endTime status store court user specialRequests specialRequestsProcessed adminNotes createdAt'
+      )
+      .populate('user', 'name email')
+      .populate('store', 'name slug')
+      .populate({
+        path: 'court',
+        select: 'name number type store',
+        populate: { path: 'store', select: 'name slug' },
+      })
+      .sort({ date: 1, startTime: 1 })
+      .lean();
+
+    const items = bookings.map((b) => ({
+      _id: b._id,
+      date: b.date,
+      startTime: b.startTime,
+      endTime: b.endTime,
+      status: b.status,
+      store: b.store,
+      court: b.court,
+      user: b.user,
+      specialRequests: b.specialRequests || '',
+      specialRequestsProcessed: b.specialRequestsProcessed === true,
+      adminNoteCount: Array.isArray(b.adminNotes) ? b.adminNotes.length : 0,
+      createdAt: b.createdAt,
+    }));
+
+    res.json({ bookings: items, count: items.length });
+  } catch (error) {
+    console.error('獲取日曆預約錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/bookings/admin/all
 // @desc    獲取所有預約（管理員）
 // @access  Private (Admin)
@@ -796,19 +869,9 @@ router.get('/admin/all', [
     if (store && String(store).trim() !== '') {
       query.store = String(store).trim();
     }
-    if (date) {
-      const startDate = new Date(date);
-      const endDate = new Date(date);
-      endDate.setDate(endDate.getDate() + 1);
-      query.date = { $gte: startDate, $lt: endDate };
-    } else if (dateFrom && dateTo) {
-      const df = new Date(dateFrom);
-      const dt = new Date(dateTo);
-      query.$or = [
-        { date: { $gte: df, $lte: dt } },
-        { endDate: { $gte: df, $lte: dt } },
-        { $and: [{ date: { $lte: dt } }, { endDate: { $gte: df } }] }
-      ];
+    const dateQuery = buildAdminBookingDateQuery({ date, dateFrom, dateTo });
+    if (dateQuery) {
+      Object.assign(query, dateQuery);
     }
 
     const sortDir = sortParam === 'asc' ? 1 : -1;
@@ -888,7 +951,12 @@ router.put('/:id/special-requests-processed', [
 router.get('/:id', [auth], async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
-      .populate('court', 'name number type amenities pricing')
+      .populate('store', 'name slug')
+      .populate({
+        path: 'court',
+        select: 'name number type amenities pricing store',
+        populate: { path: 'store', select: 'name slug' },
+      })
       .populate('user', 'name email phone')
       .populate('adminNotes.createdBy', 'name email');
 

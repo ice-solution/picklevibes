@@ -12,6 +12,35 @@ require('../models/User');
 const HK_TZ = 'Asia/Hong_Kong';
 const PAID_RECHARGE_METHODS = ['stripe', 'alipay', 'wechat'];
 
+/** 會計 API 預設查詢起日：當月 1 日（避免預設全年掃描） */
+function defaultFinanceFromYmd(today = formatHkYmd()) {
+  return `${today.slice(0, 7)}-01`;
+}
+
+/** 短暫快取：summary + income-lines 同時請求時避免重複掃描預約 */
+const INCOME_LINES_CACHE_TTL_MS = 60_000;
+const INCOME_LINES_CACHE_MAX = 24;
+const incomeLinesCache = new Map();
+
+function incomeLinesCacheKey(opts) {
+  return `${opts.fromYmd}|${opts.toYmd}|${opts.storeId || ''}`;
+}
+
+async function getIncomeLines(opts) {
+  const key = incomeLinesCacheKey(opts);
+  const hit = incomeLinesCache.get(key);
+  if (hit && hit.expiresAt > Date.now()) {
+    return hit.data;
+  }
+  const data = await computeIncomeLines(opts);
+  if (incomeLinesCache.size >= INCOME_LINES_CACHE_MAX) {
+    const oldest = incomeLinesCache.keys().next().value;
+    incomeLinesCache.delete(oldest);
+  }
+  incomeLinesCache.set(key, { expiresAt: Date.now() + INCOME_LINES_CACHE_TTL_MS, data });
+  return data;
+}
+
 function addDaysToYmd(ymd, deltaDays) {
   const [y, m, d] = ymd.split('-').map(Number);
   const dt = new Date(Date.UTC(y, m - 1, d));
@@ -211,7 +240,7 @@ async function computeIncomeLines(opts) {
       select: 'name type store',
       populate: { path: 'store', select: 'name slug' }
     })
-    .populate('user', 'name email phone')
+    .populate('user', 'name email')
     .sort({ date: 1, startTime: 1 })
     .lean();
 
@@ -223,7 +252,7 @@ async function computeIncomeLines(opts) {
         status: { $nin: ['cancelled'] }
       })
         .select('user orderNumber pointsChargedAmount pointsChargedAt status items subtotal total')
-        .populate('user', 'name email phone')
+        .populate('user', 'name email')
         .sort({ pointsChargedAt: -1 })
         .lean();
 
@@ -482,18 +511,25 @@ async function computeFinanceSummary(opts) {
     selectedStore = await Store.findById(storeId).select('name slug').lean();
   }
 
-  const { lines } = await computeIncomeLines({ fromYmd, toYmd, storeId });
+  const { lines } = await getIncomeLines({ fromYmd, toYmd, storeId });
   const agg = aggregateFromLines(lines);
   const byStoreAll = storeId ? null : agg.venue.byStore;
 
   const rechargeStats = await Recharge.aggregate([
-    { $match: { status: 'completed' } },
     {
-      $addFields: {
-        eff: { $ifNull: ['$payment.paidAt', '$updatedAt'] }
-      }
+      $match: {
+        status: 'completed',
+        $or: [
+          { 'payment.paidAt': { $gte: start, $lte: end } },
+          {
+            $and: [
+              { $or: [{ 'payment.paidAt': null }, { 'payment.paidAt': { $exists: false } }] },
+              { updatedAt: { $gte: start, $lte: end } },
+            ],
+          },
+        ],
+      },
     },
-    { $match: { eff: { $gte: start, $lte: end } } },
     {
       $group: {
         _id: '$payment.method',
@@ -559,6 +595,7 @@ function round2(n) {
 module.exports = {
   HK_TZ,
   formatHkYmd,
+  defaultFinanceFromYmd,
   addDaysToYmd,
   hkStartOfDayInstant,
   hkEndOfDayInstant,
@@ -566,6 +603,7 @@ module.exports = {
   userPaidPointsRatio,
   getBookingNominalCharge,
   computeIncomeLines,
+  getIncomeLines,
   aggregateFromLines,
   computeFinanceSummary,
   computePerStoreSummaries,

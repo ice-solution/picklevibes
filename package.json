@@ -23,7 +23,8 @@
     "migrate-stores": "node server/scripts/migrateDefaultStore.js",
     "setup-isquare": "node server/scripts/setupIsquareStore.js",
     "batch-recharge": "node server/scripts/batchManualRecharge.js",
-    "debug-finance": "node server/scripts/debugFinance.js"
+    "debug-finance": "node server/scripts/debugFinance.js",
+    "ensure-finance-indexes": "node server/scripts/ensureFinanceIndexes.js"
   },
   "keywords": [
     "pickleball",

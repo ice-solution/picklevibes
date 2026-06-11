@@ -48,6 +48,8 @@ const accountingTransactionSchema = new mongoose.Schema({
 });
 
 accountingTransactionSchema.index({ date: -1, type: 1 });
+/** 會計：按店鋪 + 日期區間 aggregate */
+accountingTransactionSchema.index({ store: 1, date: -1, type: 1 });
 
 module.exports = mongoose.model('AccountingTransaction', accountingTransactionSchema);
 module.exports.TYPES = TYPES;

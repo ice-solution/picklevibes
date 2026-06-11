@@ -141,6 +141,17 @@ const orderSchema = new mongoose.Schema({
 orderSchema.index({ user: 1, createdAt: -1 });
 orderSchema.index({ orderNumber: 1 });
 orderSchema.index({ status: 1 });
+/** 會計：網店認列收入（pointsChargedAt 區間） */
+orderSchema.index({ status: 1, pointsChargedAt: 1 });
+orderSchema.index(
+  { pointsChargedAt: 1, status: 1 },
+  {
+    partialFilterExpression: {
+      pointsChargedAmount: { $gt: 0 },
+      pointsChargedAt: { $type: 'date' },
+    },
+  }
+);
 
 // 生成訂單號
 orderSchema.statics.generateOrderNumber = function() {

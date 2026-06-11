@@ -76,6 +76,11 @@ function ymdToday(): string {
   }).format(new Date());
 }
 
+function monthStartYmd(): string {
+  const today = ymdToday();
+  return `${today.slice(0, 7)}-01`;
+}
+
 function PLRow({
   label,
   amount,
@@ -108,10 +113,9 @@ function PLRow({
 
 const AccountingPLPanel: React.FC = () => {
   const today = ymdToday();
-  const yearStart = `${today.slice(0, 4)}-01-01`;
 
   const [stores, setStores] = useState<StoreOption[]>([]);
-  const [fromYmd, setFromYmd] = useState(yearStart);
+  const [fromYmd, setFromYmd] = useState(monthStartYmd);
   const [toYmd, setToYmd] = useState(today);
   const [storeId, setStoreId] = useState('');
   const [data, setData] = useState<PLData | null>(null);

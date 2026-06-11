@@ -82,6 +82,11 @@ function ymdToday(): string {
   }).format(new Date());
 }
 
+function monthStartYmd(): string {
+  const today = ymdToday();
+  return `${today.slice(0, 7)}-01`;
+}
+
 function fmt(n: number) {
   return (Number(n) || 0).toLocaleString('zh-HK', {
     minimumFractionDigits: 0,
@@ -124,8 +129,7 @@ interface LinesTotals {
 const AccountingManagement: React.FC = () => {
   const [mainTab, setMainTab] = useState<AccountingMainTab>('pl');
   const today = ymdToday();
-  const yearStart = `${today.slice(0, 4)}-01-01`;
-  const [fromYmd, setFromYmd] = useState(yearStart);
+  const [fromYmd, setFromYmd] = useState(monthStartYmd);
   const [toYmd, setToYmd] = useState(today);
   const [storeId, setStoreId] = useState('');
   const [stores, setStores] = useState<StoreOption[]>([]);

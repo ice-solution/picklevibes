@@ -250,6 +250,8 @@ bookingSchema.index({ court: 1, date: 1, startTime: 1 });
 bookingSchema.index({ relatedActivity: 1 });
 bookingSchema.index({ user: 1, date: 1 });
 bookingSchema.index({ status: 1, date: 1 });
+/** 會計／財務：按店鋪 + 出租日篩選 */
+bookingSchema.index({ store: 1, status: 1, date: 1 });
 
 // 找出與指定時段重疊的預約（excludeId／excludeIds：更新或活動佔場時排除自身）
 bookingSchema.statics.findTimeConflicts = async function(

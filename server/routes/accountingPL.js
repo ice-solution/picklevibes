@@ -1,6 +1,6 @@
 const express = require('express');
 const { auth, adminAuth } = require('../middleware/auth');
-const { formatHkYmd } = require('../utils/financeRevenue');
+const { formatHkYmd, defaultFinanceFromYmd } = require('../utils/financeRevenue');
 const { computeAccountingPL } = require('../utils/accountingPL');
 
 const router = express.Router();
@@ -17,8 +17,7 @@ function parseYmd(raw, fallback) {
 router.get('/', [auth, adminAuth], async (req, res) => {
   try {
     const today = formatHkYmd();
-    const defaultFrom = `${today.slice(0, 4)}-01-01`;
-    const fromYmd = parseYmd(req.query.from, defaultFrom);
+    const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
     const toYmd = parseYmd(req.query.to, today);
 
     if (fromYmd > toYmd) {

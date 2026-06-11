@@ -80,5 +80,8 @@ rechargeSchema.index({ user: 1, status: 1 });
 rechargeSchema.index({ 'payment.transactionId': 1 });
 rechargeSchema.index({ paymentIntentId: 1 });
 rechargeSchema.index({ rechargeOffer: 1 });
+/** 會計：期間充值統計、用戶有價積分池 */
+rechargeSchema.index({ status: 1, 'payment.paidAt': 1 });
+rechargeSchema.index({ user: 1, status: 1, 'payment.paidAt': 1 });
 
 module.exports = mongoose.model('Recharge', rechargeSchema);

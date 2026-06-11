@@ -27,14 +27,14 @@ interface StoreRef {
   slug?: string;
 }
 
-interface Booking {
+/** 日曆列表（精簡 API） */
+interface CalendarBooking {
   _id: string;
   store?: StoreRef | string;
   user: {
     _id: string;
     name: string;
     email: string;
-    phone?: string;
   };
   court: {
     _id: string;
@@ -47,6 +47,20 @@ interface Booking {
   startTime: string;
   endTime: string;
   status: 'pending' | 'confirmed' | 'cancelled';
+  specialRequests?: string;
+  specialRequestsProcessed?: boolean;
+  adminNoteCount?: number;
+  createdAt: string;
+}
+
+/** 詳情彈窗（點擊後另取完整資料） */
+interface Booking extends CalendarBooking {
+  user: {
+    _id: string;
+    name: string;
+    email: string;
+    phone?: string;
+  };
   players: Array<{
     name: string;
     email: string;
@@ -62,8 +76,6 @@ interface Booking {
     status: string;
     amount: number;
   };
-  specialRequests?: string;
-  specialRequestsProcessed?: boolean;
   adminNotes?: Array<{
     _id: string;
     content: string;
@@ -74,7 +86,6 @@ interface Booking {
     };
     createdAt: string;
   }>;
-  createdAt: string;
   updatedAt: string;
 }
 
@@ -105,7 +116,7 @@ function addDaysToYmd(ymd: string, days: number): string {
   return getHongKongCalendarYmd(new Date(noonMs + days * 86400000));
 }
 
-function resolveBookingStoreName(booking: Booking): string {
+function resolveBookingStoreName(booking: CalendarBooking | Booking): string {
   const fromBooking = booking.store;
   if (fromBooking && typeof fromBooking === 'object' && fromBooking.name) {
     return fromBooking.name;
@@ -131,10 +142,11 @@ function hkBookingEndToUtcMs(ymd: string, endTime: string, startMs: number): num
 
 const BookingCalendar: React.FC = () => {
   const calendarRef = useRef<FullCalendar>(null);
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [bookings, setBookings] = useState<CalendarBooking[]>([]);
+  const [eventsLoading, setEventsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [view, setView] = useState<'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'>('dayGridMonth');
@@ -153,31 +165,28 @@ const BookingCalendar: React.FC = () => {
   const lastFetchedRangeKeyRef = useRef<string>('');
 
   const fetchBookings = useCallback(
-    async (range?: { start: string; end: string }, options?: { silent?: boolean }) => {
-      const silent = options?.silent === true;
+    async (range?: { start: string; end: string }) => {
+      const r = range ?? calendarRangeRef.current;
+      if (!r?.start || !r?.end) {
+        return;
+      }
       try {
-        if (!silent) {
-          setLoading(true);
-        }
+        setEventsLoading(true);
         setError(null);
-        const params = new URLSearchParams({ limit: '5000', sort: 'asc' });
-        const r = range ?? calendarRangeRef.current;
-        if (r?.start && r?.end) {
-          params.append('dateFrom', r.start);
-          params.append('dateTo', r.end);
-        }
+        const params = new URLSearchParams({
+          dateFrom: r.start,
+          dateTo: r.end,
+        });
         if (storeFilterId) {
           params.append('store', storeFilterId);
         }
-        const response = await axios.get(`/bookings/admin/all?${params.toString()}`);
-        setBookings(response.data.bookings);
+        const response = await axios.get(`/bookings/admin/calendar?${params.toString()}`);
+        setBookings(response.data.bookings || []);
       } catch (error: any) {
         console.error('獲取預約列表失敗:', error);
         setError(error.response?.data?.message || '獲取預約列表失敗');
       } finally {
-        if (!silent) {
-          setLoading(false);
-        }
+        setEventsLoading(false);
       }
     },
     [storeFilterId]
@@ -191,7 +200,7 @@ const BookingCalendar: React.FC = () => {
   }, []);
 
   const refetchBookings = useCallback(
-    () => fetchBookings(calendarRangeRef.current ?? undefined, { silent: true }),
+    () => fetchBookings(calendarRangeRef.current ?? undefined),
     [fetchBookings]
   );
 
@@ -210,21 +219,22 @@ const BookingCalendar: React.FC = () => {
         return;
       }
       lastFetchedRangeKeyRef.current = key;
-      /** 不可 setLoading(true)，否則上方 if(loading) 會整棵卸載 FullCalendar，換月會被重設回預設月份 */
-      fetchBookings({ start: info.startStr, end: info.endStr }, { silent: true });
+      fetchBookings({ start: info.startStr, end: info.endStr });
     },
     [fetchBookings]
   );
 
-  /** 掛載時必抓一次：若僅依賴 FullCalendar 的 datesSet，部分情況下不會觸發，loading 會永遠為 true */
   useEffect(() => {
-    fetchBookings(undefined, { silent: false });
-  }, [fetchBookings, storeFilterId]);
+    lastFetchedRangeKeyRef.current = '';
+    if (calendarRangeRef.current) {
+      fetchBookings(calendarRangeRef.current);
+    }
+  }, [storeFilterId, fetchBookings]);
 
   useEffect(() => {
     const onFocus = () => {
       if (calendarRangeRef.current) {
-        fetchBookings(calendarRangeRef.current, { silent: true });
+        fetchBookings(calendarRangeRef.current);
       }
     };
     window.addEventListener('focus', onFocus);
@@ -264,7 +274,7 @@ const BookingCalendar: React.FC = () => {
 
     // 檢查狀態
     const hasSpecialRequests = booking.specialRequests && booking.specialRequests.trim().length > 0;
-    const hasAdminNotes = booking.adminNotes && booking.adminNotes.length > 0;
+    const hasAdminNotes = (booking.adminNoteCount ?? 0) > 0;
     const isSpecialRequestsProcessed = booking.specialRequestsProcessed === true;
     
     // 計算邊框顏色和樣式
@@ -385,13 +395,24 @@ const BookingCalendar: React.FC = () => {
     });
   };
 
-  const handleEventClick = (info: any) => {
-    const booking = info.event.extendedProps.booking;
-    setSelectedBooking(booking);
+  const handleEventClick = async (info: any) => {
+    const bookingId = info.event.id;
+    setShowDetailModal(true);
+    setDetailLoading(true);
+    setSelectedBooking(null);
     setNewNoteContent('');
     setEditingNoteId(null);
     setEditingNoteContent('');
-    setShowDetailModal(true);
+    try {
+      const response = await axios.get(`/bookings/${bookingId}`);
+      setSelectedBooking(response.data.booking);
+    } catch (error: any) {
+      console.error('獲取預約詳情失敗:', error);
+      alert(error.response?.data?.message || '獲取預約詳情失敗');
+      setShowDetailModal(false);
+    } finally {
+      setDetailLoading(false);
+    }
   };
 
   const handleDateClick = (info: any) => {
@@ -497,14 +518,6 @@ const BookingCalendar: React.FC = () => {
       alert(error.response?.data?.message || '更新失敗，請稍後再試');
     }
   };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -645,7 +658,12 @@ const BookingCalendar: React.FC = () => {
       </div>
 
       {/* FullCalendar */}
-      <div className="bg-white rounded-lg shadow-sm p-6">
+      <div className="bg-white rounded-lg shadow-sm p-6 relative">
+        {eventsLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/70 rounded-lg">
+            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
+          </div>
+        )}
         <FullCalendar
           ref={calendarRef}
           plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
@@ -689,7 +707,7 @@ const BookingCalendar: React.FC = () => {
       </div>
 
       {/* 詳情模態框 */}
-      {showDetailModal && selectedBooking && (
+      {showDetailModal && (
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
           <div className="relative top-20 mx-auto p-5 border w-11/12 md:w-3/4 lg:w-1/2 shadow-lg rounded-md bg-white max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-4">
@@ -707,7 +725,12 @@ const BookingCalendar: React.FC = () => {
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
-            
+
+            {detailLoading || !selectedBooking ? (
+              <div className="flex items-center justify-center py-16">
+                <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary-600" />
+              </div>
+            ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -758,7 +781,7 @@ const BookingCalendar: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">參與者</label>
                 <div className="mt-1 space-y-2">
-                  {selectedBooking.players.map((player, index) => (
+                  {(selectedBooking.players || []).map((player, index) => (
                     <div key={index} className="text-sm text-gray-900">
                       {player.name} ({player.email})
                     </div>
@@ -974,6 +997,7 @@ const BookingCalendar: React.FC = () => {
                 </div>
               </div>
             </div>
+            )}
           </div>
         </div>
       )}

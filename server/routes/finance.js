@@ -3,8 +3,9 @@ const XLSX = require('xlsx');
 const { auth, adminAuth } = require('../middleware/auth');
 const {
   computeFinanceSummary,
-  computeIncomeLines,
-  formatHkYmd
+  getIncomeLines,
+  formatHkYmd,
+  defaultFinanceFromYmd,
 } = require('../utils/financeRevenue');
 
 const router = express.Router();
@@ -21,8 +22,7 @@ function parseYmd(raw, fallback) {
 router.get('/summary', [auth, adminAuth], async (req, res) => {
   try {
     const today = formatHkYmd();
-    const defaultFrom = `${today.slice(0, 4)}-01-01`;
-    const fromYmd = parseYmd(req.query.from, defaultFrom);
+    const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
     const toYmd = parseYmd(req.query.to, today);
 
     if (fromYmd > toYmd) {
@@ -44,8 +44,7 @@ router.get('/summary', [auth, adminAuth], async (req, res) => {
 router.get('/income-lines', [auth, adminAuth], async (req, res) => {
   try {
     const today = formatHkYmd();
-    const defaultFrom = `${today.slice(0, 4)}-01-01`;
-    const fromYmd = parseYmd(req.query.from, defaultFrom);
+    const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
     const toYmd = parseYmd(req.query.to, today);
 
     if (fromYmd > toYmd) {
@@ -58,7 +57,7 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
     const pageN = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limitN = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
 
-    const { lines, fromYmd: f, toYmd: t } = await computeIncomeLines({
+    const { lines, fromYmd: f, toYmd: t } = await getIncomeLines({
       fromYmd,
       toYmd,
       storeId: storeId || undefined
@@ -129,14 +128,14 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
 router.get('/summary-xlsx', [auth, adminAuth], async (req, res) => {
   try {
     const today = formatHkYmd();
-    const defaultFrom = `${today.slice(0, 4)}-01-01`;
-    const fromYmd = parseYmd(req.query.from, defaultFrom);
+    const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
     const toYmd = parseYmd(req.query.to, today);
 
     const storeId = req.query.store || req.query.storeId || null;
+    const opts = { fromYmd, toYmd, storeId: storeId || undefined };
     const [data, { lines }] = await Promise.all([
-      computeFinanceSummary({ fromYmd, toYmd, storeId: storeId || undefined }),
-      computeIncomeLines({ fromYmd, toYmd, storeId: storeId || undefined })
+      computeFinanceSummary(opts),
+      getIncomeLines(opts),
     ]);
 
     const storeLabel = data.selectedStore?.name || '全部店鋪';

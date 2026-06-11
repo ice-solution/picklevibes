@@ -66,6 +66,11 @@ function ymdToday(): string {
   }).format(new Date());
 }
 
+function monthStartYmd(): string {
+  const today = ymdToday();
+  return `${today.slice(0, 7)}-01`;
+}
+
 function toInputDate(iso: string) {
   const d = new Date(iso);
   const pad = (n: number) => String(n).padStart(2, '0');
@@ -81,14 +86,13 @@ function receiptUrl(imagePath: string) {
 
 const AccountingLedgerPanel: React.FC = () => {
   const today = ymdToday();
-  const yearStart = `${today.slice(0, 4)}-01-01`;
 
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [items, setItems] = useState<LedgerItem[]>([]);
   const [totals, setTotals] = useState<LedgerTotals>({ income: 0, expense: 0, net: 0 });
   const [loading, setLoading] = useState(false);
-  const [fromYmd, setFromYmd] = useState(yearStart);
+  const [fromYmd, setFromYmd] = useState(monthStartYmd);
   const [toYmd, setToYmd] = useState(today);
   const [storeId, setStoreId] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
