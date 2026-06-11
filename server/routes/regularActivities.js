@@ -3,43 +3,68 @@ const { body, validationResult } = require('express-validator');
 const RegularActivity = require('../models/RegularActivity');
 const { auth, adminAuth } = require('../middleware/auth');
 const { activityUpload, processActivityImage, deleteFile } = require('../middleware/upload');
+const {
+  formatRegularActivityResponse,
+  buildPinnedSortStages,
+} = require('../utils/regularActivityPin');
 
 const router = express.Router();
 
+async function listRegularActivities({ query, page, limit }) {
+  const now = new Date();
+  const limitN = Math.max(1, parseInt(limit, 10) || 10);
+  const pageN = Math.max(1, parseInt(page, 10) || 1);
+  const skip = (pageN - 1) * limitN;
+
+  const pipeline = [
+    { $match: query },
+    ...buildPinnedSortStages(now),
+    {
+      $lookup: {
+        from: 'users',
+        localField: 'createdBy',
+        foreignField: '_id',
+        as: 'createdBy',
+        pipeline: [{ $project: { name: 1, email: 1 } }],
+      },
+    },
+    {
+      $unwind: {
+        path: '$createdBy',
+        preserveNullAndEmptyArrays: true,
+      },
+    },
+    {
+      $facet: {
+        data: [{ $skip: skip }, { $limit: limitN }],
+        total: [{ $count: 'count' }],
+      },
+    },
+  ];
+
+  const [result] = await RegularActivity.aggregate(pipeline);
+  const total = result?.total?.[0]?.count || 0;
+
+  return {
+    activities: (result?.data || []).map((row) => formatRegularActivityResponse(row, now)),
+    totalPages: Math.ceil(total / limitN) || 1,
+    currentPage: pageN,
+    total,
+  };
+}
+
 // @route   GET /api/regular-activities
-// @desc    獲取所有恆常活動列表
+// @desc    獲取恆常活動列表（有效置頂優先）
 // @access  Public
 router.get('/', async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
-    
-    const query = { isActive: true };
-    
-    const activities = await RegularActivity.find(query)
-      .populate('createdBy', 'name email')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-    
-    const total = await RegularActivity.countDocuments(query);
-    
-    res.json({
-      activities: activities.map(activity => ({
-        _id: activity._id,
-        title: activity.title,
-        description: activity.description,
-        introduction: activity.introduction,
-        poster: activity.poster,
-        requirements: activity.requirements,
-        fee: activity.fee != null ? activity.fee : 0,
-        isActive: activity.isActive,
-        createdAt: activity.createdAt,
-        updatedAt: activity.updatedAt
-      })),
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+    const payload = await listRegularActivities({
+      query: { isActive: true },
+      page,
+      limit,
     });
+    res.json(payload);
   } catch (error) {
     console.error('獲取恆常活動列表錯誤:', error);
     res.status(500).json({ message: '服務器錯誤' });
@@ -58,18 +83,7 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({ message: '活動不存在' });
     }
     
-    res.json({
-      _id: activity._id,
-      title: activity.title,
-      description: activity.description,
-      introduction: activity.introduction,
-      poster: activity.poster,
-      requirements: activity.requirements,
-      fee: activity.fee != null ? activity.fee : 0,
-      isActive: activity.isActive,
-      createdAt: activity.createdAt,
-      updatedAt: activity.updatedAt
-    });
+    res.json(formatRegularActivityResponse(activity));
   } catch (error) {
     console.error('獲取恆常活動詳情錯誤:', error);
     res.status(500).json({ message: '服務器錯誤' });
@@ -134,18 +148,7 @@ router.post('/', [
 
     res.status(201).json({
       message: '恆常活動創建成功',
-      activity: {
-        _id: activity._id,
-        title: activity.title,
-        description: activity.description,
-        introduction: activity.introduction,
-        poster: activity.poster,
-        requirements: activity.requirements,
-        fee: activity.fee,
-        isActive: activity.isActive,
-        createdAt: activity.createdAt,
-        updatedAt: activity.updatedAt
-      }
+      activity: formatRegularActivityResponse(activity),
     });
   } catch (error) {
     console.error('創建恆常活動錯誤:', error);
@@ -235,18 +238,7 @@ router.put('/:id', [
 
     res.json({
       message: '恆常活動更新成功',
-      activity: {
-        _id: activity._id,
-        title: activity.title,
-        description: activity.description,
-        introduction: activity.introduction,
-        poster: activity.poster,
-        requirements: activity.requirements,
-        fee: activity.fee != null ? activity.fee : 0,
-        isActive: activity.isActive,
-        createdAt: activity.createdAt,
-        updatedAt: activity.updatedAt
-      }
+      activity: formatRegularActivityResponse(activity),
     });
   } catch (error) {
     console.error('更新恆常活動錯誤:', error);
@@ -258,6 +250,50 @@ router.put('/:id', [
       await deleteFile(req.activityImages.fullPath);
       await deleteFile(req.activityImages.thumbPath);
     }
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   PATCH /api/regular-activities/:id/pin
+// @desc    置頂／取消置頂恆常活動
+// @access  Private (Admin)
+router.patch('/:id/pin', [
+  auth,
+  adminAuth,
+  body('pinned').isBoolean().withMessage('pinned 須為布林值'),
+  body('pinnedUntil').optional({ nullable: true }).isISO8601().withMessage('pinnedUntil 須為有效日期'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0].msg });
+    }
+
+    const activity = await RegularActivity.findById(req.params.id);
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const { pinned, pinnedUntil } = req.body;
+
+    if (pinned) {
+      activity.isPinned = true;
+      activity.pinnedAt = new Date();
+      activity.pinnedUntil = pinnedUntil ? new Date(pinnedUntil) : null;
+    } else {
+      activity.isPinned = false;
+      activity.pinnedAt = null;
+      activity.pinnedUntil = null;
+    }
+
+    await activity.save();
+
+    res.json({
+      message: pinned ? '已置頂' : '已取消置頂',
+      activity: formatRegularActivityResponse(activity),
+    });
+  } catch (error) {
+    console.error('更新恆常活動置頂錯誤:', error);
     res.status(500).json({ message: '服務器錯誤' });
   }
 });

@@ -15,9 +15,24 @@ export interface TuyaDeviceConfig {
   enabled: boolean;
 }
 
+export interface TuyaZoneConfig {
+  _id?: string;
+  name: string;
+  enabled: boolean;
+  devices: TuyaDeviceConfig[];
+  courtIds: string[];
+}
+
 export const emptyTuyaDevice = (): TuyaDeviceConfig => ({
   deviceId: '',
   label: '燈',
   switchCode: 'switch_1',
   enabled: true,
+});
+
+export const emptyTuyaZone = (): TuyaZoneConfig => ({
+  name: '控制區',
+  enabled: true,
+  devices: [emptyTuyaDevice()],
+  courtIds: [],
 });

@@ -70,6 +70,31 @@ const storeSchema = new mongoose.Schema({
   tuyaPreBufferMinutes: { type: Number, default: 15, min: 0, max: 120 },
   tuyaPostBufferMinutes: { type: Number, default: 15, min: 0, max: 120 },
   tuyaMergeGapMinutes: { type: Number, default: 0, min: 0, max: 60 },
+  /**
+   * Tuya 控制區：設備綁在控制區，場地指派到控制區。
+   * 任一關聯場地有預約燈光時段 → 控制區內設備應開（OR 邏輯）。
+   */
+  tuyaZones: [{
+    name: {
+      type: String,
+      trim: true,
+      default: '控制區',
+    },
+    enabled: {
+      type: Boolean,
+      default: true,
+    },
+    devices: [{
+      deviceId: { type: String, required: true, trim: true },
+      label: { type: String, trim: true, default: '設備' },
+      switchCode: { type: String, trim: true, default: 'switch_1' },
+      enabled: { type: Boolean, default: true },
+    }],
+    courtIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Court',
+    }],
+  }],
 }, {
   timestamps: true,
 });

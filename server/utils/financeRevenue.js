@@ -4,6 +4,10 @@
  * - 積分消費依用戶累計「有價充值」vs「派送／贈送積分」比例折算認列收入
  */
 const Recharge = require('../models/Recharge');
+// populate booking.store / court.store 前須先註冊（否則 MissingSchemaError: Store）
+require('../models/Store');
+require('../models/Court');
+require('../models/User');
 
 const HK_TZ = 'Asia/Hong_Kong';
 const PAID_RECHARGE_METHODS = ['stripe', 'alipay', 'wechat'];

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { TUYA_BASE_URL_OPTIONS } from '../../constants/tuyaRegions';
+import StoreTuyaZonesModal from './StoreTuyaZonesModal';
 
 interface Store {
   _id: string;
@@ -22,6 +23,7 @@ interface Store {
   tuyaPreBufferMinutes?: number;
   tuyaPostBufferMinutes?: number;
   tuyaMergeGapMinutes?: number;
+  tuyaZones?: { _id?: string; name: string }[];
 }
 
 const emptyForm = {
@@ -51,6 +53,7 @@ const StoreManagement: React.FC = () => {
   const [editing, setEditing] = useState<Store | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
+  const [zonesStore, setZonesStore] = useState<Store | null>(null);
 
   const fetchStores = async () => {
     try {
@@ -178,8 +181,21 @@ const StoreManagement: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm">{s.enableHikAccess ? 'HIK' : '僅確認信'}</td>
-                <td className="px-4 py-3 text-sm">{s.enableTuyaAutomation ? 'Tuya' : '—'}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3 text-sm">
+                  {s.enableTuyaAutomation
+                    ? `Tuya · ${s.tuyaZones?.length || 0} 控制區`
+                    : '—'}
+                </td>
+                <td className="px-4 py-3 text-right space-x-2">
+                  {s.enableTuyaAutomation && (
+                    <button
+                      type="button"
+                      onClick={() => setZonesStore(s)}
+                      className="text-violet-600 hover:text-violet-800 text-sm"
+                    >
+                      控制區
+                    </button>
+                  )}
                   <button type="button" onClick={() => openEdit(s)} className="text-indigo-600 hover:text-indigo-800">
                     <PencilIcon className="w-5 h-5 inline" />
                   </button>
@@ -247,7 +263,7 @@ const StoreManagement: React.FC = () => {
                       <input type="number" min={0} max={60} className="w-full border rounded-md px-2 py-1.5" value={form.tuyaMergeGapMinutes} onChange={(e) => setForm({ ...form, tuyaMergeGapMinutes: Number(e.target.value) })} />
                     </div>
                   </div>
-                  <p className="text-xs text-gray-500">預熱／緩衝／合併參數供之後自動排程使用；設備 Device ID 在「場地管理 → 智能設備」設定。</p>
+                  <p className="text-xs text-gray-500">預熱／緩衝／合併參數供自動排程使用；儲存後於列表點「控制區」綁定設備與場地。</p>
                 </>
               )}
               <div className="flex gap-2 pt-2">
@@ -260,6 +276,14 @@ const StoreManagement: React.FC = () => {
           </div>
         </div>
       )}
+
+      <StoreTuyaZonesModal
+        storeId={zonesStore?._id || ''}
+        storeName={zonesStore?.name || ''}
+        isOpen={!!zonesStore}
+        onClose={() => setZonesStore(null)}
+        onSaved={fetchStores}
+      />
     </div>
   );
 };

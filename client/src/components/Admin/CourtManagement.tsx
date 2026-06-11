@@ -21,8 +21,6 @@ import {
 } from '@heroicons/react/24/outline';
 import CourtPricingModal from './CourtPricingModal';
 import CourtFormModal from './CourtFormModal';
-import CourtTuyaModal from './CourtTuyaModal';
-import { TuyaDeviceConfig } from '../../constants/tuyaRegions';
 import { PricingTimeSlot, resolveTimeSlotsFromCourt } from '../../constants/courtPricing';
 
 interface CourtImage {
@@ -58,8 +56,6 @@ interface Court {
     [key: string]: string;
   };
   images: CourtImage[];
-  enableTuyaAutomation?: boolean;
-  tuyaDevices?: TuyaDeviceConfig[];
   createdAt: string;
   updatedAt: string;
 }
@@ -82,8 +78,6 @@ const CourtManagement: React.FC = () => {
   const [pricingCourt, setPricingCourt] = useState<Court | null>(null);
   const [showPricingModal, setShowPricingModal] = useState(false);
   const [formCourt, setFormCourt] = useState<Court | null>(null);
-  const [tuyaCourt, setTuyaCourt] = useState<Court | null>(null);
-  const [showTuyaModal, setShowTuyaModal] = useState(false);
   const [showFormModal, setShowFormModal] = useState(false);
 
   useEffect(() => {
@@ -600,18 +594,6 @@ const CourtManagement: React.FC = () => {
                 </button>
 
                 <button
-                  type="button"
-                  onClick={() => {
-                    setTuyaCourt(court);
-                    setShowTuyaModal(true);
-                  }}
-                  className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-violet-800 bg-violet-100 rounded-md hover:bg-violet-200 transition-colors"
-                >
-                  <PowerIcon className="w-4 h-4 mr-2" />
-                  智能設備{court.enableTuyaAutomation ? ` (${court.tuyaDevices?.length || 0})` : ''}
-                </button>
-
-                <button
                   onClick={() => openImageModal(court)}
                   className="w-full flex items-center justify-center px-4 py-2 text-sm font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 transition-colors"
                 >
@@ -638,7 +620,7 @@ const CourtManagement: React.FC = () => {
                 <li>場地狀態變更會立即生效</li>
                 <li>「新增場地」或「編輯場地／店鋪」可設定所屬店鋪；同店內編號不可重複</li>
                 <li>「編輯時段價格」可設定貓頭鷹、非繁忙、繁忙等時段；變更僅影響新預約</li>
-                <li>「智能設備」綁定 Tuya Device ID（燈、冷氣等）；店鋪須先於店鋪管理設定 Tuya 憑證</li>
+                <li>Tuya 智能設備請於「店鋪管理 → 控制區」設定，並指派關聯場地</li>
                 <li>圖片必須為 1920x1280 像素，支持 JPEG、PNG、WEBP 格式</li>
               </ul>
             </div>
@@ -668,15 +650,6 @@ const CourtManagement: React.FC = () => {
         onSaved={fetchCourts}
       />
 
-      <CourtTuyaModal
-        court={tuyaCourt}
-        isOpen={showTuyaModal}
-        onClose={() => {
-          setShowTuyaModal(false);
-          setTuyaCourt(null);
-        }}
-        onSaved={fetchCourts}
-      />
 
       {/* 圖片管理模態框 */}
       {showImageModal && selectedCourt && (

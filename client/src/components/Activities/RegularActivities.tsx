@@ -21,6 +21,8 @@ interface RegularActivity {
   requirements?: string;
   fee?: number;
   isActive: boolean;
+  isEffectivelyPinned?: boolean;
+  pinnedUntil?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -108,22 +110,31 @@ const RegularActivities: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
               onClick={() => handleCardClick(activity)}
-              className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow cursor-pointer"
+              className={`bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow cursor-pointer ${
+                activity.isEffectivelyPinned ? 'ring-2 ring-amber-400' : ''
+              }`}
             >
               {/* Poster */}
-              {activity.poster ? (
-                <div className="h-48 bg-gray-200 overflow-hidden flex items-center justify-center">
-                  <img
-                    src={getImageUrl(activity.poster)}
-                    alt={activity.title}
-                    className="w-full h-full object-cover"
-                  />
-                </div>
-              ) : (
-                <div className="h-48 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
-                  <span className="text-6xl">🏓</span>
-                </div>
-              )}
+              <div className="relative">
+                {activity.poster ? (
+                  <div className="h-48 bg-gray-200 overflow-hidden flex items-center justify-center">
+                    <img
+                      src={getImageUrl(activity.poster)}
+                      alt={activity.title}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="h-48 bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center">
+                    <span className="text-6xl">🏓</span>
+                  </div>
+                )}
+                {activity.isEffectivelyPinned && (
+                  <span className="absolute top-3 left-3 px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full shadow">
+                    置頂
+                  </span>
+                )}
+              </div>
 
               <div className="p-6">
                 {/* Title */}

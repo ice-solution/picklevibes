@@ -124,7 +124,109 @@ async function getCourtDevicesState(store, court) {
 }
 
 /**
- * 對照目標狀態與硬件，僅對不一致的設備下指令
+ * 對照目標狀態與硬件，僅對單一設備下指令（控制區同步用）
+ */
+async function reconcileDevice(store, device, turnOn, {
+  reason = 'reconcile',
+  contextLabel = '設備',
+  zoneId,
+  zoneName,
+  courtIds,
+} = {}) {
+  const switchCode = device.switchCode || 'switch_1';
+  const targetOn = Boolean(turnOn);
+  let actualOn = null;
+  let readFailed = 0;
+
+  try {
+    actualOn = await getDeviceSwitchState(store, {
+      deviceId: device.deviceId,
+      switchCode,
+    });
+  } catch (err) {
+    readFailed = 1;
+    logTuya('warn', `⚠️ Tuya [${contextLabel}] 讀取 ${device.label || device.deviceId} 失敗，將嘗試${targetOn ? '開' : '關'}`, {
+      zoneId,
+      zoneName,
+      courtIds,
+      reason,
+      deviceId: device.deviceId,
+      deviceLabel: device.label,
+      switchCode,
+      action: 'read_failed',
+      targetOn,
+      error: err.message,
+    });
+  }
+
+  if (actualOn === targetOn) {
+    logTuya('info', `💡 Tuya [${contextLabel}] ${device.label || device.deviceId} 已是${targetOn ? '開' : '關'}（無需變更）`, {
+      zoneId,
+      zoneName,
+      courtIds,
+      reason,
+      deviceId: device.deviceId,
+      deviceLabel: device.label,
+      switchCode,
+      action: 'unchanged',
+      actualOn,
+      targetOn,
+    }, { silent: true });
+    return {
+      action: 'unchanged',
+      targetOn,
+      changed: 0,
+      unchanged: 1,
+      readFailed,
+      device: {
+        deviceId: device.deviceId,
+        label: device.label,
+        switchCode,
+        action: 'unchanged',
+        actualOn,
+        targetOn,
+      },
+    };
+  }
+
+  const control = await setDeviceSwitch(store, {
+    deviceId: device.deviceId,
+    switchCode,
+    turnOn: targetOn,
+  });
+  logTuya('info', `💡 Tuya [${contextLabel}] ${device.label || device.deviceId} ${actualOn == null ? '未知→' : (actualOn ? '開→' : '關→')}${targetOn ? '開' : '關'}`, {
+    zoneId,
+    zoneName,
+    courtIds,
+    reason,
+    deviceId: device.deviceId,
+    deviceLabel: device.label,
+    switchCode,
+    action: targetOn ? 'on' : 'off',
+    actualOn,
+    targetOn,
+  });
+  return {
+    action: targetOn ? 'on' : 'off',
+    targetOn,
+    changed: 1,
+    unchanged: 0,
+    readFailed,
+    device: {
+      deviceId: device.deviceId,
+      label: device.label,
+      switchCode,
+      action: targetOn ? 'on' : 'off',
+      actualOn,
+      targetOn,
+      success: true,
+      control,
+    },
+  };
+}
+
+/**
+ * 對照目標狀態與硬件，僅對不一致的設備下指令（舊版場地綁定）
  */
 async function reconcileCourtDevices(store, court, turnOn, { reason = 'reconcile' } = {}) {
   const devices = getActiveCourtDevices(court);
@@ -141,80 +243,15 @@ async function reconcileCourtDevices(store, court, turnOn, { reason = 'reconcile
   let readFailed = 0;
 
   for (const device of devices) {
-    const switchCode = device.switchCode || 'switch_1';
-    let actualOn = null;
-
-    try {
-      actualOn = await getDeviceSwitchState(store, {
-        deviceId: device.deviceId,
-        switchCode,
-      });
-    } catch (err) {
-      readFailed += 1;
-      logTuya('warn', `⚠️ Tuya [${courtName}] 讀取 ${device.label || device.deviceId} 失敗，將嘗試${targetOn ? '開' : '關'}`, {
-        courtId,
-        courtName,
-        reason,
-        deviceId: device.deviceId,
-        deviceLabel: device.label,
-        switchCode,
-        action: 'read_failed',
-        targetOn,
-        error: err.message,
-      });
-    }
-
-    if (actualOn === targetOn) {
-      unchanged += 1;
-      logTuya('info', `💡 Tuya [${courtName}] ${device.label || device.deviceId} 已是${targetOn ? '開' : '關'}（無需變更）`, {
-        courtId,
-        courtName,
-        reason,
-        deviceId: device.deviceId,
-        deviceLabel: device.label,
-        switchCode,
-        action: 'unchanged',
-        actualOn,
-        targetOn,
-      }, { silent: true });
-      results.push({
-        deviceId: device.deviceId,
-        label: device.label,
-        switchCode,
-        action: 'unchanged',
-        actualOn,
-        targetOn,
-      });
-      continue;
-    }
-
-    const control = await setDeviceSwitch(store, {
-      deviceId: device.deviceId,
-      switchCode,
-      turnOn: targetOn,
-    });
-    changed += 1;
-    logTuya('info', `💡 Tuya [${courtName}] ${device.label || device.deviceId} ${actualOn == null ? '未知→' : (actualOn ? '開→' : '關→')}${targetOn ? '開' : '關'}`, {
-      courtId,
-      courtName,
+    const row = await reconcileDevice(store, device, targetOn, {
       reason,
-      deviceId: device.deviceId,
-      deviceLabel: device.label,
-      switchCode,
-      action: targetOn ? 'on' : 'off',
-      actualOn,
-      targetOn,
+      contextLabel: courtName,
+      courtIds: [courtId],
     });
-    results.push({
-      deviceId: device.deviceId,
-      label: device.label,
-      switchCode,
-      action: targetOn ? 'on' : 'off',
-      actualOn,
-      targetOn,
-      success: true,
-      control,
-    });
+    results.push(row.device);
+    changed += row.changed;
+    unchanged += row.unchanged;
+    readFailed += row.readFailed;
   }
 
   let action = 'unchanged';
@@ -229,6 +266,33 @@ async function reconcileCourtDevices(store, court, turnOn, { reason = 'reconcile
     readFailed,
     devices: results,
   };
+}
+
+/**
+ * 對控制區所有設備下達同一開關狀態（不查硬件，供後台手動測試）
+ */
+async function setZoneDevices(store, devices, turnOn) {
+  const active = (devices || []).filter((d) => d.enabled !== false && d.deviceId);
+  if (!active.length) {
+    throw new Error('控制區未設定設備');
+  }
+  const results = [];
+  for (const device of active) {
+    const result = await setDeviceSwitch(store, {
+      deviceId: device.deviceId,
+      switchCode: device.switchCode || 'switch_1',
+      turnOn,
+    });
+    results.push({
+      deviceId: device.deviceId,
+      label: device.label,
+      switchCode: device.switchCode || 'switch_1',
+      turnOn,
+      success: true,
+      result,
+    });
+  }
+  return results;
 }
 
 /**
@@ -273,9 +337,11 @@ module.exports = {
   parseSwitchFromStatus,
   getDeviceSwitchState,
   getCourtDevicesState,
+  reconcileDevice,
   reconcileCourtDevices,
   setDeviceSwitch,
   setCourtDevices,
+  setZoneDevices,
   getActiveCourtDevices,
   assertStoreTuyaReady,
   isTuyaConfigured,

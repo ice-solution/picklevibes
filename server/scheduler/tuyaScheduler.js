@@ -20,11 +20,11 @@ class TuyaScheduler {
     logTuya('info', `🔄 Tuya 燈控開始同步 (${reason})`, { reason, action: 'sync_start' });
     try {
       const result = await tuyaSchedulerService.syncAllCourts({ reason });
-      logTuya('info', `✅ Tuya 燈控同步完成 (${reason}) · ${result.synced} 場地 · ${result.changed} 場有變更`, {
+      logTuya('info', `✅ Tuya 燈控同步完成 (${reason}) · ${result.synced} 設備 · ${result.changedDevices || result.changed} 有變更`, {
         reason,
         action: 'sync_done',
         synced: result.synced,
-        changedCourts: result.changed,
+        changedDevices: result.changedDevices || result.changed,
       });
     } catch (error) {
       logTuya('error', `❌ Tuya 燈控定時同步失敗 (${reason})`, {
@@ -45,15 +45,15 @@ class TuyaScheduler {
 
     logTuya('info', '🚀 啟動 Tuya 燈控自動排程 (Phase 2)', { action: 'scheduler_start' });
 
-    // 每 2 分鐘掃描預約並開關燈
+    // 每 10 分鐘掃描預約並開關燈
     this.task = cron.schedule(
-      '*/2 * * * *',
+      '*/10 * * * *',
       () => this.runSync('cron'),
       { scheduled: true, timezone: TZ }
     );
 
     this.isRunning = true;
-    logTuya('info', '✅ Tuya 燈控排程已啟動（每 2 分鐘 · Asia/Hong_Kong）', { action: 'scheduler_ready' });
+    logTuya('info', '✅ Tuya 燈控排程已啟動（每 10 分鐘 · Asia/Hong_Kong）', { action: 'scheduler_ready' });
 
     // 服務啟動後延遲執行一次
     setTimeout(() => this.runSync('startup'), 15000);
@@ -72,7 +72,7 @@ class TuyaScheduler {
     return {
       isRunning: this.isRunning,
       isSyncing: this.isSyncing,
-      schedule: '每 2 分鐘',
+      schedule: '每 10 分鐘',
       timezone: TZ,
       courtStates: tuyaSchedulerService.getCourtStateCache(),
       recentLogs: tuyaSchedulerService.getTuyaActionLog({ limit: 50 }),

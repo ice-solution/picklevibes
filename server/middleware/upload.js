@@ -224,6 +224,29 @@ const deleteFile = async (filePath) => {
   }
 };
 
+/** 會計單據上傳（保留原副檔名，最大 8MB） */
+const receiptStorage = multer.diskStorage({
+  destination(_req, _file, cb) {
+    const uploadDir = path.join(__dirname, '../../uploads/receipts');
+    ensureUploadDir(uploadDir);
+    cb(null, uploadDir);
+  },
+  filename(_req, file, cb) {
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`);
+  },
+});
+
+const receiptUpload = multer({
+  storage: receiptStorage,
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const ok = /^image\/(jpeg|png|gif|webp)$/i.test(file.mimetype);
+    if (ok) return cb(null, true);
+    cb(new Error('僅支援 JPEG、PNG、GIF、WebP 圖片'));
+  },
+});
+
 module.exports = {
   // 場地上傳
   courtUpload,
@@ -236,6 +259,9 @@ module.exports = {
   // Vlog 上傳
   vlogUpload,
   processVlogImage,
+
+  // 會計單據
+  receiptUpload,
   
   // 通用功能
   createUploadConfig,

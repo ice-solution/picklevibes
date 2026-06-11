@@ -22,7 +22,8 @@
     "export-users-sendgrid-csv": "node server/scripts/exportUsersCsvForSendgrid.js",
     "migrate-stores": "node server/scripts/migrateDefaultStore.js",
     "setup-isquare": "node server/scripts/setupIsquareStore.js",
-    "batch-recharge": "node server/scripts/batchManualRecharge.js"
+    "batch-recharge": "node server/scripts/batchManualRecharge.js",
+    "debug-finance": "node server/scripts/debugFinance.js"
   },
   "keywords": [
     "pickleball",

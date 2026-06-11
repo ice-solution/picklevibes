@@ -5,6 +5,7 @@
  *
  * 常用：
  *   node server/scripts/tuyaTest.js list
+ *   node server/scripts/tuyaTest.js plan --store <storeId>
  *   node server/scripts/tuyaTest.js plan --court <courtId>
  *   node server/scripts/tuyaTest.js status --court <courtId>
  *   node server/scripts/tuyaTest.js status --store <storeId> --device <deviceId>
@@ -24,9 +25,8 @@ const Court = require('../models/Court');
 const tuyaService = require('../services/tuyaService');
 const tuyaSchedulerService = require('../services/tuyaSchedulerService');
 const { getStoreTuyaConfig, isTuyaConfigured } = require('../utils/storeTuyaConfig');
-const { bookingsToLightWindows, isWithinLightWindows } = require('../utils/tuyaLightWindows');
-const { getHKCalendarYMD } = require('../utils/bookingDateTime');
 const { formatHKTime } = require('../utils/tuyaActionLog');
+const { resolveStoreZones } = require('../utils/tuyaZones');
 
 const TZ = 'Asia/Hong_Kong';
 
@@ -68,15 +68,17 @@ Tuya 測試工具
 
 指令：
   list                          列出店鋪／場地 Tuya 設定
-  plan   --court <id>           預覽燈光時段 + 目前應開/關 + 設備狀態（唯讀）
+  plan   --store <id>           預覽店鋪所有控制區（OR 邏輯）
+  plan   --court <id>           預覽含此場地的控制區
   status --court <id>           讀取場地所有設備開關狀態
   status --store <id> --device <deviceId> [--switch switch_1]
   on     --court <id> [--yes]   強制開燈（場地全部設備）
   off    --court <id> [--yes]   強制關燈（場地全部設備）
   on     --store <id> --device <deviceId> [--switch switch_1] [--yes]
   off    --store <id> --device <deviceId> [--switch switch_1] [--yes]
-  sync   --court <id>           依預約排程同步單一場地（reconcile）
-  sync   --all                  同步所有啟用場地
+  sync   --store <id>           同步單一店鋪控制區
+  sync   --court <id>           同步該場地所屬店鋪
+  sync   --all                  同步所有啟用店鋪
   logs   [--limit N] [--court <id>]  顯示記憶體內動作日誌（需與 API 同進程才有；CLI 僅顯示本次執行產生的 log）
 
 範例：
@@ -128,67 +130,89 @@ function printStoreSummary(store) {
 
 async function cmdList() {
   const stores = await Store.find({}).sort({ sortOrder: 1, name: 1 });
-  console.log('\n=== Tuya 店鋪／場地一覽 ===\n');
+  console.log('\n=== Tuya 店鋪／控制區一覽 ===\n');
   for (const store of stores) {
     printStoreSummary(store);
-    const courts = await Court.find({ store: store._id }).sort({ number: 1 });
-    for (const court of courts) {
-      const devices = tuyaService.getActiveCourtDevices(court);
-      const ready = tuyaSchedulerService.isCourtAutomationReady(store, court);
-      console.log(`    場地 #${court.number} ${court.name} (${court._id})`);
-      console.log(`      enableTuyaAutomation: ${!!court.enableTuyaAutomation} · 就緒: ${ready} · 設備: ${devices.length}`);
-      devices.forEach((d) => {
-        console.log(`        - ${d.label || '設備'} · ${d.deviceId} · ${d.switchCode || 'switch_1'}`);
+    const courts = await Court.find({ store: store._id }).sort({ number: 1 }).lean();
+    const courtMap = new Map(courts.map((c) => [String(c._id), c]));
+    const zones = resolveStoreZones(store, courts);
+    if (!zones.length) {
+      console.log('    （未設定控制區）\n');
+      continue;
+    }
+    for (const zone of zones) {
+      console.log(`    控制區：${zone.name}${zone.legacy ? ' [舊版場地綁定]' : ''} (${zone._id})`);
+      console.log(`      啟用: ${zone.enabled} · 設備: ${zone.devices.length} · 場地: ${zone.courtIds.length}`);
+      zone.courtIds.forEach((cid) => {
+        const c = courtMap.get(String(cid));
+        console.log(`        場地: ${c ? `#${c.number} ${c.name}` : cid}`);
+      });
+      zone.devices.forEach((d) => {
+        console.log(`        設備: ${d.label || '設備'} · ${d.deviceId} · ${d.switchCode || 'switch_1'}`);
       });
     }
     console.log('');
   }
 }
 
-async function cmdPlan(courtId) {
-  const { store, court } = await loadCourtContext(courtId);
+async function cmdPlanStore(storeId, filterCourtId) {
+  const store = await loadStore(storeId);
   tuyaService.assertStoreTuyaReady(store);
-
-  const cfg = getStoreTuyaConfig(store);
-  const bookings = await tuyaSchedulerService.fetchCourtBookings(court._id);
-  const windows = bookingsToLightWindows(bookings, cfg);
+  const courts = await Court.find({ store: store._id }).lean();
+  const courtMap = new Map(courts.map((c) => [String(c._id), c]));
+  const zones = resolveStoreZones(store, courts);
   const nowMs = Date.now();
-  const shouldOn = isWithinLightWindows(windows, nowMs);
 
-  console.log('\n=== Tuya 排程預覽 ===\n');
+  if (filterCourtId) {
+    const filtered = zones.filter((z) => z.courtIds.includes(String(filterCourtId)));
+    if (!filtered.length) {
+      throw new Error('此場地未指派任何控制區');
+    }
+  }
+
+  const { plan } = await tuyaSchedulerService.buildDeviceSyncPlanAsync(store, courts, { nowMs });
+
+  console.log('\n=== Tuya 控制區排程預覽 ===\n');
   printStoreSummary(store);
-  console.log(`  場地：${court.name} (${court._id})`);
-  console.log(`  現在 (HKT)：${formatHKTime(new Date(nowMs))}`);
-  console.log(`  依預約應為：${shouldOn ? '開燈' : '關燈'}`);
-  console.log(`  預約筆數：${bookings.length} · 合併後燈光時段：${windows.length}\n`);
+  if (filterCourtId) {
+    const c = courtMap.get(String(filterCourtId));
+    console.log(`  篩選場地：${c ? c.name : filterCourtId}`);
+  }
+  console.log(`  現在 (HKT)：${formatHKTime(new Date(nowMs))}\n`);
 
-  if (bookings.length) {
-    console.log('--- 預約 ---');
-    bookings.forEach((b) => {
-      const ymd = getHKCalendarYMD(b.date);
-      console.log(`  ${ymd} ${b.startTime}-${b.endTime} [${b.status}]`);
-    });
+  for (const zone of zones) {
+    if (filterCourtId && !zone.courtIds.includes(String(filterCourtId))) continue;
+
+    const preview = await tuyaSchedulerService.previewZonePlan(store, zone, { nowMs });
+    console.log(`--- 控制區：${zone.name} ---`);
+    console.log(`  關聯場地：${zone.courtIds.map((id) => courtMap.get(String(id))?.name || id).join('、')}`);
+    console.log(`  此區應為：${preview.shouldOn ? '開燈' : '關燈'} · 預約 ${preview.bookings.length} · 時段 ${preview.windows.length}`);
+
+    if (preview.windows.length) {
+      preview.windows.forEach((w, i) => {
+        const active = nowMs >= w.startMs && nowMs < w.endMs;
+        console.log(`    ${i + 1}. ${formatMsHK(w.startMs)} → ${formatMsHK(w.endMs)}${active ? ' ← 現在' : ''}`);
+      });
+    }
     console.log('');
   }
 
-  if (windows.length) {
-    console.log('--- 燈光時段（含預熱／緩衝／合併）---');
-    windows.forEach((w, i) => {
-      const active = nowMs >= w.startMs && nowMs < w.endMs;
-      console.log(`  ${i + 1}. ${formatMsHK(w.startMs)} → ${formatMsHK(w.endMs)}${active ? '  ← 現在在此時段' : ''}`);
-    });
-    console.log('');
-  } else {
-    console.log('（無有效燈光時段）\n');
+  console.log('--- 設備最終目標（多控制區 OR 合併）---');
+  for (const [, entry] of plan.entries()) {
+    let isOn = null;
+    try {
+      isOn = await tuyaService.getDeviceSwitchState(store, {
+        deviceId: entry.device.deviceId,
+        switchCode: entry.device.switchCode || 'switch_1',
+      });
+    } catch (err) {
+      isOn = null;
+    }
+    const actual = isOn === null ? '讀取失敗' : (isOn ? '開' : '關');
+    const match = isOn === null ? '?' : (isOn === entry.shouldOn ? '✓' : '✗');
+    console.log(`  ${entry.device.label || entry.device.deviceId} → 應${entry.shouldOn ? '開' : '關'} · 實際${actual} ${match}`);
+    console.log(`    來源：${entry.zones.map((z) => `${z.zoneName}(${z.shouldOn ? '開' : '關'})`).join(' + ')}`);
   }
-
-  const states = await tuyaService.getCourtDevicesState(store, court);
-  console.log('--- 設備實際狀態 ---');
-  states.forEach((s) => {
-    const actual = s.isOn === null ? `讀取失敗${s.readError ? ` (${s.readError})` : ''}` : (s.isOn ? '開' : '關');
-    const match = s.isOn === null ? '?' : (s.isOn === shouldOn ? '✓ 符合' : '✗ 需修正');
-    console.log(`  ${s.label || s.deviceId} · ${actual} · ${match}`);
-  });
   console.log('');
 }
 
@@ -256,10 +280,19 @@ async function cmdSync(flags) {
     console.log(JSON.stringify(result, null, 2));
     return;
   }
-  if (!flags.court) throw new Error('請指定 --court <id> 或 --all');
-  const result = await tuyaSchedulerService.syncCourtById(flags.court, { reason: 'cli_manual' });
-  console.log('\n=== 場地同步結果 ===');
-  console.log(JSON.stringify(result, null, 2));
+  if (flags.store) {
+    const result = await tuyaSchedulerService.syncStoreById(flags.store, { reason: 'cli_manual' });
+    console.log('\n=== 店鋪同步結果 ===');
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  if (flags.court) {
+    const result = await tuyaSchedulerService.syncCourtById(flags.court, { reason: 'cli_manual' });
+    console.log('\n=== 店鋪同步結果（經場地觸發）===');
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+  throw new Error('請指定 --store <id>、--court <id> 或 --all');
 }
 
 async function cmdLogs(flags) {
@@ -297,8 +330,14 @@ async function main() {
         await cmdList();
         break;
       case 'plan':
-        if (!flags.court) throw new Error('plan 需要 --court <id>');
-        await cmdPlan(flags.court);
+        if (flags.store) {
+          await cmdPlanStore(flags.store);
+        } else if (flags.court) {
+          const { store, court } = await loadCourtContext(flags.court);
+          await cmdPlanStore(String(store._id), String(court._id));
+        } else {
+          throw new Error('plan 需要 --store <id> 或 --court <id>');
+        }
         break;
       case 'status':
         if (flags.court) {

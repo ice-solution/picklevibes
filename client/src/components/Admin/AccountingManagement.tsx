@@ -8,6 +8,8 @@ import {
   BuildingStorefrontIcon
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
+import AccountingLedgerPanel from './AccountingLedgerPanel';
+import AccountingPLPanel from './AccountingPLPanel';
 
 type LineType = 'all' | 'recognized' | 'excluded' | 'venue' | 'shop';
 
@@ -95,7 +97,16 @@ const TYPE_TABS: { id: LineType; label: string }[] = [
   { id: 'excluded', label: '不計收入' }
 ];
 
+type AccountingMainTab = 'pl' | 'revenue' | 'ledger';
+
+const MAIN_TABS: { id: AccountingMainTab; label: string }[] = [
+  { id: 'pl', label: '綜合損益 P&L' },
+  { id: 'revenue', label: '系統認列收入' },
+  { id: 'ledger', label: '收支登記' },
+];
+
 const AccountingManagement: React.FC = () => {
+  const [mainTab, setMainTab] = useState<AccountingMainTab>('pl');
   const today = ymdToday();
   const yearStart = `${today.slice(0, 4)}-01-01`;
   const [fromYmd, setFromYmd] = useState(yearStart);
@@ -144,9 +155,11 @@ const AccountingManagement: React.FC = () => {
     }
   }, [storeParams, typeTab]);
 
+  // 僅在「系統認列收入」分頁才打 finance API（避免 P&L 分頁誤觸失敗請求）
   useEffect(() => {
+    if (mainTab !== 'revenue') return;
     load();
-  }, [load]);
+  }, [load, mainTab]);
 
   const storeBreakdown = summary?.byStoreBreakdown || summary?.venue?.byStore || [];
 
@@ -221,12 +234,41 @@ const AccountingManagement: React.FC = () => {
       <div>
         <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <CalculatorIcon className="w-7 h-7 text-primary-600" />
-          會計 · 收入明細
+          會計
         </h2>
         <p className="text-gray-600 mt-1">
-          場地收入按<strong>店鋪</strong>與<strong>出租日</strong>分開計算；網店為全公司共用，僅在「全部店鋪」時顯示。
+          <strong>綜合損益</strong>合併系統收入與手動收支；另可查看明細分頁。
         </p>
       </div>
+
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex gap-6">
+          {MAIN_TABS.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setMainTab(tab.id)}
+              className={`py-3 px-1 border-b-2 text-sm font-medium ${
+                mainTab === tab.id
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {mainTab === 'pl' ? (
+        <AccountingPLPanel />
+      ) : mainTab === 'ledger' ? (
+        <AccountingLedgerPanel />
+      ) : (
+        <>
+      <p className="text-sm text-gray-600">
+        場地收入按<strong>店鋪</strong>與<strong>出租日</strong>分開計算；網店為全公司共用，僅在「全部店鋪」時顯示。
+      </p>
 
       <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-end gap-4">
         <div>
@@ -526,6 +568,8 @@ const AccountingManagement: React.FC = () => {
           </table>
         </div>
       </div>
+        </>
+      )}
     </motion.div>
   );
 };

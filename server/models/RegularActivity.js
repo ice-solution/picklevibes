@@ -38,6 +38,21 @@ const regularActivitySchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  /** 置頂顯示於活動中心恆常活動列表前方 */
+  isPinned: {
+    type: Boolean,
+    default: false,
+  },
+  /** 開始置頂時間（用於同時多個置頂時的排序） */
+  pinnedAt: {
+    type: Date,
+    default: null,
+  },
+  /** 置頂截止；null 表示直至管理員手動取消 */
+  pinnedUntil: {
+    type: Date,
+    default: null,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
