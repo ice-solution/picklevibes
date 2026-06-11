@@ -484,13 +484,7 @@ async function computeFinanceSummary(opts) {
 
   const { lines } = await computeIncomeLines({ fromYmd, toYmd, storeId });
   const agg = aggregateFromLines(lines);
-
-  const allStoreLines = storeId
-    ? null
-    : await computeIncomeLines({ fromYmd, toYmd });
-  const byStoreAll = storeId
-    ? null
-    : aggregateFromLines(allStoreLines.lines).venue.byStore;
+  const byStoreAll = storeId ? null : agg.venue.byStore;
 
   const rechargeStats = await Recharge.aggregate([
     { $match: { status: 'completed' } },

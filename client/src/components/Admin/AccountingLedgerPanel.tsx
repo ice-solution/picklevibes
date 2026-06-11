@@ -93,6 +93,15 @@ const AccountingLedgerPanel: React.FC = () => {
   const [storeId, setStoreId] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    totalPages: 1,
+  });
+
+  const LEDGER_PAGE_SIZE = 50;
 
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState<LedgerItem | null>(null);
@@ -104,12 +113,13 @@ const AccountingLedgerPanel: React.FC = () => {
     () => ({
       from: fromYmd,
       to: toYmd,
-      limit: 100,
+      page,
+      limit: LEDGER_PAGE_SIZE,
       ...(storeId ? { store: storeId } : {}),
       ...(typeFilter ? { type: typeFilter } : {}),
       ...(categoryFilter ? { category: categoryFilter } : {}),
     }),
-    [fromYmd, toYmd, storeId, typeFilter, categoryFilter]
+    [fromYmd, toYmd, storeId, typeFilter, categoryFilter, page]
   );
 
   const loadMeta = useCallback(async () => {
@@ -127,6 +137,14 @@ const AccountingLedgerPanel: React.FC = () => {
       const res = await api.get('/accounting/ledger', { params: listParams });
       setItems(res.data.items || []);
       setTotals(res.data.totals || { income: 0, expense: 0, net: 0 });
+      setPagination(
+        res.data.pagination || {
+          page: 1,
+          limit: LEDGER_PAGE_SIZE,
+          total: 0,
+          totalPages: 1,
+        }
+      );
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } } };
       alert(err.response?.data?.message || '載入收支失敗');
@@ -142,6 +160,10 @@ const AccountingLedgerPanel: React.FC = () => {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [fromYmd, toYmd, storeId, typeFilter, categoryFilter]);
 
   const openCreate = () => {
     setEditing(null);
@@ -388,6 +410,32 @@ const AccountingLedgerPanel: React.FC = () => {
             </tbody>
           </table>
         </div>
+        {pagination.totalPages > 1 && (
+          <div className="px-4 py-3 border-t bg-gray-50 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <span className="text-gray-600">
+              第 {pagination.page} / {pagination.totalPages} 頁，共 {pagination.total} 筆
+              <span className="text-gray-400 ml-2">（期間合計仍含全部篩選結果）</span>
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 border rounded-lg hover:bg-white disabled:opacity-40"
+              >
+                上一頁
+              </button>
+              <button
+                type="button"
+                disabled={page >= pagination.totalPages || loading}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1.5 border rounded-lg hover:bg-white disabled:opacity-40"
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {showModal && (

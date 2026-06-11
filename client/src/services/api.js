@@ -1,6 +1,9 @@
 import axios from 'axios';
 import apiConfig from '../config/api';
 
+/** 會計／損益報表查詢較慢，預設 10s 會被 axios 中止（Network 顯示 canceled） */
+export const ACCOUNTING_REPORT_TIMEOUT_MS = 120000;
+
 // 創建 axios 實例
 const api = axios.create({
   baseURL: apiConfig.API_BASE_URL,

@@ -54,6 +54,10 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
 
     const storeId = req.query.store || req.query.storeId || null;
     const typeFilter = req.query.type; // recognized | excluded | venue | shop
+    const search = String(req.query.search || '').trim().toLowerCase();
+    const pageN = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limitN = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
+
     const { lines, fromYmd: f, toYmd: t } = await computeIncomeLines({
       fromYmd,
       toYmd,
@@ -66,6 +70,31 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
     else if (typeFilter === 'venue') filtered = lines.filter((l) => l.source === 'venue');
     else if (typeFilter === 'shop') filtered = lines.filter((l) => l.source === 'shop');
 
+    if (search) {
+      filtered = filtered.filter((l) => {
+        const blob = [
+          l.description,
+          l.store,
+          l.court,
+          l.orderNumber,
+          l.userName,
+          l.userEmail,
+          l.paymentMethod,
+          l.category
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase();
+        return blob.includes(search);
+      });
+    }
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / limitN));
+    const safePage = Math.min(pageN, totalPages);
+    const offset = (safePage - 1) * limitN;
+    const pagedLines = filtered.slice(offset, offset + limitN);
+
     const recognizedInView = filtered.filter((l) => l.lineType === 'recognized');
 
     res.json({
@@ -73,11 +102,18 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
       data: {
         period: { fromYmd: f, toYmd: t },
         storeId: storeId || null,
-        lines: filtered,
+        lines: pagedLines,
+        pagination: {
+          page: safePage,
+          limit: limitN,
+          total,
+          totalPages
+        },
         totals: {
-          lineCount: filtered.length,
+          lineCount: total,
           recognizedTotal: recognizedInView.reduce((s, l) => s + l.recognized, 0),
-          nominalTotal: recognizedInView.reduce((s, l) => s + l.nominal, 0)
+          nominalTotal: recognizedInView.reduce((s, l) => s + l.nominal, 0),
+          giftExcludedTotal: recognizedInView.reduce((s, l) => s + l.giftExcluded, 0)
         }
       }
     });

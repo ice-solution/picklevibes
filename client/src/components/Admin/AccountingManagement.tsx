@@ -7,7 +7,7 @@ import {
   InformationCircleIcon,
   BuildingStorefrontIcon
 } from '@heroicons/react/24/outline';
-import api from '../../services/api';
+import api, { ACCOUNTING_REPORT_TIMEOUT_MS } from '../../services/api';
 import AccountingLedgerPanel from './AccountingLedgerPanel';
 import AccountingPLPanel from './AccountingPLPanel';
 
@@ -105,6 +105,22 @@ const MAIN_TABS: { id: AccountingMainTab; label: string }[] = [
   { id: 'ledger', label: '收支登記' },
 ];
 
+const LINES_PAGE_SIZE = 50;
+
+interface LinesPagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+interface LinesTotals {
+  lineCount: number;
+  recognizedTotal: number;
+  nominalTotal: number;
+  giftExcludedTotal?: number;
+}
+
 const AccountingManagement: React.FC = () => {
   const [mainTab, setMainTab] = useState<AccountingMainTab>('pl');
   const today = ymdToday();
@@ -115,10 +131,25 @@ const AccountingManagement: React.FC = () => {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [typeTab, setTypeTab] = useState<LineType>('recognized');
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [appliedSearch, setAppliedSearch] = useState('');
+  const [linesPage, setLinesPage] = useState(1);
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [linesLoading, setLinesLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [summary, setSummary] = useState<FinanceSummary | null>(null);
   const [lines, setLines] = useState<IncomeLine[]>([]);
+  const [linesPagination, setLinesPagination] = useState<LinesPagination>({
+    page: 1,
+    limit: LINES_PAGE_SIZE,
+    total: 0,
+    totalPages: 1,
+  });
+  const [linesTotals, setLinesTotals] = useState<LinesTotals>({
+    lineCount: 0,
+    recognizedTotal: 0,
+    nominalTotal: 0,
+    giftExcludedTotal: 0,
+  });
 
   useEffect(() => {
     api.get('/stores/admin/all').then((r) => setStores(r.data.stores || [])).catch(() => {});
@@ -133,73 +164,146 @@ const AccountingManagement: React.FC = () => {
     [fromYmd, toYmd, storeId]
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const reportOpts = useMemo(
+    () => ({ timeout: ACCOUNTING_REPORT_TIMEOUT_MS }),
+    []
+  );
+
+  const loadSummary = useCallback(async () => {
+    setSummaryLoading(true);
+    try {
+      const summaryRes = await api.get('/finance/summary', {
+        params: storeParams,
+        ...reportOpts,
+      });
+      setSummary(summaryRes.data?.data || null);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } };
+      alert(err.response?.data?.message || '載入摘要失敗');
+      setSummary(null);
+    } finally {
+      setSummaryLoading(false);
+    }
+  }, [storeParams, reportOpts]);
+
+  const loadLines = useCallback(async () => {
+    setLinesLoading(true);
+    try {
+      const typeParam = typeTab === 'all' ? undefined : typeTab;
+      const linesRes = await api.get('/finance/income-lines', {
+        params: {
+          ...storeParams,
+          page: linesPage,
+          limit: LINES_PAGE_SIZE,
+          ...(typeParam ? { type: typeParam } : {}),
+          ...(appliedSearch ? { search: appliedSearch } : {}),
+        },
+        ...reportOpts,
+      });
+      const data = linesRes.data?.data;
+      setLines(data?.lines || []);
+      setLinesPagination(
+        data?.pagination || {
+          page: linesPage,
+          limit: LINES_PAGE_SIZE,
+          total: 0,
+          totalPages: 1,
+        }
+      );
+      setLinesTotals(
+        data?.totals || {
+          lineCount: 0,
+          recognizedTotal: 0,
+          nominalTotal: 0,
+          giftExcludedTotal: 0,
+        }
+      );
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } };
+      alert(err.response?.data?.message || '載入明細失敗');
+      setLines([]);
+    } finally {
+      setLinesLoading(false);
+    }
+  }, [storeParams, typeTab, linesPage, appliedSearch, reportOpts]);
+
+  const refreshRevenue = useCallback(async () => {
+    const nextSearch = search.trim();
+    setLinesPage(1);
+    setAppliedSearch(nextSearch);
+    setSummaryLoading(true);
+    setLinesLoading(true);
     try {
       const typeParam = typeTab === 'all' ? undefined : typeTab;
       const [summaryRes, linesRes] = await Promise.all([
-        api.get('/finance/summary', { params: storeParams }),
+        api.get('/finance/summary', { params: storeParams, ...reportOpts }),
         api.get('/finance/income-lines', {
-          params: { ...storeParams, ...(typeParam ? { type: typeParam } : {}) }
-        })
+          params: {
+            ...storeParams,
+            page: 1,
+            limit: LINES_PAGE_SIZE,
+            ...(typeParam ? { type: typeParam } : {}),
+            ...(nextSearch ? { search: nextSearch } : {}),
+          },
+          ...reportOpts,
+        }),
       ]);
       setSummary(summaryRes.data?.data || null);
-      setLines(linesRes.data?.data?.lines || []);
+      const data = linesRes.data?.data;
+      setLines(data?.lines || []);
+      setLinesPagination(
+        data?.pagination || {
+          page: 1,
+          limit: LINES_PAGE_SIZE,
+          total: 0,
+          totalPages: 1,
+        }
+      );
+      setLinesTotals(
+        data?.totals || {
+          lineCount: 0,
+          recognizedTotal: 0,
+          nominalTotal: 0,
+          giftExcludedTotal: 0,
+        }
+      );
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } } };
       alert(err.response?.data?.message || '載入失敗');
       setSummary(null);
       setLines([]);
     } finally {
-      setLoading(false);
+      setSummaryLoading(false);
+      setLinesLoading(false);
     }
-  }, [storeParams, typeTab]);
+  }, [storeParams, typeTab, search, reportOpts]);
 
-  // 僅在「系統認列收入」分頁才打 finance API（避免 P&L 分頁誤觸失敗請求）
   useEffect(() => {
     if (mainTab !== 'revenue') return;
-    load();
-  }, [load, mainTab]);
+    loadLines();
+  }, [mainTab, loadLines, appliedSearch, linesPage]);
+
+  useEffect(() => {
+    setLinesPage(1);
+    setAppliedSearch('');
+    setSearch('');
+  }, [fromYmd, toYmd, storeId]);
+
+  useEffect(() => {
+    if (mainTab !== 'revenue') return;
+    loadSummary();
+  }, [mainTab, loadSummary]);
 
   const storeBreakdown = summary?.byStoreBreakdown || summary?.venue?.byStore || [];
-
-  const filteredLines = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return lines;
-    return lines.filter((l) => {
-      const blob = [
-        l.description,
-        l.store,
-        l.court,
-        l.orderNumber,
-        l.userName,
-        l.userEmail,
-        l.paymentMethod,
-        l.category
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase();
-      return blob.includes(q);
-    });
-  }, [lines, search]);
-
-  const tableFooter = useMemo(() => {
-    const rec = filteredLines.filter((l) => l.lineType === 'recognized');
-    return {
-      count: filteredLines.length,
-      nominal: rec.reduce((s, l) => s + l.nominal, 0),
-      recognized: rec.reduce((s, l) => s + l.recognized, 0),
-      giftExcluded: rec.reduce((s, l) => s + l.giftExcluded, 0)
-    };
-  }, [filteredLines]);
+  const loading = summaryLoading || linesLoading;
 
   const handleExport = async () => {
     setExporting(true);
     try {
       const res = await api.get('/finance/summary-xlsx', {
         params: storeParams,
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: ACCOUNTING_REPORT_TIMEOUT_MS,
       });
       const blob = new Blob([res.data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -311,13 +415,16 @@ const AccountingManagement: React.FC = () => {
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="場地、用戶、訂單號…"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') refreshRevenue();
+            }}
+            placeholder="場地、用戶、訂單號…（按查詢或 Enter）"
             className="w-full px-3 py-2 border rounded-lg"
           />
         </div>
         <button
           type="button"
-          onClick={load}
+          onClick={refreshRevenue}
           disabled={loading}
           className="inline-flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
         >
@@ -455,7 +562,10 @@ const AccountingManagement: React.FC = () => {
           <button
             key={t.id}
             type="button"
-            onClick={() => setTypeTab(t.id)}
+            onClick={() => {
+              setTypeTab(t.id);
+              setLinesPage(1);
+            }}
             disabled={storeId !== '' && t.id === 'shop'}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors disabled:opacity-40 ${
               typeTab === t.id
@@ -494,20 +604,20 @@ const AccountingManagement: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {loading && filteredLines.length === 0 ? (
+              {linesLoading && lines.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                     載入中…
                   </td>
                 </tr>
-              ) : filteredLines.length === 0 ? (
+              ) : lines.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-12 text-center text-gray-400">
                     此條件下沒有資料
                   </td>
                 </tr>
               ) : (
-                filteredLines.map((row) => (
+                lines.map((row) => (
                   <tr
                     key={`${row.source}-${row.id}`}
                     className={`border-t hover:bg-gray-50 ${
@@ -550,23 +660,55 @@ const AccountingManagement: React.FC = () => {
                 ))
               )}
             </tbody>
-            {filteredLines.length > 0 && (
+            {linesTotals.lineCount > 0 && (
               <tfoot className="bg-gray-100 font-semibold text-sm sticky bottom-0">
                 <tr>
                   <td colSpan={7} className="px-3 py-3">
-                    小計（{tableFooter.count} 筆）
+                    期間合計（{linesTotals.lineCount} 筆）
+                    {linesPagination.totalPages > 1 && (
+                      <span className="text-xs font-normal text-gray-500 ml-2">
+                        本頁 {lines.length} 筆
+                      </span>
+                    )}
                   </td>
-                  <td className="px-3 py-3 text-right">{fmt(tableFooter.nominal)}</td>
+                  <td className="px-3 py-3 text-right">{fmt(linesTotals.nominalTotal)}</td>
                   <td className="px-3 py-3 text-right text-primary-800">
-                    {fmt(tableFooter.recognized)}
+                    {fmt(linesTotals.recognizedTotal)}
                   </td>
-                  <td className="px-3 py-3 text-right">{fmt(tableFooter.giftExcluded)}</td>
+                  <td className="px-3 py-3 text-right">
+                    {fmt(linesTotals.giftExcludedTotal || 0)}
+                  </td>
                   <td />
                 </tr>
               </tfoot>
             )}
           </table>
         </div>
+        {linesPagination.totalPages > 1 && (
+          <div className="px-4 py-3 border-t bg-gray-50 flex flex-wrap items-center justify-between gap-3 text-sm">
+            <span className="text-gray-600">
+              第 {linesPagination.page} / {linesPagination.totalPages} 頁，共 {linesPagination.total} 筆
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={linesPage <= 1 || linesLoading}
+                onClick={() => setLinesPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1.5 border rounded-lg hover:bg-white disabled:opacity-40"
+              >
+                上一頁
+              </button>
+              <button
+                type="button"
+                disabled={linesPage >= linesPagination.totalPages || linesLoading}
+                onClick={() => setLinesPage((p) => p + 1)}
+                className="px-3 py-1.5 border rounded-lg hover:bg-white disabled:opacity-40"
+              >
+                下一頁
+              </button>
+            </div>
+          </div>
+        )}
       </div>
         </>
       )}

@@ -6,7 +6,7 @@ import {
   InformationCircleIcon,
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
-import api from '../../services/api';
+import api, { ACCOUNTING_REPORT_TIMEOUT_MS } from '../../services/api';
 
 interface FinanceSummary {
   timezone: string;
@@ -66,7 +66,10 @@ const FinanceReportManagement: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get('/finance/summary', { params: { from: fromYmd, to: toYmd } });
+      const res = await api.get('/finance/summary', {
+        params: { from: fromYmd, to: toYmd },
+        timeout: ACCOUNTING_REPORT_TIMEOUT_MS,
+      });
       setData(res.data?.data || null);
     } catch (e: unknown) {
       const err = e as { response?: { data?: { message?: string } } };
@@ -86,7 +89,8 @@ const FinanceReportManagement: React.FC = () => {
     try {
       const res = await api.get('/finance/summary-xlsx', {
         params: { from: fromYmd, to: toYmd },
-        responseType: 'blob'
+        responseType: 'blob',
+        timeout: ACCOUNTING_REPORT_TIMEOUT_MS,
       });
       const blob = new Blob([res.data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'

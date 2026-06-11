@@ -4,7 +4,7 @@ import {
   ChartBarIcon,
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
-import api from '../../services/api';
+import api, { ACCOUNTING_REPORT_TIMEOUT_MS } from '../../services/api';
 
 interface StoreOption {
   _id: string;
@@ -130,6 +130,7 @@ const AccountingPLPanel: React.FC = () => {
           to: toYmd,
           ...(storeId ? { store: storeId } : {}),
         },
+        timeout: ACCOUNTING_REPORT_TIMEOUT_MS,
       });
       setData(res.data.data || null);
     } catch (e: unknown) {
