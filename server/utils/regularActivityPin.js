@@ -1,8 +1,8 @@
 /** 恆常活動置頂狀態 */
 
 function isEffectivelyPinned(activity, now = new Date()) {
-  if (!activity?.isPinned) return false;
-  if (activity.pinnedUntil && new Date(activity.pinnedUntil) <= now) return false;
+  if (activity?.isPinned !== true) return false;
+  if (activity.pinnedUntil != null && new Date(activity.pinnedUntil) <= now) return false;
   return true;
 }
 
@@ -36,10 +36,10 @@ function buildPinnedSortStages(now = new Date()) {
           $cond: {
             if: {
               $and: [
-                '$isPinned',
+                { $eq: ['$isPinned', true] },
                 {
                   $or: [
-                    { $eq: ['$pinnedUntil', null] },
+                    { $eq: [{ $ifNull: ['$pinnedUntil', null] }, null] },
                     { $gt: ['$pinnedUntil', now] },
                   ],
                 },

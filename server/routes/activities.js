@@ -1581,7 +1581,13 @@ router.patch('/:id/pin', [
   auth,
   adminAuth,
   body('pinned').isBoolean().withMessage('pinned 須為布林值'),
-  body('pinnedUntil').optional({ nullable: true }).isISO8601().withMessage('pinnedUntil 須為有效日期'),
+  body('pinnedUntil')
+    .optional({ nullable: true })
+    .custom((value) => {
+      if (value === null || value === undefined || value === '') return true;
+      return !Number.isNaN(Date.parse(value));
+    })
+    .withMessage('pinnedUntil 須為有效日期'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -1589,23 +1595,30 @@ router.patch('/:id/pin', [
       return res.status(400).json({ message: errors.array()[0].msg });
     }
 
-    const activity = await Activity.findById(req.params.id);
+    const { pinned, pinnedUntil } = req.body;
+    const pinUpdate = pinned
+      ? {
+          isPinned: true,
+          pinnedAt: new Date(),
+          pinnedUntil: pinnedUntil ? new Date(pinnedUntil) : null,
+        }
+      : {
+          isPinned: false,
+          pinnedAt: null,
+          pinnedUntil: null,
+        };
+
+    const activity = await Activity.findByIdAndUpdate(
+      req.params.id,
+      { $set: pinUpdate },
+      { new: true, runValidators: true }
+    )
+      .populate('organizer', 'name email')
+      .populate('coaches', 'name email');
+
     if (!activity) {
       return res.status(404).json({ message: '活動不存在' });
     }
-
-    const { pinned, pinnedUntil } = req.body;
-    if (pinned) {
-      activity.isPinned = true;
-      activity.pinnedAt = new Date();
-      activity.pinnedUntil = pinnedUntil ? new Date(pinnedUntil) : null;
-    } else {
-      activity.isPinned = false;
-      activity.pinnedAt = null;
-      activity.pinnedUntil = null;
-    }
-
-    await activity.save();
 
     res.json({
       message: pinned ? '已置頂' : '已取消置頂',

@@ -497,6 +497,7 @@ const ActivityManagement: React.FC = () => {
       }
       setPinModalActivity(null);
       setPinUntilValue('');
+      setCurrentPage(1);
       fetchActivities();
     } catch (error: any) {
       alert(error.message || '置頂設定失敗');
