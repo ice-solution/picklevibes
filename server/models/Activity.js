@@ -95,7 +95,21 @@ const activitySchema = new mongoose.Schema({
   isActive: {
     type: Boolean,
     default: true
-  }
+  },
+  /** 置頂顯示於活動中心列表前方 */
+  isPinned: {
+    type: Boolean,
+    default: false,
+  },
+  pinnedAt: {
+    type: Date,
+    default: null,
+  },
+  /** null = 直至管理員手動取消 */
+  pinnedUntil: {
+    type: Date,
+    default: null,
+  },
 }, {
   timestamps: true
 });

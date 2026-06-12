@@ -12,7 +12,8 @@ import {
   XMarkIcon,
   AcademicCapIcon,
   UserPlusIcon,
-  ClipboardDocumentIcon
+  ClipboardDocumentIcon,
+  BookmarkIcon,
 } from '@heroicons/react/24/outline';
 import CoachAutocomplete from '../Common/CoachAutocomplete';
 import UserAutocomplete from '../Common/UserAutocomplete';
@@ -42,6 +43,10 @@ interface Activity {
   }>;
   requirements?: string;
   isActive: boolean;
+  isPinned?: boolean;
+  pinnedAt?: string | null;
+  pinnedUntil?: string | null;
+  isEffectivelyPinned?: boolean;
   createdAt: string;
   venueHoldMode?: 'full_venue' | 'single_court';
   venueHoldCourtId?: string | { _id: string; name?: string };
@@ -104,6 +109,9 @@ const ActivityManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [pinModalActivity, setPinModalActivity] = useState<Activity | null>(null);
+  const [pinUntilValue, setPinUntilValue] = useState('');
+  const [pinSaving, setPinSaving] = useState(false);
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
   const [participantsLoading, setParticipantsLoading] = useState(false);
   const [participants, setParticipants] = useState<ActivityRegistration[]>([]);
@@ -438,6 +446,62 @@ const ActivityManagement: React.FC = () => {
       fetchActivities();
     } catch (error: any) {
       alert(error.message);
+    }
+  };
+
+  const formatPinUntil = (pinnedUntil?: string | null) => {
+    if (!pinnedUntil) return '直至手動取消';
+    return new Date(pinnedUntil).toLocaleString('zh-HK', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    });
+  };
+
+  const toDatetimeLocalValue = (iso?: string | null) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const openPinModal = (activity: Activity) => {
+    setPinModalActivity(activity);
+    setPinUntilValue(toDatetimeLocalValue(activity.pinnedUntil));
+  };
+
+  const submitPin = async (pinned: boolean) => {
+    if (!pinModalActivity) return;
+    try {
+      setPinSaving(true);
+      const body: { pinned: boolean; pinnedUntil?: string | null } = { pinned };
+      if (pinned) {
+        body.pinnedUntil = pinUntilValue
+          ? new Date(pinUntilValue).toISOString()
+          : null;
+      }
+      const response = await fetch(`${apiBaseUrl}/activities/${pinModalActivity._id}/pin`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token')}`,
+        },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || '置頂設定失敗');
+      }
+      setPinModalActivity(null);
+      setPinUntilValue('');
+      fetchActivities();
+    } catch (error: any) {
+      alert(error.message || '置頂設定失敗');
+    } finally {
+      setPinSaving(false);
     }
   };
 
@@ -876,25 +940,43 @@ const ActivityManagement: React.FC = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: index * 0.1 }}
-              className="bg-white rounded-xl shadow-lg overflow-hidden"
+              className={`bg-white rounded-xl shadow-lg overflow-hidden ${
+                activity.isEffectivelyPinned ? 'ring-2 ring-amber-400' : ''
+              }`}
             >
               {/* Poster */}
               {(activity as any).posterThumb || activity.poster ? (
-                <div className="h-48 bg-gray-200 overflow-hidden">
+                <div className="relative h-48 bg-gray-200 overflow-hidden">
                   <img
                     src={getImageUrl(((activity as any).posterThumb || activity.poster) as string)}
                     alt={activity.title}
                     className="w-full h-full object-cover"
                   />
+                  {activity.isEffectivelyPinned && (
+                    <span className="absolute top-3 left-3 px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full shadow">
+                      置頂
+                    </span>
+                  )}
+                </div>
+              ) : activity.isEffectivelyPinned ? (
+                <div className="relative h-12 bg-amber-50 border-b border-amber-200 flex items-center px-4">
+                  <span className="px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full">
+                    置頂
+                  </span>
                 </div>
               ) : null}
 
               <div className="p-6">
                 {/* Status Badge */}
                 <div className="flex items-center justify-between mb-3">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(activity.status)}`}>
-                    {getStatusText(activity.status)}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(activity.status)}`}>
+                      {getStatusText(activity.status)}
+                    </span>
+                    {activity.isEffectivelyPinned && (
+                      <span className="text-xs text-amber-700">{formatPinUntil(activity.pinnedUntil)}</span>
+                    )}
+                  </div>
                   <span className="text-sm text-gray-500">
                     {formatDate(activity.createdAt)}
                   </span>
@@ -953,7 +1035,20 @@ const ActivityManagement: React.FC = () => {
                 </div>
 
                 {/* Actions：上 icon、下文字，避免窄欄位時橫排難讀 */}
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-5 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openPinModal(activity)}
+                    className={`flex flex-col items-center justify-center gap-1.5 px-1.5 py-3 border rounded-lg transition-colors min-h-[4.5rem] ${
+                      activity.isEffectivelyPinned
+                        ? 'text-amber-700 border-amber-400 bg-amber-50'
+                        : 'text-gray-600 border-gray-300 hover:bg-gray-50'
+                    }`}
+                    title="置頂設定"
+                  >
+                    <BookmarkIcon className="h-5 w-5 shrink-0" />
+                    <span className="text-xs text-center leading-snug">置頂</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => handleOpenParticipantsModal(activity)}
@@ -1595,6 +1690,65 @@ const ActivityManagement: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pinModalActivity && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">置頂設定</h3>
+                <p className="text-sm text-gray-500 mt-1">{pinModalActivity.title}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setPinModalActivity(null);
+                  setPinUntilValue('');
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600 bg-amber-50 border border-amber-100 rounded-md px-3 py-2 mb-4">
+              置頂活動會顯示在活動中心「現在活動」列表最前；多個置頂時，開始日期愈接近今天愈前。
+            </p>
+
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              置頂至（選填）
+            </label>
+            <input
+              type="datetime-local"
+              value={pinUntilValue}
+              onChange={(e) => setPinUntilValue(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg mb-4"
+            />
+            <p className="text-xs text-gray-500 mb-4">留空 = 長期置頂，直至按「取消置頂」</p>
+
+            <div className="flex flex-wrap gap-2 justify-end">
+              {pinModalActivity.isEffectivelyPinned && (
+                <button
+                  type="button"
+                  disabled={pinSaving}
+                  onClick={() => submitPin(false)}
+                  className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  取消置頂
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={pinSaving}
+                onClick={() => submitPin(true)}
+                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 disabled:opacity-50"
+              >
+                {pinSaving ? '儲存中…' : pinModalActivity.isEffectivelyPinned ? '更新置頂' : '確認置頂'}
+              </button>
             </div>
           </div>
         </div>

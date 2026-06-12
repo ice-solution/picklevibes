@@ -13,6 +13,10 @@ const emailService = require('../services/emailService');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { auth, adminAuth } = require('../middleware/auth');
 const { activityUpload, processActivityImage, deleteFile } = require('../middleware/upload');
+const {
+  buildActivityListSortStages,
+  withActivityPinFields,
+} = require('../utils/activityPin');
 
 const router = express.Router();
 const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
@@ -476,26 +480,8 @@ router.get('/', async (req, res) => {
     const skip = (pageNum - 1) * limitNum;
     const now = new Date();
 
-    /**
-     * 活動中心排序：依「活動開始時間」，愈接近現在愈前。
-     * - 尚未結束（endDate >= now）：startDate 升序 → 最快開場的排最前
-     * - 已結束（endDate < now）：startDate 降序 → 最近才結束的排最前（仍依開始時間接近度）
-     */
-    const sortPipeline = [
-      {
-        $addFields: {
-          _ended: { $lt: ['$endDate', now] },
-          _sortKey: {
-            $cond: [
-              { $lt: ['$endDate', now] },
-              { $multiply: [-1, { $toLong: '$startDate' }] },
-              { $toLong: '$startDate' }
-            ]
-          }
-        }
-      },
-      { $sort: { _ended: 1, _sortKey: 1 } }
-    ];
+    /** 置頂優先，其餘依開始時間接近今天排序 */
+    const sortPipeline = buildActivityListSortStages(now);
 
     const idRows = await Activity.aggregate([
       { $match: query },
@@ -545,13 +531,13 @@ router.get('/', async (req, res) => {
         }
         
         return {
-          ...activity.toObject(),
+          ...withActivityPinFields(activity, now),
           totalRegistered,
           availableSpots: activity.maxParticipants - totalRegistered,
           userRegistration,
           canRegister: activity.canRegister,
           isExpired: activity.isExpired,
-          isFull: activity.isFull
+          isFull: activity.isFull,
         };
       })
     );
@@ -1585,6 +1571,49 @@ router.delete('/:id/register', auth, async (req, res) => {
     res.status(500).json({ 
       message: '服務器錯誤，請稍後再試' 
     });
+  }
+});
+
+// @route   PATCH /api/activities/:id/pin
+// @desc    置頂／取消置頂活動（活動中心）
+// @access  Private (Admin)
+router.patch('/:id/pin', [
+  auth,
+  adminAuth,
+  body('pinned').isBoolean().withMessage('pinned 須為布林值'),
+  body('pinnedUntil').optional({ nullable: true }).isISO8601().withMessage('pinnedUntil 須為有效日期'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0].msg });
+    }
+
+    const activity = await Activity.findById(req.params.id);
+    if (!activity) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const { pinned, pinnedUntil } = req.body;
+    if (pinned) {
+      activity.isPinned = true;
+      activity.pinnedAt = new Date();
+      activity.pinnedUntil = pinnedUntil ? new Date(pinnedUntil) : null;
+    } else {
+      activity.isPinned = false;
+      activity.pinnedAt = null;
+      activity.pinnedUntil = null;
+    }
+
+    await activity.save();
+
+    res.json({
+      message: pinned ? '已置頂' : '已取消置頂',
+      activity: withActivityPinFields(activity),
+    });
+  } catch (error) {
+    console.error('更新活動置頂錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
   }
 });
 

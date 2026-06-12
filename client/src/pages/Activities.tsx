@@ -44,6 +44,8 @@ interface Activity {
     totalCost: number;
     createdAt: string;
   } | null;
+  isEffectivelyPinned?: boolean;
+  pinnedUntil?: string | null;
 }
 
 const Activities: React.FC = () => {
@@ -289,16 +291,29 @@ const Activities: React.FC = () => {
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: index * 0.1 }}
-                className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow"
+                className={`bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow ${
+                  activity.isEffectivelyPinned ? 'ring-2 ring-amber-400' : ''
+                }`}
               >
                 {/* Poster */}
                 {(activity as any).posterThumb || activity.poster ? (
-                  <div className="h-48 bg-gray-200 overflow-hidden flex items-center justify-center">
+                  <div className="relative h-48 bg-gray-200 overflow-hidden flex items-center justify-center">
                     <img
                       src={getImageUrl(((activity as any).posterThumb || activity.poster) as string)}
                       alt={activity.title}
                       className="w-full h-full object-cover"
                     />
+                    {activity.isEffectivelyPinned && (
+                      <span className="absolute top-3 left-3 px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full shadow">
+                        置頂
+                      </span>
+                    )}
+                  </div>
+                ) : activity.isEffectivelyPinned ? (
+                  <div className="h-10 bg-amber-50 border-b border-amber-200 flex items-center px-4">
+                    <span className="px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full">
+                      置頂
+                    </span>
                   </div>
                 ) : null}
 
