@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
+import { canAccessAdminPanel } from '../../constants/adminAccess';
 import { useShopConfig } from '../../contexts/ShopConfigContext';
 import { useMaintenance } from '../../hooks/useMaintenance';
 import LanguageSwitcher from '../Common/LanguageSwitcher';
@@ -95,7 +96,7 @@ const Navbar: React.FC = () => {
 
   // 維護模式檢查
   const isMaintenanceMode = maintenanceStatus?.maintenanceMode;
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = canAccessAdminPanel(user);
   const isCoach = user?.role === 'coach';
   const isAdminV2 = useMemo(() => location.pathname.startsWith('/admin-v2'), [location.pathname]);
 
@@ -482,7 +483,7 @@ const Navbar: React.FC = () => {
                     )}
 
                     {/* 管理員功能 */}
-                    {user.role === 'admin' && (
+                    {canAccessAdminPanel(user) && (
                       <>
                         <div className="text-sm font-medium text-gray-500 px-3 py-1 mt-4">管理功能</div>
                         <Link

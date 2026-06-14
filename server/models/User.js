@@ -27,9 +27,14 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin', 'coach'],
-    default: 'user'
+    enum: ['user', 'coach', 'staff', 'admin', 'super_admin'],
+    default: 'user',
   },
+  /** 店鋪 admin / staff 可管理的店鋪（super_admin 留空 = 全部） */
+  managedStores: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+  }],
   membershipLevel: {
     type: String,
     enum: ['basic', 'vip'],

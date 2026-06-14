@@ -65,7 +65,7 @@ const maintenanceAdminMiddleware = (req, res, next) => {
     }
     
     // 如果是管理員且已認證，允許通過所有 API
-    if (req.user && req.user.role === 'admin') {
+    if (req.user && require('../utils/adminAccess').canAccessAdminPanel(req.user)) {
       return next();
     }
     

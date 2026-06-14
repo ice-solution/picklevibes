@@ -5,6 +5,7 @@ const { body, validationResult } = require('express-validator');
 const AccountingTransaction = require('../models/AccountingTransaction');
 const Store = require('../models/Store');
 const { auth, adminAuth } = require('../middleware/auth');
+const { isSuperAdmin } = require('../utils/adminAccess');
 const { receiptUpload, deleteFile } = require('../middleware/upload');
 const {
   ACCOUNTING_CATEGORIES,
@@ -54,7 +55,7 @@ function formatRow(row) {
 }
 
 function canModifyTransaction(req, tx) {
-  if (req.user.role === 'admin') return true;
+  if (isSuperAdmin(req.user)) return true;
   return String(tx.createdBy) === String(req.user.id || req.user._id);
 }
 

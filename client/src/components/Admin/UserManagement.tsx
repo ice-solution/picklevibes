@@ -18,13 +18,16 @@ import {
   UserCircleIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { useAuth } from '../../contexts/AuthContext';
+import { adminRoleLabel, isSuperAdmin, normalizeAdminRole } from '../../constants/adminAccess';
 
 interface User {
   _id: string;
   name: string;
   email: string;
   phone: string;
-  role: 'user' | 'admin' | 'coach';
+  role: 'user' | 'admin' | 'coach' | 'staff' | 'super_admin';
+  managedStores?: Array<{ _id: string; name?: string; slug?: string } | string>;
   membershipLevel: 'basic' | 'vip';
   membershipExpiry?: string;
   isActive: boolean;
@@ -59,9 +62,17 @@ interface PaginationInfo {
   limit: number;
 }
 
+interface StoreOption {
+  _id: string;
+  name: string;
+  slug?: string;
+}
+
 const BALANCE_HISTORY_PAGE_SIZE = 20;
 
 const UserManagement: React.FC = () => {
+  const { user: currentUser } = useAuth();
+  const showAdminAccessControls = isSuperAdmin(currentUser);
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<UserStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -90,7 +101,7 @@ const UserManagement: React.FC = () => {
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
   const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
   const [showProfileEditModal, setShowProfileEditModal] = useState(false);
-  const [profileEditForm, setProfileEditForm] = useState({ name: '', phone: '' });
+  const [profileEditForm, setProfileEditForm] = useState({ name: '', phone: '', password: '', confirmPassword: '' });
   
   // 創建用戶狀態
   const [showCreateUserModal, setShowCreateUserModal] = useState(false);
@@ -115,6 +126,19 @@ const UserManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<'name' | 'email' | 'phone'>('name');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+
+  const [showAdminAccessModal, setShowAdminAccessModal] = useState(false);
+  const [adminAccessRole, setAdminAccessRole] = useState<string>('user');
+  const [adminAccessStoreIds, setAdminAccessStoreIds] = useState<string[]>([]);
+  const [allStores, setAllStores] = useState<StoreOption[]>([]);
+  const [savingAdminAccess, setSavingAdminAccess] = useState(false);
+
+  useEffect(() => {
+    if (!showAdminAccessControls) return;
+    axios.get('/stores/admin/all').then((res) => {
+      setAllStores(res.data.stores || []);
+    }).catch(() => {});
+  }, [showAdminAccessControls]);
 
   // 防抖搜索查詢
   useEffect(() => {
@@ -394,11 +418,56 @@ const UserManagement: React.FC = () => {
   };
 
   const getRoleColor = (role: string) => {
-    switch (role) {
-      case 'admin': return 'bg-red-100 text-red-800';
+    switch (normalizeAdminRole(role)) {
+      case 'super_admin': return 'bg-red-100 text-red-800';
+      case 'admin': return 'bg-orange-100 text-orange-800';
+      case 'staff': return 'bg-yellow-100 text-yellow-800';
       case 'coach': return 'bg-blue-100 text-blue-800';
       default: return 'bg-gray-100 text-gray-800';
     }
+  };
+
+  const getRoleDisplay = (user: User) => adminRoleLabel(user.role);
+
+  const handleOpenAdminAccess = (user: User) => {
+    setSelectedUser(user);
+    const role = normalizeAdminRole(user.role);
+    setAdminAccessRole(
+      role === 'super_admin' || role === 'admin' || role === 'staff' ? String(role) : 'user'
+    );
+    const ids = (user.managedStores || []).map((s) =>
+      typeof s === 'string' ? s : String(s._id)
+    );
+    setAdminAccessStoreIds(ids);
+    setShowAdminAccessModal(true);
+  };
+
+  const handleSaveAdminAccess = async () => {
+    if (!selectedUser) return;
+    if ((adminAccessRole === 'admin' || adminAccessRole === 'staff') && adminAccessStoreIds.length === 0) {
+      alert('店鋪 Admin / Staff 須至少指派一間店鋪');
+      return;
+    }
+    try {
+      setSavingAdminAccess(true);
+      await axios.patch(`/users/${selectedUser._id}/admin-access`, {
+        role: adminAccessRole,
+        managedStoreIds: adminAccessStoreIds,
+      });
+      setShowAdminAccessModal(false);
+      fetchUsers();
+      alert('後台權限已更新');
+    } catch (error: any) {
+      alert(error.response?.data?.message || '更新後台權限失敗');
+    } finally {
+      setSavingAdminAccess(false);
+    }
+  };
+
+  const toggleAdminAccessStore = (storeId: string) => {
+    setAdminAccessStoreIds((prev) =>
+      prev.includes(storeId) ? prev.filter((id) => id !== storeId) : [...prev, storeId]
+    );
   };
 
   const getMembershipColor = (level: string) => {
@@ -416,7 +485,7 @@ const UserManagement: React.FC = () => {
 
   const handleEditProfile = (user: User) => {
     setSelectedUser(user);
-    setProfileEditForm({ name: user.name, phone: user.phone });
+    setProfileEditForm({ name: user.name, phone: user.phone, password: '', confirmPassword: '' });
     setShowProfileEditModal(true);
   };
 
@@ -434,11 +503,31 @@ const UserManagement: React.FC = () => {
       alert('請輸入有效的電話號碼');
       return;
     }
+    const { password, confirmPassword } = profileEditForm;
+    if (password || confirmPassword) {
+      if (password.length < 8) {
+        alert('密碼至少需要8個字符');
+        return;
+      }
+      if (!/^(?=.*[A-Za-z])(?=.*\d)/.test(password)) {
+        alert('密碼必須包含至少一個字母和一個數字');
+        return;
+      }
+      if (password !== confirmPassword) {
+        alert('兩次輸入的密碼不一致');
+        return;
+      }
+    }
     try {
-      await axios.put(`/users/${selectedUser._id}/profile`, profileEditForm);
+      const payload: { name: string; phone: string; password?: string } = {
+        name: profileEditForm.name.trim(),
+        phone: profileEditForm.phone.trim(),
+      };
+      if (password) payload.password = password;
+      await axios.put(`/users/${selectedUser._id}/profile`, payload);
       setShowProfileEditModal(false);
       fetchUsers();
-      alert('用戶資料已更新');
+      alert(password ? '用戶資料及密碼已更新' : '用戶資料已更新');
     } catch (error: any) {
       alert(error.response?.data?.message || '更新失敗');
     }
@@ -856,7 +945,7 @@ const UserManagement: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(user.role)}`}>
-                      {user.role === 'admin' ? '管理員' : user.role === 'coach' ? '教練' : '用戶'}
+                      {getRoleDisplay(user)}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -897,10 +986,19 @@ const UserManagement: React.FC = () => {
                       >
                         <UserCircleIcon className="w-4 h-4" />
                       </button>
+                      {showAdminAccessControls && (
+                        <button
+                          onClick={() => handleOpenAdminAccess(user)}
+                          className="text-red-600 hover:text-red-900"
+                          title="後台權限（Super Admin）"
+                        >
+                          <ShieldCheckIcon className="w-4 h-4" />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleEditUser(user, 'role')}
                         className="text-blue-600 hover:text-blue-900"
-                        title="修改角色"
+                        title="修改前台角色（用戶/教練）"
                       >
                         <PencilIcon className="w-4 h-4" />
                       </button>
@@ -1008,7 +1106,6 @@ const UserManagement: React.FC = () => {
                   >
                     <option value="user">用戶</option>
                     <option value="coach">教練</option>
-                    <option value="admin">管理員</option>
                   </select>
                 )}
 
@@ -1683,6 +1780,34 @@ const UserManagement: React.FC = () => {
                   placeholder="請輸入電話號碼"
                 />
               </div>
+              <div className="border-t border-gray-200 pt-4">
+                <p className="text-sm font-medium text-gray-700 mb-3">重設密碼（選填）</p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">新密碼</label>
+                    <input
+                      type="password"
+                      value={profileEditForm.password}
+                      onChange={(e) => setProfileEditForm({ ...profileEditForm, password: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="留空則不更改"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-600 mb-1">確認新密碼</label>
+                    <input
+                      type="password"
+                      value={profileEditForm.confirmPassword}
+                      onChange={(e) => setProfileEditForm({ ...profileEditForm, confirmPassword: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      placeholder="再次輸入新密碼"
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-500">至少 8 個字符，須包含字母及數字</p>
+                </div>
+              </div>
               <div className="flex justify-end space-x-3 pt-4">
                 <button
                   onClick={() => setShowProfileEditModal(false)}
@@ -1877,6 +2002,86 @@ const UserManagement: React.FC = () => {
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
                 >
                   創建用戶
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAdminAccessModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
+                後台權限 — {selectedUser.name}
+              </h3>
+              <button
+                onClick={() => setShowAdminAccessModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">後台角色</label>
+                <select
+                  value={adminAccessRole}
+                  onChange={(e) => setAdminAccessRole(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                >
+                  <option value="user">無後台權限（一般用戶）</option>
+                  <option value="staff">Staff（僅預約管理，不可 0 元建單）</option>
+                  <option value="admin">店鋪 Admin（指派店鋪，完整後台）</option>
+                  <option value="super_admin">Super Admin（全部店鋪）</option>
+                  <option value="coach">教練（保留 coach 角色）</option>
+                </select>
+              </div>
+
+              {(adminAccessRole === 'admin' || adminAccessRole === 'staff') && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">指派店鋪</label>
+                  <div className="border rounded-lg max-h-48 overflow-y-auto divide-y">
+                    {allStores.map((store) => (
+                      <label
+                        key={store._id}
+                        className="flex items-center gap-2 px-3 py-2 hover:bg-gray-50 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={adminAccessStoreIds.includes(store._id)}
+                          onChange={() => toggleAdminAccessStore(store._id)}
+                        />
+                        <span className="text-sm">{store.name}</span>
+                        {store.slug && (
+                          <span className="text-xs text-gray-400 font-mono">{store.slug}</span>
+                        )}
+                      </label>
+                    ))}
+                    {allStores.length === 0 && (
+                      <p className="px-3 py-4 text-sm text-gray-500">尚無店鋪，請先建立店鋪</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAdminAccessModal(false)}
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveAdminAccess}
+                  disabled={savingAdminAccess}
+                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {savingAdminAccess ? '儲存中…' : '儲存'}
                 </button>
               </div>
             </div>

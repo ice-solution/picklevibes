@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { auth } = require('../middleware/auth');
+const { isAdminPanelUser } = require('../utils/adminAccess');
 const fullVenueService = require('../services/fullVenueService');
 const User = require('../models/User');
 const { normalizeBookingDateInput } = require('../utils/bookingDateTime');
@@ -65,7 +66,7 @@ router.post('/create', auth, async (req, res) => {
       pointsDeduction: req.body.pointsDeduction || 0,
       bypassRestrictions: bypassRestrictions,
       storeId: resolvedStoreId,
-      includeInactive: req.user.role === 'admin',
+      includeInactive: isAdminPanelUser(req.user),
     });
 
     try {
@@ -210,7 +211,7 @@ router.post('/check-availability', auth, async (req, res) => {
       startTime,
       endTime,
       resolvedStoreId,
-      { includeInactive: req.user.role === 'admin' }
+      { includeInactive: isAdminPanelUser(req.user) }
     );
 
     res.json({

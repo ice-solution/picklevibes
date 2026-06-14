@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { canAccessAdminPanel, canSeeAdminTab, adminRoleLabel } from '../constants/adminAccess';
 import { useBooking } from '../contexts/BookingContext';
 import CurrentBookings from '../components/Booking/CurrentBookings';
 import UserManagement from '../components/Admin/UserManagement';
@@ -98,8 +99,8 @@ const Admin: React.FC = () => {
     loadData();
   }, [fetchCourts, fetchBookings]);
 
-  // 檢查是否為管理員
-  if (user?.role !== 'admin') {
+  // 檢查是否為後台用戶
+  if (!canAccessAdminPanel(user)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
@@ -119,7 +120,7 @@ const Admin: React.FC = () => {
     .filter(b => b.payment?.status === 'paid')
     .reduce((sum, b) => sum + (b.pricing?.totalPrice || 0), 0);
 
-  const tabs = [
+  const allTabs = [
     { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon },
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon },
     { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon },
@@ -147,6 +148,8 @@ const Admin: React.FC = () => {
     { id: 'analytics', name: '數據分析', icon: ChartBarIcon },
     { id: 'reports', name: '報告', icon: DocumentChartBarIcon }
   ];
+
+  const tabs = allTabs.filter((t) => canSeeAdminTab(t.id, user));
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">

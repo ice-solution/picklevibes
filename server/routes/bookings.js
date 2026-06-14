@@ -19,6 +19,12 @@ const { collectBundledBookingIds } = require('../utils/bookingBundle');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
+const {
+  isAdminPanelUser,
+  canBypassBookingRestrictions,
+  assertStoreAccess,
+  applyStoreScopeToQuery,
+} = require('../utils/adminAccess');
 
 const router = express.Router();
 
@@ -73,14 +79,18 @@ router.post('/', [
 
     let { user, court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, redeemCodeId, customPoints, isCustomPoints = false } = req.body;
     
-    // 只有管理員才能 bypass 限制
-    const bypassRestrictions = req.user.role === 'admin' && req.body.bypassRestrictions === true;
+    if (req.body.bypassRestrictions === true && !canBypassBookingRestrictions(req.user)) {
+      return res.status(403).json({ message: '您的角色不可使用免扣款／繞過限制建單' });
+    }
+
+    const bypassRestrictions =
+      canBypassBookingRestrictions(req.user) && req.body.bypassRestrictions === true;
     /**
      * 後台建單且未勾選「管理員權限」時：僅放寬「可預約天數上限」與「營業時段 isOpenAt」，
      * 其餘與一般用戶相同（含場地啟用、1～2 小時時長）；照常扣積分。
      * 勾選管理員權限時：仍會檢查時段衝突（不可與現有預約重疊），其餘可繞過（不扣分等）。
      */
-    const adminRelaxRules = req.user.role === 'admin' && !bypassRestrictions;
+    const adminRelaxRules = isAdminPanelUser(req.user) && !bypassRestrictions;
 
     // 如果沒有指定用戶（普通用戶創建），使用當前登錄用戶
     // 如果指定了用戶（管理員創建），使用指定的用戶
@@ -112,7 +122,11 @@ router.post('/', [
       return res.status(404).json({ message: '場地不存在' });
     }
 
-    const isAdminBooking = req.user.role === 'admin';
+    const isAdminBooking = isAdminPanelUser(req.user);
+
+    if (isAdminBooking && courtDoc.store && !assertStoreAccess(req.user, courtDoc.store)) {
+      return res.status(403).json({ message: '無權限在此店鋪建立預約' });
+    }
 
     // 後台建單：停用場地仍可預約，僅擋維護中；一般用戶仍檢查 isActive
     if (!bypassRestrictions) {
@@ -803,8 +817,13 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
     const dateQuery = buildAdminBookingDateQuery({ dateFrom, dateTo });
     const query = { ...dateQuery };
     if (store && String(store).trim() !== '') {
-      query.store = String(store).trim();
+      const sid = String(store).trim();
+      if (!assertStoreAccess(req.user, sid)) {
+        return res.status(403).json({ message: '無權限存取此店鋪' });
+      }
+      query.store = sid;
     }
+    applyStoreScopeToQuery(req.user, query, 'store');
 
     const bookings = await Booking.find(query)
       .select(
@@ -867,12 +886,17 @@ router.get('/admin/all', [
     if (status) query.status = status;
     if (court) query.court = court;
     if (store && String(store).trim() !== '') {
-      query.store = String(store).trim();
+      const sid = String(store).trim();
+      if (!assertStoreAccess(req.user, sid)) {
+        return res.status(403).json({ message: '無權限存取此店鋪' });
+      }
+      query.store = sid;
     }
     const dateQuery = buildAdminBookingDateQuery({ date, dateFrom, dateTo });
     if (dateQuery) {
       Object.assign(query, dateQuery);
     }
+    applyStoreScopeToQuery(req.user, query, 'store');
 
     const sortDir = sortParam === 'asc' ? 1 : -1;
     const limitNum = Math.min(10000, Math.max(1, parseInt(limit, 10) || 20));

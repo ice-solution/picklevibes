@@ -2,7 +2,12 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Store = require('../models/Store');
 const Court = require('../models/Court');
-const { auth, adminAuth } = require('../middleware/auth');
+const { auth, adminAuth, superAdminAuth } = require('../middleware/auth');
+const {
+  applyStoreScopeToQuery,
+  assertStoreAccess,
+  isSuperAdmin,
+} = require('../utils/adminAccess');
 
 const router = express.Router();
 
@@ -13,7 +18,7 @@ router.get('/', async (req, res) => {
   try {
     const stores = await Store.find({ isActive: true })
       .sort({ sortOrder: 1, name: 1 })
-      .select('name slug address phone operatingHours sortOrder enableHikAccess');
+      .select('name slug address phone operatingHours sortOrder enableHikAccess logoUrl primaryColor');
     res.json({ stores });
   } catch (error) {
     console.error('獲取店鋪列表錯誤:', error);
@@ -26,7 +31,12 @@ router.get('/', async (req, res) => {
 // @access  Private (Admin)
 router.get('/admin/all', [auth, adminAuth], async (req, res) => {
   try {
-    const stores = await Store.find().sort({ sortOrder: 1, name: 1 });
+    let query = {};
+    if (!isSuperAdmin(req.user)) {
+      const ids = (req.user.managedStores || []).map((s) => s._id || s);
+      query._id = ids.length ? { $in: ids } : { $in: [] };
+    }
+    const stores = await Store.find(query).sort({ sortOrder: 1, name: 1 });
     res.json({ stores });
   } catch (error) {
     console.error('獲取店鋪列表錯誤:', error);
@@ -39,7 +49,7 @@ router.get('/admin/all', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.post('/', [
   auth,
-  adminAuth,
+  superAdminAuth,
   body('name').trim().notEmpty().withMessage('店鋪名稱不能為空'),
   body('slug').trim().notEmpty().withMessage('slug 不能為空'),
   body('address').trim().notEmpty().withMessage('地址不能為空'),
@@ -66,6 +76,9 @@ router.post('/', [
 // @access  Private (Admin)
 router.put('/:id', [auth, adminAuth], async (req, res) => {
   try {
+    if (!assertStoreAccess(req.user, req.params.id)) {
+      return res.status(403).json({ message: '無權限編輯此店鋪' });
+    }
     const update = { ...req.body };
     if (update.slug) update.slug = String(update.slug).trim().toLowerCase();
     const store = await Store.findByIdAndUpdate(req.params.id, update, {

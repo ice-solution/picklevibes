@@ -7,7 +7,7 @@ const { body, validationResult } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const { VIP_PERIOD_MS } = require('../constants/vipMembership');
-const { auth } = require('../middleware/auth');
+const { auth, serializeAdminUser } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -165,8 +165,8 @@ router.post('/login', authLimiter, [
     // 更新最後登入時間
     user.lastLogin = new Date();
     await user.save();
+    await user.populate('managedStores', 'name slug');
 
-    // 生成JWT token
     const token = jwt.sign(
       { userId: user._id },
       process.env.JWT_SECRET || 'fallback-secret',
@@ -176,15 +176,7 @@ router.post('/login', authLimiter, [
     res.json({
       message: '登入成功',
       token,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        membershipLevel: user.membershipLevel,
-        preferences: user.preferences
-      }
+      user: serializeAdminUser(user),
     });
 
   } catch (error) {
@@ -243,21 +235,13 @@ router.put('/profile', auth, [
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    // req.user 是從 auth middleware 中設置的
     const user = req.user;
+    if (!user.populated('managedStores')) {
+      await user.populate('managedStores', 'name slug');
+    }
 
     res.json({
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        membershipLevel: user.membershipLevel,
-        preferences: user.preferences,
-        lastLogin: user.lastLogin,
-        createdAt: user.createdAt
-      }
+      user: serializeAdminUser(user),
     });
 
   } catch (error) {

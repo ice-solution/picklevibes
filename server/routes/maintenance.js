@@ -1,6 +1,6 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const { auth, adminAuth } = require('../middleware/auth');
+const { auth, superAdminAuth } = require('../middleware/auth');
 const { getMaintenanceStatus, setMaintenanceStatus } = require('../middleware/maintenance');
 const router = express.Router();
 
@@ -20,7 +20,7 @@ router.get('/status', (req, res) => {
 // @access  Private (Admin)
 router.post('/toggle', [
   auth,
-  adminAuth,
+  superAdminAuth,
   body('message').optional().isString().isLength({ min: 1, max: 200 }).withMessage('維護訊息必須在1-200個字符之間')
 ], async (req, res) => {
   try {
@@ -58,7 +58,7 @@ router.post('/toggle', [
 // @access  Private (Admin)
 router.post('/set-message', [
   auth,
-  adminAuth,
+  superAdminAuth,
   body('message').isString().isLength({ min: 1, max: 200 }).withMessage('維護訊息必須在1-200個字符之間')
 ], async (req, res) => {
   try {

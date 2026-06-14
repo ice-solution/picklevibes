@@ -3,11 +3,15 @@ import axios from 'axios';
 import { PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { TUYA_BASE_URL_OPTIONS } from '../../constants/tuyaRegions';
 import StoreTuyaZonesModal from './StoreTuyaZonesModal';
+import { useAuth } from '../../contexts/AuthContext';
+import { isSuperAdmin } from '../../constants/adminAccess';
 
 interface Store {
   _id: string;
   name: string;
   slug: string;
+  logoUrl?: string;
+  primaryColor?: string;
   address: string;
   phone: string;
   sortOrder: number;
@@ -29,6 +33,8 @@ interface Store {
 const emptyForm = {
   name: '',
   slug: '',
+  logoUrl: '',
+  primaryColor: '#2563eb',
   address: '',
   phone: '',
   sortOrder: 0,
@@ -47,6 +53,8 @@ const emptyForm = {
 };
 
 const StoreManagement: React.FC = () => {
+  const { user } = useAuth();
+  const canCreateStore = isSuperAdmin(user);
   const [stores, setStores] = useState<Store[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
@@ -83,6 +91,8 @@ const StoreManagement: React.FC = () => {
     setForm({
       name: s.name,
       slug: s.slug,
+      logoUrl: s.logoUrl || '',
+      primaryColor: s.primaryColor || '#2563eb',
       address: s.address,
       phone: s.phone || '',
       sortOrder: s.sortOrder ?? 0,
@@ -151,7 +161,13 @@ const StoreManagement: React.FC = () => {
         <button
           type="button"
           onClick={openCreate}
-          className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700"
+          disabled={!canCreateStore}
+          title={canCreateStore ? undefined : '僅 Super Admin 可新增店鋪'}
+          className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg ${
+            canCreateStore
+              ? 'bg-primary-600 text-white hover:bg-primary-700'
+              : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+          }`}
         >
           <PlusIcon className="w-5 h-5" />
           新增店鋪
@@ -162,6 +178,7 @@ const StoreManagement: React.FC = () => {
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">品牌</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">名稱</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">地址</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
@@ -173,6 +190,19 @@ const StoreManagement: React.FC = () => {
           <tbody className="divide-y divide-gray-200">
             {stores.map((s) => (
               <tr key={s._id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 text-sm">
+                  <div className="flex items-center gap-2">
+                    {s.logoUrl ? (
+                      <img src={s.logoUrl} alt="" className="w-8 h-8 rounded object-contain border" />
+                    ) : (
+                      <div
+                        className="w-8 h-8 rounded border"
+                        style={{ backgroundColor: s.primaryColor || '#2563eb' }}
+                      />
+                    )}
+                    <span className="text-xs text-gray-500 font-mono">{s.slug}</span>
+                  </div>
+                </td>
                 <td className="px-4 py-3 text-sm font-medium text-gray-900">{s.name}</td>
                 <td className="px-4 py-3 text-sm text-gray-600">{s.address}</td>
                 <td className="px-4 py-3 text-sm">
@@ -213,6 +243,21 @@ const StoreManagement: React.FC = () => {
             <form onSubmit={handleSubmit} className="space-y-3">
               <input className="w-full border rounded-md px-3 py-2" placeholder="名稱 *" required value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
               <input className="w-full border rounded-md px-3 py-2" placeholder="slug *" required value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} />
+              <input className="w-full border rounded-md px-3 py-2" placeholder="Logo URL（/uploads/... 或 https://）" value={form.logoUrl} onChange={(e) => setForm({ ...form, logoUrl: e.target.value })} />
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={form.primaryColor}
+                  onChange={(e) => setForm({ ...form, primaryColor: e.target.value })}
+                  className="h-10 w-14 border rounded cursor-pointer"
+                />
+                <input
+                  className="flex-1 border rounded-md px-3 py-2 font-mono text-sm"
+                  placeholder="品牌主色 #2563eb"
+                  value={form.primaryColor}
+                  onChange={(e) => setForm({ ...form, primaryColor: e.target.value })}
+                />
+              </div>
               <input className="w-full border rounded-md px-3 py-2" placeholder="地址 *" required value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
               <input className="w-full border rounded-md px-3 py-2" placeholder="電話" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
               <label className="flex items-center gap-2 text-sm">

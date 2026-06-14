@@ -14,6 +14,8 @@ import {
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
 import { isFullVenueEnabledForStoreSlug } from '../../constants/storeFeatures';
+import { useAuth } from '../../contexts/AuthContext';
+import { canBypassBooking } from '../../constants/adminAccess';
 
 interface User {
   _id: string;
@@ -85,6 +87,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   selectedTime,
   initialStoreId
 }) => {
+  const { user: authUser } = useAuth();
+  const allowBypass = canBypassBooking(authUser);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflictDetails, setConflictDetails] = useState<BookingConflictDetail[]>([]);
@@ -679,6 +683,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
           </div>
 
           {/* 管理員選項 */}
+          {allowBypass && (
           <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
             <div className="flex items-center">
               <input
@@ -702,6 +707,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               其餘規則與一般用戶相同（場地須啟用、1～2 小時、時段不可重疊），並依價格<strong>扣除積分</strong>。
             </p>
           </div>
+          )}
 
           {/* 自訂積分選項 */}
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { canAccessAdminPanel } from '../../constants/adminAccess';
 import { useMaintenance } from '../../hooks/useMaintenance';
 
 interface MaintenanceCheckProps {
@@ -31,7 +32,7 @@ const MaintenanceCheck: React.FC<MaintenanceCheckProps> = ({ children }) => {
     }
     
     // 管理員可以訪問其他頁面
-    if (user?.role === 'admin') {
+    if (canAccessAdminPanel(user)) {
       return <>{children}</>;
     }
     

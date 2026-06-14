@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { canAccessAdminPanel, canSeeAdminTab, adminRoleLabel, isSuperAdmin } from '../constants/adminAccess';
 
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
@@ -70,7 +71,7 @@ const AdminV2: React.FC = () => {
     if (tab) setActiveTab(tab);
   }, [searchParams]);
 
-  const tabs: Tab[] = useMemo(() => ([
+  const allTabs: Tab[] = useMemo(() => ([
     { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon, element: <BookingManagement /> },
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
     { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
@@ -99,14 +100,25 @@ const AdminV2: React.FC = () => {
     { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> }
   ]), []);
 
+  const tabs = useMemo(
+    () => allTabs.filter((t) => canSeeAdminTab(t.id, user)),
+    [allTabs, user]
+  );
+
   const current = useMemo(() => tabs.find((t) => t.id === activeTab) || tabs[0], [tabs, activeTab]);
 
-  if (user?.role !== 'admin') {
+  useEffect(() => {
+    if (tabs.length && !tabs.some((t) => t.id === activeTab)) {
+      setActiveTab(tabs[0].id);
+    }
+  }, [tabs, activeTab]);
+
+  if (!canAccessAdminPanel(user)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">權限不足</h1>
-          <p className="text-gray-600">您需要管理員權限才能訪問此頁面</p>
+          <p className="text-gray-600">您需要後台權限才能訪問此頁面</p>
         </div>
       </div>
     );
@@ -163,6 +175,11 @@ const AdminV2: React.FC = () => {
         <aside className="hidden lg:flex lg:flex-col lg:w-72 lg:shrink-0 bg-white border-r border-gray-200 min-h-0">
           <div className="flex-shrink-0 h-16 flex items-center px-5 border-b border-gray-200">
             <div className="font-bold text-gray-900">Admin Panel</div>
+            {user && (
+              <span className="ml-2 text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                {adminRoleLabel(user.adminRole || user.role)}
+              </span>
+            )}
           </div>
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
             <Nav />

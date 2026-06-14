@@ -3,7 +3,9 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const Recharge = require('../models/Recharge');
-const { auth, adminAuth } = require('../middleware/auth');
+const { auth, adminAuth, superAdminAuth } = require('../middleware/auth');
+const { serializeAdminUser } = require('../utils/adminAccess');
+const { ADMIN_PANEL_ROLES } = require('../constants/adminRoles');
 const emailService = require('../services/emailService');
 
 const router = express.Router();
@@ -44,7 +46,8 @@ router.get('/', [auth, adminAuth], async (req, res) => {
     }
     
     const users = await User.find(query)
-      .select('-password') // 排除密碼
+      .select('-password')
+      .populate('managedStores', 'name slug')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -151,29 +154,34 @@ router.get('/:id', [auth, adminAuth], async (req, res) => {
 });
 
 // @route   PUT /api/users/:id/profile
-// @desc    管理員修改用戶資料（姓名、電話）
+// @desc    管理員修改用戶資料（姓名、電話、密碼）
 // @access  Private (Admin)
 router.put('/:id/profile', [
   auth,
   adminAuth,
   body('name').optional().trim().isLength({ min: 2, max: 50 }).withMessage('姓名必須在2-50個字符之間'),
-  body('phone').optional().trim().matches(/^[0-9+\-\s()]+$/).withMessage('請輸入有效的電話號碼')
+  body('phone').optional().trim().matches(/^[0-9+\-\s()]+$/).withMessage('請輸入有效的電話號碼'),
+  body('password')
+    .optional({ values: 'falsy' })
+    .isLength({ min: 8 }).withMessage('密碼至少需要8個字符')
+    .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼必須包含至少一個字母和一個數字'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ message: errors.array()[0].msg });
     }
-    const { name, phone } = req.body;
-    const user = await User.findById(req.params.id).select('-password');
+    const { name, phone, password } = req.body;
+    const user = await User.findById(req.params.id);
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
     }
     if (name !== undefined) user.name = name;
     if (phone !== undefined) user.phone = phone;
+    if (password) user.password = password;
     await user.save();
     res.json({
-      message: '用戶資料已更新',
+      message: password ? '用戶資料及密碼已更新' : '用戶資料已更新',
       user: {
         id: user._id,
         name: user.name,
@@ -738,6 +746,55 @@ router.put('/:id/recharge-records/:rechargeId/status', [
     });
   } catch (error) {
     console.error('更新充值狀態錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   PATCH /api/users/:id/admin-access
+// @desc    Super Admin 設定後台角色與店鋪指派
+// @access  Private (Super Admin)
+router.patch('/:id/admin-access', [
+  auth,
+  superAdminAuth,
+  body('role')
+    .isIn([...ADMIN_PANEL_ROLES, 'user', 'coach'])
+    .withMessage('無效的角色'),
+  body('managedStoreIds').optional().isArray().withMessage('managedStoreIds 須為陣列'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0].msg });
+    }
+
+    const target = await User.findById(req.params.id);
+    if (!target) {
+      return res.status(404).json({ message: '用戶不存在' });
+    }
+
+    const { role, managedStoreIds = [] } = req.body;
+
+    if ((role === 'admin' || role === 'staff') && (!managedStoreIds || managedStoreIds.length === 0)) {
+      return res.status(400).json({ message: '店鋪 Admin / Staff 須至少指派一間店鋪' });
+    }
+
+    target.role = role;
+
+    if (role === 'admin' || role === 'staff') {
+      target.managedStores = managedStoreIds;
+    } else {
+      target.managedStores = [];
+    }
+
+    await target.save();
+    await target.populate('managedStores', 'name slug');
+
+    res.json({
+      message: '後台權限已更新',
+      user: serializeAdminUser(target),
+    });
+  } catch (error) {
+    console.error('更新後台權限錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

@@ -20,6 +20,18 @@ const storeSchema = new mongoose.Schema({
     trim: true,
     lowercase: true,
   },
+  /** 店鋪品牌 logo（URL 或 /uploads/... 路徑） */
+  logoUrl: {
+    type: String,
+    default: '',
+    trim: true,
+  },
+  /** 品牌主色，如 #FF5722 */
+  primaryColor: {
+    type: String,
+    default: '#2563eb',
+    trim: true,
+  },
   address: {
     type: String,
     required: [true, '地址為必填項目'],

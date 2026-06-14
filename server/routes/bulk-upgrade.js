@@ -1,12 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
-const { auth, adminAuth } = require('../middleware/auth');
+const { auth, superAdminAuth } = require('../middleware/auth');
 
 // @route   POST /api/bulk-upgrade/vip
 // @desc    批量升級所有用戶為 VIP 會員 (僅管理員)
 // @access  Private (Admin)
-router.post('/vip', [auth, adminAuth], async (req, res) => {
+router.post('/vip', [auth, superAdminAuth], async (req, res) => {
   try {
     const { days = 30 } = req.body; // 默認30天VIP期限
     
@@ -75,7 +75,7 @@ router.post('/vip', [auth, adminAuth], async (req, res) => {
 // @route   GET /api/bulk-upgrade/status
 // @desc    獲取當前用戶會員狀態統計 (僅管理員)
 // @access  Private (Admin)
-router.get('/status', [auth, adminAuth], async (req, res) => {
+router.get('/status', [auth, superAdminAuth], async (req, res) => {
   try {
     const basicCount = await User.countDocuments({ membershipLevel: 'basic' });
     const vipCount = await User.countDocuments({ membershipLevel: 'vip' });

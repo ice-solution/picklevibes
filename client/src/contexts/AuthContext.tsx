@@ -1,13 +1,15 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import axios from 'axios';
 import apiConfig from '../config/api';
+import type { AdminRole, AdminUserFields, ManagedStoreRef } from '../constants/adminAccess';
 
-interface User {
+export interface User extends AdminUserFields {
   id: string;
   name: string;
   email: string;
   phone: string;
-  role: string;
+  adminRole?: AdminRole;
+  managedStores?: ManagedStoreRef[] | string[];
   membershipLevel: string;
   preferences?: {
     notifications: {
