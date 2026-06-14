@@ -1,26 +1,36 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
+import { useParams, useNavigate, useLocation, Navigate } from 'react-router-dom';
+import axios from 'axios';
 import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
-import StoreSelector from '../components/Booking/StoreSelector';
-import type { StoreSummary } from '../contexts/BookingContext';
-import CourtSelector from '../components/Booking/CourtSelector';
-import DateSelector from '../components/Booking/DateSelector';
+import BookingPicker from '../components/Booking/BookingPicker';
 import TimeSlotSelector from '../components/Booking/TimeSlotSelector';
 import PlayerForm from '../components/Booking/PlayerForm';
 import BookingSummary from '../components/Booking/BookingSummary';
 import BackToTop from '../components/Common/BackToTop';
 import { CalendarDaysIcon, ClockIcon, UsersIcon } from '@heroicons/react/24/outline';
+import {
+  buildBookingPath,
+  parseBookingParams,
+  type BookingPathParams,
+} from '../utils/bookingRoutes';
+import type { StoreSummary } from '../contexts/BookingContext';
 
 const Booking: React.FC = () => {
-  const { 
+  const params = useParams<{ storeSlug?: string; courtSlug?: string; date?: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isDeepLinkRoute = !location.pathname.startsWith('/booking');
+  const routeParams = parseBookingParams(params.storeSlug, params.courtSlug, params.date);
+
+  const {
     stores,
     selectedStore,
-    selectedCourt, 
-    selectedDate, 
-    selectedTimeSlot, 
-    players,
+    selectedCourt,
+    selectedDate,
+    selectedTimeSlot,
     includeSoloCourt,
     soloCourtAvailable,
     loading,
@@ -31,33 +41,52 @@ const Booking: React.FC = () => {
     setSelectedCourt,
     setSelectedDate,
     setSelectedTimeSlot,
-    setPlayers,
     setIncludeSoloCourt,
     checkSoloCourtAvailability,
-    clearError
+    clearError,
   } = useBooking();
-  
+
   const { user } = useAuth();
   const [currentStep, setCurrentStep] = useState(1);
   const [availability, setAvailability] = useState<any>(null);
-  const [maxAdvanceDaysByRole, setMaxAdvanceDaysByRole] = useState<Record<string, number>>({ user: 7, coach: 14, admin: 30 });
+  const [maxAdvanceDaysByRole, setMaxAdvanceDaysByRole] = useState<Record<string, number>>({
+    user: 7,
+    coach: 14,
+    admin: 30,
+  });
   const [bookingFormData, setBookingFormData] = useState({
     totalPlayers: 1,
     contactName: '',
     contactEmail: '',
-    contactPhone: ''
+    contactPhone: '',
   });
+  const [routeError, setRouteError] = useState<string | null>(null);
+  const [hydrating, setHydrating] = useState(false);
+  const hydratedKey = useRef<string>('');
 
-  // 調試：監控 bookingFormData 變化
-  useEffect(() => {
-    console.log('🔍 bookingFormData 更新:', bookingFormData);
-    console.log('🔍 bookingFormData.totalPlayers:', bookingFormData.totalPlayers);
-  }, [bookingFormData]);
-
-  // 預約現在使用積分支付，不再需要支付狀態管理
-
-  // 使用 useMemo 來穩定 availability 對象，避免 BookingSummary 重新創建
   const stableAvailability = useMemo(() => availability, [availability]);
+
+  const maxAdvanceDays =
+    user?.role && maxAdvanceDaysByRole[user.role] != null
+      ? maxAdvanceDaysByRole[user.role]
+      : maxAdvanceDaysByRole.user ?? 7;
+
+  const steps = [
+    { id: 1, name: '選擇店鋪／場地／日期', icon: CalendarDaysIcon },
+    { id: 2, name: '選擇時間', icon: ClockIcon },
+    { id: 3, name: '填寫信息', icon: UsersIcon },
+    { id: 4, name: '確認預約', icon: CalendarDaysIcon },
+  ];
+
+  const syncUrl = useCallback(
+    (next: BookingPathParams) => {
+      const path = buildBookingPath(next, { deepLink: isDeepLinkRoute });
+      if (location.pathname !== path) {
+        navigate(path, { replace: true });
+      }
+    },
+    [isDeepLinkRoute, location.pathname, navigate]
+  );
 
   useEffect(() => {
     fetchStores();
@@ -69,7 +98,6 @@ const Booking: React.FC = () => {
     }
   }, [selectedStore?._id, fetchCourts]);
 
-  // 載入預約設定（依 role 的可預約天數）
   useEffect(() => {
     const loadBookingConfig = async () => {
       try {
@@ -77,7 +105,7 @@ const Booking: React.FC = () => {
         const data = res.data?.data?.maxAdvanceDaysByRole;
         if (data && typeof data === 'object') setMaxAdvanceDaysByRole(data);
       } catch (_) {
-        // 使用預設值
+        // 預設值
       }
     };
     loadBookingConfig();
@@ -85,66 +113,127 @@ const Booking: React.FC = () => {
 
   useEffect(() => {
     if (error) {
-      const timer = setTimeout(() => {
-        clearError();
-      }, 5000);
+      const timer = setTimeout(() => clearError(), 5000);
       return () => clearTimeout(timer);
     }
   }, [error, clearError]);
 
-  // 檢查單人場可用性 - 當選擇比賽場且選擇了時間段時
   useEffect(() => {
     if (selectedCourt?.type === 'competition' && selectedDate && selectedTimeSlot) {
       checkSoloCourtAvailability(selectedDate, selectedTimeSlot.start, selectedTimeSlot.end);
     }
   }, [selectedCourt, selectedDate, selectedTimeSlot, checkSoloCourtAvailability]);
 
-  const maxAdvanceDays = user?.role && maxAdvanceDaysByRole[user.role] != null
-    ? maxAdvanceDaysByRole[user.role]
-    : (maxAdvanceDaysByRole.user ?? 7);
+  // URL → 狀態
+  useEffect(() => {
+    if (routeParams === null) {
+      setRouteError('無效的預約連結');
+      return;
+    }
+    setRouteError(null);
 
-  const steps = [
-    { id: 1, name: '選擇店鋪', icon: CalendarDaysIcon },
-    { id: 2, name: '選擇場地', icon: CalendarDaysIcon },
-    { id: 3, name: '選擇日期', icon: CalendarDaysIcon },
-    { id: 4, name: '選擇時間', icon: ClockIcon },
-    { id: 5, name: '填寫信息', icon: UsersIcon },
-    { id: 6, name: '確認預約', icon: CalendarDaysIcon }
-  ];
+    const key = `${routeParams.storeSlug || ''}|${routeParams.courtSlug || ''}|${routeParams.date || ''}`;
+    if (!routeParams.storeSlug) {
+      hydratedKey.current = key;
+      setCurrentStep(1);
+      return;
+    }
+    if (key === hydratedKey.current) return;
+
+    const hydrate = async () => {
+      setHydrating(true);
+      try {
+        if (!routeParams.storeSlug) {
+          hydratedKey.current = key;
+          setCurrentStep(1);
+          return;
+        }
+
+        const storeRes = await axios.get(`/stores/by-slug/${routeParams.storeSlug}`);
+        const store = storeRes.data.store;
+        setSelectedStore(store);
+        await fetchCourts(store._id);
+
+        let court = null;
+        if (routeParams.courtSlug) {
+          const courtRes = await axios.get(
+            `/courts?storeSlug=${routeParams.storeSlug}&courtSlug=${routeParams.courtSlug}`
+          );
+          court = courtRes.data.court;
+          setSelectedCourt(court);
+        }
+
+        if (routeParams.date) {
+          setSelectedDate(routeParams.date);
+          setCurrentStep(2);
+        } else {
+          setCurrentStep(1);
+        }
+
+        hydratedKey.current = key;
+      } catch {
+        setRouteError('找不到指定的店鋪或場地，請重新選擇');
+        hydratedKey.current = key;
+      } finally {
+        setHydrating(false);
+      }
+    };
+
+    hydrate();
+  }, [routeParams, setSelectedStore, setSelectedCourt, setSelectedDate, fetchCourts]);
+
+  const handleSelectStore = (store: StoreSummary) => {
+    setSelectedStore(store);
+    fetchCourts(store._id);
+    syncUrl({ storeSlug: store.slug });
+  };
+
+  const handleSelectCourt = (court: NonNullable<typeof selectedCourt>) => {
+    setSelectedCourt(court);
+    setSelectedDate('');
+    setSelectedTimeSlot(null);
+    if (selectedStore?.slug && court.slug) {
+      syncUrl({ storeSlug: selectedStore.slug, courtSlug: court.slug });
+    }
+  };
+
+  const handleSelectDate = (date: string) => {
+    setSelectedDate(date);
+    setSelectedTimeSlot(null);
+    if (selectedStore?.slug && selectedCourt?.slug) {
+      syncUrl({ storeSlug: selectedStore.slug, courtSlug: selectedCourt.slug, date });
+    }
+  };
 
   const canProceed = () => {
     switch (currentStep) {
-      case 1: return selectedStore !== null;
-      case 2: return selectedCourt !== null;
-      case 3: return selectedDate !== '';
-      case 4: return selectedTimeSlot !== null;
-      case 5: return bookingFormData.totalPlayers > 0 && 
-                     bookingFormData.contactName.trim() !== '' &&
-                     bookingFormData.contactEmail.trim() !== '' &&
-                     bookingFormData.contactPhone.trim() !== '';
-      default: return true;
+      case 1:
+        return selectedStore !== null && selectedCourt !== null && selectedDate !== '';
+      case 2:
+        return selectedTimeSlot !== null;
+      case 3:
+        return (
+          bookingFormData.totalPlayers > 0 &&
+          bookingFormData.contactName.trim() !== '' &&
+          bookingFormData.contactEmail.trim() !== '' &&
+          bookingFormData.contactPhone.trim() !== ''
+        );
+      default:
+        return true;
     }
   };
 
   const nextStep = () => {
-    if (canProceed() && currentStep < 6) {
+    if (canProceed() && currentStep < 4) {
       setCurrentStep(currentStep + 1);
-      // 滾動到頂部
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
   const prevStep = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
-      // 滾動到頂部
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 
@@ -152,82 +241,78 @@ const Booking: React.FC = () => {
     setSelectedCourt(null);
     setSelectedDate('');
     setSelectedTimeSlot(null);
-    // 保留 selectedStore（含 localStorage 記憶）
     setBookingFormData({
       totalPlayers: 1,
       contactName: '',
       contactEmail: '',
-      contactPhone: ''
+      contactPhone: '',
     });
     setAvailability(null);
-    // 預約現在使用積分支付，不再需要支付狀態重置
     setCurrentStep(1);
+    navigate(buildBookingPath({}, { deepLink: false }), { replace: true });
   };
 
-  // 處理預約數據編輯
   const handleEditBooking = (field: keyof typeof bookingFormData, value: any) => {
-    console.log('🔍 handleEditBooking:', field, value);
-    setBookingFormData(prev => {
-      const newData = {
-        ...prev,
-        [field]: value
-      };
-      console.log('🔍 handleEditBooking 新數據:', newData);
-      return newData;
-    });
+    setBookingFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // 處理 PlayerForm 數據變化
   const handlePlayerFormChange = (newFormData: typeof bookingFormData) => {
     setBookingFormData(newFormData);
   };
 
+  if (routeParams === null) {
+    return <Navigate to="/booking" replace />;
+  }
+
+  const showLoading = loading || hydrating;
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
           className="text-center mb-12"
         >
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-            預約場地
-          </h1>
+          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">預約場地</h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            選擇您喜歡的場地和時間，開始您的匹克球之旅
+            在同一頁選擇店鋪、場地與日期，再挑選時段完成預約
           </p>
         </motion.div>
 
-        {/* Progress Steps */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
           className="mb-12"
         >
-          <div className="flex items-center justify-center">
-            <div className="flex items-center space-x-4">
+          <div className="flex items-center justify-center overflow-x-auto pb-2">
+            <div className="flex items-center space-x-2 md:space-x-4 min-w-max px-2">
               {steps.map((step, index) => (
                 <div key={step.id} className="flex items-center">
-                  <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-                    currentStep >= step.id
-                      ? 'bg-primary-600 border-primary-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-400'
-                  }`}>
+                  <div
+                    className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
+                      currentStep >= step.id
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : 'bg-white border-gray-300 text-gray-400'
+                    }`}
+                  >
                     <step.icon className="w-5 h-5" />
                   </div>
-                  <span className={`ml-2 text-sm font-medium ${
-                    currentStep >= step.id ? 'text-primary-600' : 'text-gray-400'
-                  }`}>
+                  <span
+                    className={`ml-2 text-sm font-medium whitespace-nowrap ${
+                      currentStep >= step.id ? 'text-primary-600' : 'text-gray-400'
+                    }`}
+                  >
                     {step.name}
                   </span>
                   {index < steps.length - 1 && (
-                    <div className={`w-8 h-0.5 mx-4 ${
-                      currentStep > step.id ? 'bg-primary-600' : 'bg-gray-300'
-                    }`} />
+                    <div
+                      className={`w-6 md:w-8 h-0.5 mx-2 md:mx-4 ${
+                        currentStep > step.id ? 'bg-primary-600' : 'bg-gray-300'
+                      }`}
+                    />
                   )}
                 </div>
               ))}
@@ -235,66 +320,42 @@ const Booking: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* Error Message */}
-        {error && (
+        {(error || routeError) && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
             animate={{ opacity: 1, y: 0 }}
             className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4"
           >
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <span className="text-red-400">⚠️</span>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-800">{error}</p>
-              </div>
-            </div>
+            <p className="text-sm text-red-800">{routeError || error}</p>
           </motion.div>
         )}
 
-        {/* Loading */}
-        {loading && (
+        {showLoading && currentStep === 1 && !selectedStore && (
           <div className="text-center py-12">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" />
             <p className="mt-4 text-gray-600">載入中...</p>
           </div>
         )}
 
-        {/* Booking Form */}
-        {!loading && (
+        {!showLoading || currentStep > 1 || selectedStore ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Main Content */}
             <div className="lg:col-span-2">
               <div className="bg-white rounded-2xl shadow-lg p-8">
                 {currentStep === 1 && (
-                  <StoreSelector
+                  <BookingPicker
                     stores={stores}
                     selectedStore={selectedStore}
-                    onSelect={(s: StoreSummary) => {
-                      setSelectedStore(s);
-                      fetchCourts(s._id);
-                    }}
-                    loading={loading && stores.length === 0}
+                    selectedCourt={selectedCourt}
+                    selectedDate={selectedDate}
+                    maxAdvanceDays={maxAdvanceDays}
+                    loading={loading}
+                    onSelectStore={handleSelectStore}
+                    onSelectCourt={handleSelectCourt}
+                    onSelectDate={handleSelectDate}
                   />
                 )}
 
                 {currentStep === 2 && (
-                  <CourtSelector
-                    onSelect={setSelectedCourt}
-                    selectedCourt={selectedCourt}
-                  />
-                )}
-
-                {currentStep === 3 && (
-                  <DateSelector
-                    onSelect={setSelectedDate}
-                    selectedDate={selectedDate}
-                    maxAdvanceDays={maxAdvanceDays}
-                  />
-                )}
-
-                {currentStep === 4 && (
                   <TimeSlotSelector
                     court={selectedCourt}
                     date={selectedDate}
@@ -304,7 +365,7 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {currentStep === 5 && (
+                {currentStep === 3 && (
                   <PlayerForm
                     formData={bookingFormData}
                     onFormDataChange={handlePlayerFormChange}
@@ -312,7 +373,7 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {currentStep === 6 && (
+                {currentStep === 4 && (
                   <BookingSummary
                     court={selectedCourt}
                     date={selectedDate}
@@ -330,8 +391,7 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {/* Navigation Buttons */}
-                {currentStep < 6 && (
+                {currentStep < 4 && (
                   <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
                     <button
                       onClick={prevStep}
@@ -344,7 +404,6 @@ const Booking: React.FC = () => {
                     >
                       上一步
                     </button>
-
                     <button
                       onClick={nextStep}
                       disabled={!canProceed()}
@@ -361,40 +420,38 @@ const Booking: React.FC = () => {
               </div>
             </div>
 
-            {/* Sidebar */}
             <div className="lg:col-span-1">
               <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-8">
                 <h3 className="text-lg font-bold text-gray-900 mb-4">預約摘要</h3>
-                
                 <div className="space-y-4">
                   <div>
-                    <span className="text-sm text-gray-500">場地</span>
-                    <p className="font-medium">
-                      {selectedCourt ? selectedCourt.name : '未選擇'}
-                    </p>
+                    <span className="text-sm text-gray-500">店鋪</span>
+                    <p className="font-medium">{selectedStore?.name || '未選擇'}</p>
                   </div>
-                  
+                  <div>
+                    <span className="text-sm text-gray-500">場地</span>
+                    <p className="font-medium">{selectedCourt ? selectedCourt.name : '未選擇'}</p>
+                  </div>
                   <div>
                     <span className="text-sm text-gray-500">日期</span>
                     <p className="font-medium">
-                      {selectedDate ? new Date(selectedDate).toLocaleDateString('zh-TW') : '未選擇'}
+                      {selectedDate
+                        ? new Date(selectedDate + 'T12:00:00').toLocaleDateString('zh-TW')
+                        : '未選擇'}
                     </p>
                   </div>
-                  
                   <div>
                     <span className="text-sm text-gray-500">時間</span>
                     <p className="font-medium">
-                      {selectedTimeSlot ? `${selectedTimeSlot.start} - ${selectedTimeSlot.end}` : '未選擇'}
+                      {selectedTimeSlot
+                        ? `${selectedTimeSlot.start} - ${selectedTimeSlot.end}`
+                        : '未選擇'}
                     </p>
                   </div>
-                  
                   <div>
                     <span className="text-sm text-gray-500">人數</span>
-                    <p className="font-medium">
-                      {bookingFormData.totalPlayers} 人
-                    </p>
+                    <p className="font-medium">{bookingFormData.totalPlayers} 人</p>
                   </div>
-
                   {availability && (
                     <div className="pt-4 border-t border-gray-200">
                       <div className="flex justify-between">
@@ -406,21 +463,11 @@ const Booking: React.FC = () => {
                     </div>
                   )}
                 </div>
-
-                {!user && (
-                  <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
-                    <p className="text-sm text-yellow-800">
-                      請先登入以完成預約
-                    </p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
-        )}
+        ) : null}
       </div>
-      
-      {/* 返回頂部按鈕 */}
       <BackToTop />
     </div>
   );

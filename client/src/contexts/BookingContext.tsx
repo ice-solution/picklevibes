@@ -3,6 +3,7 @@ import axios from 'axios';
 import apiConfig from '../config/api';
 
 export const BOOKING_STORE_STORAGE_KEY = 'picklevibes_selected_store_id';
+export const BOOKING_STORE_SLUG_STORAGE_KEY = 'picklevibes_selected_store_slug';
 
 export interface StoreSummary {
   _id: string;
@@ -15,7 +16,8 @@ export interface StoreSummary {
 
 interface Court {
   _id: string;
-  store?: string | { _id: string; name: string };
+  store?: string | { _id: string; name: string; slug?: string };
+  slug?: string;
   name: string;
   number: number;
   type: 'competition' | 'training' | 'solo' | 'dink' | 'full_venue';
@@ -153,8 +155,12 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       const list: StoreSummary[] = response.data.stores || [];
       setStores(list);
       const savedId = localStorage.getItem(BOOKING_STORE_STORAGE_KEY);
+      const savedSlug = localStorage.getItem(BOOKING_STORE_SLUG_STORAGE_KEY);
       if (savedId) {
         const remembered = list.find((s) => s._id === savedId);
+        if (remembered) setSelectedStoreState(remembered);
+      } else if (savedSlug) {
+        const remembered = list.find((s) => s.slug === savedSlug);
         if (remembered) setSelectedStoreState(remembered);
       }
     } catch (error: any) {
@@ -167,8 +173,10 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
     setSelectedStoreState(store);
     if (store) {
       localStorage.setItem(BOOKING_STORE_STORAGE_KEY, store._id);
+      if (store.slug) localStorage.setItem(BOOKING_STORE_SLUG_STORAGE_KEY, store.slug);
     } else {
       localStorage.removeItem(BOOKING_STORE_STORAGE_KEY);
+      localStorage.removeItem(BOOKING_STORE_SLUG_STORAGE_KEY);
     }
     setSelectedCourt(null);
     setSelectedDate('');

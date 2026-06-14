@@ -34,6 +34,12 @@ const courtSchema = new mongoose.Schema({
     required: [true, '場地編號為必填項目'],
     min: [1, '場地編號必須大於0']
   },
+  /** 店內唯一 URL slug，如 match-court、solo-court-2 */
+  slug: {
+    type: String,
+    trim: true,
+    lowercase: true,
+  },
   type: {
     type: String,
     enum: ['competition', 'training', 'solo', 'dink', 'full_venue'],
@@ -133,6 +139,7 @@ const courtSchema = new mongoose.Schema({
 });
 
 courtSchema.index({ store: 1, number: 1 }, { unique: true });
+courtSchema.index({ store: 1, slug: 1 }, { unique: true, sparse: true });
 courtSchema.index({ store: 1, isActive: 1, type: 1 });
 
 // 檢查場地是否在維護中

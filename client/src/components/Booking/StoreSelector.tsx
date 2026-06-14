@@ -30,7 +30,7 @@ const StoreSelector: React.FC<StoreSelectorProps> = ({
   return (
     <div>
       <h2 className="text-2xl font-bold text-gray-900 mb-2">選擇店鋪</h2>
-      <p className="text-gray-600 mb-8">請先選擇您要預約的店鋪，再選擇場地</p>
+      <p className="text-gray-600 mb-8">選擇分店後，在同一頁繼續選場地與日期</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {stores.map((store, index) => (

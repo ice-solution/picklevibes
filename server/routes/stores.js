@@ -83,6 +83,24 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   GET /api/stores/by-slug/:slug
+// @desc    以 slug 取得上線店鋪
+// @access  Public
+router.get('/by-slug/:slug', async (req, res) => {
+  try {
+    const slug = String(req.params.slug).trim().toLowerCase();
+    const store = await Store.findOne({ slug, isActive: true })
+      .select('name slug address phone operatingHours sortOrder enableHikAccess');
+    if (!store) {
+      return res.status(404).json({ message: '店鋪不存在' });
+    }
+    res.json({ store });
+  } catch (error) {
+    console.error('獲取店鋪錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/stores/:id
 // @desc    單一店鋪
 // @access  Public

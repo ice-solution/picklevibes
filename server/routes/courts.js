@@ -65,6 +65,24 @@ router.get('/', async (req, res) => {
     if (storeId && String(storeId).trim() !== '') {
       query.store = String(storeId).trim();
     }
+
+    const { storeSlug, courtSlug } = req.query;
+    if (storeSlug && courtSlug) {
+      const Store = require('../models/Store');
+      const store = await Store.findOne({ slug: String(storeSlug).trim().toLowerCase(), isActive: true });
+      if (!store) {
+        return res.status(404).json({ message: '店鋪不存在' });
+      }
+      const court = await Court.findOne({
+        store: store._id,
+        slug: String(courtSlug).trim().toLowerCase(),
+        ...(all !== 'true' ? { isActive: true } : {}),
+      }).populate('store', 'name slug address enableHikAccess');
+      if (!court) {
+        return res.status(404).json({ message: '場地不存在' });
+      }
+      return res.json({ court, store });
+    }
     
     const courts = await Court.find(query).populate('store', 'name slug address enableHikAccess').sort({ number: 1 });
     

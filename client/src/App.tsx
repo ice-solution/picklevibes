@@ -81,6 +81,39 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
+                <Route
+                  path="/booking/:storeSlug"
+                  element={
+                    <ProtectedRoute>
+                      <Booking />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/booking/:storeSlug/:courtSlug"
+                  element={
+                    <ProtectedRoute>
+                      <Booking />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/booking/:storeSlug/:courtSlug/:date"
+                  element={
+                    <ProtectedRoute>
+                      <Booking />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* Deep link 分享：/lai-chi-kok/match-court/2026-06-13 */}
+                <Route
+                  path="/:storeSlug/:courtSlug/:date"
+                  element={
+                    <ProtectedRoute>
+                      <Booking />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
