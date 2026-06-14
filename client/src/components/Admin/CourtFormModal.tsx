@@ -2,6 +2,11 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { getDefaultSlotsForCourtType } from '../../constants/courtPricing';
+import {
+  suggestCourtSlug,
+  normalizeCourtSlugInput,
+  isValidCourtSlugInput,
+} from '../../constants/courtSlug';
 
 export interface StoreOption {
   _id: string;
@@ -13,6 +18,7 @@ interface CourtForForm {
   name: string;
   number: number | string;
   type: string;
+  slug?: string;
   description?: string;
   capacity: number;
   store?: string | { _id: string; name?: string };
@@ -93,6 +99,7 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
   const [type, setType] = useState('competition');
   const [capacity, setCapacity] = useState('8');
   const [description, setDescription] = useState('');
+  const [slug, setSlug] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +113,7 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
       setType(court.type || 'competition');
       setCapacity(String(court.capacity ?? 8));
       setDescription(court.description || '');
+      setSlug(court.slug || '');
     } else {
       setStoreId(defaultStoreId || stores[0]?._id || '');
       setName('');
@@ -113,8 +121,14 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
       setType('competition');
       setCapacity('8');
       setDescription('');
+      setSlug('');
     }
   }, [court, isOpen, defaultStoreId, stores]);
+
+  useEffect(() => {
+    if (!isOpen || court) return;
+    setSlug(suggestCourtSlug(type, number));
+  }, [type, number, isOpen, court]);
 
   if (!isOpen) return null;
 
@@ -140,6 +154,16 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
       return;
     }
 
+    const normalizedSlug = normalizeCourtSlugInput(slug);
+    if (!normalizedSlug) {
+      setError('請輸入 URL slug');
+      return;
+    }
+    if (!isValidCourtSlugInput(normalizedSlug)) {
+      setError('slug 只能包含小寫字母、數字與連字號（如 match-court）');
+      return;
+    }
+
     try {
       setSaving(true);
       setError(null);
@@ -150,6 +174,7 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
           name: name.trim(),
           number: num,
           capacity: cap,
+          slug: normalizedSlug,
           description: description.trim() || undefined,
         });
       } else {
@@ -160,6 +185,7 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
           number: num,
           type,
           capacity: cap,
+          slug: normalizedSlug,
           description: description.trim() || undefined,
           operatingHours: buildOperatingHours(type),
           pricing,
@@ -259,6 +285,22 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
             {isEdit && (
               <p className="text-xs text-gray-500 mt-1">類型建立後不可變更（影響營業時間與計價）</p>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">URL Slug *</label>
+            <input
+              type="text"
+              value={slug}
+              onChange={(e) => setSlug(normalizeCourtSlugInput(e.target.value))}
+              required
+              maxLength={60}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm font-mono"
+              placeholder="match-court"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              預約連結用，同店不可重複。例：<span className="font-mono">/booking/店鋪slug/{slug || 'match-court'}</span>
+            </p>
           </div>
 
           <div>

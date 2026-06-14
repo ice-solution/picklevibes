@@ -107,17 +107,90 @@ export function parseBookingParams(
 }
 
 const SCROLL_OFFSET = 96;
+const SCROLL_MAX_WAIT_MS = 10000;
+
+export interface BookingScrollReadiness {
+  hydrating?: boolean;
+  loading?: boolean;
+  storesLoaded?: boolean;
+  selectedStore?: boolean;
+  selectedCourt?: boolean;
+  selectedDate?: boolean;
+  selectedTimeSlot?: boolean;
+}
+
+/** 區塊 DOM 是否已渲染且可捲動 */
+export function isBookingSectionReady(
+  section: BookingSection,
+  readiness: BookingScrollReadiness
+): boolean {
+  if (readiness.hydrating) return false;
+  if (section === 'store') {
+    return !readiness.hydrating && !readiness.loading;
+  }
+  if (section === 'court') {
+    return Boolean(readiness.selectedStore) && !readiness.loading;
+  }
+  if (section === 'date') {
+    return Boolean(readiness.selectedCourt);
+  }
+  if (section === 'time') {
+    return Boolean(readiness.selectedDate);
+  }
+  if (section === 'details') {
+    return Boolean(readiness.selectedTimeSlot);
+  }
+  if (section === 'confirm') {
+    return Boolean(readiness.selectedTimeSlot);
+  }
+  return false;
+}
+
+/**
+ * 等待 section 出現在 DOM 且前置資料就緒後再捲動
+ */
+export function scrollToBookingSectionWhenReady(
+  section: BookingSection,
+  readiness: BookingScrollReadiness,
+  behavior: ScrollBehavior = 'smooth'
+): () => void {
+  let cancelled = false;
+  const start = Date.now();
+
+  const attempt = () => {
+    if (cancelled) return;
+
+    if (!isBookingSectionReady(section, readiness)) {
+      if (Date.now() - start < SCROLL_MAX_WAIT_MS) {
+        requestAnimationFrame(attempt);
+      }
+      return;
+    }
+
+    const el = document.getElementById(`booking-section-${section}`);
+    if (!el || el.offsetHeight === 0) {
+      if (Date.now() - start < SCROLL_MAX_WAIT_MS) {
+        requestAnimationFrame(attempt);
+      }
+      return;
+    }
+
+    const top = el.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET;
+    window.scrollTo({ top: Math.max(0, top), behavior });
+  };
+
+  requestAnimationFrame(attempt);
+
+  return () => {
+    cancelled = true;
+  };
+}
 
 export function scrollToBookingSection(
   section: BookingSection,
   behavior: ScrollBehavior = 'smooth'
 ): void {
-  requestAnimationFrame(() => {
-    const el = document.getElementById(`booking-section-${section}`);
-    if (!el) return;
-    const top = el.getBoundingClientRect().top + window.scrollY - SCROLL_OFFSET;
-    window.scrollTo({ top: Math.max(0, top), behavior });
-  });
+  scrollToBookingSectionWhenReady(section, { storesLoaded: true }, behavior);
 }
 
 export function sectionToProgressStep(section: BookingSection): number {

@@ -14,7 +14,7 @@ import {
   buildBookingUrl,
   parseBookingParams,
   parseBookingSection,
-  scrollToBookingSection,
+  scrollToBookingSectionWhenReady,
   sectionToProgressStep,
   inferBookingSection,
   type BookingPathParams,
@@ -67,7 +67,6 @@ const Booking: React.FC = () => {
   const [routeError, setRouteError] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(false);
   const hydratedKey = useRef<string>('');
-  const scrollAfterHydrate = useRef<BookingSection | null>(null);
 
   const stableAvailability = useMemo(() => availability, [availability]);
   const progressStep = sectionToProgressStep(activeSection);
@@ -91,6 +90,27 @@ const Booking: React.FC = () => {
     };
   }, [selectedStore?.slug, selectedCourt?.slug, selectedDate]);
 
+  const scrollReadiness = useMemo(
+    () => ({
+      hydrating,
+      loading,
+      storesLoaded: stores.length > 0,
+      selectedStore: Boolean(selectedStore),
+      selectedCourt: Boolean(selectedCourt),
+      selectedDate: Boolean(selectedDate),
+      selectedTimeSlot: Boolean(selectedTimeSlot),
+    }),
+    [
+      hydrating,
+      loading,
+      stores.length,
+      selectedStore,
+      selectedCourt,
+      selectedDate,
+      selectedTimeSlot,
+    ]
+  );
+
   const goToSection = useCallback(
     (section: BookingSection, pathOverride?: BookingPathParams) => {
       const p = pathOverride ?? pathParams();
@@ -98,10 +118,15 @@ const Booking: React.FC = () => {
       if (`${location.pathname}${location.hash}` !== url) {
         navigate(url, { replace: true });
       }
-      scrollToBookingSection(section);
     },
     [isDeepLinkRoute, location.pathname, location.hash, navigate, pathParams]
   );
+
+  // hash / 資料就緒後才捲動到對應 section
+  useEffect(() => {
+    const section = parseBookingSection(location.hash);
+    return scrollToBookingSectionWhenReady(section, scrollReadiness);
+  }, [location.hash, location.pathname, scrollReadiness]);
 
   useEffect(() => {
     fetchStores();
@@ -139,12 +164,6 @@ const Booking: React.FC = () => {
     }
   }, [selectedCourt, selectedDate, selectedTimeSlot, checkSoloCourtAvailability]);
 
-  // 瀏覽器前進／後退：hash 變更時捲動到對應區塊
-  useEffect(() => {
-    const section = parseBookingSection(location.hash);
-    scrollToBookingSection(section, 'smooth');
-  }, [location.hash]);
-
   // URL 路徑 → 狀態
   useEffect(() => {
     if (routeParams === null) {
@@ -180,18 +199,22 @@ const Booking: React.FC = () => {
 
         if (routeParams.date) {
           setSelectedDate(routeParams.date);
-          scrollAfterHydrate.current = inferBookingSection({
-            storeSlug: routeParams.storeSlug,
-            courtSlug: routeParams.courtSlug,
-            date: routeParams.date,
-            hash: location.hash,
-          });
-        } else {
-          scrollAfterHydrate.current = inferBookingSection({
-            storeSlug: routeParams.storeSlug,
-            courtSlug: routeParams.courtSlug,
-            hash: location.hash,
-          });
+        }
+
+        const targetSection = inferBookingSection({
+          storeSlug: routeParams.storeSlug,
+          courtSlug: routeParams.courtSlug,
+          date: routeParams.date,
+          hash: location.hash,
+        });
+        const p: BookingPathParams = {
+          storeSlug: routeParams.storeSlug,
+          courtSlug: routeParams.courtSlug,
+          date: routeParams.date,
+        };
+        const url = buildBookingUrl(p, targetSection, { deepLink: isDeepLinkRoute });
+        if (`${location.pathname}${location.hash}` !== url) {
+          navigate(url, { replace: true });
         }
 
         hydratedKey.current = key;
@@ -214,25 +237,6 @@ const Booking: React.FC = () => {
     isDeepLinkRoute,
     navigate,
   ]);
-
-  // hydrate 完成後捲動到目標區塊
-  useEffect(() => {
-    if (!hydrating && scrollAfterHydrate.current) {
-      const section = scrollAfterHydrate.current;
-      scrollAfterHydrate.current = null;
-      const p: BookingPathParams = {
-        storeSlug: routeParams?.storeSlug,
-        courtSlug: routeParams?.courtSlug,
-        date: routeParams?.date,
-      };
-      const url = buildBookingUrl(p, section, { deepLink: isDeepLinkRoute });
-      if (`${location.pathname}${location.hash}` !== url) {
-        navigate(url, { replace: true });
-      } else {
-        scrollToBookingSection(section);
-      }
-    }
-  }, [hydrating, routeParams, isDeepLinkRoute, location.pathname, location.hash, navigate]);
 
   const handleSelectStore = (store: StoreSummary) => {
     setSelectedStore(store);

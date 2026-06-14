@@ -7,6 +7,17 @@ const TYPE_SLUG_PREFIX = {
   full_venue: 'full-venue',
 };
 
+const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function normalizeCourtSlug(raw) {
+  if (raw == null || raw === '') return '';
+  return String(raw).trim().toLowerCase().replace(/\s+/g, '-');
+}
+
+function isValidCourtSlug(slug) {
+  return SLUG_PATTERN.test(slug);
+}
+
 /**
  * 同店同類型多個場地時加編號，單一則用簡短 slug（如 match-court）
  */
@@ -16,4 +27,32 @@ function buildCourtSlug(type, number, sameTypeCount) {
   return `${prefix}-${number}`;
 }
 
-module.exports = { TYPE_SLUG_PREFIX, buildCourtSlug };
+async function suggestCourtSlug(Court, storeId, type, number, excludeCourtId) {
+  const query = { store: storeId, type };
+  if (excludeCourtId) query._id = { $ne: excludeCourtId };
+  const count = await Court.countDocuments(query);
+  return buildCourtSlug(type, number, count + 1);
+}
+
+async function assertCourtSlugUnique(Court, storeId, slug, excludeCourtId) {
+  if (!slug) return null;
+  const query = { store: storeId, slug };
+  if (excludeCourtId) query._id = { $ne: excludeCourtId };
+  const existing = await Court.findOne(query).select('_id name');
+  if (existing) {
+    const err = new Error(`此店鋪已有 slug「${slug}」（${existing.name}）`);
+    err.code = 'DUPLICATE_SLUG';
+    throw err;
+  }
+  return slug;
+}
+
+module.exports = {
+  TYPE_SLUG_PREFIX,
+  SLUG_PATTERN,
+  normalizeCourtSlug,
+  isValidCourtSlug,
+  buildCourtSlug,
+  suggestCourtSlug,
+  assertCourtSlugUnique,
+};

@@ -33,6 +33,7 @@ interface CourtImage {
 interface Court {
   _id: string;
   name: string;
+  slug?: string;
   number: string;
   type: string;
   description: string;
@@ -456,6 +457,9 @@ const CourtManagement: React.FC = () => {
                   <div>
                     <h3 className="font-semibold text-gray-900">{court.name}</h3>
                     <p className="text-sm text-gray-500">{court.number}號場</p>
+                    {court.slug && (
+                      <p className="text-xs text-gray-400 font-mono mt-0.5">/{court.slug}</p>
+                    )}
                   </div>
                 </div>
                 <div className="flex flex-col gap-2">
