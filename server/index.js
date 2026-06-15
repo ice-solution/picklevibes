@@ -197,6 +197,7 @@ app.use('/api/accounting/ledger', require('./routes/accountingLedger'));
 app.use('/api/accounting/pl', require('./routes/accountingPL'));
 app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'));
 app.use('/api/edm', require('./routes/edm'));
+app.use('/api/open', require('./routes/openBooking'));
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

@@ -1,0 +1,260 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "PickleVibes Booking Deep Link API",
+    "description": "供外部系統查詢預約 deep link 對應的店鋪、場地、日期與可選時段。\n\n認證：請求標頭 `X-API-Key: <your-key>` 或 `Authorization: Bearer <your-key>`。",
+    "version": "1.0.0"
+  },
+  "servers": [
+    { "url": "/api/open", "description": "相對於 API 主機" }
+  ],
+  "security": [{ "ApiKeyAuth": [] }, { "BearerAuth": [] }],
+  "paths": {
+    "/booking/stores": {
+      "get": {
+        "summary": "列出可預約店鋪",
+        "operationId": "listStores",
+        "tags": ["Booking"],
+        "responses": {
+          "200": {
+            "description": "店鋪列表",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/StoreListResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/booking/{storeSlug}": {
+      "get": {
+        "summary": "查詢店鋪及旗下場地",
+        "operationId": "getStoreBooking",
+        "tags": ["Booking"],
+        "parameters": [{ "$ref": "#/components/parameters/storeSlug" }],
+        "responses": {
+          "200": {
+            "description": "店鋪與場地列表",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BookingContextResponse" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/booking/{storeSlug}/{courtSlug}": {
+      "get": {
+        "summary": "查詢店鋪 + 場地",
+        "operationId": "getCourtBooking",
+        "tags": ["Booking"],
+        "parameters": [
+          { "$ref": "#/components/parameters/storeSlug" },
+          { "$ref": "#/components/parameters/courtSlug" }
+        ],
+        "responses": {
+          "200": {
+            "description": "店鋪與場地",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BookingContextResponse" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/booking/{storeSlug}/{courtSlug}/{date}": {
+      "get": {
+        "summary": "查詢店鋪 + 場地 + 日期（可含時段）",
+        "description": "對應前台 URL `/booking/lai-chi-kok/match-court/2026-06-16`",
+        "operationId": "getDatedBooking",
+        "tags": ["Booking"],
+        "parameters": [
+          { "$ref": "#/components/parameters/storeSlug" },
+          { "$ref": "#/components/parameters/courtSlug" },
+          { "$ref": "#/components/parameters/date" },
+          {
+            "name": "includeSlots",
+            "in": "query",
+            "schema": { "type": "boolean", "default": false },
+            "description": "是否回傳當日可預約時段（預設 1 小時一格）"
+          },
+          {
+            "name": "duration",
+            "in": "query",
+            "schema": { "type": "integer", "enum": [60, 120], "default": 60 },
+            "description": "時段長度（分鐘）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "完整預約上下文",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/BookingContextResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key"
+      },
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer"
+      }
+    },
+    "parameters": {
+      "storeSlug": {
+        "name": "storeSlug",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "example": "lai-chi-kok" }
+      },
+      "courtSlug": {
+        "name": "courtSlug",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "example": "match-court" }
+      },
+      "date": {
+        "name": "date",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "format": "date", "example": "2026-06-16" }
+      }
+    },
+    "schemas": {
+      "Store": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "address": { "type": "string" },
+          "phone": { "type": "string" }
+        }
+      },
+      "Court": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "slug": { "type": "string" },
+          "type": { "type": "string" },
+          "capacity": { "type": "integer" }
+        }
+      },
+      "BookingUrls": {
+        "type": "object",
+        "properties": {
+          "booking": { "type": "string", "format": "uri" },
+          "deepLink": { "type": "string", "format": "uri", "nullable": true }
+        }
+      },
+      "TimeSlot": {
+        "type": "object",
+        "properties": {
+          "start": { "type": "string", "example": "10:00" },
+          "end": { "type": "string", "example": "11:00" },
+          "available": { "type": "boolean" },
+          "price": { "type": "number" },
+          "reason": { "type": "string" }
+        }
+      },
+      "BookingContextResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "store": { "$ref": "#/components/schemas/Store" },
+              "court": { "$ref": "#/components/schemas/Court", "nullable": true },
+              "date": { "type": "string", "nullable": true },
+              "urls": { "$ref": "#/components/schemas/BookingUrls" },
+              "courts": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Court" },
+                "nullable": true
+              },
+              "timeSlots": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "durationMinutes": { "type": "integer" },
+                  "slots": {
+                    "type": "array",
+                    "items": { "$ref": "#/components/schemas/TimeSlot" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "StoreListResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "stores": {
+                "type": "array",
+                "items": { "$ref": "#/components/schemas/Store" }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string" }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "API Key 無效",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "資源不存在",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "參數錯誤",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      }
+    }
+  }
+}
