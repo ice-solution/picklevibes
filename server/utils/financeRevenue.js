@@ -115,7 +115,8 @@ function getBookingNominalCharge(booking) {
   }
 
   if (method === 'points' || !method) {
-    return pts > 0 ? pts : listPrice;
+    // 認列以實際扣除積分為準（非牌價）；未扣款應為 0
+    return pts > 0 ? pts : 0;
   }
 
   return pts || listPrice;

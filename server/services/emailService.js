@@ -2589,6 +2589,90 @@ PickleVibes 團隊
   }
 
   /**
+   * 教練課堂指派：通知教練
+   */
+  async sendCoachClassAssignedEmail({
+    coachEmail,
+    coachName,
+    title,
+    dateLabel,
+    timeRange,
+    location,
+    notes,
+    viewUrl,
+    calendarUrl,
+  }) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+      const to = coachEmail && String(coachEmail).trim();
+      if (!to) {
+        console.warn('⚠️ 教練無電郵，略過課堂指派通知');
+        return { success: false, error: '教練電郵未設定' };
+      }
+
+      const siteUrl = (process.env.CLIENT_URL || 'https://picklevibes.hk').replace(/\/+$/, '');
+      const classUrl = viewUrl || `${siteUrl}/coach-courses`;
+      const calUrl = calendarUrl || `${siteUrl}/coach-calendar`;
+      const subject = `[教練課堂] ${title || '新課堂'} · ${dateLabel}`;
+
+      const text = [
+        `${coachName || '教練'}，您好：`,
+        '',
+        '管理員已為您安排以下教練課堂：',
+        '',
+        `課堂：${title || '教練課堂'}`,
+        `日期：${dateLabel}`,
+        `時間：${timeRange}`,
+        `地點：${location || '—'}`,
+        notes ? `備註：${notes}` : '',
+        '',
+        `查看課堂：${classUrl}`,
+        `教練課表：${calUrl}`,
+      ]
+        .filter((line) => line !== '')
+        .join('\n');
+
+      const html = `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 560px; margin: 0 auto; color: #111827;">
+          <p>您好 ${escapeHtml(coachName || '教練')}，</p>
+          <p>管理員已為您安排以下<strong>教練課堂</strong>：</p>
+          <table style="width: 100%; border-collapse: collapse; margin: 16px 0; background: #f9fafb; border-radius: 8px;">
+            <tr><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; color: #6b7280; width: 72px;">課堂</td><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb;"><strong>${escapeHtml(title || '教練課堂')}</strong></td></tr>
+            <tr><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">日期</td><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(dateLabel)}</td></tr>
+            <tr><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">時間</td><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(timeRange)}</td></tr>
+            <tr><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb; color: #6b7280;">地點</td><td style="padding: 10px 14px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(location || '—')}</td></tr>
+            ${notes ? `<tr><td style="padding: 10px 14px; color: #6b7280; vertical-align: top;">備註</td><td style="padding: 10px 14px;">${escapeHtml(notes)}</td></tr>` : ''}
+          </table>
+          <p style="margin: 24px 0;">
+            <a href="${escapeHtml(classUrl)}" style="display: inline-block; background: #7c3aed; color: #fff; text-decoration: none; padding: 12px 20px; border-radius: 8px; font-weight: 600;">查看課堂詳情</a>
+          </p>
+          <p style="font-size: 14px; color: #6b7280;">
+            或於<a href="${escapeHtml(calUrl)}" style="color: #7c3aed;">教練課表</a>日曆檢視。
+          </p>
+          <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">PickleVibes 匹克球場</p>
+        </div>
+      `;
+
+      const mailOptions = {
+        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        to,
+        subject,
+        text,
+        html,
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log(`✅ 教練課堂指派通知已發送至 ${to}: ${result.messageId}`);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 教練課堂指派郵件發送失敗:', error.message);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
    * 教練學校要請：通知內部信箱（優先 NOTICE_EMAIL）
    */
   async sendCoachScheduleRequestEmail({

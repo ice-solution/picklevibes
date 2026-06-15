@@ -6,9 +6,25 @@ const User = require('../models/User');
 const Court = require('../models/Court');
 const { auth, adminAuth } = require('../middleware/auth');
 const { createAdminBypassBooking } = require('../services/adminBypassBooking');
-const { getCoachCalendarEvents, getCoachAssignments } = require('../services/coachScheduleService');
+const { getCoachCalendarEvents, getCoachAssignments, coachClassLocationLabel } = require('../services/coachScheduleService');
+const emailService = require('../services/emailService');
 
 const router = express.Router();
+
+function getClientBaseUrl() {
+  return (process.env.CLIENT_URL || process.env.PUBLIC_WEB_URL || 'https://picklevibes.hk').replace(/\/+$/, '');
+}
+
+function formatSessionDateLabel(dateInput) {
+  const d = new Date(dateInput);
+  if (Number.isNaN(d.getTime())) return String(dateInput);
+  return d.toLocaleDateString('zh-HK', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+}
 
 // @route   GET /api/coach-classes/calendar
 // @desc    教練合併課表（活動 + 教練課堂 + 已批核要請）
@@ -189,6 +205,24 @@ router.post(
         })
         .populate('createdBy', 'name email')
         .populate('booking');
+
+      const classId = String(populated._id);
+      const baseUrl = getClientBaseUrl();
+      try {
+        await emailService.sendCoachClassAssignedEmail({
+          coachEmail: populated.coach?.email,
+          coachName: populated.coach?.name,
+          title: populated.title,
+          dateLabel: formatSessionDateLabel(populated.sessionDate),
+          timeRange: `${populated.startTime} – ${populated.endTime}`,
+          location: coachClassLocationLabel(populated),
+          notes: populated.notes || '',
+          viewUrl: `${baseUrl}/coach-courses?class=${classId}`,
+          calendarUrl: `${baseUrl}/coach-calendar?class=${classId}`,
+        });
+      } catch (mailErr) {
+        console.error('教練課堂郵件通知失敗（課堂已建立）:', mailErr);
+      }
 
       res.status(201).json({
         message:

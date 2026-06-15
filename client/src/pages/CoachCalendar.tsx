@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -8,6 +8,12 @@ import type { EventInput, DatesSetArg, EventClickArg } from '@fullcalendar/core'
 import { motion } from 'framer-motion';
 import { CalendarDaysIcon, MapPinIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
+import {
+  formatCoachEventDateLabel,
+  formatCoachEventTimeRange24,
+  coachEventStatusLabel,
+  coachEventStatusBadgeClass,
+} from '../utils/coachEventFormat';
 
 type EventType = 'activity' | 'coach_class' | 'schedule_request';
 
@@ -58,30 +64,17 @@ function typeLabel(type: EventType): string {
   }
 }
 
-function statusLabel(status: string, type: EventType): string {
-  if (type === 'coach_class') return '已排程';
-  if (type === 'schedule_request') return '已批核';
-  switch (status) {
-    case 'upcoming':
-      return '即將開始';
-    case 'ongoing':
-      return '進行中';
-    case 'completed':
-      return '已完結';
-    case 'cancelled':
-      return '已取消';
-    default:
-      return status;
-  }
-}
-
 const CoachCalendar: React.FC = () => {
   const calendarRef = useRef<FullCalendar>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const deepLinkClassId = searchParams.get('class');
   const [events, setEvents] = useState<EventInput[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<CalendarEvent | null>(null);
+  const deepLinkHandledRef = useRef(false);
 
   const loadRange = useCallback(async (start: Date, end: Date) => {
     setLoading(true);
@@ -94,6 +87,7 @@ const CoachCalendar: React.FC = () => {
         },
       });
       const list: CalendarEvent[] = res.data?.events || [];
+      setCalendarEvents(list);
       const mapped: EventInput[] = list.map((ev) => {
         const { bg, border } = eventStyle(ev.type, ev.status);
         return {
@@ -115,6 +109,21 @@ const CoachCalendar: React.FC = () => {
       setLoading(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!deepLinkClassId || deepLinkHandledRef.current || calendarEvents.length === 0) return;
+    const match = calendarEvents.find(
+      (ev) => ev.type === 'coach_class' && ev.sourceId === deepLinkClassId
+    );
+    if (match) {
+      deepLinkHandledRef.current = true;
+      setSelected(match);
+      const api = calendarRef.current?.getApi();
+      if (api) {
+        api.gotoDate(new Date(match.start));
+      }
+    }
+  }, [calendarEvents, deepLinkClassId]);
 
   const handleDatesSet = useCallback(
     (info: DatesSetArg) => {
@@ -235,13 +244,21 @@ const CoachCalendar: React.FC = () => {
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
-            <p className="text-sm text-gray-500 mb-2">
-              {statusLabel(selected.status, selected.type)}
-            </p>
-            <p className="text-sm text-gray-700 mb-2">
-              {new Date(selected.start).toLocaleString('zh-TW')} —{' '}
-              {new Date(selected.end).toLocaleString('zh-TW')}
-            </p>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset mb-3 ${coachEventStatusBadgeClass(selected.status, selected.type)}`}
+            >
+              {coachEventStatusLabel(selected.status, selected.type)}
+            </span>
+            <div className="space-y-1 text-sm text-gray-700 mb-3">
+              <p>
+                <span className="text-gray-500">日期：</span>
+                {formatCoachEventDateLabel(selected.start, selected.end)}
+              </p>
+              <p>
+                <span className="text-gray-500">時間：</span>
+                {formatCoachEventTimeRange24(selected.start, selected.end)}
+              </p>
+            </div>
             {selected.location && (
               <div className="flex items-start gap-2 text-sm text-gray-600 mb-4">
                 <MapPinIcon className="w-5 h-5 shrink-0 text-gray-400" />

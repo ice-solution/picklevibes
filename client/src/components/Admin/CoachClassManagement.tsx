@@ -3,6 +3,10 @@ import api from '../../services/api';
 import { useBooking } from '../../contexts/BookingContext';
 import CoachAutocomplete from '../Common/CoachAutocomplete';
 import { AcademicCapIcon, PlusIcon, XCircleIcon } from '@heroicons/react/24/outline';
+import {
+  coachClassAdminStatusBadgeClass,
+  coachClassAdminStatusLabel,
+} from '../../utils/coachEventFormat';
 
 interface CoachInfo {
   _id: string;
@@ -238,13 +242,9 @@ const CoachClassManagement: React.FC = () => {
                   <td className="px-4 py-3">{row.title}</td>
                   <td className="px-4 py-3">
                     <span
-                      className={
-                        row.status === 'scheduled'
-                          ? 'text-emerald-600'
-                          : 'text-gray-400'
-                      }
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${coachClassAdminStatusBadgeClass(row.status)}`}
                     >
-                      {row.status === 'scheduled' ? '已排程' : '已取消'}
+                      {coachClassAdminStatusLabel(row.status)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

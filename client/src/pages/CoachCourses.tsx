@@ -1,7 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import axios from 'axios';
-import { Link } from 'react-router-dom';
+import {
+  formatCoachEventDateLabel,
+  formatCoachEventTimeRange24,
+  coachEventStatusLabel,
+  coachEventStatusBadgeClass,
+} from '../utils/coachEventFormat';
 
 type ItemKind = 'activity' | 'coach_class' | 'schedule_request';
 
@@ -41,10 +46,24 @@ const CoachCourses: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const highlightClassId = searchParams.get('class');
+  const scrolledRef = useRef(false);
 
   useEffect(() => {
     fetchAssignments();
   }, []);
+
+  useEffect(() => {
+    if (!highlightClassId || items.length === 0 || scrolledRef.current) return;
+    const el = document.getElementById(`coach-class-${highlightClassId}`);
+    if (el) {
+      scrolledRef.current = true;
+      window.setTimeout(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 150);
+    }
+  }, [items, highlightClassId]);
 
   const fetchAssignments = async () => {
     try {
@@ -59,17 +78,10 @@ const CoachCourses: React.FC = () => {
     }
   };
 
-  const formatDateTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleString('zh-TW', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      weekday: 'short',
-    });
-  };
+  const formatDateTime = (start: string, end: string) => ({
+    date: formatCoachEventDateLabel(start, end),
+    time: formatCoachEventTimeRange24(start, end),
+  });
 
   const upcomingCount = items.filter((i) => new Date(i.end) >= new Date()).length;
   const activityCount = items.filter((i) => i.kind === 'activity').length;
@@ -140,16 +152,31 @@ const CoachCourses: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-4">
-            {items.map((item) => (
+            {items.map((item) => {
+              const isHighlighted =
+                item.kind === 'coach_class' && highlightClassId === item.id;
+              return (
               <div
                 key={`${item.kind}-${item.id}`}
-                className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 hover:shadow-md transition-shadow"
+                id={item.kind === 'coach_class' ? `coach-class-${item.id}` : undefined}
+                className={`bg-white rounded-lg shadow-sm border p-5 hover:shadow-md transition-shadow ${
+                  isHighlighted
+                    ? 'border-violet-500 ring-2 ring-violet-400 ring-offset-2'
+                    : 'border-gray-200'
+                }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
                   <div>
-                    <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium mb-2 ${kindColor[item.kind]}`}>
-                      {kindLabel[item.kind]}
-                    </span>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${kindColor[item.kind]}`}>
+                        {kindLabel[item.kind]}
+                      </span>
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${coachEventStatusBadgeClass(item.status, item.kind)}`}
+                      >
+                        {coachEventStatusLabel(item.status, item.kind)}
+                      </span>
+                    </div>
                     <h3 className="text-lg font-semibold text-gray-900">{item.title}</h3>
                   </div>
                   {item.kind === 'activity' && item.raw?.totalRegistered != null && (
@@ -159,7 +186,16 @@ const CoachCourses: React.FC = () => {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-gray-600 mb-1">{formatDateTime(item.start)}</p>
+                <div className="text-sm text-gray-600 mb-1 space-y-0.5">
+                  <p>
+                    <span className="text-gray-500">日期：</span>
+                    {formatDateTime(item.start, item.end).date}
+                  </p>
+                  <p>
+                    <span className="text-gray-500">時間：</span>
+                    {formatDateTime(item.start, item.end).time}
+                  </p>
+                </div>
                 {item.location && (
                   <p className="text-sm text-gray-500 mb-2">{item.location}</p>
                 )}
@@ -176,7 +212,8 @@ const CoachCourses: React.FC = () => {
                   </button>
                 )}
               </div>
-            ))}
+            );
+            })}
           </div>
         )}
       </div>
