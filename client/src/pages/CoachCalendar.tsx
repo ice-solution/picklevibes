@@ -9,17 +9,29 @@ import { motion } from 'framer-motion';
 import { CalendarDaysIcon, MapPinIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
 
-interface CalendarActivity {
-  _id: string;
+type EventType = 'activity' | 'coach_class' | 'schedule_request';
+
+interface CalendarEvent {
+  id: string;
+  sourceId: string;
+  type: EventType;
   title: string;
-  startDate: string;
-  endDate: string;
+  start: string;
+  end: string;
   location: string;
   status: string;
   poster?: string | null;
+  notes?: string;
+  court?: { id: string; name: string; number?: number } | null;
 }
 
-function statusColor(status: string): { bg: string; border: string } {
+function eventStyle(type: EventType, status: string): { bg: string; border: string } {
+  if (type === 'coach_class') {
+    return { bg: '#7C3AED', border: '#6D28D9' };
+  }
+  if (type === 'schedule_request') {
+    return { bg: '#D97706', border: '#B45309' };
+  }
   switch (status) {
     case 'ongoing':
       return { bg: '#10B981', border: '#059669' };
@@ -33,7 +45,22 @@ function statusColor(status: string): { bg: string; border: string } {
   }
 }
 
-function statusLabel(status: string): string {
+function typeLabel(type: EventType): string {
+  switch (type) {
+    case 'activity':
+      return '活動課程';
+    case 'coach_class':
+      return '教練課堂';
+    case 'schedule_request':
+      return '學校要請';
+    default:
+      return '';
+  }
+}
+
+function statusLabel(status: string, type: EventType): string {
+  if (type === 'coach_class') return '已排程';
+  if (type === 'schedule_request') return '已批核';
   switch (status) {
     case 'upcoming':
       return '即將開始';
@@ -54,34 +81,29 @@ const CoachCalendar: React.FC = () => {
   const [events, setEvents] = useState<EventInput[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<CalendarActivity | null>(null);
+  const [selected, setSelected] = useState<CalendarEvent | null>(null);
 
   const loadRange = useCallback(async (start: Date, end: Date) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get('/activities/coach-calendar', {
+      const res = await api.get('/coach-classes/calendar', {
         params: {
           start: start.toISOString(),
           end: end.toISOString(),
         },
       });
-      const list: CalendarActivity[] = res.data?.activities || [];
-      const mapped: EventInput[] = list.map((a) => {
-        const { bg, border } = statusColor(a.status);
+      const list: CalendarEvent[] = res.data?.events || [];
+      const mapped: EventInput[] = list.map((ev) => {
+        const { bg, border } = eventStyle(ev.type, ev.status);
         return {
-          id: a._id,
-          title: a.title,
-          start: a.startDate,
-          end: a.endDate,
+          id: ev.id,
+          title: ev.title,
+          start: ev.start,
+          end: ev.end,
           backgroundColor: bg,
           borderColor: border,
-          extendedProps: {
-            location: a.location,
-            status: a.status,
-            poster: a.poster,
-            raw: a,
-          },
+          extendedProps: { raw: ev },
         };
       });
       setEvents(mapped);
@@ -102,7 +124,7 @@ const CoachCalendar: React.FC = () => {
   );
 
   const handleEventClick = useCallback((info: EventClickArg) => {
-    const raw = info.event.extendedProps.raw as CalendarActivity;
+    const raw = info.event.extendedProps.raw as CalendarEvent;
     if (raw) setSelected(raw);
   }, []);
 
@@ -121,7 +143,7 @@ const CoachCalendar: React.FC = () => {
                 教練課表
               </h1>
               <p className="text-gray-600 mt-1">
-                顯示活動中心已指派您為教練的課程（與「我的課程」相同資料來源，以日曆檢視）
+                顯示所有指派項目：活動課程、教練課堂及已批核學校要請
               </p>
             </div>
             <Link
@@ -134,18 +156,18 @@ const CoachCalendar: React.FC = () => {
         </motion.div>
 
         <div className="flex flex-wrap gap-4 mb-4 text-sm">
-          {(['upcoming', 'ongoing', 'completed', 'cancelled'] as const).map((s) => {
-            const c = statusColor(s);
-            return (
-              <div key={s} className="flex items-center gap-2">
-                <span
-                  className="inline-block w-3 h-3 rounded"
-                  style={{ backgroundColor: c.bg }}
-                />
-                <span className="text-gray-600">{statusLabel(s)}</span>
-              </div>
-            );
-          })}
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded bg-blue-500" />
+            <span className="text-gray-600">活動課程</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded bg-violet-600" />
+            <span className="text-gray-600">教練課堂</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-3 h-3 rounded bg-amber-600" />
+            <span className="text-gray-600">學校要請（已批核）</span>
+          </div>
         </div>
 
         {error && (
@@ -200,7 +222,10 @@ const CoachCalendar: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 pr-4">{selected.title}</h3>
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">{typeLabel(selected.type)}</p>
+                <h3 className="text-lg font-semibold text-gray-900 pr-4">{selected.title}</h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setSelected(null)}
@@ -211,27 +236,34 @@ const CoachCalendar: React.FC = () => {
               </button>
             </div>
             <p className="text-sm text-gray-500 mb-2">
-              {statusLabel(selected.status)}
+              {statusLabel(selected.status, selected.type)}
             </p>
             <p className="text-sm text-gray-700 mb-2">
-              {new Date(selected.startDate).toLocaleString('zh-TW')} —{' '}
-              {new Date(selected.endDate).toLocaleString('zh-TW')}
+              {new Date(selected.start).toLocaleString('zh-TW')} —{' '}
+              {new Date(selected.end).toLocaleString('zh-TW')}
             </p>
-            <div className="flex items-start gap-2 text-sm text-gray-600 mb-6">
-              <MapPinIcon className="w-5 h-5 shrink-0 text-gray-400" />
-              <span>{selected.location}</span>
-            </div>
+            {selected.location && (
+              <div className="flex items-start gap-2 text-sm text-gray-600 mb-4">
+                <MapPinIcon className="w-5 h-5 shrink-0 text-gray-400" />
+                <span>{selected.location}</span>
+              </div>
+            )}
+            {selected.notes && (
+              <p className="text-sm text-gray-600 mb-4 border-t pt-3">{selected.notes}</p>
+            )}
             <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelected(null);
-                  navigate(`/activities/${selected._id}`);
-                }}
-                className="flex-1 min-w-[8rem] px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 text-sm font-medium"
-              >
-                活動詳情
-              </button>
+              {selected.type === 'activity' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelected(null);
+                    navigate(`/activities/${selected.sourceId}`);
+                  }}
+                  className="flex-1 min-w-[8rem] px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 text-sm font-medium"
+                >
+                  活動詳情
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setSelected(null)}

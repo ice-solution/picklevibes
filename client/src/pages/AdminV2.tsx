@@ -6,6 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
 import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
+import CoachClassManagement from '../components/Admin/CoachClassManagement';
 import CourtManagement from '../components/Admin/CourtManagement';
 import StoreManagement from '../components/Admin/StoreManagement';
 import UserManagement from '../components/Admin/UserManagement';
@@ -50,6 +51,7 @@ import {
   EnvelopeIcon,
   BuildingStorefrontIcon,
   CurrencyDollarIcon,
+  AcademicCapIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -74,6 +76,7 @@ const AdminV2: React.FC = () => {
     { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon, element: <BookingManagement /> },
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
     { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
+    { id: 'coach-classes', name: '教練課堂', icon: AcademicCapIcon, element: <CoachClassManagement /> },
     { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: <StoreManagement /> },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
     { id: 'users', name: '用戶管理', icon: UsersIcon, element: <UserManagement /> },

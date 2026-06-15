@@ -193,12 +193,12 @@ const Shop: React.FC = () => {
             <p className="text-gray-600">選購優質匹克球用品和裝備</p>
           </motion.div>
 
-          {/* 搜尋（獨立一行，避免與分類橫向捲動擠在一起） */}
+          {/* 搜尋 */}
           <form
             onSubmit={(e) => {
               e.preventDefault();
             }}
-            className="mb-4"
+            className="mb-6"
           >
             <motion.div
               initial={{ opacity: 0, y: 20 }}
@@ -219,72 +219,56 @@ const Shop: React.FC = () => {
             </motion.div>
           </form>
 
-          {/* 分類：換行排列、可分享 URL，無橫向捲動 */}
-          <motion.nav
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
-            aria-label="商品分類"
-            className="mb-8"
-          >
-            <p className="text-xs text-gray-500 mb-2">
-              目前分類：<span className="font-medium text-gray-800">{activeCategoryName}</span>
-              {selectedCategory ? (
-                <span className="text-gray-400 ml-1"></span>
-              ) : null}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              <Link
-                to={`/shop${buildShopSearchParams({ search: searchTerm })}`}
-                className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                  selectedCategory === ''
-                    ? 'bg-primary-600 text-white border-primary-600'
-                    : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                }`}
-              >
-                全部
-              </Link>
-              {categories.map((category) => {
-                const active = selectedCategory === category._id;
-                return (
-                  <Link
-                    key={category._id}
-                    to={`/shop${buildShopSearchParams({ category: category._id, search: searchTerm })}`}
-                    className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium border transition-colors max-w-full ${
-                      active
-                        ? 'bg-primary-600 text-white border-primary-600'
-                        : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50 hover:border-gray-300'
-                    }`}
-                    title={category.name}
-                  >
-                    <span className="line-clamp-2 text-left">{category.name}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </motion.nav>
-
-          {user && (
-            <Link
-              to="/cart"
-              className="fixed bottom-8 right-8 bg-primary-600 text-white p-4 rounded-full shadow-lg hover:bg-primary-700 transition-colors z-50"
+          <div className="flex flex-col sm:flex-row gap-6 lg:gap-8 items-start">
+            {/* 分類：左側垂直選單 */}
+            <motion.aside
+              initial={{ opacity: 0, x: -12 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.15 }}
+              aria-label="商品分類"
+              className="w-full sm:w-44 md:w-52 shrink-0 sm:sticky sm:top-24"
             >
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.3, type: 'spring' }}
-                className="relative"
-              >
-                <ShoppingCartIcon className="w-6 h-6" />
-                {cartCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
-                    {cartCount}
-                  </span>
-                )}
-              </motion.div>
-            </Link>
-          )}
+              <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
+                  <h2 className="text-sm font-semibold text-gray-900">商品分類</h2>
+                  <p className="text-xs text-gray-500 mt-0.5 truncate" title={activeCategoryName}>
+                    {activeCategoryName}
+                  </p>
+                </div>
+                <nav className="p-2 flex sm:flex-col flex-wrap sm:flex-nowrap gap-1 max-h-[50vh] sm:max-h-[calc(100vh-12rem)] overflow-y-auto">
+                  <Link
+                    to={`/shop${buildShopSearchParams({ search: searchTerm })}`}
+                    className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                      selectedCategory === ''
+                        ? 'bg-primary-600 text-white'
+                        : 'text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    全部
+                  </Link>
+                  {categories.map((category) => {
+                    const active = selectedCategory === category._id;
+                    return (
+                      <Link
+                        key={category._id}
+                        to={`/shop${buildShopSearchParams({ category: category._id, search: searchTerm })}`}
+                        className={`block px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                          active
+                            ? 'bg-primary-600 text-white'
+                            : 'text-gray-700 hover:bg-gray-100'
+                        }`}
+                        title={category.name}
+                      >
+                        <span className="line-clamp-2">{category.name}</span>
+                      </Link>
+                    );
+                  })}
+                </nav>
+              </div>
+            </motion.aside>
 
+            {/* 商品列表 */}
+            <main className="flex-1 min-w-0 w-full">
           {loading ? (
             <motion.div className="text-center py-12">
               <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
@@ -297,7 +281,7 @@ const Shop: React.FC = () => {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                 {products.map((product, index) => (
                   <motion.div
                     key={product._id}
@@ -413,6 +397,29 @@ const Shop: React.FC = () => {
                 </div>
               )}
             </>
+          )}
+            </main>
+          </div>
+
+          {user && (
+            <Link
+              to="/cart"
+              className="fixed bottom-8 right-8 bg-primary-600 text-white p-4 rounded-full shadow-lg hover:bg-primary-700 transition-colors z-50"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.3, type: 'spring' }}
+                className="relative"
+              >
+                <ShoppingCartIcon className="w-6 h-6" />
+                {cartCount > 0 && (
+                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                    {cartCount}
+                  </span>
+                )}
+              </motion.div>
+            </Link>
           )}
         </motion.div>
       </motion.div>

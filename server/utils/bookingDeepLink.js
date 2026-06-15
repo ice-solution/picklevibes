@@ -1,8 +1,10 @@
 const Store = require('../models/Store');
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
+const Config = require('../models/Config');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const AUDIENCE_ROLES = new Set(['user', 'coach', 'admin']);
 
 function getPublicWebBase() {
   const base = process.env.PUBLIC_WEB_URL || process.env.CLIENT_URL || 'https://picklevibes.hk';
@@ -14,6 +16,49 @@ function isValidBookingDateYmd(date) {
   const [y, m, d] = date.split('-').map(Number);
   const parsed = new Date(y, m - 1, d);
   return parsed.getFullYear() === y && parsed.getMonth() === m - 1 && parsed.getDate() === d;
+}
+
+function getDateDiffDays(dateYmd) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const bookingDate = new Date(`${dateYmd}T12:00:00`);
+  bookingDate.setHours(0, 0, 0, 0);
+  return Math.floor((bookingDate - today) / (1000 * 60 * 60 * 24));
+}
+
+async function getMaxAdvanceDaysForRole(audienceRole = 'user') {
+  const role = AUDIENCE_ROLES.has(audienceRole) ? audienceRole : 'user';
+  const bookingConfig = await Config.getBookingConfig();
+  return bookingConfig.maxAdvanceDaysByRole[role] ?? 7;
+}
+
+function evaluateBookingDateWindow(dateYmd, maxAdvanceDays) {
+  const diffDays = getDateDiffDays(dateYmd);
+  if (diffDays < 0) {
+    return {
+      bookable: false,
+      diffDays,
+      maxAdvanceDays,
+      reason: '不可查詢過去的日期',
+      code: 'PAST_DATE',
+    };
+  }
+  if (diffDays > maxAdvanceDays) {
+    return {
+      bookable: false,
+      diffDays,
+      maxAdvanceDays,
+      reason: `最多可查 ${maxAdvanceDays} 天內的預約`,
+      code: 'BEYOND_MAX_ADVANCE',
+    };
+  }
+  return {
+    bookable: true,
+    diffDays,
+    maxAdvanceDays,
+    reason: null,
+    code: null,
+  };
 }
 
 function buildBookingUrls(storeSlug, courtSlug, date) {
@@ -117,6 +162,25 @@ async function computeDaySlots(court, dateYmd, durationMinutes = 60) {
   return { durationMinutes, slots };
 }
 
+function assertOpenApiStoreAccess(store, authContext) {
+  if (!store.openApiEnabled) {
+    const err = new Error('此店鋪未開放 Open API');
+    err.status = 403;
+    throw err;
+  }
+
+  if (!authContext) return;
+
+  const { store: authStore, legacy, devBypass } = authContext;
+  if (legacy || devBypass || !authStore) return;
+
+  if (String(authStore._id) !== String(store._id)) {
+    const err = new Error('API Key 無權存取此店鋪');
+    err.status = 403;
+    throw err;
+  }
+}
+
 /**
  * 解析 /booking/:storeSlug/:courtSlug?/:date?
  */
@@ -126,6 +190,9 @@ async function resolveBookingDeepLink({
   date,
   includeSlots = false,
   durationMinutes = 60,
+  audienceRole = 'user',
+  requireOpenApi = false,
+  authContext = null,
 }) {
   const normalizedStoreSlug = String(storeSlug || '').trim().toLowerCase();
   if (!normalizedStoreSlug) {
@@ -141,6 +208,12 @@ async function resolveBookingDeepLink({
     throw err;
   }
 
+  if (requireOpenApi) {
+    assertOpenApiStoreAccess(store, authContext);
+  }
+
+  const maxAdvanceDays = await getMaxAdvanceDaysForRole(audienceRole);
+
   const result = {
     store: serializeStore(store),
     court: null,
@@ -148,6 +221,13 @@ async function resolveBookingDeepLink({
     urls: buildBookingUrls(store.slug, null, null),
     courts: null,
     timeSlots: null,
+    bookingWindow: {
+      audienceRole: AUDIENCE_ROLES.has(audienceRole) ? audienceRole : 'user',
+      maxAdvanceDays,
+      bookable: null,
+      diffDays: null,
+      reason: null,
+    },
   };
 
   if (!courtSlug) {
@@ -188,6 +268,27 @@ async function resolveBookingDeepLink({
   result.date = date;
   result.urls = buildBookingUrls(store.slug, court.slug, date);
 
+  const window = evaluateBookingDateWindow(date, maxAdvanceDays);
+  result.bookingWindow = {
+    audienceRole: AUDIENCE_ROLES.has(audienceRole) ? audienceRole : 'user',
+    maxAdvanceDays,
+    bookable: window.bookable,
+    diffDays: window.diffDays,
+    reason: window.reason,
+    code: window.code || null,
+  };
+
+  if (!window.bookable) {
+    if (includeSlots) {
+      result.timeSlots = {
+        durationMinutes: durationMinutes === 120 ? 120 : 60,
+        slots: [],
+        unavailableReason: window.reason,
+      };
+    }
+    return result;
+  }
+
   if (includeSlots) {
     const courtDoc = await Court.findById(court._id);
     result.timeSlots = await computeDaySlots(courtDoc, date, durationMinutes);
@@ -196,6 +297,54 @@ async function resolveBookingDeepLink({
   return result;
 }
 
+/**
+ * 列出已啟用 Open API 的店鋪；若金鑰綁定單一店鋪則只回傳該店。
+ */
+async function listOpenApiStores({ includeCourts = true, authContext = null } = {}) {
+  const filter = { isActive: true, openApiEnabled: true };
+
+  if (authContext?.store && !authContext.legacy && !authContext.devBypass) {
+    filter._id = authContext.store._id;
+  }
+
+  const stores = await Store.find(filter)
+    .sort({ sortOrder: 1, name: 1 })
+    .select('name slug address phone primaryColor logoUrl')
+    .lean();
+
+  if (!includeCourts || stores.length === 0) {
+    return stores.map((s) => ({
+      ...serializeStore(s),
+      urls: buildBookingUrls(s.slug, null, null),
+      courts: null,
+    }));
+  }
+
+  const storeIds = stores.map((s) => s._id);
+  const courts = await Court.find({
+    store: { $in: storeIds },
+    isActive: true,
+    type: { $ne: 'full_venue' },
+  })
+    .sort({ number: 1 })
+    .select('name slug number type capacity description isActive store')
+    .lean();
+
+  const courtsByStore = new Map();
+  for (const court of courts) {
+    const sid = String(court.store);
+    if (!courtsByStore.has(sid)) courtsByStore.set(sid, []);
+    courtsByStore.get(sid).push(serializeCourt(court));
+  }
+
+  return stores.map((s) => ({
+    ...serializeStore(s),
+    urls: buildBookingUrls(s.slug, null, null),
+    courts: courtsByStore.get(String(s._id)) || [],
+  }));
+}
+
+/** @deprecated 使用 listOpenApiStores */
 async function listBookableStores() {
   const stores = await Store.find({ isActive: true })
     .sort({ sortOrder: 1, name: 1 })
@@ -208,6 +357,9 @@ module.exports = {
   isValidBookingDateYmd,
   buildBookingUrls,
   resolveBookingDeepLink,
+  listOpenApiStores,
   listBookableStores,
   getPublicWebBase,
+  getMaxAdvanceDaysForRole,
+  evaluateBookingDateWindow,
 };

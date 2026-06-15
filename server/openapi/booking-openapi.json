@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "PickleVibes Booking Deep Link API",
-    "description": "供外部系統查詢預約 deep link 對應的店鋪、場地、日期與可選時段。\n\n認證：請求標頭 `X-API-Key: <your-key>` 或 `Authorization: Bearer <your-key>`。",
-    "version": "1.0.0"
+    "description": "供外部系統查詢已開放 Open API 的店鋪、場地、日期與可選時段。\n\n## 認證\n每間店鋪於後台「店鋪管理」獨立產生 API Key，請求標頭：\n- `X-API-Key: <store-key>`\n- 或 `Authorization: Bearer <store-key>`\n\n金鑰僅能存取該店鋪資料（舊版 `.env` 全域金鑰可存取所有已啟用店鋪，過渡用）。\n\n## 預約天數\n查詢含日期時，預設依 **一般用戶** 可預約天數（預設 7 天）限制；超出範圍仍回傳店鋪／場地／URL，但 `bookingWindow.bookable=false` 且不回傳可訂時段。",
+    "version": "1.1.0"
   },
   "servers": [
     { "url": "/api/open", "description": "相對於 API 主機" }
@@ -12,9 +12,18 @@
   "paths": {
     "/booking/stores": {
       "get": {
-        "summary": "列出可預約店鋪",
+        "summary": "列出已開放 Open API 的店鋪（含場地）",
+        "description": "回傳已啟用 Open API 且上線的店鋪。使用店鋪金鑰時僅回傳該店；預設含旗下場地列表。",
         "operationId": "listStores",
         "tags": ["Booking"],
+        "parameters": [
+          {
+            "name": "includeCourts",
+            "in": "query",
+            "schema": { "type": "boolean", "default": true },
+            "description": "是否回傳各店旗下場地（預設 true）"
+          }
+        ],
         "responses": {
           "200": {
             "description": "店鋪列表",
@@ -43,6 +52,7 @@
               }
             }
           },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
@@ -65,6 +75,7 @@
               }
             }
           },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
@@ -72,7 +83,7 @@
     "/booking/{storeSlug}/{courtSlug}/{date}": {
       "get": {
         "summary": "查詢店鋪 + 場地 + 日期（可含時段）",
-        "description": "對應前台 URL `/booking/lai-chi-kok/match-court/2026-06-16`",
+        "description": "對應前台 URL `/booking/lai-chi-kok/match-court/2026-06-16`。超出可預約天數時 `bookingWindow.bookable=false`。",
         "operationId": "getDatedBooking",
         "tags": ["Booking"],
         "parameters": [
@@ -90,6 +101,12 @@
             "in": "query",
             "schema": { "type": "integer", "enum": [60, 120], "default": 60 },
             "description": "時段長度（分鐘）"
+          },
+          {
+            "name": "audienceRole",
+            "in": "query",
+            "schema": { "type": "string", "enum": ["user", "coach", "admin"], "default": "user" },
+            "description": "模擬哪種用戶身份的可預約天數上限（預設 user=7 天）"
           }
         ],
         "responses": {
@@ -102,6 +119,7 @@
             }
           },
           "400": { "$ref": "#/components/responses/BadRequest" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
@@ -112,11 +130,13 @@
       "ApiKeyAuth": {
         "type": "apiKey",
         "in": "header",
-        "name": "X-API-Key"
+        "name": "X-API-Key",
+        "description": "店鋪後台產生的 Open API 金鑰"
       },
       "BearerAuth": {
         "type": "http",
-        "scheme": "bearer"
+        "scheme": "bearer",
+        "description": "同上，Bearer 格式"
       }
     },
     "parameters": {
@@ -147,7 +167,14 @@
           "name": { "type": "string" },
           "slug": { "type": "string" },
           "address": { "type": "string" },
-          "phone": { "type": "string" }
+          "phone": { "type": "string" },
+          "urls": { "$ref": "#/components/schemas/BookingUrls" },
+          "courts": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/Court" },
+            "nullable": true,
+            "description": "僅 /booking/stores 回傳"
+          }
         }
       },
       "Court": {
@@ -165,6 +192,17 @@
         "properties": {
           "booking": { "type": "string", "format": "uri" },
           "deepLink": { "type": "string", "format": "uri", "nullable": true }
+        }
+      },
+      "BookingWindow": {
+        "type": "object",
+        "properties": {
+          "audienceRole": { "type": "string", "enum": ["user", "coach", "admin"] },
+          "maxAdvanceDays": { "type": "integer", "example": 7 },
+          "bookable": { "type": "boolean", "nullable": true },
+          "diffDays": { "type": "integer", "nullable": true },
+          "reason": { "type": "string", "nullable": true },
+          "code": { "type": "string", "nullable": true, "enum": ["PAST_DATE", "BEYOND_MAX_ADVANCE"] }
         }
       },
       "TimeSlot": {
@@ -188,6 +226,7 @@
               "court": { "$ref": "#/components/schemas/Court", "nullable": true },
               "date": { "type": "string", "nullable": true },
               "urls": { "$ref": "#/components/schemas/BookingUrls" },
+              "bookingWindow": { "$ref": "#/components/schemas/BookingWindow" },
               "courts": {
                 "type": "array",
                 "items": { "$ref": "#/components/schemas/Court" },
@@ -201,7 +240,8 @@
                   "slots": {
                     "type": "array",
                     "items": { "$ref": "#/components/schemas/TimeSlot" }
-                  }
+                  },
+                  "unavailableReason": { "type": "string" }
                 }
               }
             }
@@ -233,6 +273,14 @@
     "responses": {
       "Unauthorized": {
         "description": "API Key 無效",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "店鋪未開放 Open API 或金鑰無權存取",
         "content": {
           "application/json": {
             "schema": { "$ref": "#/components/schemas/Error" }

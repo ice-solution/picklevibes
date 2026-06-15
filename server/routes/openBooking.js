@@ -4,7 +4,7 @@ const fs = require('fs');
 const { openApiAuth } = require('../middleware/openApiAuth');
 const {
   resolveBookingDeepLink,
-  listBookableStores,
+  listOpenApiStores,
 } = require('../utils/bookingDeepLink');
 
 const router = express.Router();
@@ -57,7 +57,12 @@ router.use(openApiAuth);
 /** GET /api/open/booking/stores */
 router.get('/booking/stores', async (req, res) => {
   try {
-    const stores = await listBookableStores();
+    const includeCourts =
+      req.query.includeCourts !== 'false' && req.query.includeCourts !== '0';
+    const stores = await listOpenApiStores({
+      includeCourts,
+      authContext: req.openApiAuth,
+    });
     res.json({ success: true, data: { stores } });
   } catch (error) {
     console.error('Open API list stores:', error);
@@ -69,12 +74,16 @@ async function handleResolve(req, res) {
   try {
     const includeSlots = req.query.includeSlots === 'true' || req.query.includeSlots === '1';
     const duration = parseInt(req.query.duration, 10) || 60;
+    const audienceRole = String(req.query.audienceRole || 'user').trim().toLowerCase();
     const data = await resolveBookingDeepLink({
       storeSlug: req.params.storeSlug,
       courtSlug: req.params.courtSlug,
       date: req.params.date,
       includeSlots,
       durationMinutes: duration === 120 ? 120 : 60,
+      audienceRole,
+      requireOpenApi: true,
+      authContext: req.openApiAuth,
     });
     res.json({ success: true, data });
   } catch (error) {

@@ -48,6 +48,16 @@ const storeSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  /** 外部 Open Booking API（每店獨立金鑰） */
+  openApiEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  openApiKey: {
+    type: String,
+    default: null,
+    trim: true,
+  },
   enableHikAccess: {
     type: Boolean,
     default: false,
@@ -100,5 +110,6 @@ const storeSchema = new mongoose.Schema({
 });
 
 storeSchema.index({ isActive: 1, sortOrder: 1 });
+storeSchema.index({ openApiEnabled: 1, openApiKey: 1 }, { sparse: true });
 
 module.exports = mongoose.model('Store', storeSchema);

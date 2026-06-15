@@ -196,6 +196,7 @@ app.use('/api/finance', require('./routes/finance'));
 app.use('/api/accounting/ledger', require('./routes/accountingLedger'));
 app.use('/api/accounting/pl', require('./routes/accountingPL'));
 app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'));
+app.use('/api/coach-classes', require('./routes/coachClasses'));
 app.use('/api/edm', require('./routes/edm'));
 app.use('/api/open', require('./routes/openBooking'));
 

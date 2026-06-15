@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const { body, validationResult } = require('express-validator');
 const Store = require('../models/Store');
 const Court = require('../models/Court');
@@ -57,6 +58,29 @@ router.post('/', [
       return res.status(400).json({ message: 'slug 已存在' });
     }
     console.error('建立店鋪錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/stores/:id/regenerate-open-api-key
+// @desc    重新產生店鋪 Open API 金鑰
+// @access  Private (Admin)
+router.post('/:id/regenerate-open-api-key', [auth, adminAuth], async (req, res) => {
+  try {
+    const openApiKey = `pk_${crypto.randomBytes(24).toString('base64url')}`;
+    const store = await Store.findByIdAndUpdate(
+      req.params.id,
+      { openApiKey, openApiEnabled: true },
+      { new: true, runValidators: true }
+    );
+    if (!store) return res.status(404).json({ message: '店鋪不存在' });
+    res.json({
+      message: 'Open API 金鑰已重新產生',
+      openApiKey,
+      store,
+    });
+  } catch (error) {
+    console.error('產生 Open API 金鑰錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
