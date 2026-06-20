@@ -1,6 +1,13 @@
 const mongoose = require('mongoose');
 
 const gameHallSchema = new mongoose.Schema({
+  /** 所屬加盟店鋪（PickCourt 聯盟場地） */
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    default: null,
+    index: true,
+  },
   name: {
     type: String,
     required: true,
@@ -25,6 +32,8 @@ const gameHallSchema = new mongoose.Schema({
     default: true
   }
 }, { timestamps: true });
+
+gameHallSchema.index({ store: 1, isActive: 1 });
 
 module.exports = mongoose.model('GameHall', gameHallSchema);
 

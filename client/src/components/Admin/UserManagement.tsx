@@ -115,6 +115,7 @@ const UserManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<'name' | 'email' | 'phone'>('name');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [listAudience, setListAudience] = useState<'members' | 'platform-admins'>('members');
 
   // 防抖搜索查詢
   useEffect(() => {
@@ -128,7 +129,7 @@ const UserManagement: React.FC = () => {
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [currentPage, pageSize, debouncedSearchQuery, searchType]);
+  }, [currentPage, pageSize, debouncedSearchQuery, searchType, listAudience]);
 
   const fetchUsers = async () => {
     try {
@@ -137,7 +138,8 @@ const UserManagement: React.FC = () => {
       // 構建查詢參數
       const params = new URLSearchParams({
         page: currentPage.toString(),
-        limit: pageSize.toString()
+        limit: pageSize.toString(),
+        audience: listAudience,
       });
       
       // 如果有搜索查詢，添加搜索參數
@@ -469,13 +471,13 @@ const UserManagement: React.FC = () => {
   };
 
   // 創建用戶相關函數
-  const handleCreateUser = () => {
+  const handleCreateUser = (defaultRole: 'user' | 'admin' | 'coach' = 'user') => {
     setNewUser({
       name: '',
       email: '',
       password: '',
       phone: '',
-      role: 'user',
+      role: defaultRole,
       membershipLevel: 'basic',
       vipDays: 30
     });
@@ -740,16 +742,49 @@ const UserManagement: React.FC = () => {
         <div className="p-6 border-b border-gray-200">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-bold text-gray-900">用戶管理</h2>
-              <p className="text-gray-600">管理用戶角色、會員等級和狀態</p>
+              <h2 className="text-xl font-bold text-gray-900">
+                {listAudience === 'platform-admins' ? '平台超級管理員（舊版）' : '球友用戶管理'}
+              </h2>
+              <p className="text-gray-600 text-sm mt-1">
+                {listAudience === 'platform-admins'
+                  ? '僅維護平台超級管理員（role=admin）。店鋪員工請至「店鋪員工」頁面指派。'
+                  : '管理球友與教練帳號。不含店鋪 staff／平台 admin。'}
+              </p>
             </div>
-            <button
-              onClick={handleCreateUser}
-              className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              <PlusIcon className="h-5 w-5 mr-2" />
-              創建用戶
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => { setListAudience('members'); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg text-sm ${listAudience === 'members' ? 'bg-primary-600 text-white' : 'bg-gray-100'}`}
+              >
+                球友／教練
+              </button>
+              <button
+                type="button"
+                onClick={() => { setListAudience('platform-admins'); setCurrentPage(1); }}
+                className={`px-3 py-1.5 rounded-lg text-sm ${listAudience === 'platform-admins' ? 'bg-primary-600 text-white' : 'bg-gray-100'}`}
+              >
+                超級管理員
+              </button>
+            {listAudience === 'members' && (
+              <button
+                onClick={() => handleCreateUser()}
+                className="flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors ml-2"
+              >
+                <PlusIcon className="h-5 w-5 mr-2" />
+                創建球友
+              </button>
+            )}
+            {listAudience === 'platform-admins' && (
+              <button
+                onClick={() => handleCreateUser('admin')}
+                className="flex items-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors ml-2"
+              >
+                <PlusIcon className="h-5 w-5 mr-2" />
+                新增超級管理員
+              </button>
+            )}
+            </div>
           </div>
           
           {/* 搜索框 */}
@@ -1008,7 +1043,7 @@ const UserManagement: React.FC = () => {
                   >
                     <option value="user">用戶</option>
                     <option value="coach">教練</option>
-                    <option value="admin">管理員</option>
+                    <option value="admin">平台超級管理員（舊版）</option>
                   </select>
                 )}
 
@@ -1786,7 +1821,7 @@ const UserManagement: React.FC = () => {
                   >
                     <option value="user">普通用戶</option>
                     <option value="coach">教練</option>
-                    <option value="admin">管理員</option>
+                    <option value="admin">平台超級管理員（舊版）</option>
                   </select>
                 </div>
 

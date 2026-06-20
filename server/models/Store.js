@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { HK_DISTRICTS } = require('../utils/hkDistricts');
 
 const dayHoursSchema = {
   start: { type: String, default: '08:00' },
@@ -25,6 +26,18 @@ const storeSchema = new mongoose.Schema({
     required: [true, '地址為必填項目'],
     trim: true,
     maxlength: [200, '地址不能超過200個字符'],
+  },
+  /** 香港 18 區（PickCourt 聯盟搜尋用） */
+  district: {
+    type: String,
+    trim: true,
+    default: null,
+    validate: {
+      validator(value) {
+        return value == null || value === '' || HK_DISTRICTS.includes(value);
+      },
+      message: '請選擇有效的香港區域',
+    },
   },
   phone: {
     type: String,
@@ -57,6 +70,38 @@ const storeSchema = new mongoose.Schema({
     type: String,
     default: null,
     trim: true,
+  },
+  /** PickCourt 聯盟：是否在聯盟平台展示／供應預約 */
+  allianceEnabled: {
+    type: Boolean,
+    default: false,
+  },
+  /** SaaS：店鋪後台域名（例 admin.venue.com） */
+  adminDomain: {
+    type: String,
+    default: null,
+    trim: true,
+    lowercase: true,
+  },
+  /** SaaS：店鋪前台域名（可選） */
+  consumerDomain: {
+    type: String,
+    default: null,
+    trim: true,
+    lowercase: true,
+  },
+  /** SaaS 訂閱方案 */
+  subscriptionPlan: {
+    type: String,
+    enum: ['starter', 'pro', 'enterprise'],
+    default: 'starter',
+  },
+  branding: {
+    displayName: { type: String, trim: true, default: '' },
+    tagline: { type: String, trim: true, default: '' },
+    intro: { type: String, trim: true, default: '' },
+    logoUrl: { type: String, trim: true, default: '' },
+    primaryColor: { type: String, trim: true, default: '' },
   },
   enableHikAccess: {
     type: Boolean,
@@ -111,5 +156,18 @@ const storeSchema = new mongoose.Schema({
 
 storeSchema.index({ isActive: 1, sortOrder: 1 });
 storeSchema.index({ openApiEnabled: 1, openApiKey: 1 }, { sparse: true });
+storeSchema.index({ allianceEnabled: 1, isActive: 1 });
+storeSchema.index({ district: 1, allianceEnabled: 1, isActive: 1 });
+storeSchema.index({ adminDomain: 1 }, { unique: true, sparse: true });
+storeSchema.index({ consumerDomain: 1 }, { unique: true, sparse: true });
+
+storeSchema.pre('save', function normalizeTenantDomains(next) {
+  const { normalizeDomain } = require('../utils/tenantResolver');
+  if (this.adminDomain) this.adminDomain = normalizeDomain(this.adminDomain);
+  if (this.consumerDomain) this.consumerDomain = normalizeDomain(this.consumerDomain);
+  if (this.adminDomain === '') this.adminDomain = null;
+  if (this.consumerDomain === '') this.consumerDomain = null;
+  next();
+});
 
 module.exports = mongoose.model('Store', storeSchema);

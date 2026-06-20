@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { loadTenantAccess } = require('../utils/tenantAccess');
 
 const auth = async (req, res, next) => {
   try {
@@ -35,13 +36,32 @@ const auth = async (req, res, next) => {
   }
 };
 
-// 管理員權限中間件
-const adminAuth = (req, res, next) => {
+// 後台權限：平台 admin 或已指派店鋪的 staff
+const adminAuth = async (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
+  }
+
+  req.tenantAccess = await loadTenantAccess(req.user);
+
+  if (req.user.role === 'admin') {
+    return next();
+  }
+
+  if (req.user.role === 'staff' && (req.tenantAccess.managedStoreIds || []).length > 0) {
+    return next();
+  }
+
+  return res.status(403).json({ message: '訪問被拒絕，需要管理員權限' });
+};
+
+// 平台超級管理員（僅 role === admin）
+const platformAdminAuth = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
   }
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ message: '訪問被拒絕，需要管理員權限' });
+    return res.status(403).json({ message: '訪問被拒絕，需要平台管理員權限' });
   }
   next();
 };
@@ -57,6 +77,6 @@ const coachOrAdminAuth = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, adminAuth, coachOrAdminAuth };
+module.exports = { auth, adminAuth, platformAdminAuth, coachOrAdminAuth };
 
 

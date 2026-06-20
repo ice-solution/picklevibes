@@ -64,8 +64,8 @@ const maintenanceAdminMiddleware = (req, res, next) => {
       return next();
     }
     
-    // 如果是管理員且已認證，允許通過所有 API
-    if (req.user && req.user.role === 'admin') {
+    // 平台管理員或店鋪員工（已認證）可通過 API
+    if (req.user && ['admin', 'staff'].includes(req.user.role)) {
       return next();
     }
     

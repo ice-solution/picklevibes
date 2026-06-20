@@ -8,6 +8,12 @@ const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const { VIP_PERIOD_MS } = require('../constants/vipMembership');
 const { auth } = require('../middleware/auth');
+const {
+  grantVip,
+  resolveMembership,
+  formatMembershipForClient,
+} = require('../utils/platformMembershipService');
+const { loadTenantAccess, formatTenantAccessForClient } = require('../utils/tenantAccess');
 
 const router = express.Router();
 
@@ -86,10 +92,15 @@ router.post('/register', authLimiter, [
       password,
       phone,
       membershipLevel: 'vip',
-      membershipExpiry: new Date(Date.now() + VIP_PERIOD_MS)
+      membershipExpiry: new Date(Date.now() + VIP_PERIOD_MS),
     });
 
     await user.save();
+    await grantVip(user._id, {
+      expiryDate: user.membershipExpiry,
+      source: 'pickcourt',
+    });
+    const membership = await resolveMembership(user);
 
     // 生成JWT token
     const token = jwt.sign(
@@ -107,9 +118,8 @@ router.post('/register', authLimiter, [
         email: user.email,
         phone: user.phone,
         role: user.role,
-        membershipLevel: user.membershipLevel,
-        membershipExpiry: user.membershipExpiry,
-        preferences: user.preferences
+        preferences: user.preferences,
+        ...formatMembershipForClient(membership),
       }
     });
 
@@ -173,6 +183,9 @@ router.post('/login', authLimiter, [
       { expiresIn: '7d' }
     );
 
+    const tenantAccess = await loadTenantAccess(user);
+    const membership = await resolveMembership(user);
+
     res.json({
       message: '登入成功',
       token,
@@ -182,8 +195,9 @@ router.post('/login', authLimiter, [
         email: user.email,
         phone: user.phone,
         role: user.role,
-        membershipLevel: user.membershipLevel,
-        preferences: user.preferences
+        preferences: user.preferences,
+        ...formatTenantAccessForClient(tenantAccess),
+        ...formatMembershipForClient(membership),
       }
     });
 
@@ -243,8 +257,9 @@ router.put('/profile', auth, [
 // @access  Private
 router.get('/me', auth, async (req, res) => {
   try {
-    // req.user 是從 auth middleware 中設置的
     const user = req.user;
+    const tenantAccess = await loadTenantAccess(user);
+    const membership = await resolveMembership(user);
 
     res.json({
       user: {
@@ -253,10 +268,11 @@ router.get('/me', auth, async (req, res) => {
         email: user.email,
         phone: user.phone,
         role: user.role,
-        membershipLevel: user.membershipLevel,
         preferences: user.preferences,
         lastLogin: user.lastLogin,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        ...formatTenantAccessForClient(tenantAccess),
+        ...formatMembershipForClient(membership),
       }
     });
 

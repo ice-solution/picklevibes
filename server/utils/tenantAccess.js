@@ -1,0 +1,107 @@
+const TenantMembership = require('../models/TenantMembership');
+
+/**
+ * 載入用戶的店鋪權限上下文
+ * @param {import('../models/User')} user
+ */
+async function loadTenantAccess(user) {
+  if (!user) {
+    return {
+      isPlatformAdmin: false,
+      managedStoreIds: [],
+      managedStores: [],
+      memberships: [],
+    };
+  }
+
+  if (user.role === 'admin') {
+    return {
+      isPlatformAdmin: true,
+      managedStoreIds: null,
+      managedStores: [],
+      memberships: [],
+    };
+  }
+
+  if (user.role === 'staff') {
+    const memberships = await TenantMembership.find({
+      user: user._id,
+      isActive: true,
+    })
+      .populate('store', 'name slug allianceEnabled')
+      .lean();
+
+    const managedStores = memberships
+      .filter((m) => m.store)
+      .map((m) => ({
+        id: m.store._id,
+        name: m.store.name,
+        slug: m.store.slug,
+        membershipRole: m.role,
+      }));
+
+    return {
+      isPlatformAdmin: false,
+      managedStoreIds: managedStores.map((s) => s.id),
+      managedStores,
+      memberships,
+    };
+  }
+
+  return {
+    isPlatformAdmin: false,
+    managedStoreIds: [],
+    managedStores: [],
+    memberships: [],
+  };
+}
+
+function canAccessStore(tenantAccess, storeId) {
+  if (!storeId) return false;
+  if (!tenantAccess) return false;
+  if (tenantAccess.isPlatformAdmin) return true;
+  return (tenantAccess.managedStoreIds || []).some((id) => String(id) === String(storeId));
+}
+
+/**
+ * 在查詢物件上套用店鋪範圍（非平台 admin）
+ */
+function applyStoreScope(query, tenantAccess, field = 'store') {
+  if (!tenantAccess || tenantAccess.isPlatformAdmin) return query;
+
+  const ids = tenantAccess.managedStoreIds || [];
+  const scoped = { ...query };
+
+  if (ids.length === 0) {
+    scoped[field] = { $in: [] };
+    return scoped;
+  }
+
+  if (scoped[field] != null && scoped[field] !== '') {
+    const sid = String(scoped[field]);
+    if (!ids.some((id) => String(id) === sid)) {
+      scoped[field] = { $in: [] };
+    }
+  } else {
+    scoped[field] = { $in: ids };
+  }
+
+  return scoped;
+}
+
+function formatTenantAccessForClient(tenantAccess) {
+  if (!tenantAccess) {
+    return { isPlatformAdmin: false, managedStores: [] };
+  }
+  return {
+    isPlatformAdmin: Boolean(tenantAccess.isPlatformAdmin),
+    managedStores: tenantAccess.managedStores || [],
+  };
+}
+
+module.exports = {
+  loadTenantAccess,
+  canAccessStore,
+  applyStoreScope,
+  formatTenantAccessForClient,
+};

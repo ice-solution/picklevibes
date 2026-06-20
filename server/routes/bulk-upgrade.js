@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const { auth, adminAuth } = require('../middleware/auth');
+const { grantVip } = require('../utils/platformMembershipService');
 
 // @route   POST /api/bulk-upgrade/vip
 // @desc    批量升級所有用戶為 VIP 會員 (僅管理員)
@@ -39,9 +40,7 @@ router.post('/vip', [auth, adminAuth], async (req, res) => {
     // 批量更新
     for (const user of basicUsers) {
       try {
-        user.membershipLevel = 'vip';
-        user.membershipExpiry = vipExpiryDate;
-        await user.save();
+        await grantVip(user._id, { expiryDate: vipExpiryDate, source: 'admin' });
         successCount++;
       } catch (error) {
         errorCount++;

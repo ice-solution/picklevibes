@@ -2,13 +2,31 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import axios from 'axios';
 import apiConfig from '../config/api';
 
-interface User {
+export interface ManagedStore {
+  id: string;
+  name: string;
+  slug: string;
+  membershipRole?: string;
+}
+
+interface PlatformMembershipInfo {
+  tier: string;
+  expiry?: string | null;
+  isVipActive?: boolean;
+  source?: string;
+}
+
+export interface User {
   id: string;
   name: string;
   email: string;
   phone: string;
   role: string;
   membershipLevel: string;
+  membershipExpiry?: string | null;
+  platformMembership?: PlatformMembershipInfo;
+  isPlatformAdmin?: boolean;
+  managedStores?: ManagedStore[];
   preferences?: {
     notifications: {
       email: boolean;
@@ -22,8 +40,8 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
-  register: (userData: RegisterData) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
+  register: (userData: RegisterData) => Promise<User>;
   logout: () => void;
   loading: boolean;
   updateProfile: (userData: Partial<User>) => Promise<void>;
@@ -38,14 +56,12 @@ interface RegisterData {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// 設置axios默認配置
 axios.defaults.baseURL = apiConfig.API_BASE_URL;
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 檢查本地存儲的token
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -72,26 +88,30 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (email: string, password: string) => {
     try {
       const response = await axios.post('/auth/login', { email, password });
-      const { token, user } = response.data;
-      
+      const { token, user: loggedInUser } = response.data;
+
       localStorage.setItem('token', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      setUser(user);
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || '登錄失敗');
+      setUser(loggedInUser);
+      return loggedInUser as User;
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      throw new Error(err.response?.data?.message || '登錄失敗');
     }
   };
 
   const register = async (userData: RegisterData) => {
     try {
       const response = await axios.post('/auth/register', userData);
-      const { token, user } = response.data;
-      
+      const { token, user: registeredUser } = response.data;
+
       localStorage.setItem('token', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      setUser(user);
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || '註冊失敗');
+      setUser(registeredUser);
+      return registeredUser as User;
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      throw new Error(err.response?.data?.message || '註冊失敗');
     }
   };
 
@@ -105,8 +125,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const response = await axios.put('/auth/profile', userData);
       setUser(response.data.user);
-    } catch (error: any) {
-      throw new Error(error.response?.data?.message || '更新資料失敗');
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } } };
+      throw new Error(err.response?.data?.message || '更新資料失敗');
     }
   };
 
@@ -116,14 +137,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     register,
     logout,
     loading,
-    updateProfile
+    updateProfile,
   };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

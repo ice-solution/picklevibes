@@ -39,7 +39,9 @@ function getApiBaseUrl(req) {
 // @access  Private(Game JWT)
 router.get('/:id/info', gameAuth, async (req, res) => {
   try {
-    const gameHall = await GameHall.findById(req.params.id).lean();
+    const gameHall = await GameHall.findById(req.params.id)
+      .populate('store', 'name slug district branding allianceEnabled')
+      .lean();
     if (!gameHall || gameHall.isActive === false) return res.status(404).json({ message: '遊戲廳不存在' });
 
     const socketCode = randomSocketCode();
@@ -64,7 +66,15 @@ router.get('/:id/info', gameAuth, async (req, res) => {
           _id: gameHall._id,
           name: gameHall.name,
           description: gameHall.description || '',
-          seasonKey: gameHall.seasonKey || 'season-1'
+          seasonKey: gameHall.seasonKey || 'season-1',
+          store: gameHall.store
+            ? {
+                _id: gameHall.store._id,
+                name: gameHall.store.branding?.displayName || gameHall.store.name,
+                slug: gameHall.store.slug,
+                district: gameHall.store.district || null,
+              }
+            : null,
         },
         session: {
           _id: session._id,

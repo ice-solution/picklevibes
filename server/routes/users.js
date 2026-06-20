@@ -5,6 +5,12 @@ const UserBalance = require('../models/UserBalance');
 const Recharge = require('../models/Recharge');
 const { auth, adminAuth } = require('../middleware/auth');
 const emailService = require('../services/emailService');
+const {
+  grantVip,
+  setBasic,
+  resolveMembership,
+  formatMembershipForClient,
+} = require('../utils/platformMembershipService');
 
 const router = express.Router();
 
@@ -13,10 +19,31 @@ const router = express.Router();
 // @access  Private (Admin)
 router.get('/', [auth, adminAuth], async (req, res) => {
   try {
-    const { page = 1, limit = 10, role, membershipLevel, search, searchType } = req.query;
+    const { page = 1, limit = 10, role, membershipLevel, search, searchType, audience } = req.query;
     
     const query = {};
-    if (role) query.role = role;
+    const resolvedAudience = audience || 'members';
+    if (resolvedAudience === 'members') {
+      query.role = { $in: ['user', 'coach'] };
+    } else if (resolvedAudience === 'platform-admins') {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: '需要平台超級管理員權限' });
+      }
+      query.role = 'admin';
+    } else if (resolvedAudience === 'all') {
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: '需要平台超級管理員權限' });
+      }
+    } else {
+      return res.status(400).json({ message: '無效的 audience 參數' });
+    }
+
+    if (role) {
+      if (resolvedAudience === 'members' && !['user', 'coach'].includes(role)) {
+        return res.status(400).json({ message: '球友列表僅能篩選 user 或 coach' });
+      }
+      query.role = role;
+    }
     if (membershipLevel) query.membershipLevel = membershipLevel;
 
     const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -215,6 +242,12 @@ router.put('/:id/role', [
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
+    }
+
+    if (user.role === 'staff') {
+      return res.status(400).json({
+        message: '店鋪員工請於「店鋪員工」頁面管理，無法在此修改角色',
+      });
     }
     
     // 更新角色
@@ -797,34 +830,24 @@ router.put('/:id/membership', [auth, adminAuth], async (req, res) => {
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
     }
-    
-    // 如果設置為VIP，計算到期日期
+
+    let membership;
     if (membershipLevel === 'vip') {
-      const now = new Date();
-      const expiryDate = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
-      
-      user.membershipLevel = 'vip';
-      user.membershipExpiry = expiryDate;
-      
       console.log(`👤 管理員更新用戶 ${user.name} 為 VIP 會員，期限: ${days} 天`);
+      membership = await grantVip(userId, { days, source: 'admin' });
     } else {
-      user.membershipLevel = 'basic';
-      user.membershipExpiry = null;
-      
       console.log(`👤 管理員更新用戶 ${user.name} 為普通會員`);
+      membership = await setBasic(userId, 'admin');
     }
-    
-    await user.save();
-    
+
     res.json({
       message: `用戶會員等級已更新為 ${membershipLevel === 'vip' ? `VIP會員 (${days}天)` : '普通會員'}`,
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
-        membershipLevel: user.membershipLevel,
-        membershipExpiry: user.membershipExpiry
-      }
+        ...formatMembershipForClient(membership),
+      },
     });
   } catch (error) {
     console.error('更新會員等級錯誤:', error);
@@ -915,6 +938,13 @@ router.post('/create', [
 
     const user = new User(userData);
     await user.save();
+
+    if (membershipLevel === 'vip') {
+      await grantVip(user._id, { expiryDate: user.membershipExpiry, source: 'admin' });
+    } else {
+      await setBasic(user._id, 'admin');
+    }
+    const membership = await resolveMembership(user._id);
 
     // 為新用戶創建積分記錄
     const userBalance = new UserBalance({

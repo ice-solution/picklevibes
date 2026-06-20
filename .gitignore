@@ -108,6 +108,7 @@ client/build/
 .vercel
 
 db-backups/
+backup/
 
 # One-time scripts (do not commit)
 update-vip-to-20260422.js

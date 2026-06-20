@@ -23,7 +23,7 @@ const Login: React.FC = () => {
   // 已登入則直接回到原本要去的頁面（例如 game join）
   useEffect(() => {
     if (!authLoading && user) {
-      navigate(getPostAuthRedirectPath(redirectFrom), { replace: true });
+      navigate(getPostAuthRedirectPath(redirectFrom, user), { replace: true });
     }
   }, [authLoading, user, redirectFrom, navigate]);
 
@@ -78,16 +78,15 @@ const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await login(formData.email, formData.password);
-      
-      // 根據「記住我」選項儲存或清除 email
+      const loggedInUser = await login(formData.email, formData.password);
+
       if (rememberMe) {
         localStorage.setItem('rememberedEmail', formData.email);
       } else {
         localStorage.removeItem('rememberedEmail');
       }
-      
-      navigate(getPostAuthRedirectPath(redirectFrom), { replace: true });
+
+      navigate(getPostAuthRedirectPath(redirectFrom, loggedInUser), { replace: true });
     } catch (error: any) {
       setErrors({ general: error.message });
     } finally {
@@ -104,14 +103,11 @@ const Login: React.FC = () => {
           transition={{ duration: 0.6 }}
           className="text-center"
         >
-          <Link to="/" className="flex items-center justify-center space-x-2">
-            <div className="w-12 h-12 bg-primary-600 rounded-xl flex items-center justify-center">
-              <span className="text-white font-bold text-2xl">P</span>
-            </div>
-            <span className="text-3xl font-bold text-gray-900">PickleVibes</span>
+          <Link to="/" className="flex items-center justify-center">
+            <img src="/pickcourt_logo.jpg" alt="PickCourt" className="h-14 w-auto object-contain" />
           </Link>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            登入您的帳戶
+            登入 PickCourt
           </h2>
           <p className="mt-2 text-sm text-gray-600">
             或者{' '}

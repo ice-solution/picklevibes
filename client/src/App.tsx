@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { BookingProvider } from './contexts/BookingContext';
@@ -42,7 +42,14 @@ import Checkout from './pages/Checkout';
 import OrderHistory from './pages/OrderHistory';
 import Vlog from './pages/Vlog';
 import GameJoin from './pages/GameJoin';
+import PickleCourtHome from './pages/PickleCourtHome';
+import PickleCourtSearch from './pages/PickleCourtSearch';
+import { isPickCourtPublicPath } from './utils/pickcourtRoutes';
+import StoreAdmin from './pages/StoreAdmin';
+import StorePublic from './pages/StorePublic';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
+import TenantDomainRedirect from './components/TenantDomainRedirect';
+import { StoreTenantHostProvider, useStoreTenantHost } from './contexts/StoreTenantHostContext';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
 import ShopDisabled from './pages/ShopDisabled';
@@ -54,12 +61,38 @@ function App() {
         <ShopConfigProvider>
         <BookingProvider>
           <Router>
+            <StoreTenantHostProvider>
             <MaintenanceCheck>
-            <div className="min-h-screen bg-gray-50">
-              <Navbar />
-              <main>
-                <Routes>
-                <Route path="/" element={<Home />} />
+              <AppShell />
+            </MaintenanceCheck>
+            </StoreTenantHostProvider>
+          </Router>
+        </BookingProvider>
+        </ShopConfigProvider>
+      </AuthProvider>
+    </HelmetProvider>
+  );
+}
+
+function AppShell() {
+  const location = useLocation();
+  const isStoreAdmin = /^\/store\/[^/]+\/admin/.test(location.pathname);
+  const { resolved: isTenantHost } = useStoreTenantHost();
+  const hideMainChrome = isPickCourtPublicPath(location.pathname) || isStoreAdmin || isTenantHost;
+
+  return (
+    <div className={hideMainChrome ? 'min-h-screen' : 'min-h-screen bg-gray-50'}>
+      {!hideMainChrome && <Navbar />}
+      <main>
+        <TenantDomainRedirect />
+        <Routes>
+                <Route path="/" element={<PickleCourtHome />} />
+                <Route path="/search" element={<PickleCourtSearch />} />
+                <Route path="/pickcourt" element={<Navigate to="/" replace />} />
+                <Route path="/pickcourt/search" element={<Navigate to="/search" replace />} />
+                <Route path="/picklecourt" element={<Navigate to="/" replace />} />
+                <Route path="/picklecourt/search" element={<Navigate to="/search" replace />} />
+                <Route path="/picklevibes" element={<Home />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/vlog/:id" element={<Vlog />} />
                 <Route path="/faq" element={<FAQ />} />
@@ -105,16 +138,10 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
-                {/* Deep link 分享：/lai-chi-kok/match-court/2026-06-13 */}
-                <Route
-                  path="/:storeSlug/:courtSlug/:date"
-                  element={
-                    <ProtectedRoute>
-                      <Booking />
-                    </ProtectedRoute>
-                  }
-                />
+                {/* Deep link 分享：/lai-chi-kok/match-court/2026-06-13 — 須在靜態路由之後、catch-all 之前 */}
                 <Route path="/login" element={<Login />} />
+                <Route path="/pickcourt/login" element={<Navigate to="/login" replace />} />
+                <Route path="/picklecourt/login" element={<Navigate to="/login" replace />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/forgot-password" element={<ForgotPassword />} />
                 <Route path="/reset-password/:token" element={<ResetPassword />} />
@@ -146,6 +173,15 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route
+                  path="/store/:storeSlug/admin"
+                  element={
+                    <ProtectedRoute>
+                      <StoreAdmin />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route path="/store/:storeSlug" element={<StorePublic />} />
                 <Route 
                   path="/admin" 
                   element={
@@ -256,17 +292,19 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
+                <Route
+                  path="/:storeSlug/:courtSlug/:date"
+                  element={
+                    <ProtectedRoute>
+                      <Booking />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </main>
-              <Footer />
-            </div>
-            </MaintenanceCheck>
-          </Router>
-        </BookingProvider>
-        </ShopConfigProvider>
-      </AuthProvider>
-    </HelmetProvider>
+        </Routes>
+      </main>
+      {!hideMainChrome && <Footer />}
+    </div>
   );
 }
 

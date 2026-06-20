@@ -3,12 +3,21 @@ import { motion } from 'framer-motion';
 import axios from 'axios';
 import { PlusIcon, TrashIcon, PencilIcon } from '@heroicons/react/24/outline';
 
+type StoreOption = {
+  _id: string;
+  name: string;
+  slug: string;
+  district?: string | null;
+  allianceEnabled?: boolean;
+};
+
 type GameHall = {
   _id: string;
   name: string;
   description?: string;
   seasonKey?: string;
   isActive: boolean;
+  store?: StoreOption | string | null;
   createdAt?: string;
 };
 
@@ -16,14 +25,26 @@ const GameHallManagement: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
   const [items, setItems] = useState<GameHall[]>([]);
+  const [stores, setStores] = useState<StoreOption[]>([]);
   const [selected, setSelected] = useState<GameHall | null>(null);
 
   const [form, setForm] = useState({
+    storeId: '',
     name: '',
     description: '',
     seasonKey: 'season-1',
-    isActive: true
+    isActive: true,
   });
+
+  const fetchStores = async () => {
+    try {
+      const res = await axios.get('/stores/admin/all');
+      const list = (res.data?.stores || []).filter((s: StoreOption) => s.allianceEnabled);
+      setStores(list);
+    } catch {
+      setStores([]);
+    }
+  };
 
   const fetchList = async () => {
     setLoading(true);
@@ -39,35 +60,60 @@ const GameHallManagement: React.FC = () => {
   };
 
   useEffect(() => {
+    void fetchStores();
     void fetchList();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const storeLabel = (hall: GameHall) => {
+    const s = hall.store;
+    if (!s || typeof s === 'string') return '—';
+    return s.district ? `${s.name}（${s.district}）` : s.name;
+  };
+
   const startCreate = () => {
     setSelected(null);
-    setForm({ name: '', description: '', seasonKey: 'season-1', isActive: true });
+    setForm({
+      storeId: stores[0]?._id || '',
+      name: '',
+      description: '',
+      seasonKey: 'season-1',
+      isActive: true,
+    });
   };
 
   const startEdit = (it: GameHall) => {
     setSelected(it);
+    const storeId =
+      typeof it.store === 'object' && it.store?._id
+        ? it.store._id
+        : typeof it.store === 'string'
+          ? it.store
+          : '';
     setForm({
+      storeId,
       name: it.name || '',
       description: it.description || '',
       seasonKey: it.seasonKey || 'season-1',
-      isActive: it.isActive !== false
+      isActive: it.isActive !== false,
     });
   };
 
   const save = async () => {
+    if (!form.storeId) {
+      alert('請選擇加盟店鋪');
+      return;
+    }
     if (!form.name.trim()) {
       alert('請輸入名稱');
       return;
     }
     const payload = {
+      storeId: form.storeId,
       name: form.name.trim(),
       description: form.description.trim(),
       seasonKey: form.seasonKey.trim(),
-      isActive: !!form.isActive
+      isActive: !!form.isActive,
     };
 
     try {
@@ -78,8 +124,9 @@ const GameHallManagement: React.FC = () => {
       }
       await fetchList();
       alert('已保存');
-    } catch (e: any) {
-      alert(e?.response?.data?.message || '保存失敗');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } };
+      alert(err?.response?.data?.message || '保存失敗');
     }
   };
 
@@ -89,8 +136,9 @@ const GameHallManagement: React.FC = () => {
       await axios.delete(`/game-halls/${id}`);
       if (selected?._id === id) startCreate();
       await fetchList();
-    } catch (e: any) {
-      alert(e?.response?.data?.message || '刪除失敗');
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { message?: string } } };
+      alert(err?.response?.data?.message || '刪除失敗');
     }
   };
 
@@ -100,7 +148,9 @@ const GameHallManagement: React.FC = () => {
         <div className="flex items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-bold text-gray-900">GameHall 管理</h2>
-            <p className="text-gray-600 mt-1">建立並派發給 game client 端使用的遊戲廳（Mongo _id）。</p>
+            <p className="text-gray-600 mt-1">
+              計分廳綁定加盟店鋪，供場內計分系統與 PickCourt 聯盟查閱。
+            </p>
           </div>
           <button type="button" onClick={startCreate} className="btn-primary flex items-center gap-2">
             <PlusIcon className="w-5 h-5" /> 新增
@@ -136,7 +186,7 @@ const GameHallManagement: React.FC = () => {
                         {it.isActive ? '啟用' : '停用'}
                       </span>
                     </div>
-                    <div className="text-xs text-gray-500 mt-1 truncate">{it._id}</div>
+                    <div className="text-xs text-gray-500 mt-1 truncate">{storeLabel(it)}</div>
                     <div className="text-xs text-gray-500 mt-1 truncate">season: {it.seasonKey || 'season-1'}</div>
                   </button>
                 ))}
@@ -170,6 +220,21 @@ const GameHallManagement: React.FC = () => {
             ) : null}
 
             <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">加盟店鋪 *</label>
+              <select
+                className="input-field"
+                value={form.storeId}
+                onChange={(e) => setForm((p) => ({ ...p, storeId: e.target.value }))}
+              >
+                <option value="">請選擇</option>
+                {stores.map((s) => (
+                  <option key={s._id} value={s._id}>
+                    {s.district ? `${s.name}（${s.district}）` : s.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">名稱</label>
               <input className="input-field" value={form.name} onChange={(e) => setForm((p) => ({ ...p, name: e.target.value }))} />
             </div>
@@ -202,4 +267,3 @@ const GameHallManagement: React.FC = () => {
 };
 
 export default GameHallManagement;
-

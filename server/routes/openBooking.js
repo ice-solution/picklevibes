@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const { openApiEnabled } = require('../config/platformFeatures');
 const { openApiAuth } = require('../middleware/openApiAuth');
 const {
   resolveBookingDeepLink,
@@ -8,6 +9,15 @@ const {
 } = require('../utils/bookingDeepLink');
 
 const router = express.Router();
+
+/** Open API 暫停：設 OPEN_API_ENABLED=true 才開放 */
+router.use((req, res, next) => {
+  if (openApiEnabled) return next();
+  return res.status(503).json({
+    message: 'Open Booking API 暫未開放，請使用 PickCourt 聯盟平台',
+    code: 'OPEN_API_DISABLED',
+  });
+});
 
 const openApiSpecPath = path.join(__dirname, '../openapi/booking-openapi.json');
 

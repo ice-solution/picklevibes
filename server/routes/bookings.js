@@ -6,6 +6,8 @@ const Court = require('../models/Court');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
+const { applyStoreScope } = require('../utils/tenantAccess');
+const { isUserVipActive, resolveMembership } = require('../utils/platformMembershipService');
 const whatsappService = require('../services/whatsappService');
 const {
   sendBookingNotification,
@@ -219,8 +221,9 @@ router.post('/', [
       bookingUser = req.user;
     }
     
-    const isMember = bookingUser.membershipLevel !== 'basic';
-    const isVip = bookingUser.membershipLevel === 'vip';
+    const membership = await resolveMembership(bookingUser);
+    const isVip = membership.isVipActive;
+    const isMember = membership.tier !== 'basic';
     
     // 創建預約對象來計算價格
     const tempBooking = new Booking({
@@ -801,10 +804,11 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
     }
 
     const dateQuery = buildAdminBookingDateQuery({ dateFrom, dateTo });
-    const query = { ...dateQuery };
+    let query = { ...dateQuery };
     if (store && String(store).trim() !== '') {
       query.store = String(store).trim();
     }
+    query = applyStoreScope(query, req.tenantAccess, 'store');
 
     const bookings = await Booking.find(query)
       .select(
@@ -873,6 +877,8 @@ router.get('/admin/all', [
     if (dateQuery) {
       Object.assign(query, dateQuery);
     }
+
+    query = applyStoreScope(query, req.tenantAccess, 'store');
 
     const sortDir = sortParam === 'asc' ? 1 : -1;
     const limitNum = Math.min(10000, Math.max(1, parseInt(limit, 10) || 20));

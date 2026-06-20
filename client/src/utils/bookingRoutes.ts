@@ -25,7 +25,7 @@ export const BOOKING_RESERVED_SEGMENTS = new Set([
   'forgot-password', 'reset-password', 'dashboard', 'my-bookings', 'profile', 'admin',
   'admin-v2', 'payment-result', 'recharge', 'recharge-success', 'balance', 'maintenance',
   'coach-calendar', 'coach-courses', 'coach', 'activities', 'my-activities', 'shop', 'cart',
-  'checkout', 'orders', 'game', 'vlog',
+  'checkout', 'orders', 'game', 'vlog', 'pickcourt', 'picklecourt', 'picklevibes', 'search', 'store',
 ]);
 
 export interface BookingPathParams {

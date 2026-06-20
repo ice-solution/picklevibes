@@ -199,6 +199,8 @@ app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'
 app.use('/api/coach-classes', require('./routes/coachClasses'));
 app.use('/api/edm', require('./routes/edm'));
 app.use('/api/open', require('./routes/openBooking'));
+app.use('/api/platform', require('./routes/platform'));
+app.use('/api/tenant-memberships', require('./routes/tenantMemberships'));
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

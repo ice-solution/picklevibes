@@ -26,7 +26,13 @@
     "batch-recharge": "node server/scripts/batchManualRecharge.js",
     "debug-finance": "node server/scripts/debugFinance.js",
     "verify-finance": "node server/scripts/verifyFinanceRevenue.js",
-    "ensure-finance-indexes": "node server/scripts/ensureFinanceIndexes.js"
+    "ensure-finance-indexes": "node server/scripts/ensureFinanceIndexes.js",
+    "db-baseline-report": "node server/scripts/dbBaselineReport.js",
+    "db-restore-saas-dev": "bash scripts/restore-saas-dev.sh",
+    "migrate-store-tenant": "node server/scripts/migrateStoreTenantFields.js",
+    "migrate-store-district": "node server/scripts/migrateStoreDistrict.js",
+    "migrate-game-hall-store": "node server/scripts/migrateGameHallStore.js",
+    "migrate-platform-membership": "node server/scripts/migratePlatformMembership.js"
   },
   "keywords": [
     "pickleball",

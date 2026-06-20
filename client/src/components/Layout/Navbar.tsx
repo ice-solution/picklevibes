@@ -95,12 +95,22 @@ const Navbar: React.FC = () => {
 
   // 維護模式檢查
   const isMaintenanceMode = maintenanceStatus?.maintenanceMode;
-  const isAdmin = user?.role === 'admin';
+  const isPlatformAdmin = user?.role === 'admin';
+  const isStoreStaff = user?.role === 'staff' && (user?.managedStores?.length ?? 0) > 0;
+  const canAccessAdmin = isPlatformAdmin || isStoreStaff;
   const isCoach = user?.role === 'coach';
   const isAdminV2 = useMemo(() => location.pathname.startsWith('/admin-v2'), [location.pathname]);
+  const adminHref = useMemo(() => {
+    if (isPlatformAdmin) return isAdminV2 ? '/admin?tab=bookings' : '/admin-v2';
+    if (isStoreStaff && user?.managedStores?.[0]) {
+      return `/store/${user.managedStores[0].slug}/admin`;
+    }
+    return '/admin-v2';
+  }, [isPlatformAdmin, isStoreStaff, isAdminV2, user?.managedStores]);
+  const adminLinkLabel = isPlatformAdmin ? (isAdminV2 ? '返回舊版' : '平台管理') : '店鋪後台';
 
   // 如果在維護模式下且不是管理員，隱藏導航（包括維護頁面）
-  if (isMaintenanceMode && !isAdmin) {
+  if (isMaintenanceMode && !canAccessAdmin) {
     return null;
   }
 
@@ -260,13 +270,13 @@ const Navbar: React.FC = () => {
                 </div>
 
                 {/* 管理入口（預設新版；新版可返舊版） */}
-                {isAdmin && (
+                {canAccessAdmin && (
                   <Link
-                    to={isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
+                    to={adminHref}
                     className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors duration-200"
                   >
                     <CogIcon className="w-5 h-5" />
-                    <span>{isAdminV2 ? '返回舊版' : '管理'}</span>
+                    <span>{adminLinkLabel}</span>
                   </Link>
                 )}
 
@@ -482,16 +492,16 @@ const Navbar: React.FC = () => {
                     )}
 
                     {/* 管理員功能 */}
-                    {user.role === 'admin' && (
+                    {canAccessAdmin && (
                       <>
                         <div className="text-sm font-medium text-gray-500 px-3 py-1 mt-4">管理功能</div>
                         <Link
-                          to={isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
+                          to={adminHref}
                           onClick={() => setIsOpen(false)}
                           className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
                         >
                           <CogIcon className="w-5 h-5" />
-                          <span>{isAdminV2 ? '返回舊版' : '管理（新版）'}</span>
+                          <span>{adminLinkLabel}</span>
                         </Link>
                       </>
                     )}

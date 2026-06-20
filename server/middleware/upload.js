@@ -102,6 +102,47 @@ const processImage = (targetWidth, targetHeight) => {
   };
 };
 
+// 店鋪 Logo 上傳（保留比例，最長邊 512px）
+const storeLogoUpload = createUploadConfig('stores', 'store-logo');
+const processStoreLogo = async (req, res, next) => {
+  try {
+    if (!req.file) return next();
+
+    const inputPath = req.file.path;
+    const inputExt = path.extname(inputPath).toLowerCase();
+    const outputPath = inputPath.replace(/\.[^/.]+$/, '.jpg');
+
+    let tempPath = inputPath;
+    if (inputExt === '.jpg' || inputExt === '.jpeg') {
+      tempPath = inputPath.replace(/\.(jpg|jpeg)$/i, '_temp.jpg');
+      fs.renameSync(inputPath, tempPath);
+    }
+
+    await sharp(tempPath)
+      .resize(512, 512, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 90, progressive: true })
+      .toFile(outputPath);
+
+    if (tempPath !== outputPath) {
+      fs.unlinkSync(tempPath);
+    }
+
+    req.file.path = outputPath;
+    req.file.filename = path.basename(outputPath);
+    next();
+  } catch (error) {
+    console.error('店鋪 Logo 處理錯誤:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Logo 處理失敗',
+      error: error.message,
+    });
+  }
+};
+
 // 場地上傳配置 (1920x1280)
 const courtUpload = createUploadConfig('courts', 'court');
 const processCourtImage = processImage(1920, 1280);
@@ -248,6 +289,10 @@ const receiptUpload = multer({
 });
 
 module.exports = {
+  // 店鋪 Logo
+  storeLogoUpload,
+  processStoreLogo,
+
   // 場地上傳
   courtUpload,
   processCourtImage,

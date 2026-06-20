@@ -41,7 +41,15 @@ module.exports = {
           700: '#b45309',
           800: '#92400e',
           900: '#78350f',
-        }
+        },
+        pickcourt: {
+          navy: '#0f1f3d',
+          'navy-light': '#1a2f52',
+          'navy-dark': '#0a1528',
+          gold: '#c9a227',
+          'gold-light': '#e4c04d',
+          'gold-dark': '#9a7b1a',
+        },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
