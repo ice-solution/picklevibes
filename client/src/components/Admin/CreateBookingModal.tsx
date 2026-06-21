@@ -272,43 +272,11 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
     // 不要重置 fullVenueStep，讓它保持當前狀態直到完成
 
     try {
-      // 獲取所有場地
-      console.log('🔍 可用場地:', courts);
       if (!storeId) {
         throw new Error('請先選擇店鋪');
       }
-      const soloCourt = courts.find((court) => court.type === 'solo');
-      const trainingCourt = courts.find((court) => court.type === 'training');
-      const competitionCourt = courts.find((court) => court.type === 'competition');
 
-      console.log('🔍 找到的場地:', { soloCourt, trainingCourt, competitionCourt });
-
-      if (!soloCourt || !trainingCourt || !competitionCourt) {
-        throw new Error('找不到所有必要的場地');
-      }
-
-      // 創建3個預約
-      const bookings = [
-        { courtId: soloCourt._id, type: 'solo' },
-        { courtId: trainingCourt._id, type: 'training' },
-        { courtId: competitionCourt._id, type: 'competition' }
-      ];
-
-      // 先扣除積分（如果設置了積分扣除）
-      if (fullVenueDeduction > 0) {
-        try {
-          await axios.post(`/users/${formData.userId}/manual-deduct`, {
-            points: fullVenueDeduction,
-            reason: '包場預約積分扣除',
-            bypassRestrictions: formData.bypassRestrictions
-          });
-        } catch (error) {
-          console.error('積分扣除失敗:', error);
-          throw new Error('積分扣除失敗，請檢查用戶積分餘額');
-        }
-      }
-
-      // 使用專門的包場API，只創建一個預約記錄和一個QR碼
+      // 包場扣款由 API 統一處理（含自訂議價；避免重複扣款）
       const fullVenueData = {
         storeId,
         date: formData.date,
@@ -321,7 +289,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
           email: formData.playerEmail,
           phone: formData.playerPhone
         }],
-        notes: `包場預約 - 所有場地${fullVenueDeduction > 0 ? ` (已扣除${fullVenueDeduction}積分)` : ''}`,
+        notes: `包場預約 - 所有場地${fullVenueDeduction > 0 ? ` (議價 ${fullVenueDeduction} 積分)` : ''}`,
         userId: formData.userId, // 管理員為指定用戶創建
         pointsDeduction: fullVenueDeduction, // 傳遞積分扣除數量
         bypassRestrictions: formData.bypassRestrictions
@@ -772,7 +740,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                       </div>
                       
                       <p className="text-sm text-gray-500 mb-6">
-                        包場將同時預約所有場地（單人場、訓練場、比賽場）
+                        包場將同時 hold 店鋪內所有啟用場地，該時段不可再被預約
                       </p>
                     </div>
                   )}

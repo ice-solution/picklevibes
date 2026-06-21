@@ -3,6 +3,7 @@ import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
 import apiConfig from '../../config/api';
+import { BOOKING_CANCELLATION_POLICY_LINES } from '../../constants/bookingCancellationPolicy';
 import { 
   CalendarDaysIcon, 
   ClockIcon, 
@@ -527,6 +528,21 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             </div>
           </div>
         )}
+
+        {/* 取消及惡劣天氣政策 */}
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
+          <div className="flex items-start gap-3">
+            <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+            <div>
+              <h4 className="font-semibold text-amber-900 mb-2">取消及惡劣天氣政策</h4>
+              <ul className="text-sm text-amber-900 space-y-1 list-disc list-inside">
+                {BOOKING_CANCELLATION_POLICY_LINES.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
 
         {/* 重要提醒 */}
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">

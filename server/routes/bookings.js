@@ -19,6 +19,7 @@ const { collectBundledBookingIds } = require('../utils/bookingBundle');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
+const { settleBookingWithPoints, getSettlePreview } = require('../services/bookingSettleService');
 
 const router = express.Router();
 
@@ -808,7 +809,7 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
 
     const bookings = await Booking.find(query)
       .select(
-        'date startTime endTime status store court user specialRequests specialRequestsProcessed adminNotes createdAt'
+        'date startTime endTime status store court user specialRequests specialRequestsProcessed adminNotes createdAt venueBundleId venueBundleKind isFullVenue fullVenueBookings'
       )
       .populate('user', 'name email')
       .populate('store', 'name slug')
@@ -833,6 +834,10 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
       specialRequestsProcessed: b.specialRequestsProcessed === true,
       adminNoteCount: Array.isArray(b.adminNotes) ? b.adminNotes.length : 0,
       createdAt: b.createdAt,
+      venueBundleId: b.venueBundleId || null,
+      venueBundleKind: b.venueBundleKind || null,
+      isFullVenue: b.isFullVenue === true,
+      fullVenueBookings: b.fullVenueBookings || [],
     }));
 
     res.json({ bookings: items, count: items.length });
@@ -945,6 +950,56 @@ router.put('/:id/special-requests-processed', [
   }
 });
 
+// @route   POST /api/bookings/:id/settle
+// @desc    指派用戶並扣積分結算（admin 留場 → 客戶充值後結算，計入 T&L）
+// @access  Private (Admin)
+router.post('/:id/settle', [
+  auth,
+  adminAuth,
+  body('userId').notEmpty().withMessage('請選擇用戶'),
+  body('points').optional().isInt({ min: 1 }).withMessage('扣款積分必須是正整數'),
+  body('reason').optional().trim().isLength({ max: 200 }).withMessage('原因不能超過200字'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const { userId, points, reason = '預約結算' } = req.body;
+
+    const result = await settleBookingWithPoints({
+      bookingId: req.params.id,
+      targetUserId: userId,
+      points,
+      reason,
+      adminUser: req.user,
+      allowReassign: true,
+    });
+
+    res.json({
+      message: result.reassigned ? '已指派用戶並完成結算' : '預約結算成功',
+      booking: result.booking,
+      deduct: {
+        id: result.deductRecord._id,
+        points: result.deductRecord.points,
+      },
+      userBalance: result.userBalance,
+      reassigned: result.reassigned,
+      bundleCount: result.bundleCount || 1,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error('預約結算錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/bookings/:id
 // @desc    獲取單個預約詳情
 // @access  Private
@@ -969,7 +1024,16 @@ router.get('/:id', [auth], async (req, res) => {
       return res.status(403).json({ message: '無權限查看此預約' });
     }
 
-    res.json({ booking });
+    const payload = { booking: booking.toObject ? booking.toObject() : booking };
+    if (req.user.role === 'admin') {
+      try {
+        payload.settleInfo = await getSettlePreview(booking._id);
+      } catch {
+        payload.settleInfo = { eligible: false, suggestedPoints: 0 };
+      }
+    }
+
+    res.json(payload);
   } catch (error) {
     console.error('獲取預約詳情錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });

@@ -79,7 +79,7 @@ const FullVenueManagement: React.FC = () => {
     const confirm1 = window.confirm('確認要創建包場預約嗎？這將預約所有場地。');
     if (!confirm1) return;
     
-    const confirm2 = window.confirm('再次確認：包場預約將同時預約單人場、訓練場、比賽場。');
+    const confirm2 = window.confirm('再次確認：包場將 hold 店鋪內所有啟用場地。');
     if (!confirm2) return;
     
     const confirm3 = window.confirm('最後確認：您確定要創建包場預約嗎？');
@@ -464,7 +464,7 @@ const FullVenueManagement: React.FC = () => {
                   <div className="text-sm text-yellow-800">
                     <strong>包場預約警告：</strong>
                     <ul className="mt-1 list-disc list-inside">
-                      <li>包場預約將同時預約所有場地（單人場、訓練場、比賽場）</li>
+                      <li>包場將 hold 店鋪內所有啟用場地（不限類型），該時段不可再被預約</li>
                       <li>請確保時間段內沒有其他預約</li>
                       <li>包場預約無法取消，請謹慎操作</li>
                     </ul>

@@ -167,3 +167,62 @@
     0 0 0 4px #10B981,
     0 0 0 5px #10B981 !important;
 }
+
+/* 包場：左→右四色（比賽藍 / 訓練綠 / 單人紫 / 發球機橙） */
+.fc-event.booking-full-venue {
+  border: 2px solid #1e1b4b !important;
+  background: linear-gradient(
+    90deg,
+    #2563eb 0%,
+    #2563eb 24%,
+    #059669 25%,
+    #059669 49%,
+    #7c3aed 50%,
+    #7c3aed 74%,
+    #d97706 75%,
+    #d97706 100%
+  ) !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 6px rgba(30, 27, 75, 0.35) !important;
+}
+
+.fc-event.booking-full-venue .fc-event-title,
+.fc-event.booking-full-venue .fc-event-time {
+  color: #fff !important;
+}
+
+.fc-event.booking-full-venue-cancelled {
+  background: linear-gradient(
+    90deg,
+    #6b7280 0%,
+    #6b7280 24%,
+    #9ca3af 25%,
+    #9ca3af 49%,
+    #78716c 50%,
+    #78716c 74%,
+    #a8a29e 75%,
+    #a8a29e 100%
+  ) !important;
+  opacity: 0.85;
+}
+
+/* 包場 + 特殊要求未處理：外圈紅框 */
+.fc-event.booking-full-venue.booking-full-venue-alert {
+  box-shadow:
+    0 0 0 3px #dc2626,
+    0 2px 8px rgba(220, 38, 38, 0.4) !important;
+}
+
+.fc-event.booking-full-venue.booking-full-venue-processed {
+  box-shadow:
+    0 0 0 3px #10b981,
+    0 2px 8px rgba(16, 185, 129, 0.35) !important;
+}
+
+.fc-event.booking-full-venue.booking-full-venue-notes {
+  box-shadow:
+    0 0 0 3px #3b82f6,
+    0 2px 8px rgba(59, 130, 246, 0.35) !important;
+}
