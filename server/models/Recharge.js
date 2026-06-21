@@ -70,7 +70,33 @@ const rechargeSchema = new mongoose.Schema({
   pointsDeducted: {
     type: Boolean,
     default: false
-  }
+  },
+  /** 手動加減積分歸屬店鋪（損益認列用） */
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    default: null,
+    index: true,
+  },
+  /** 可選：歸屬場地 */
+  court: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Court',
+    default: null,
+  },
+  /** 操作管理員 */
+  adjustedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null,
+  },
+  /** 手動扣積分關聯預約（損益認列回寫至預約場地） */
+  booking: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Booking',
+    default: null,
+    index: true,
+  },
 }, {
   timestamps: true
 });
@@ -83,5 +109,6 @@ rechargeSchema.index({ rechargeOffer: 1 });
 /** 會計：期間充值統計、用戶有價積分池 */
 rechargeSchema.index({ status: 1, 'payment.paidAt': 1 });
 rechargeSchema.index({ user: 1, status: 1, 'payment.paidAt': 1 });
+rechargeSchema.index({ status: 1, pointsDeducted: 1, store: 1, 'payment.paidAt': 1 });
 
 module.exports = mongoose.model('Recharge', rechargeSchema);

@@ -3,6 +3,10 @@ const QRCode = require('qrcode');
 const fs = require('fs').promises;
 const path = require('path');
 const pdfService = require('./pdfService');
+const {
+  BOOKING_CANCELLATION_POLICY_HTML,
+  BOOKING_CANCELLATION_POLICY_TEXT,
+} = require('../constants/bookingCancellationPolicy');
 
 function orderItemDisplayName(item) {
   if (!item || !item.name) return '';
@@ -587,9 +591,10 @@ class EmailService {
               <strong>⚠️ 重要提醒：</strong>
               <ul>
                 <li>請保持場地整潔，使用完畢後請清理現場</li>
-                <li>如需取消或修改預約，請提前 24 小時聯繫我們</li>
               </ul>
             </div>
+
+            ${BOOKING_CANCELLATION_POLICY_HTML}
 
             <p>感謝您選擇 PickleVibes，祝您運動愉快！</p>
 
@@ -630,7 +635,8 @@ class EmailService {
         重要提醒：
         - 請準時到達，遲到超過 15 分鐘將視為取消預約
         - 請保持場地整潔，使用完畢後請清理現場
-        - 如需取消或修改預約，請提前 24 小時聯繫我們
+        
+        ${BOOKING_CANCELLATION_POLICY_TEXT}
         
         感謝您選擇 PickleVibes，祝您運動愉快！
         
@@ -745,6 +751,7 @@ class EmailService {
             <p style="background:#f8f9fa;padding:15px;border-radius:8px;margin:20px 0">
               請於預約時段準時到場。此店鋪暫不提供自動門禁密碼，如有疑問請聯絡場地。
             </p>
+            ${BOOKING_CANCELLATION_POLICY_HTML}
             <p style="text-align:center;color:#666;font-size:14px;margin-top:30px">
               感謝您選擇 PickleVibes<br>info@picklevibes.hk
             </p>
@@ -752,7 +759,7 @@ class EmailService {
         </body>
         </html>
       `,
-      text: `PickleVibes 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。`,
+      text: `PickleVibes 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。\n\n${BOOKING_CANCELLATION_POLICY_TEXT}`,
     };
   }
 

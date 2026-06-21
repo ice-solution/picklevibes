@@ -70,6 +70,41 @@ function buildConflictError(conflictCheck) {
   return err;
 }
 
+/** 包場 = 店鋪內所有可預約場地（不限類型；排除 full_venue 虛擬類型） */
+async function resolveStoreCourtsForFullVenue(storeId, options = {}) {
+  const courtQuery = {
+    store: storeId,
+    type: { $ne: 'full_venue' },
+  };
+  if (!options.includeInactive) {
+    courtQuery.isActive = true;
+  }
+  const courts = await Court.find(courtQuery).sort({ number: 1, name: 1 });
+  if (!courts.length) {
+    throw new Error('此店鋪沒有可包場的場地');
+  }
+  return courts;
+}
+
+/** 按場地牌價比例分配自訂總價，最後一場補齊舍入差額 */
+function allocateChargeAcrossCourts(chargeTotal, courtPrices) {
+  const listTotal = courtPrices.reduce((sum, cp) => sum + cp.courtPrice, 0);
+  if (chargeTotal <= 0 || !courtPrices.length) return courtPrices.map(() => 0);
+  if (listTotal <= 0) {
+    const even = Math.floor(chargeTotal / courtPrices.length);
+    return courtPrices.map((_, i) =>
+      i === courtPrices.length - 1 ? chargeTotal - even * (courtPrices.length - 1) : even
+    );
+  }
+  let allocated = 0;
+  return courtPrices.map((cp, i) => {
+    if (i === courtPrices.length - 1) return chargeTotal - allocated;
+    const share = Math.round((chargeTotal * cp.courtPrice) / listTotal);
+    allocated += share;
+    return share;
+  });
+}
+
 class FullVenueService {
   /**
    * 創建包場預約
@@ -86,19 +121,8 @@ class FullVenueService {
         throw new Error('請選擇店鋪');
       }
 
-      const courtQuery = { store: storeId };
-      if (!options.includeInactive) {
-        courtQuery.isActive = true;
-      }
-      const soloCourt = await Court.findOne({ type: 'solo', ...courtQuery });
-      const trainingCourt = await Court.findOne({ type: 'training', ...courtQuery });
-      const competitionCourt = await Court.findOne({ type: 'competition', ...courtQuery });
-      
-      if (!soloCourt || !trainingCourt || !competitionCourt) {
-        throw new Error('此店鋪找不到包場所需的場地（單人場、訓練場、比賽場）');
-      }
-      
-      const courts = [soloCourt, trainingCourt, competitionCourt];
+      const courts = await resolveStoreCourtsForFullVenue(storeId, options);
+      console.log(`🏢 包場場地：${courts.length} 個（${courts.map((c) => c.name).join('、')}）`);
 
       const bookingDate = normalizeBookingDateInput(bookingData.date);
       bookingData.date = bookingDate;
@@ -113,21 +137,32 @@ class FullVenueService {
         throw buildConflictError(conflictCheck);
       }
 
-      // 處理積分扣除（如果指定了）
-      let pointsDeducted = 0;
-      if (options.pointsDeduction && options.pointsDeduction > 0) {
-        pointsDeducted = options.pointsDeduction;
-        console.log(`💰 包場積分扣除: ${pointsDeducted} 分`);
-      }
+      const bypassRestrictions = options.bypassRestrictions === true;
+      /** 管理員輸入的包場扣款／議價（bypass 時仍保存，供結算與顯示） */
+      const requestedCharge = Math.max(0, Number(options.pointsDeduction) || 0);
+      const useCustomCharge = requestedCharge > 0;
 
-      // 計算包場總價格
-      let totalPrice = 0;
+      // 計算包場牌價總和
+      let listTotalPrice = 0;
       const courtBookings = [];
+      const courtPrices = [];
       const venueBundleId = new mongoose.Types.ObjectId();
 
-      // 為每個場地創建預約記錄
       for (const court of courts) {
         const courtPrice = court.getPriceForTime(bookingData.startTime, bookingData.date);
+        courtPrices.push({ court, courtPrice });
+        listTotalPrice += courtPrice;
+      }
+
+      const chargeTotal = useCustomCharge ? requestedCharge : listTotalPrice;
+      const allocatedCharges = allocateChargeAcrossCourts(chargeTotal, courtPrices);
+      const balanceDeduction = bypassRestrictions ? 0 : chargeTotal;
+      const unpaidHold = bypassRestrictions || balanceDeduction <= 0;
+
+      courtPrices.forEach(({ court, courtPrice }, index) => {
+        const courtCharge = allocatedCharges[index] || 0;
+        const courtPointsShare = unpaidHold ? 0 : courtCharge;
+
         const courtBooking = new Booking({
           user: user._id,
           store: storeId,
@@ -141,23 +176,30 @@ class FullVenueService {
           venueBundleId,
           venueBundleKind: 'full_venue',
           isFullVenue: false,
+          bypassRestrictions: bypassRestrictions,
+          noUserBalanceDebited: unpaidHold,
           status: 'confirmed',
           pricing: {
             basePrice: courtPrice,
-            totalPrice: courtPrice,
-            memberDiscount: 0
+            totalPrice: courtCharge,
+            memberDiscount: 0,
+            pointsDeducted: courtPointsShare,
+            isCustomPoints: useCustomCharge,
+            customPoints: useCustomCharge ? courtCharge : undefined,
+            originalPrice: courtPrice,
           },
           payment: {
             status: 'paid',
-            method: 'points',
-            pointsDeducted: 0
+            method: unpaidHold ? 'admin_waived' : 'points',
+            pointsDeducted: courtPointsShare,
+            originalPrice: courtPrice,
+            paidAt: new Date(),
           },
-          specialRequests: `🏢 包場預約 - ${court.name}\n📅 預約日期: ${bookingData.date.toLocaleDateString('zh-TW')}\n⏰ 時間: ${bookingData.startTime}-${bookingData.endTime}\n👥 參與人數: ${bookingData.totalPlayers}人\n💰 場地費用: ${courtPrice}積分${bookingData.notes ? `\n📝 備註: ${bookingData.notes}` : ''}`
+          specialRequests: `🏢 包場預約 - ${court.name}\n📅 預約日期: ${bookingData.date.toLocaleDateString('zh-TW')}\n⏰ 時間: ${bookingData.startTime}-${bookingData.endTime}\n👥 參與人數: ${bookingData.totalPlayers}人\n💰 場地費用: ${courtCharge}積分${useCustomCharge ? `（議價總額 ${chargeTotal}）` : ''}${bookingData.notes ? `\n📝 備註: ${bookingData.notes}` : ''}`
         });
 
         courtBookings.push(courtBooking);
-        totalPrice += courtPrice;
-      }
+      });
 
       // 保存所有預約
       const savedBookings = await Booking.insertMany(courtBookings);
@@ -176,34 +218,34 @@ class FullVenueService {
         );
       }
 
-      // 如果有積分扣除，創建積分扣除記錄
-      if (pointsDeducted > 0) {
+      // 非 bypass 且有指定扣款：從用戶餘額扣除（CreateBookingModal 可能已先 manual-deduct，此處僅在直接 API 建單時生效）
+      if (balanceDeduction > 0 && !bypassRestrictions) {
         const UserBalance = require('../models/UserBalance');
         let userBalance = await UserBalance.findOne({ user: user._id });
-        
+
         if (!userBalance) {
           userBalance = new UserBalance({ user: user._id });
           await userBalance.save();
         }
 
-        // 扣除積分並關聯到第一個預約記錄
         await userBalance.deductBalance(
-          pointsDeducted,
-          `包場預約積分扣除 - ${savedBookings.length}個場地`,
-          savedBookings[0]._id // 關聯到第一個預約記錄
+          balanceDeduction,
+          `包場預約積分扣除 - ${savedBookings.length}個場地${useCustomCharge ? `（議價 ${chargeTotal}）` : ''}`,
+          savedBookings[0]._id
         );
-        
-        console.log(`💰 包場積分扣除: ${pointsDeducted} 分`);
+
+        console.log(`💰 包場積分扣除: ${balanceDeduction} 分`);
       }
 
       console.log(`✅ 包場預約創建成功: ${savedBookings.length} 個場地`);
-      console.log(`💰 總價格: $${totalPrice}`);
+      console.log(`💰 包場總價: ${chargeTotal}（牌價 ${listTotalPrice}）`);
 
       return {
         success: true,
-        bookings: savedBookings, // 所有預約記錄
-        totalPrice: totalPrice,
-        message: `包場預約創建成功，共 ${savedBookings.length} 個場地，總價 $${totalPrice}`
+        bookings: savedBookings,
+        totalPrice: chargeTotal,
+        listTotalPrice,
+        message: `包場預約創建成功，共 ${savedBookings.length} 個場地，總價 ${chargeTotal} 積分`
       };
 
     } catch (error) {
@@ -224,19 +266,7 @@ class FullVenueService {
       if (!storeId) {
         throw new Error('請選擇店鋪');
       }
-      const courtQuery = { store: storeId };
-      if (!options.includeInactive) {
-        courtQuery.isActive = true;
-      }
-      const soloCourt = await Court.findOne({ type: 'solo', ...courtQuery });
-      const trainingCourt = await Court.findOne({ type: 'training', ...courtQuery });
-      const competitionCourt = await Court.findOne({ type: 'competition', ...courtQuery });
-      
-      if (!soloCourt || !trainingCourt || !competitionCourt) {
-        throw new Error('此店鋪找不到包場所需的場地（單人場、訓練場、比賽場）');
-      }
-      
-      const courts = [soloCourt, trainingCourt, competitionCourt];
+      const courts = await resolveStoreCourtsForFullVenue(storeId, options);
       const conflicts = [];
       const seenBookingIds = new Set();
 

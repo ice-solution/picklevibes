@@ -188,7 +188,7 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       return;
     }
     const sid = storeId ?? selectedStore?._id;
-    const url = sid ? `/courts?store=${sid}` : '/courts?all=true';
+    const url = sid ? `/courts?store=${sid}` : '/courts';
 
     try {
       fetchingCourts.current = true;

@@ -3,6 +3,9 @@ const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const Recharge = require('../models/Recharge');
+const Store = require('../models/Store');
+const Court = require('../models/Court');
+const Booking = require('../models/Booking');
 const { auth, adminAuth } = require('../middleware/auth');
 const emailService = require('../services/emailService');
 const {
@@ -11,8 +14,95 @@ const {
   resolveMembership,
   formatMembershipForClient,
 } = require('../utils/platformMembershipService');
+const {
+  isBookingEligibleForSettle,
+  suggestedSettlePoints,
+  settleBookingWithPoints,
+} = require('../services/bookingSettleService');
 
 const router = express.Router();
+
+async function resolveManualAdjustStoreCourt(storeId, courtId) {
+  const store = await Store.findById(storeId);
+  if (!store) {
+    const err = new Error('店鋪不存在');
+    err.status = 404;
+    throw err;
+  }
+  if (!courtId) return { store, court: null };
+
+  const court = await Court.findById(courtId);
+  if (!court) {
+    const err = new Error('場地不存在');
+    err.status = 404;
+    throw err;
+  }
+  if (String(court.store) !== String(store._id)) {
+    const err = new Error('場地不屬於所選店鋪');
+    err.status = 400;
+    throw err;
+  }
+  return { store, court };
+}
+
+function isBookingEligibleForManualDeduct(booking, linkedBookingIds) {
+  return isBookingEligibleForSettle(booking) && !linkedBookingIds.has(String(booking._id));
+}
+
+function suggestedDeductPoints(booking) {
+  return suggestedSettlePoints(booking);
+}
+
+async function resolveBookingForManualDeduct(bookingId, userId) {
+  const booking = await Booking.findById(bookingId)
+    .populate('store', 'name slug')
+    .populate({ path: 'court', select: 'name store', populate: { path: 'store', select: 'name slug' } });
+
+  if (!booking) {
+    const err = new Error('預約不存在');
+    err.status = 404;
+    throw err;
+  }
+  if (String(booking.user) !== String(userId)) {
+    const err = new Error('預約不屬於此用戶');
+    err.status = 400;
+    throw err;
+  }
+
+  const existingLink = await Recharge.findOne({
+    booking: bookingId,
+    pointsDeducted: true,
+    status: 'completed',
+  });
+  if (existingLink) {
+    const err = new Error('此預約已有手動扣積分記錄');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!isBookingEligibleForManualDeduct(booking, new Set())) {
+    const err = new Error('此預約不可再扣積分（可能已付款或已取消）');
+    err.status = 400;
+    throw err;
+  }
+
+  const storeDoc = booking.store?._id
+    ? booking.store
+    : booking.court?.store?._id
+      ? booking.court.store
+      : await Store.findById(booking.store || booking.court?.store);
+  if (!storeDoc) {
+    const err = new Error('無法解析預約所屬店鋪');
+    err.status = 400;
+    throw err;
+  }
+
+  return {
+    booking,
+    store: storeDoc,
+    court: booking.court?._id ? booking.court : null,
+  };
+}
 
 // @route   GET /api/users
 // @desc    獲取所有用戶列表 (僅管理員)
@@ -373,7 +463,9 @@ router.post('/:id/manual-recharge', [
   auth,
   adminAuth,
   body('points').isInt({ min: 1 }).withMessage('充值積分必須是正整數'),
-  body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('充值原因必須在1-200個字符之間')
+  body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('充值原因必須在1-200個字符之間'),
+  body('storeId').notEmpty().withMessage('請選擇歸屬店鋪'),
+  body('courtId').optional({ nullable: true }),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -384,8 +476,10 @@ router.post('/:id/manual-recharge', [
       });
     }
     
-    const { points, reason } = req.body;
+    const { points, reason, storeId, courtId } = req.body;
     const userId = req.params.id;
+    
+    const { store, court } = await resolveManualAdjustStoreCourt(storeId, courtId || null);
     
     // 檢查用戶是否存在
     const user = await User.findById(userId);
@@ -407,6 +501,9 @@ router.post('/:id/manual-recharge', [
       status: 'completed', // 直接完成
       paymentIntentId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
       description: `管理員手動充值 - ${reason}`,
+      store: store._id,
+      court: court?._id || null,
+      adjustedBy: req.user._id,
       payment: {
         status: 'paid',
         method: 'manual',
@@ -437,6 +534,8 @@ router.post('/:id/manual-recharge', [
         points: points,
         amount: points,
         reason: reason,
+        store: { id: store._id, name: store.name },
+        court: court ? { id: court._id, name: court.name } : null,
         adminName: req.user.name,
         completedAt: recharge.payment.paidAt
       },
@@ -447,7 +546,73 @@ router.post('/:id/manual-recharge', [
       }
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error('手動充值錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/users/:id/deductible-bookings
+// @desc    獲取可關聯手動扣積分的預約列表 (僅管理員)
+// @access  Private (Admin)
+router.get('/:id/deductible-bookings', [auth, adminAuth], async (req, res) => {
+  try {
+    const userId = req.params.id;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: '用戶不存在' });
+    }
+
+    const linkedBookingIds = new Set(
+      (await Recharge.distinct('booking', {
+        booking: { $ne: null },
+        pointsDeducted: true,
+        status: 'completed',
+      })).map(String)
+    );
+
+    const bookings = await Booking.find({
+      user: userId,
+      status: { $in: ['pending', 'confirmed', 'completed'] },
+    })
+      .populate('store', 'name slug')
+      .populate({ path: 'court', select: 'name number type store', populate: { path: 'store', select: 'name slug' } })
+      .sort({ date: -1, startTime: -1 })
+      .limit(80)
+      .lean();
+
+    const deductibleBookings = bookings
+      .filter((b) => isBookingEligibleForManualDeduct(b, linkedBookingIds))
+      .map((b) => {
+        const storeName = b.store?.name || b.court?.store?.name || '未指定店鋪';
+        const courtName = b.court?.name || '';
+        const dateStr = new Intl.DateTimeFormat('zh-HK', {
+          timeZone: 'Asia/Hong_Kong',
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+        }).format(new Date(b.date));
+        const suggested = suggestedDeductPoints(b);
+        return {
+          _id: b._id,
+          date: b.date,
+          startTime: b.startTime,
+          endTime: b.endTime,
+          status: b.status,
+          store: b.store || b.court?.store || null,
+          court: b.court,
+          pricing: b.pricing,
+          payment: b.payment,
+          suggestedPoints: suggested,
+          label: `${dateStr} ${b.startTime}–${b.endTime} ${courtName}（${storeName}）${suggested > 0 ? ` · ${suggested}分` : ''}`,
+        };
+      });
+
+    res.json({ bookings: deductibleBookings });
+  } catch (error) {
+    console.error('獲取可扣積分預約錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
@@ -460,6 +625,9 @@ router.post('/:id/manual-deduct', [
   adminAuth,
   body('points').isInt({ min: 1 }).withMessage('扣除積分必須是正整數'),
   body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('扣除原因必須在1-200個字符之間'),
+  body('bookingId').optional({ nullable: true }),
+  body('storeId').optional({ nullable: true }),
+  body('courtId').optional({ nullable: true }),
   body('bypassRestrictions').optional().isBoolean().withMessage('bypassRestrictions必須是布爾值')
 ], async (req, res) => {
   try {
@@ -471,8 +639,27 @@ router.post('/:id/manual-deduct', [
       });
     }
     
-    const { points, reason, bypassRestrictions = false } = req.body;
+    const { points, reason, bookingId, storeId, courtId, bypassRestrictions = false } = req.body;
     const userId = req.params.id;
+
+    if (!bypassRestrictions && !bookingId && !storeId) {
+      return res.status(400).json({ message: '請選擇關聯預約或歸屬店鋪' });
+    }
+
+    let store;
+    let court = null;
+    let booking = null;
+
+    if (bookingId) {
+      const resolved = await resolveBookingForManualDeduct(bookingId, userId);
+      booking = resolved.booking;
+      store = resolved.store;
+      court = resolved.court;
+    } else if (storeId) {
+      const resolved = await resolveManualAdjustStoreCourt(storeId, courtId || null);
+      store = resolved.store;
+      court = resolved.court;
+    }
     
     // 檢查用戶是否存在
     const user = await User.findById(userId);
@@ -485,6 +672,35 @@ router.post('/:id/manual-deduct', [
 
     // 如果不是管理員 bypass，才檢查用戶積分記錄
     if (!bypassRestrictions) {
+      if (bookingId) {
+        const result = await settleBookingWithPoints({
+          bookingId,
+          targetUserId: userId,
+          points,
+          reason,
+          adminUser: req.user,
+          allowReassign: false,
+        });
+        return res.json({
+          message: '手動扣除成功',
+          deduct: {
+            id: result.deductRecord._id,
+            points,
+            reason,
+            booking: { id: result.booking._id },
+            store: result.booking.store
+              ? { id: result.booking.store._id, name: result.booking.store.name }
+              : null,
+            court: result.booking.court
+              ? { id: result.booking.court._id, name: result.booking.court.name }
+              : null,
+            adminName: req.user.name,
+            completedAt: result.deductRecord.payment.paidAt,
+          },
+          userBalance: result.userBalance,
+        });
+      }
+
       // 獲取用戶餘額記錄
       userBalance = await UserBalance.findOne({ user: userId });
       if (!userBalance) {
@@ -511,7 +727,13 @@ router.post('/:id/manual-deduct', [
         amount: points, // 1積分 = 1港幣
         status: 'completed', // 直接完成
         paymentIntentId: `manual_deduct_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
-        description: `管理員手動扣除 - ${reason}`,
+        description: booking
+          ? `預約扣積分 - ${reason}`
+          : `管理員手動扣除 - ${reason}`,
+        store: store._id,
+        court: court?._id || null,
+        booking: booking?._id || null,
+        adjustedBy: req.user._id,
         payment: {
           status: 'paid',
           method: 'manual',
@@ -522,6 +744,17 @@ router.post('/:id/manual-deduct', [
         pointsDeducted: true // 標記為扣除
       });
       await deductRecord.save();
+
+      if (booking) {
+        booking.payment.method = 'points';
+        booking.payment.pointsDeducted = points;
+        booking.payment.originalPrice = booking.pricing?.totalPrice || points;
+        booking.payment.status = 'paid';
+        booking.payment.paidAt = new Date();
+        booking.noUserBalanceDebited = false;
+        booking.pricing.pointsDeducted = points;
+        await booking.save();
+      }
     } else {
       // 管理員 bypass 模式：只記錄但不實際扣除積分
       console.log(`🎯 管理員繞過積分扣除: ${user.name} - ${points}分 (${reason}) [BYPASS模式]`);
@@ -535,6 +768,9 @@ router.post('/:id/manual-deduct', [
         id: bypassRestrictions ? null : deductRecord._id,
         points: points,
         reason: reason,
+        booking: booking ? { id: booking._id } : null,
+        store: store ? { id: store._id, name: store.name } : null,
+        court: court ? { id: court._id, name: court.name } : null,
         adminName: req.user.name,
         completedAt: bypassRestrictions ? new Date() : deductRecord.payment.paidAt
       },
@@ -545,6 +781,9 @@ router.post('/:id/manual-deduct', [
       }
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error('手動扣除錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
@@ -631,6 +870,9 @@ router.get('/:id/recharge-records', [auth, adminAuth], async (req, res) => {
     // 獲取充值記錄
     const rechargeRecords = await Recharge.find(query)
       .populate('redeemCode', 'code name')
+      .populate('store', 'name slug')
+      .populate('court', 'name number')
+      .populate('booking', 'date startTime endTime')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);

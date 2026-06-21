@@ -59,6 +59,30 @@ interface PaginationInfo {
   limit: number;
 }
 
+interface StoreOption {
+  _id: string;
+  name: string;
+  slug?: string;
+}
+
+interface CourtOption {
+  _id: string;
+  name: string;
+  store?: string;
+}
+
+interface DeductibleBooking {
+  _id: string;
+  date: string;
+  startTime: string;
+  endTime: string;
+  status: string;
+  suggestedPoints: number;
+  label: string;
+  court?: { name?: string };
+  store?: { name?: string };
+}
+
 const BALANCE_HISTORY_PAGE_SIZE = 20;
 
 const UserManagement: React.FC = () => {
@@ -72,9 +96,16 @@ const UserManagement: React.FC = () => {
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [rechargePoints, setRechargePoints] = useState('');
   const [rechargeReason, setRechargeReason] = useState('');
+  const [rechargeStoreId, setRechargeStoreId] = useState('');
+  const [rechargeCourtId, setRechargeCourtId] = useState('');
   const [showDeductModal, setShowDeductModal] = useState(false);
   const [deductPoints, setDeductPoints] = useState('');
   const [deductReason, setDeductReason] = useState('');
+  const [deductBookingId, setDeductBookingId] = useState('');
+  const [deductibleBookings, setDeductibleBookings] = useState<DeductibleBooking[]>([]);
+  const [deductBookingsLoading, setDeductBookingsLoading] = useState(false);
+  const [stores, setStores] = useState<StoreOption[]>([]);
+  const [rechargeCourts, setRechargeCourts] = useState<CourtOption[]>([]);
   const [showBalanceHistory, setShowBalanceHistory] = useState(false);
   const [balanceHistory, setBalanceHistory] = useState<any[]>([]);
   const [balanceHistoryLoading, setBalanceHistoryLoading] = useState(false);
@@ -125,6 +156,40 @@ const UserManagement: React.FC = () => {
 
     return () => clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    axios.get('/stores/admin/all')
+      .then((res) => setStores(res.data.stores || []))
+      .catch(() => setStores([]));
+  }, []);
+
+  const fetchCourtsForStore = async (storeId: string) => {
+    if (!storeId) {
+      setRechargeCourts([]);
+      setRechargeCourtId('');
+      return;
+    }
+    try {
+      const response = await axios.get(`/courts?all=true&store=${storeId}`);
+      const courts = response.data.courts || response.data || [];
+      setRechargeCourts(courts);
+      setRechargeCourtId('');
+    } catch {
+      setRechargeCourts([]);
+    }
+  };
+
+  const fetchDeductibleBookings = async (userId: string) => {
+    try {
+      setDeductBookingsLoading(true);
+      const response = await axios.get(`/users/${userId}/deductible-bookings`);
+      setDeductibleBookings(response.data.bookings || []);
+    } catch {
+      setDeductibleBookings([]);
+    } finally {
+      setDeductBookingsLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -232,6 +297,9 @@ const UserManagement: React.FC = () => {
     setSelectedUser(user);
     setRechargePoints('');
     setRechargeReason('');
+    setRechargeStoreId('');
+    setRechargeCourtId('');
+    setRechargeCourts([]);
     setShowRechargeModal(true);
   };
 
@@ -239,16 +307,29 @@ const UserManagement: React.FC = () => {
     setSelectedUser(user);
     setDeductPoints('');
     setDeductReason('');
+    setDeductBookingId('');
+    setDeductibleBookings([]);
     setShowDeductModal(true);
+    fetchDeductibleBookings(user._id);
+  };
+
+  const handleDeductBookingChange = (bookingId: string) => {
+    setDeductBookingId(bookingId);
+    const booking = deductibleBookings.find((b) => b._id === bookingId);
+    if (booking && booking.suggestedPoints > 0) {
+      setDeductPoints(String(booking.suggestedPoints));
+    }
   };
 
   const handleSubmitRecharge = async () => {
-    if (!selectedUser || !rechargePoints || !rechargeReason) return;
+    if (!selectedUser || !rechargePoints || !rechargeReason || !rechargeStoreId) return;
     
     try {
       await axios.post(`/users/${selectedUser._id}/manual-recharge`, {
         points: parseInt(rechargePoints),
-        reason: rechargeReason
+        reason: rechargeReason,
+        storeId: rechargeStoreId,
+        courtId: rechargeCourtId || undefined,
       });
       
       setShowRechargeModal(false);
@@ -304,7 +385,7 @@ const UserManagement: React.FC = () => {
   };
 
   const handleSubmitDeduct = async () => {
-    if (!selectedUser || !deductPoints || !deductReason) return;
+    if (!selectedUser || !deductPoints || !deductReason || !deductBookingId) return;
     
     const pointsToDeduct = parseInt(deductPoints);
     if (pointsToDeduct <= 0) {
@@ -324,7 +405,8 @@ const UserManagement: React.FC = () => {
     try {
       await axios.post(`/users/${selectedUser._id}/manual-deduct`, {
         points: pointsToDeduct,
-        reason: deductReason
+        reason: deductReason,
+        bookingId: deductBookingId,
       });
       
       setShowDeductModal(false);
@@ -1114,6 +1196,44 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  歸屬店鋪 <span className="text-red-500">*</span>
+                </label>
+                <select
+                  value={rechargeStoreId}
+                  onChange={(e) => {
+                    setRechargeStoreId(e.target.value);
+                    fetchCourtsForStore(e.target.value);
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">請選擇店鋪</option>
+                  {stores.map((store) => (
+                    <option key={store._id} value={store._id}>{store.name}</option>
+                  ))}
+                </select>
+                <p className="mt-1 text-xs text-gray-500">用於損益報表歸屬追蹤（派送積分不計收入）</p>
+              </div>
+
+              {rechargeCourts.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    歸屬場地（可選）
+                  </label>
+                  <select
+                    value={rechargeCourtId}
+                    onChange={(e) => setRechargeCourtId(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="">不指定場地</option>
+                    {rechargeCourts.map((court) => (
+                      <option key={court._id} value={court._id}>{court.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   充值積分
                 </label>
                 <input
@@ -1148,7 +1268,7 @@ const UserManagement: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSubmitRecharge}
-                  disabled={!rechargePoints || !rechargeReason}
+                  disabled={!rechargePoints || !rechargeReason || !rechargeStoreId}
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   確認充值
@@ -1162,7 +1282,7 @@ const UserManagement: React.FC = () => {
       {/* 減分模態框 */}
       {showDeductModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div className="bg-white rounded-xl p-6 w-full max-w-lg">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">扣除積分</h3>
               <button
@@ -1179,6 +1299,33 @@ const UserManagement: React.FC = () => {
                   為 <span className="font-medium">{selectedUser.name}</span> 扣除積分
                 </p>
                 <p className="text-xs text-gray-500">當前餘額: {selectedUser.balance || 0} 分</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  關聯預約 <span className="text-red-500">*</span>
+                </label>
+                {deductBookingsLoading ? (
+                  <p className="text-sm text-gray-500">載入預約中…</p>
+                ) : deductibleBookings.length === 0 ? (
+                  <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                    此用戶暫無可扣積分的預約（可能已全部付款或已取消）
+                  </p>
+                ) : (
+                  <select
+                    value={deductBookingId}
+                    onChange={(e) => handleDeductBookingChange(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="">請選擇預約場地</option>
+                    {deductibleBookings.map((booking) => (
+                      <option key={booking._id} value={booking._id}>{booking.label}</option>
+                    ))}
+                  </select>
+                )}
+                <p className="mt-1 text-xs text-gray-500">
+                  扣款會回寫至該預約，損益報表按預約日期／場地認列
+                </p>
               </div>
 
               <div>
@@ -1231,7 +1378,7 @@ const UserManagement: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSubmitDeduct}
-                  disabled={!deductPoints || !deductReason}
+                  disabled={!deductPoints || !deductReason || !deductBookingId || deductibleBookings.length === 0}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   確認扣除
@@ -1405,6 +1552,7 @@ const UserManagement: React.FC = () => {
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">金額</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">積分狀態</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">店鋪</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">支付方式</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">描述</th>
                     <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">時間</th>
@@ -1418,7 +1566,9 @@ const UserManagement: React.FC = () => {
                         {record._id.substring(0, 8)}...
                       </td>
                       <td className="px-4 py-2">
-                        <span className="font-medium text-green-600">+{record.points}</span>
+                        <span className={`font-medium ${record.pointsDeducted ? 'text-red-600' : 'text-green-600'}`}>
+                          {record.pointsDeducted ? '-' : '+'}{record.points}
+                        </span>
                       </td>
                       <td className="px-4 py-2">
                         <span className="font-medium">HK${record.amount}</span>
@@ -1450,9 +1600,16 @@ const UserManagement: React.FC = () => {
                         </div>
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-600">
-                        {record.payment.method === 'manual' ? '手動充值' :
-                         record.payment.method === 'stripe' ? 'Stripe' :
-                         record.payment.method === 'alipay' ? '支付寶' : '微信支付'}
+                        {record.booking
+                          ? `預約 ${new Date(record.booking.date).toLocaleDateString('zh-HK')} ${record.booking.startTime}–${record.booking.endTime}`
+                          : record.store?.name || '—'}
+                        {!record.booking && record.court?.name ? ` / ${record.court.name}` : ''}
+                      </td>
+                      <td className="px-4 py-2 text-sm text-gray-600">
+                        {record.payment.method === 'manual'
+                          ? (record.pointsDeducted ? '手動扣款' : '手動充值')
+                          : record.payment.method === 'stripe' ? 'Stripe'
+                          : record.payment.method === 'alipay' ? '支付寶' : '微信支付'}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-600">{record.description}</td>
                       <td className="px-4 py-2 text-sm text-gray-500">

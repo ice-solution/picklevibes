@@ -90,15 +90,27 @@ router.get('/', async (req, res) => {
       return res.json({ court, store });
     }
     
-    const courts = await Court.find(query).populate('store', 'name slug address enableHikAccess').sort({ number: 1 });
+    const courts = await Court.find(query)
+      .populate('store', 'name slug address enableHikAccess isActive')
+      .sort({ number: 1 });
+    
+    let result = courts;
+    if (all !== 'true') {
+      result = courts.filter((court) => {
+        if (!court.isActive) return false;
+        const store = court.store;
+        if (store && store.isActive === false) return false;
+        return true;
+      });
+    }
     
     // 如果請求可用場地，過濾掉維護中的場地
     if (available === 'true') {
-      const availableCourts = courts.filter(court => court.isAvailable());
+      const availableCourts = result.filter(court => court.isAvailable());
       return res.json({ courts: availableCourts });
     }
     
-    res.json({ courts });
+    res.json({ courts: result });
   } catch (error) {
     console.error('獲取場地錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });

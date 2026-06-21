@@ -6,6 +6,7 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import axios from 'axios';
 import CreateBookingModal from './CreateBookingModal';
+import UserAutocomplete from '../Common/UserAutocomplete';
 import {
   CalendarDaysIcon,
   ClockIcon,
@@ -51,6 +52,10 @@ interface CalendarBooking {
   specialRequestsProcessed?: boolean;
   adminNoteCount?: number;
   createdAt: string;
+  venueBundleId?: string | null;
+  venueBundleKind?: string | null;
+  isFullVenue?: boolean;
+  fullVenueBookings?: string[];
 }
 
 /** 詳情彈窗（點擊後另取完整資料） */
@@ -66,15 +71,23 @@ interface Booking extends CalendarBooking {
     email: string;
     phone: string;
   }>;
-  pricing: {
-    totalPrice: number;
-    duration: number;
-    basePrice: number;
-  };
   payment: {
     method: string;
     status: string;
     amount: number;
+    pointsDeducted?: number;
+  };
+  noUserBalanceDebited?: boolean;
+  bypassRestrictions?: boolean;
+  venueBundleKind?: string | null;
+  isFullVenue?: boolean;
+  specialRequests?: string;
+  pricing: {
+    totalPrice: number;
+    duration: number;
+    basePrice: number;
+    isCustomPoints?: boolean;
+    customPoints?: number;
   };
   adminNotes?: Array<{
     _id: string;
@@ -128,6 +141,45 @@ function resolveBookingStoreName(booking: CalendarBooking | Booking): string {
   return '（未指派店鋪）';
 }
 
+/** 包場整組只顯示一條日曆事件 */
+function collapseFullVenueCalendarBookings(bookings: CalendarBooking[]): CalendarBooking[] {
+  const childIds = new Set<string>();
+  for (const b of bookings) {
+    if (b.isFullVenue && b.fullVenueBookings?.length) {
+      b.fullVenueBookings.forEach((id) => childIds.add(String(id)));
+    }
+  }
+
+  const bundleGroups = new Map<string, CalendarBooking[]>();
+  for (const b of bookings) {
+    if (b.venueBundleKind === 'full_venue' && b.venueBundleId) {
+      const key = String(b.venueBundleId);
+      if (!bundleGroups.has(key)) bundleGroups.set(key, []);
+      bundleGroups.get(key)!.push(b);
+    }
+  }
+
+  const bundleCounts = new Map<string, number>();
+  bundleGroups.forEach((group: CalendarBooking[]) => {
+    const leader = group.find((b: CalendarBooking) => b.isFullVenue) || group[0];
+    if (!leader) return;
+    bundleCounts.set(String(leader._id), group.length);
+    group.forEach((b: CalendarBooking) => {
+      if (String(b._id) !== String(leader._id)) childIds.add(String(b._id));
+    });
+  });
+
+  return bookings
+    .filter((b) => !childIds.has(String(b._id)))
+    .map((b) => {
+      const count = bundleCounts.get(String(b._id));
+      if (count && count > 1) {
+        return { ...b, _collapsedFullVenueCount: count } as CalendarBooking & { _collapsedFullVenueCount?: number };
+      }
+      return b;
+    });
+}
+
 /** 預約結束時間（香港）；24:00 為翌日 00:00（HKT）；跨日時段則加一日 */
 function hkBookingEndToUtcMs(ymd: string, endTime: string, startMs: number): number {
   if (endTime === '24:00') {
@@ -160,6 +212,20 @@ const BookingCalendar: React.FC = () => {
   const [addingNote, setAddingNote] = useState(false);
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
   const [editingNoteContent, setEditingNoteContent] = useState<string>('');
+  const [settleUser, setSettleUser] = useState<{ _id: string; name: string; email: string; phone?: string } | null>(null);
+  const [settlePoints, setSettlePoints] = useState('');
+  const [settleReason, setSettleReason] = useState('預約結算');
+  const [settleUserBalance, setSettleUserBalance] = useState<number | null>(null);
+  const [settleInfo, setSettleInfo] = useState<{
+    eligible: boolean;
+    alreadySettled?: boolean;
+    suggestedPoints: number;
+    bundleCount?: number;
+    isFullVenue?: boolean;
+    label?: string | null;
+    bundleBreakdown?: Array<{ id: string; courtName: string; pointsDeducted: number }>;
+  } | null>(null);
+  const [settling, setSettling] = useState(false);
   const calendarRangeRef = useRef<{ start: string; end: string } | null>(null);
   /** 避免 datesSet 與 events 更新連鎖造成重複請求／loading 卡死 */
   const lastFetchedRangeKeyRef = useRef<string>('');
@@ -265,7 +331,9 @@ const BookingCalendar: React.FC = () => {
   // 將預約數據轉換為FullCalendar事件格式（必須 memo，否則每次父層 render 新陣列會觸發 FC 內部 datesSet → 無限 refetch、無法換月）
   const events = useMemo(
     () =>
-      bookings.map((booking) => {
+      collapseFullVenueCalendarBookings(bookings).map((booking) => {
+    const collapsedCount = (booking as CalendarBooking & { _collapsedFullVenueCount?: number })._collapsedFullVenueCount;
+    const isCollapsedFullVenue = collapsedCount && collapsedCount > 1;
     const ymdHk = getHongKongCalendarYmd(booking.date);
     const startMs = hkWallTimeToUtcMs(ymdHk, booking.startTime);
     const endMs = hkBookingEndToUtcMs(ymdHk, booking.endTime, startMs);
@@ -281,7 +349,9 @@ const BookingCalendar: React.FC = () => {
     // 如果特殊要求已處理，使用綠色；否則如果有特殊要求，使用紅色
     // 如果有留言，使用藍色
     // 如果有多個狀態，使用漸變色
-    let borderColor = getCourtTypeColor(booking.court.type, booking.status);
+    let borderColor = isCollapsedFullVenue
+      ? '#6366F1'
+      : getCourtTypeColor(booking.court.type, booking.status);
     let classNames: string[] = [];
     
     // 構建狀態數組
@@ -296,8 +366,20 @@ const BookingCalendar: React.FC = () => {
       states.push('has-notes');
     }
     
-    // 根據狀態設置邊框
-    if (states.length === 1) {
+    // 包場：彩色橫向平滑漸層（左→右 藍→綠→紫→橙）
+    if (isCollapsedFullVenue) {
+      classNames.push('booking-full-venue');
+      if (booking.status === 'cancelled') {
+        classNames.push('booking-full-venue-cancelled');
+      }
+      if (hasSpecialRequests && !isSpecialRequestsProcessed) {
+        classNames.push('booking-full-venue-alert');
+      } else if (isSpecialRequestsProcessed) {
+        classNames.push('booking-full-venue-processed');
+      } else if (hasAdminNotes) {
+        classNames.push('booking-full-venue-notes');
+      }
+    } else if (states.length === 1) {
       // 單一狀態
       if (states[0] === 'special-request') {
         borderColor = '#DC2626'; // 紅色 - 特殊要求未處理
@@ -309,7 +391,7 @@ const BookingCalendar: React.FC = () => {
         borderColor = '#3B82F6'; // 藍色 - 有留言
         classNames.push('booking-blue-border');
       }
-    } else if (states.length === 2) {
+    } else if (!isCollapsedFullVenue && states.length === 2) {
       // 兩個狀態，使用漸變色
       classNames.push('booking-gradient-border');
       // 根據狀態組合決定漸變方向
@@ -320,7 +402,7 @@ const BookingCalendar: React.FC = () => {
       } else if (states.includes('processed') && states.includes('has-notes')) {
         classNames.push('gradient-green-blue');
       }
-    } else if (states.length === 3) {
+    } else if (!isCollapsedFullVenue && states.length === 3) {
       // 三個狀態，使用三色漸變
       classNames.push('booking-gradient-border');
       classNames.push('gradient-red-blue-green');
@@ -335,7 +417,10 @@ const BookingCalendar: React.FC = () => {
     let finalBorderColor = borderColor;
     let finalBorderWidth = 1;
     
-    if (classNames.includes('booking-gradient-border')) {
+    if (isCollapsedFullVenue) {
+      finalBorderColor = 'transparent';
+      finalBorderWidth = 0;
+    } else if (classNames.includes('booking-gradient-border')) {
       // 漸變色邊框時，使用透明邊框，讓 CSS 處理漸變
       finalBorderColor = 'transparent';
       finalBorderWidth = 0;
@@ -350,16 +435,20 @@ const BookingCalendar: React.FC = () => {
     }
 
     const storeLabel = resolveBookingStoreName(booking);
-    const title = storeFilterId
-      ? `${booking.court.name} - ${booking.user.name}`
-      : `[${storeLabel}] ${booking.court.name} - ${booking.user.name}`;
+    const title = isCollapsedFullVenue
+      ? (storeFilterId
+          ? `🏢 包場 (${collapsedCount}場) - ${booking.user.name}`
+          : `[${storeLabel}] 🏢 包場 (${collapsedCount}場) - ${booking.user.name}`)
+      : (storeFilterId
+          ? `${booking.court.name} - ${booking.user.name}`
+          : `[${storeLabel}] ${booking.court.name} - ${booking.user.name}`);
 
     return {
       id: booking._id,
       title,
       start: startDate,
       end: endDate,
-      backgroundColor: getCourtTypeColor(booking.court.type, booking.status),
+      backgroundColor: isCollapsedFullVenue ? 'transparent' : getCourtTypeColor(booking.court.type, booking.status),
       borderColor: finalBorderColor,
       borderWidth: finalBorderWidth,
       textColor: 'white',
@@ -395,6 +484,145 @@ const BookingCalendar: React.FC = () => {
     });
   };
 
+  const isBookingPendingSettle = (booking: Booking, info?: typeof settleInfo) => {
+    if (info) return info.eligible;
+    if (booking.status === 'cancelled') return false;
+    const method = booking.payment?.method;
+    const pts = Number(booking.payment?.pointsDeducted) || 0;
+    if (method === 'points' && pts > 0 && !booking.noUserBalanceDebited) return false;
+    if (['cash', 'bank_transfer', 'stripe'].includes(method) && booking.payment?.status === 'paid') {
+      return false;
+    }
+    return (
+      method === 'admin_waived' ||
+      booking.noUserBalanceDebited === true ||
+      (method === 'points' && pts === 0)
+    );
+  };
+
+  const isFullVenueBooking = (booking: Booking) =>
+    booking.venueBundleKind === 'full_venue' ||
+    booking.isFullVenue === true ||
+    String(booking.specialRequests || '').includes('包場');
+
+  const getSuggestedSettlePoints = (booking: Booking, info?: typeof settleInfo) => {
+    if (info?.suggestedPoints) return info.suggestedPoints;
+    if (booking.pricing?.isCustomPoints && booking.pricing.customPoints) {
+      return booking.pricing.customPoints;
+    }
+    return booking.pricing?.totalPrice || 0;
+  };
+
+  const getDisplayChargePoints = (booking: Booking, info?: typeof settleInfo) => {
+    const paid = Number(booking.payment?.pointsDeducted) || 0;
+    const isFV = info?.isFullVenue || isFullVenueBooking(booking);
+    const bundleCount =
+      info?.bundleCount ||
+      (booking.isFullVenue && booking.fullVenueBookings
+        ? booking.fullVenueBookings.length + 1
+        : isFV
+          ? 2
+          : 0);
+
+    if (booking.payment?.method === 'points' && paid > 0 && !booking.noUserBalanceDebited) {
+      if (isFV && bundleCount > 1) {
+        const bundleTotal = info?.suggestedPoints && info.suggestedPoints > paid
+          ? info.suggestedPoints
+          : info?.suggestedPoints || paid;
+        return {
+          amount: bundleTotal,
+          suffix: '已結算 · 包場總收',
+          courtShare: paid,
+          bundleCount,
+        };
+      }
+      return { amount: paid, suffix: '已結算', courtShare: null, bundleCount: 0 };
+    }
+    if (isBookingPendingSettle(booking, info)) {
+      return {
+        amount: getSuggestedSettlePoints(booking, info),
+        suffix: `待結算${info?.label ? ` · ${info.label}` : ''}`,
+        courtShare: null,
+        bundleCount: isFV ? bundleCount : 0,
+      };
+    }
+    return { amount: booking.pricing?.totalPrice || 0, suffix: null, courtShare: null, bundleCount: 0 };
+  };
+
+  const resetSettleForm = () => {
+    setSettleUser(null);
+    setSettlePoints('');
+    setSettleReason('預約結算');
+    setSettleUserBalance(null);
+    setSettleInfo(null);
+    setSettling(false);
+  };
+
+  const initSettleForm = (booking: Booking, info?: typeof settleInfo) => {
+    setSettleUser(null);
+    setSettlePoints(String(getSuggestedSettlePoints(booking, info) || ''));
+    setSettleReason('預約結算');
+    setSettleUserBalance(null);
+    setSettling(false);
+  };
+
+  const handleSettleUserChange = async (user: { _id: string; name: string; email: string; phone?: string } | null) => {
+    setSettleUser(user);
+    setSettleUserBalance(null);
+    if (!user) return;
+    try {
+      const response = await axios.get(`/users/${user._id}`);
+      setSettleUserBalance(response.data.user?.balance ?? null);
+    } catch {
+      setSettleUserBalance(null);
+    }
+  };
+
+  const handleSettleBooking = async () => {
+    if (!selectedBooking || !settleUser || !settlePoints) return;
+    const points = parseInt(settlePoints, 10);
+    if (points <= 0) {
+      alert('扣款積分必須大於 0');
+      return;
+    }
+    if (settleUserBalance !== null && settleUserBalance < points) {
+      alert(`用戶餘額不足！當前：${settleUserBalance}，需要：${points}`);
+      return;
+    }
+    const courtLabel = settleInfo?.isFullVenue
+      ? `包場（${settleInfo.bundleCount || 3} 個場地）`
+      : selectedBooking.court?.name || '場地';
+    const dateLabel = formatDate(selectedBooking.date);
+    if (
+      !window.confirm(
+        `確認將${settleInfo?.isFullVenue ? '包場' : '此預約'}指派予 ${settleUser.name} 並扣除 ${points} 積分？\n${dateLabel} ${selectedBooking.startTime}–${selectedBooking.endTime} ${courtLabel}`
+      )
+    ) {
+      return;
+    }
+    try {
+      setSettling(true);
+      const response = await axios.post(`/bookings/${selectedBooking._id}/settle`, {
+        userId: settleUser._id,
+        points,
+        reason: settleReason.trim() || '預約結算',
+      });
+      alert(response.data.message || '結算成功');
+      const refresh = await axios.get(`/bookings/${selectedBooking._id}`);
+      setSelectedBooking(refresh.data.booking);
+      setSettleInfo(refresh.data.settleInfo || null);
+      setSettleUser(null);
+      setSettlePoints('');
+      setSettleUserBalance(null);
+      setSettling(false);
+      refetchBookings();
+    } catch (error: any) {
+      alert(error.response?.data?.message || '結算失敗');
+    } finally {
+      setSettling(false);
+    }
+  };
+
   const handleEventClick = async (info: any) => {
     const bookingId = info.event.id;
     setShowDetailModal(true);
@@ -403,9 +631,16 @@ const BookingCalendar: React.FC = () => {
     setNewNoteContent('');
     setEditingNoteId(null);
     setEditingNoteContent('');
+    resetSettleForm();
     try {
       const response = await axios.get(`/bookings/${bookingId}`);
-      setSelectedBooking(response.data.booking);
+      const booking = response.data.booking as Booking;
+      const settlePreview = response.data.settleInfo as typeof settleInfo;
+      setSelectedBooking(booking);
+      setSettleInfo(settlePreview || null);
+      if (isBookingPendingSettle(booking, settlePreview || undefined)) {
+        initSettleForm(booking, settlePreview || undefined);
+      }
     } catch (error: any) {
       console.error('獲取預約詳情失敗:', error);
       alert(error.response?.data?.message || '獲取預約詳情失敗');
@@ -719,6 +954,7 @@ const BookingCalendar: React.FC = () => {
                   setNewNoteContent('');
                   setEditingNoteId(null);
                   setEditingNoteContent('');
+                  resetSettleForm();
                 }}
                 className="text-gray-400 hover:text-gray-600"
               >
@@ -930,22 +1166,125 @@ const BookingCalendar: React.FC = () => {
                 </div>
               </div>
               
+              {settleInfo?.alreadySettled && settleInfo.isFullVenue && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-green-900">包場已結算</p>
+                  <p className="text-2xl font-bold text-green-800 mt-1">
+                    {settleInfo.suggestedPoints} 積分
+                  </p>
+                  <p className="text-xs text-green-700 mt-1">
+                    共 {settleInfo.bundleCount} 個場地 · 用戶已付清（此頁為其中一場詳情）
+                  </p>
+                  {settleInfo.bundleBreakdown && settleInfo.bundleBreakdown.length > 0 && (
+                    <ul className="mt-2 text-xs text-green-800 space-y-0.5">
+                      {settleInfo.bundleBreakdown.map((row) => (
+                        <li key={row.id}>
+                          {row.courtName}：{row.pointsDeducted} 積分
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">總價</label>
-                  <p className="text-sm text-gray-900">
-                    {selectedBooking.payment.method === 'admin_waived' ? 0 : selectedBooking.pricing.totalPrice} 積分
-                  </p>
+                  {(() => {
+                    const charge = getDisplayChargePoints(selectedBooking, settleInfo || undefined);
+                    return (
+                      <div>
+                        <p className="text-sm font-semibold text-gray-900">
+                          {charge.suffix
+                            ? `${charge.amount} 積分（${charge.suffix}）`
+                            : `${charge.amount} 積分`}
+                        </p>
+                        {charge.courtShare != null &&
+                          charge.bundleCount > 1 &&
+                          charge.amount !== charge.courtShare && (
+                            <p className="text-xs text-gray-500 mt-1">
+                              此場地分攤 {charge.courtShare} 積分 · 共 {charge.bundleCount} 場
+                              （T&amp;L 按各場認列，總收以包場總額為準）
+                            </p>
+                          )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">付款方式</label>
                   <p className="text-sm text-gray-900">
                   {selectedBooking.payment.method === 'admin_waived'
-                    ? '管理員免扣積分'
-                    : selectedBooking.payment.method}
+                    ? '管理員留場（未扣積分）'
+                    : selectedBooking.payment.method === 'points'
+                      ? '積分'
+                      : selectedBooking.payment.method}
                 </p>
                 </div>
               </div>
+
+              {isBookingPendingSettle(selectedBooking, settleInfo || undefined) && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-4">
+                  <div>
+                    <h4 className="text-sm font-semibold text-amber-900">
+                      {settleInfo?.isFullVenue ? '包場指派用戶並結算' : '指派用戶並結算'}
+                    </h4>
+                    <p className="text-xs text-amber-800 mt-1">
+                      {settleInfo?.isFullVenue
+                        ? `此為包場預約（共 ${settleInfo.bundleCount || 3} 個場地），結算一次會整組轉至用戶並扣總價，T&L 按各場地認列。`
+                        : '客戶充值後，選擇用戶並扣積分。預約會轉至該用戶名下，收入計入 T&L（按預約日期／場地）。'}
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      指派用戶 <span className="text-red-500">*</span>
+                    </label>
+                    <UserAutocomplete
+                      value={settleUser?._id || ''}
+                      onChange={handleSettleUserChange}
+                      placeholder="搜索姓名、電郵或電話…"
+                    />
+                    {settleUserBalance !== null && (
+                      <p className="mt-1 text-xs text-gray-600">
+                        用戶餘額：<span className={settleUserBalance < parseInt(settlePoints || '0', 10) ? 'text-red-600 font-medium' : 'text-green-700 font-medium'}>{settleUserBalance}</span> 積分
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">扣款積分</label>
+                      <input
+                        type="number"
+                        min={1}
+                        value={settlePoints}
+                        onChange={(e) => setSettlePoints(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">備註</label>
+                      <input
+                        type="text"
+                        value={settleReason}
+                        onChange={(e) => setSettleReason(e.target.value)}
+                        placeholder="預約結算"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleSettleBooking}
+                    disabled={settling || !settleUser || !settlePoints}
+                    className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                  >
+                    {settling ? '結算中…' : settleInfo?.isFullVenue ? '包場指派並扣積分結算' : '指派用戶並扣積分結算'}
+                  </button>
+                </div>
+              )}
 
               {/* 管理動作 */}
               <div className="mt-6 pt-4 border-t border-gray-200">

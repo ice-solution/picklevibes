@@ -72,6 +72,9 @@ function classifyRechargePoints(recharge) {
   const method = recharge.payment?.method;
 
   if (method === 'manual') {
+    if (recharge.pointsDeducted) {
+      return { economicPoints: 0, giftPoints: 0, label: '管理員手動扣除' };
+    }
     return { economicPoints: 0, giftPoints: points, label: '管理員派送' };
   }
 
@@ -155,7 +158,7 @@ async function buildUserRechargePools(userIds, endInstant) {
       { updatedAt: { $lte: endInstant } }
     ]
   })
-    .select('user points amount payment.method payment.paidAt updatedAt')
+    .select('user points amount payment.method payment.paidAt updatedAt pointsDeducted pointsAdded')
     .lean();
 
   for (const r of recharges) {
@@ -257,9 +260,28 @@ async function computeIncomeLines(opts) {
         .sort({ pointsChargedAt: -1 })
         .lean();
 
+  const manualAdjustQuery = {
+    status: 'completed',
+    'payment.method': 'manual',
+    store: { $ne: null },
+    'payment.paidAt': { $gte: start, $lte: end }
+  };
+  if (storeId) {
+    manualAdjustQuery.store = storeId;
+  }
+
+  const manualAdjustments = await Recharge.find(manualAdjustQuery)
+    .select('user store court booking points amount description payment pointsDeducted pointsAdded')
+    .populate('store', 'name slug')
+    .populate('court', 'name')
+    .populate('user', 'name email')
+    .sort({ 'payment.paidAt': 1 })
+    .lean();
+
   const userIds = new Set();
   bookings.forEach((b) => b.user && userIds.add(String(b.user._id || b.user)));
   orders.forEach((o) => o.user && userIds.add(String(o.user._id || o.user)));
+  manualAdjustments.forEach((r) => r.user && userIds.add(String(r.user._id || r.user)));
 
   const pools = await buildUserRechargePools([...userIds], end);
   const lines = [];
@@ -367,6 +389,72 @@ async function computeIncomeLines(opts) {
       paidPointsRatio,
       excludeReason: null
     });
+  }
+
+  for (const r of manualAdjustments) {
+    const user = r.user;
+    const userName = user?.name || '';
+    const userEmail = user?.email || '';
+    const storeIdLine = r.store?._id ? String(r.store._id) : null;
+    const storeName = r.store?.name || '未指定店鋪';
+    const courtName = r.court?.name || '';
+    const incomeDate = formatHkYmd(r.payment?.paidAt || r.updatedAt);
+    const uid = String(user?._id || r.user);
+    const pool = pools.get(uid) || { economicPoints: 0, giftPoints: 0 };
+
+    if (r.pointsDeducted) {
+      // 已關聯預約：收入由預約列認列（依預約出租日），避免重複計算
+      if (r.booking) continue;
+
+      const nominal = Number(r.points) || 0;
+      const paidPointsRatio = round4(userPaidPointsRatio(pool.economicPoints, pool.giftPoints));
+      const recognized = round2(nominal * paidPointsRatio);
+      const giftExcluded = round2(nominal - recognized);
+
+      lines.push({
+        id: `manual-deduct-${r._id}`,
+        source: 'venue',
+        lineType: 'recognized',
+        incomeDate,
+        category: '場地租賃（手動扣積分）',
+        description: (r.description || '管理員手動扣除').replace(/^管理員手動扣除 - /, ''),
+        storeId: storeIdLine,
+        store: storeName,
+        court: courtName,
+        orderNumber: null,
+        userName,
+        userEmail,
+        paymentMethod: '積分（手動扣款）',
+        statusLabel: 'completed',
+        nominal: round2(nominal),
+        recognized: round2(recognized),
+        giftExcluded: round2(giftExcluded),
+        paidPointsRatio,
+        excludeReason: null
+      });
+    } else if (r.pointsAdded) {
+      lines.push({
+        id: `manual-recharge-${r._id}`,
+        source: 'venue',
+        lineType: 'excluded',
+        incomeDate,
+        category: '手動充值（派送）',
+        description: (r.description || '管理員手動充值').replace(/^管理員手動充值 - /, ''),
+        storeId: storeIdLine,
+        store: storeName,
+        court: courtName,
+        orderNumber: null,
+        userName,
+        userEmail,
+        paymentMethod: '手動派送',
+        statusLabel: 'completed',
+        nominal: round2(Number(r.points) || 0),
+        recognized: 0,
+        giftExcluded: 0,
+        paidPointsRatio: null,
+        excludeReason: '管理員派送積分（不計收入，已歸屬店鋪）'
+      });
+    }
   }
 
   lines.sort((a, b) => {
