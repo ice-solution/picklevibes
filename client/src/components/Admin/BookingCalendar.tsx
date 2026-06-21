@@ -366,7 +366,7 @@ const BookingCalendar: React.FC = () => {
       states.push('has-notes');
     }
     
-    // 包場：彩色橫向漸層（左→右 = 比賽/訓練/單人/發球機）
+    // 包場：彩色橫向平滑漸層（左→右 藍→綠→紫→橙）
     if (isCollapsedFullVenue) {
       classNames.push('booking-full-venue');
       if (booking.status === 'cancelled') {

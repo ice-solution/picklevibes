@@ -168,18 +168,14 @@
     0 0 0 5px #10B981 !important;
 }
 
-/* 包場：左→右四色（比賽藍 / 訓練綠 / 單人紫 / 發球機橙） */
+/* 包場：左→右四色平滑漸變（比賽藍 → 訓練綠 → 單人紫 → 發球機橙） */
 .fc-event.booking-full-venue {
   border: 2px solid #1e1b4b !important;
   background: linear-gradient(
     90deg,
     #2563eb 0%,
-    #2563eb 24%,
-    #059669 25%,
-    #059669 49%,
-    #7c3aed 50%,
-    #7c3aed 74%,
-    #d97706 75%,
+    #059669 33%,
+    #7c3aed 66%,
     #d97706 100%
   ) !important;
   color: #fff !important;
@@ -197,12 +193,8 @@
   background: linear-gradient(
     90deg,
     #6b7280 0%,
-    #6b7280 24%,
-    #9ca3af 25%,
-    #9ca3af 49%,
-    #78716c 50%,
-    #78716c 74%,
-    #a8a29e 75%,
+    #9ca3af 33%,
+    #78716c 66%,
     #a8a29e 100%
   ) !important;
   opacity: 0.85;
