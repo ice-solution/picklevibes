@@ -124,7 +124,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateProfile = async (userData: Partial<User>) => {
     try {
       const response = await axios.put('/auth/profile', userData);
-      setUser(response.data.user);
+      setUser((prev) => ({
+        ...prev,
+        ...response.data.user,
+        platformMembership:
+          response.data.user.platformMembership ?? prev?.platformMembership,
+        membershipExpiry:
+          response.data.user.membershipExpiry ?? prev?.membershipExpiry,
+        membershipLevel:
+          response.data.user.membershipLevel ?? prev?.membershipLevel,
+      }));
     } catch (error: unknown) {
       const err = error as { response?: { data?: { message?: string } } };
       throw new Error(err.response?.data?.message || '更新資料失敗');

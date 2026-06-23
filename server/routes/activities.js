@@ -17,6 +17,11 @@ const {
   buildActivityListSortStages,
   withActivityPinFields,
 } = require('../utils/activityPin');
+const {
+  applyStoreScope,
+  checkDocumentStoreAccess,
+  resolveStoreForCreate,
+} = require('../utils/tenantAccess');
 
 const router = express.Router();
 const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
@@ -56,6 +61,66 @@ function parseLocalDateTime(dateTimeString) {
   const hkTimeString = dateTimeString + '+08:00';
   return new Date(hkTimeString);
 }
+
+function denyStoreAccess(res, check) {
+  return res.status(check.status).json({ message: check.message });
+}
+
+// @route   GET /api/activities/admin/list
+// @desc    管理員活動列表（含非 active、依店鋪範圍）
+// @access  Private (Admin)
+router.get('/admin/list', [auth, adminAuth], async (req, res) => {
+  try {
+    const { status, page = 1, limit = 10, store } = req.query;
+
+    let query = {};
+    if (status) {
+      query.status = status;
+    }
+    if (store && String(store).trim() !== '') {
+      query.store = String(store).trim();
+    }
+    query = applyStoreScope(query, req.tenantAccess, 'store');
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
+    const skip = (pageNum - 1) * limitNum;
+    const now = new Date();
+    const sortPipeline = buildActivityListSortStages(now);
+
+    const idRows = await Activity.aggregate([
+      { $match: query },
+      ...sortPipeline,
+      { $skip: skip },
+      { $limit: limitNum },
+      { $project: { _id: 1 } },
+    ]);
+    const orderedIds = idRows.map((r) => r._id);
+
+    let activities = [];
+    if (orderedIds.length > 0) {
+      const found = await Activity.find({ _id: { $in: orderedIds } })
+        .populate('organizer', 'name email')
+        .populate('coaches', 'name email');
+      const byId = new Map(found.map((a) => [a._id.toString(), a]));
+      activities = orderedIds
+        .map((id) => byId.get(id.toString()))
+        .filter(Boolean);
+    }
+
+    const total = await Activity.countDocuments(query);
+
+    res.json({
+      activities: activities.map((activity) => withActivityPinFields(activity, now)),
+      totalPages: Math.ceil(total / limitNum),
+      currentPage: pageNum,
+      totalActivities: total,
+    });
+  } catch (error) {
+    console.error('獲取管理員活動列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
 
 async function recalcActivityParticipantCount(activityId) {
   const registrations = await ActivityRegistration.find({
@@ -737,10 +802,15 @@ router.get('/user/registrations', auth, async (req, res) => {
 router.get('/:id/registrations', [auth, adminAuth], async (req, res) => {
   try {
     const activityId = req.params.id;
-    const activity = await Activity.findById(activityId).select('title maxParticipants currentParticipants');
+    const activity = await Activity.findById(activityId).select('title maxParticipants currentParticipants store');
 
     if (!activity) {
       return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const access = checkDocumentStoreAccess(req.tenantAccess, activity.store);
+    if (!access.ok) {
+      return denyStoreAccess(res, access);
     }
 
     const registrations = await ActivityRegistration.find({ activity: activityId })
@@ -844,6 +914,12 @@ router.post('/:id/duplicate', [auth, adminAuth], async (req, res) => {
     if (!source) {
       return res.status(404).json({ message: '活動不存在' });
     }
+
+    const access = checkDocumentStoreAccess(req.tenantAccess, source.store);
+    if (!access.ok) {
+      return denyStoreAccess(res, access);
+    }
+
     const title = (source.title + ' (複製)').slice(0, 100);
     const doc = {
       title,
@@ -861,6 +937,7 @@ router.post('/:id/duplicate', [auth, adminAuth], async (req, res) => {
       organizer: req.user.id,
       coaches: source.coaches ? [...source.coaches] : [],
       isActive: source.isActive,
+      store: source.store || null,
       venueHoldMode: source.venueHoldMode || 'full_venue',
       venueHoldCourtId: source.venueHoldCourtId || null
     };
@@ -962,6 +1039,11 @@ router.post('/', [
       });
     }
 
+    const storeResult = resolveStoreForCreate(req.tenantAccess, req.body.store);
+    if (!storeResult.ok) {
+      return res.status(storeResult.status).json({ message: storeResult.message });
+    }
+
     const venueHoldMode =
       req.body.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue';
     let venueHoldCourtId = null;
@@ -1002,6 +1084,7 @@ router.post('/', [
       requirements,
       organizer: req.user.id,
       coaches: coachIds,
+      store: storeResult.storeId,
       venueHoldMode: location === FIXED_ACTIVITY_VENUE_LOCATION ? venueHoldMode : 'full_venue',
       venueHoldCourtId:
         location === FIXED_ACTIVITY_VENUE_LOCATION && venueHoldMode === 'single_court'
@@ -1278,6 +1361,11 @@ router.post('/:id/admin/registrations', [
       return res.status(404).json({ message: '活動不存在' });
     }
 
+    const adminRegAccess = checkDocumentStoreAccess(req.tenantAccess, activity.store);
+    if (!adminRegAccess.ok) {
+      return denyStoreAccess(res, adminRegAccess);
+    }
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
@@ -1447,6 +1535,11 @@ router.patch('/:activityId/admin/registrations/:registrationId/cancel', [
       return res.status(404).json({ message: '活動不存在' });
     }
 
+    const cancelRegAccess = checkDocumentStoreAccess(req.tenantAccess, activity.store);
+    if (!cancelRegAccess.ok) {
+      return denyStoreAccess(res, cancelRegAccess);
+    }
+
     const registration = await ActivityRegistration.findOne({
       _id: registrationId,
       activity: activityId
@@ -1608,6 +1701,16 @@ router.patch('/:id/pin', [
           pinnedUntil: null,
         };
 
+    const existing = await Activity.findById(req.params.id).select('store');
+    if (!existing) {
+      return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const access = checkDocumentStoreAccess(req.tenantAccess, existing.store);
+    if (!access.ok) {
+      return denyStoreAccess(res, access);
+    }
+
     const activity = await Activity.findByIdAndUpdate(
       req.params.id,
       { $set: pinUpdate },
@@ -1654,6 +1757,11 @@ router.put('/:id', [
     const activity = await Activity.findById(req.params.id);
     if (!activity) {
       return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const access = checkDocumentStoreAccess(req.tenantAccess, activity.store);
+    if (!access.ok) {
+      return denyStoreAccess(res, access);
     }
 
     const previousTitle = activity.title;
@@ -1819,6 +1927,11 @@ router.delete('/:id', [auth, adminAuth], async (req, res) => {
       return res.status(404).json({ message: '活動不存在' });
     }
 
+    const access = checkDocumentStoreAccess(req.tenantAccess, activity.store);
+    if (!access.ok) {
+      return denyStoreAccess(res, access);
+    }
+
     // 軟刪除
     activity.isActive = false;
     await activity.save();
@@ -1855,6 +1968,11 @@ router.post('/:activityId/admin/registrations/:registrationId/notify', [
       .lean();
     if (!activity) {
       return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const notifyAccess = checkDocumentStoreAccess(req.tenantAccess, activity.store);
+    if (!notifyAccess.ok) {
+      return denyStoreAccess(res, notifyAccess);
     }
 
     const registration = await ActivityRegistration.findOne({
@@ -1924,6 +2042,11 @@ router.post('/:id/admin/registrations/notify-all', [
       .lean();
     if (!activity) {
       return res.status(404).json({ message: '活動不存在' });
+    }
+
+    const notifyAllAccess = checkDocumentStoreAccess(req.tenantAccess, activity.store);
+    if (!notifyAllAccess.ok) {
+      return denyStoreAccess(res, notifyAllAccess);
     }
 
     const registrations = await ActivityRegistration.find({

@@ -1,7 +1,13 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import { Bars3Icon, XMarkIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { PICKCOURT_HOME, pickcourtHomeHash } from '../../utils/pickcourtRoutes';
+import { useAuth } from '../../contexts/AuthContext';
+import {
+  getMembershipBadgeClass,
+  getMembershipTierLabel,
+  resolveDisplayMembership,
+} from '../../utils/membershipDisplay';
 
 type NavLink =
   | { to: string; label: string }
@@ -41,6 +47,64 @@ function NavItem({
   );
 }
 
+function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div
+        className={`${compact ? 'h-9' : 'h-10'} w-24 bg-pickcourt-gold/10 rounded-lg animate-pulse`}
+        aria-hidden
+      />
+    );
+  }
+
+  if (user) {
+    const membership = resolveDisplayMembership(user);
+    const tierLabel = getMembershipTierLabel(membership.tier, membership.isVipActive);
+    const badgeClass = getMembershipBadgeClass(membership.tier, membership.isVipActive);
+
+    return (
+      <div className={`flex items-center ${compact ? 'flex-col gap-2 w-full' : 'gap-3'}`}>
+        <Link
+          to="/profile"
+          onClick={onNavigate}
+          className={`flex items-center gap-2 ${compact ? 'w-full justify-center py-2' : ''} text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold transition-colors`}
+        >
+          <UserCircleIcon className="h-5 w-5 shrink-0" aria-hidden />
+          <span className="truncate max-w-[8rem]">{user.name}</span>
+        </Link>
+        <span
+          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${badgeClass}`}
+        >
+          {tierLabel}
+        </span>
+        {!compact && (
+          <Link
+            to="/balance"
+            onClick={onNavigate}
+            className="text-sm font-medium text-pickcourt-navy/70 hover:text-pickcourt-gold transition-colors"
+          >
+            餘額
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to="/login"
+      onClick={onNavigate}
+      className={`text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold transition-colors ${
+        compact ? 'block py-2 text-center w-full' : 'px-4 py-2'
+      }`}
+    >
+      球友登入
+    </Link>
+  );
+}
+
 const PickleCourtNav: React.FC = () => {
   const [open, setOpen] = useState(false);
 
@@ -67,12 +131,7 @@ const PickleCourtNav: React.FC = () => {
           </nav>
 
           <div className="hidden lg:flex items-center gap-3">
-            <Link
-              to="/login"
-              className="text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold transition-colors px-4 py-2"
-            >
-              球友登入
-            </Link>
+            <AuthActions />
             <a
               href={pickcourtHomeHash('contact')}
               className="text-sm font-semibold bg-pickcourt-gold text-pickcourt-navy-dark px-5 py-2.5 rounded-lg hover:bg-pickcourt-gold-light transition-colors shadow-md"
@@ -102,9 +161,7 @@ const PickleCourtNav: React.FC = () => {
               onClick={() => setOpen(false)}
             />
           ))}
-          <Link to="/login" className="block text-pickcourt-navy font-semibold py-2" onClick={() => setOpen(false)}>
-            球友登入
-          </Link>
+          <AuthActions compact onNavigate={() => setOpen(false)} />
           <a
             href={pickcourtHomeHash('contact')}
             className="block text-center bg-pickcourt-gold text-pickcourt-navy-dark font-semibold py-3 rounded-lg"

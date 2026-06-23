@@ -231,6 +231,7 @@ router.put('/profile', auth, [
     if (phone !== undefined) user.phone = phone;
     if (preferences !== undefined) user.preferences = { ...user.preferences, ...preferences };
     await user.save();
+    const membership = await resolveMembership(user);
     const userObj = user.toObject();
     delete userObj.password;
     res.json({
@@ -240,10 +241,10 @@ router.put('/profile', auth, [
         email: userObj.email,
         phone: userObj.phone,
         role: userObj.role,
-        membershipLevel: userObj.membershipLevel,
         preferences: userObj.preferences,
         lastLogin: userObj.lastLogin,
-        createdAt: userObj.createdAt
+        createdAt: userObj.createdAt,
+        ...formatMembershipForClient(membership),
       }
     });
   } catch (error) {

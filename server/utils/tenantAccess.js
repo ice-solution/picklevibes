@@ -99,9 +99,49 @@ function formatTenantAccessForClient(tenantAccess) {
   };
 }
 
+/** 單筆資源的店鋪存取（store 為 null 時僅平台 admin） */
+function checkDocumentStoreAccess(tenantAccess, storeId) {
+  if (!storeId) {
+    if (!tenantAccess?.isPlatformAdmin) {
+      return { ok: false, status: 403, message: '無權限存取此資源' };
+    }
+    return { ok: true };
+  }
+  if (!canAccessStore(tenantAccess, storeId)) {
+    return { ok: false, status: 403, message: '無權限存取此資源' };
+  }
+  return { ok: true };
+}
+
+/** 建立資源時解析並驗證店鋪 ID */
+function resolveStoreForCreate(tenantAccess, requestedStoreId) {
+  if (!tenantAccess) {
+    return { ok: false, status: 500, message: '權限上下文未載入' };
+  }
+  if (tenantAccess.isPlatformAdmin) {
+    return { ok: true, storeId: requestedStoreId || null };
+  }
+  const ids = tenantAccess.managedStoreIds || [];
+  if (ids.length === 0) {
+    return { ok: false, status: 403, message: '無店鋪管理權限' };
+  }
+  if (requestedStoreId) {
+    if (!ids.some((id) => String(id) === String(requestedStoreId))) {
+      return { ok: false, status: 403, message: '無權限指定此店鋪' };
+    }
+    return { ok: true, storeId: requestedStoreId };
+  }
+  if (ids.length === 1) {
+    return { ok: true, storeId: ids[0] };
+  }
+  return { ok: false, status: 400, message: '請指定店鋪' };
+}
+
 module.exports = {
   loadTenantAccess,
   canAccessStore,
   applyStoreScope,
   formatTenantAccessForClient,
+  checkDocumentStoreAccess,
+  resolveStoreForCreate,
 };

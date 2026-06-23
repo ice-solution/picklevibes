@@ -14,6 +14,11 @@ const {
   BULK_MAX_QUANTITY,
 } = require('../services/redeemBatchGenerator');
 const { auth, adminAuth } = require('../middleware/auth');
+const {
+  applyStoreScope,
+  checkDocumentStoreAccess,
+  resolveStoreForCreate,
+} = require('../utils/tenantAccess');
 
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { normalizeApplicablePricingSlots } = require('../utils/redeemPricingSlots');
@@ -39,6 +44,29 @@ function sanitizeRedeemPayload(body) {
     data.applicablePricingSlots = normalizeApplicablePricingSlots(data.applicablePricingSlots);
   }
   return data;
+}
+
+function denyStoreAccess(res, check) {
+  return res.status(check.status).json({ message: check.message });
+}
+
+async function assertRedeemCodeAccess(req, redeemCode) {
+  if (!redeemCode) {
+    return { ok: false, status: 404, message: '兌換碼不存在' };
+  }
+  return checkDocumentStoreAccess(req.tenantAccess, redeemCode.store);
+}
+
+async function assertRedeemBatchAccess(req, batchId) {
+  const sample = await RedeemCode.findOne({ batchId }).select('store').lean();
+  if (!sample) {
+    return { ok: false, status: 404, message: '找不到此批次' };
+  }
+  return checkDocumentStoreAccess(req.tenantAccess, sample.store);
+}
+
+function scopeRedeemQuery(query, tenantAccess) {
+  return applyStoreScope(query, tenantAccess, 'store');
 }
 
 // 獨立兌換碼：6 位（字母+數字混合），至少包含一個字母與一個數字
@@ -311,6 +339,11 @@ router.post('/admin/create', [
       });
     }
 
+    const storeResult = resolveStoreForCreate(req.tenantAccess, req.body.store);
+    if (!storeResult.ok) {
+      return res.status(storeResult.status).json({ message: storeResult.message });
+    }
+
     // 獨立兌換碼：一次生成 N 個唯一碼
     if (isIndependentCode) {
       const batchId = new mongoose.Types.ObjectId();
@@ -324,6 +357,7 @@ router.post('/admin/create', [
           batchId,
           isIndependentCode,
           commissionRate,
+          store: storeResult.storeId,
           // 獨立兌換碼：強制每個碼只用一次（全域）與每用戶一次
           usageLimit: 1,
           userUsageLimit: 1,
@@ -353,6 +387,7 @@ router.post('/admin/create', [
       code: finalCode,
       isIndependentCode,
       commissionRate,
+      store: storeResult.storeId,
       usageLimit: req.body.usageLimit,
       userUsageLimit: req.body.userUsageLimit,
       createdBy: req.user.id,
@@ -381,9 +416,9 @@ router.post('/admin/create', [
 // @access  Private (Admin)
 router.get('/admin/list', [auth, adminAuth], async (req, res) => {
   try {
-    const { page = 1, limit = 10, status, batchId, q: qRaw } = req.query;
+    const { page = 1, limit = 10, status, batchId, q: qRaw, store } = req.query;
     
-    const query = {};
+    let query = {};
     if (status === 'active') {
       query.isActive = true;
       query.validFrom = { $lte: new Date() };
@@ -392,6 +427,10 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
       query.validUntil = { $lt: new Date() };
     } else if (status === 'inactive') {
       query.isActive = false;
+    }
+
+    if (store && String(store).trim() !== '') {
+      query.store = String(store).trim();
     }
 
     if (batchId && String(batchId).trim() !== '') {
@@ -410,6 +449,8 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
         { description: re },
       ];
     }
+
+    query = scopeRedeemQuery(query, req.tenantAccess);
     
     const redeemCodes = await RedeemCode.find(query)
       .populate('createdBy', 'name email')
@@ -468,7 +509,16 @@ router.post('/admin/batch-jobs', [
 
     const quantity = parseInt(req.body.quantity, 10);
     const batchId = new mongoose.Types.ObjectId();
-    const template = normalizeTemplate(req.body, req.user.id);
+
+    const storeResult = resolveStoreForCreate(req.tenantAccess, req.body.store);
+    if (!storeResult.ok) {
+      return res.status(storeResult.status).json({ message: storeResult.message });
+    }
+
+    const template = normalizeTemplate(
+      { ...req.body, store: storeResult.storeId },
+      req.user.id
+    );
 
     const job = await RedeemBatchJob.create({
       batchId,
@@ -521,9 +571,14 @@ router.get('/admin/batch/:batchId/export', [auth, adminAuth], async (req, res) =
       return res.status(400).json({ message: '無效的 batchId' });
     }
 
-    const sample = await RedeemCode.findOne({ batchId }).select('name').lean();
+    const sample = await RedeemCode.findOne({ batchId }).select('name store').lean();
     if (!sample) {
       return res.status(404).json({ message: '找不到此批次' });
+    }
+
+    const exportAccess = checkDocumentStoreAccess(req.tenantAccess, sample.store);
+    if (!exportAccess.ok) {
+      return denyStoreAccess(res, exportAccess);
     }
 
     const codes = await RedeemCode.find({ batchId })
@@ -569,7 +624,7 @@ router.get('/admin/groups', [auth, adminAuth], async (req, res) => {
     const { page = 1, limit = 10, status, q: qRaw } = req.query;
 
     const now = new Date();
-    const match = { batchId: { $ne: null } };
+    let match = { batchId: { $ne: null } };
     if (status === 'active') {
       match.isActive = true;
       match.validFrom = { $lte: now };
@@ -578,6 +633,10 @@ router.get('/admin/groups', [auth, adminAuth], async (req, res) => {
       match.validUntil = { $lt: now };
     } else if (status === 'inactive') {
       match.isActive = false;
+    }
+
+    if (req.query.store && String(req.query.store).trim() !== '') {
+      match.store = String(req.query.store).trim();
     }
 
     const q = normalizeSearchQ(qRaw);
@@ -590,6 +649,8 @@ router.get('/admin/groups', [auth, adminAuth], async (req, res) => {
         { code: re },
       ];
     }
+
+    match = scopeRedeemQuery(match, req.tenantAccess);
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
     const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 10));
@@ -681,9 +742,14 @@ router.put('/admin/batch/:batchId', [
     }
 
     // 先找一筆確認 batch 存在
-    const sample = await RedeemCode.findOne({ batchId }).select('_id isIndependentCode').lean();
+    const sample = await RedeemCode.findOne({ batchId }).select('_id isIndependentCode store').lean();
     if (!sample) {
       return res.status(404).json({ message: '找不到此批次' });
+    }
+
+    const batchAccess = checkDocumentStoreAccess(req.tenantAccess, sample.store);
+    if (!batchAccess.ok) {
+      return denyStoreAccess(res, batchAccess);
     }
 
     const update = sanitizeRedeemPayload({ ...req.body });
@@ -721,7 +787,7 @@ router.put('/admin/batch/:batchId', [
     update.updatedAt = new Date();
 
     const result = await RedeemCode.updateMany(
-      { batchId },
+      scopeRedeemQuery({ batchId }, req.tenantAccess),
       { $set: update },
       { runValidators: true }
     );
@@ -794,6 +860,16 @@ router.put('/admin/:id', [
       }
     }
 
+    const existing = await RedeemCode.findById(req.params.id).select('store').lean();
+    if (!existing) {
+      return res.status(404).json({ message: '兌換碼不存在' });
+    }
+
+    const codeAccess = checkDocumentStoreAccess(req.tenantAccess, existing.store);
+    if (!codeAccess.ok) {
+      return denyStoreAccess(res, codeAccess);
+    }
+
     const redeemCode = await RedeemCode.findByIdAndUpdate(
       req.params.id,
       update,
@@ -836,6 +912,17 @@ router.put('/admin/:id/status', [
     }
 
     const { isActive } = req.body;
+
+    const existing = await RedeemCode.findById(req.params.id).select('store').lean();
+    if (!existing) {
+      return res.status(404).json({ message: '兌換碼不存在' });
+    }
+
+    const statusAccess = checkDocumentStoreAccess(req.tenantAccess, existing.store);
+    if (!statusAccess.ok) {
+      return denyStoreAccess(res, statusAccess);
+    }
+
     const redeemCode = await RedeemCode.findByIdAndUpdate(
       req.params.id,
       { isActive },
@@ -863,12 +950,14 @@ router.put('/admin/:id/status', [
 router.get('/admin/stats', [auth, adminAuth], async (req, res) => {
   try {
     const now = new Date();
+    const baseQuery = scopeRedeemQuery({}, req.tenantAccess);
     
     // 總兌換碼數量
-    const totalCodes = await RedeemCode.countDocuments();
+    const totalCodes = await RedeemCode.countDocuments(baseQuery);
     
     // 有效兌換碼數量
     const activeCodes = await RedeemCode.countDocuments({
+      ...baseQuery,
       isActive: true,
       validFrom: { $lte: now },
       validUntil: { $gte: now }
@@ -876,6 +965,7 @@ router.get('/admin/stats', [auth, adminAuth], async (req, res) => {
     
     // 總使用次數
     const totalUsageResult = await RedeemCode.aggregate([
+      { $match: baseQuery },
       {
         $group: {
           _id: null,
@@ -887,6 +977,7 @@ router.get('/admin/stats', [auth, adminAuth], async (req, res) => {
     
     // 總折扣金額
     const totalDiscountResult = await RedeemCode.aggregate([
+      { $match: baseQuery },
       {
         $group: {
           _id: null,
@@ -924,6 +1015,11 @@ router.get('/admin/:id/usage', [auth, adminAuth], async (req, res) => {
     const redeemCode = await RedeemCode.findById(id);
     if (!redeemCode) {
       return res.status(404).json({ message: '兌換碼不存在' });
+    }
+
+    const usageAccess = checkDocumentStoreAccess(req.tenantAccess, redeemCode.store);
+    if (!usageAccess.ok) {
+      return denyStoreAccess(res, usageAccess);
     }
     
     // 獲取使用記錄

@@ -13,6 +13,7 @@ import {
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { PRICING_SLOT_NAMES } from '../../constants/courtPricing';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 interface RedeemCode {
   _id: string;
@@ -132,6 +133,7 @@ function ApplicablePricingSlotsPicker({
 }
 
 const RedeemCodeManagement: React.FC = () => {
+  const lockedStoreId = useLockedStoreId();
   const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([]);
   const [redeemGroups, setRedeemGroups] = useState<RedeemCodeGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -206,7 +208,13 @@ const RedeemCodeManagement: React.FC = () => {
   useEffect(() => {
     fetchRedeemCodes();
     fetchStats();
-  }, []);
+  }, [lockedStoreId]);
+
+  const appendStoreParam = (params: URLSearchParams) => {
+    if (lockedStoreId) {
+      params.append('store', lockedStoreId);
+    }
+  };
 
   const fetchRedeemCodes = async (
     page = currentPage,
@@ -225,6 +233,7 @@ const RedeemCodeManagement: React.FC = () => {
         });
         if (status) params.append('status', status);
         if (searchQ.trim()) params.append('q', searchQ.trim());
+        appendStoreParam(params);
         const response = await axios.get(`/redeem/admin/groups?${params}`);
         setRedeemGroups(response.data.groups || []);
         setRedeemCodes([]); // 群組模式預設不顯示明細，需點選批次才載入
@@ -245,6 +254,7 @@ const RedeemCodeManagement: React.FC = () => {
       if (searchQ.trim()) params.append('q', searchQ.trim());
       // 非群組模式：只顯示不屬於批次的兌換碼
       params.append('standaloneOnly', 'true');
+      appendStoreParam(params);
 
       const response = await axios.get(`/redeem/admin/list?${params}`);
       setRedeemCodes(response.data.redeemCodes);
@@ -270,6 +280,7 @@ const RedeemCodeManagement: React.FC = () => {
       });
       if (status) params.append('status', status);
       if (searchQ.trim()) params.append('q', searchQ.trim());
+      appendStoreParam(params);
       const response = await axios.get(`/redeem/admin/list?${params}`);
       setRedeemCodes(response.data.redeemCodes || []);
       setSelectedBatchId(batchId);
@@ -573,6 +584,7 @@ const RedeemCodeManagement: React.FC = () => {
       
       const submitData = {
         ...formData,
+        ...(lockedStoreId ? { store: lockedStoreId } : {}),
         usageLimit: formData.usageLimit && formData.usageLimit.trim() !== '' ? parseInt(formData.usageLimit) : undefined,
         validFrom: new Date(formData.validFrom).toISOString(),
         validUntil: new Date(formData.validUntil).toISOString()

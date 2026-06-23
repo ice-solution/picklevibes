@@ -17,7 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import CoachAutocomplete from '../Common/CoachAutocomplete';
 import UserAutocomplete from '../Common/UserAutocomplete';
-import { useOptionalStoreAdmin } from '../../contexts/StoreAdminContext';
+import { useOptionalStoreAdmin, useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 interface Activity {
   _id: string;
@@ -101,6 +101,7 @@ type ParticipantCountValue = number | '';
 const ActivityManagement: React.FC = () => {
   const storeAdmin = useOptionalStoreAdmin();
   const userLookupStoreId = storeAdmin?.store?._id;
+  const lockedStoreId = useLockedStoreId();
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
   const fixedVenueLocation = '荔枝角福源廣場8樓B C D室';
   const customLocationOption = '__custom__';
@@ -165,7 +166,7 @@ const ActivityManagement: React.FC = () => {
 
   useEffect(() => {
     fetchActivities();
-  }, [currentPage, statusFilter]);
+  }, [currentPage, statusFilter, lockedStoreId]);
 
   useEffect(() => {
     if (!showCreateModal && !showEditModal) return;
@@ -195,7 +196,11 @@ const ActivityManagement: React.FC = () => {
         params.append('status', statusFilter);
       }
 
-      const response = await fetch(`${apiBaseUrl}/activities?${params}`, {
+      if (lockedStoreId) {
+        params.append('store', lockedStoreId);
+      }
+
+      const response = await fetch(`${apiBaseUrl}/activities/admin/list?${params}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -388,6 +393,9 @@ const ActivityManagement: React.FC = () => {
         }
       });
       formDataToSend.append('location', finalLocation);
+      if (lockedStoreId) {
+        formDataToSend.append('store', lockedStoreId);
+      }
       if (finalLocation === fixedVenueLocation) {
         formDataToSend.append('venueHoldMode', formData.venueHoldMode);
         if (formData.venueHoldMode === 'single_court' && formData.venueHoldCourtId) {

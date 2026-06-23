@@ -75,9 +75,9 @@ npm run dev                   # 前後端開發
 | 4 | Open API 擴充（聯盟查詢／下單） | ⏸ 暫停 |
 | 5 | `GameHall.store` + 計分系統合併 | ✅ |
 | 5b | 加盟限定 SaaS + Open API 功能開關 | ✅ |
-| 6 | 聯盟預約流程 + 店鋪品牌公開頁 | 🚧 搜尋帶時段深連結、店鋪後台鎖店 |
+| 6 | 聯盟預約流程 + 店鋪品牌公開頁 | 🚧 搜尋帶時段深連結、店鋪後台鎖店、活動／兌換券 API 鎖店 |
 | 6a | 店鋪會員查詢（曾預約才可搜） | ✅ |
-| 6b | 自訂域名 E2E + 會籍前台展示 | 🚧 Apache UAT 範例待 deploy 驗證 |
+| 6b | 自訂域名 E2E + 會籍前台展示 | 🚧 Nav+Profile 會籍 ✅；Apache UAT 範例待 deploy 驗證 |
 
 ## Migration 原則
 

@@ -11,8 +11,16 @@ import {
   ShoppingBagIcon,
   LockClosedIcon,
   QrCodeIcon,
-  TagIcon
+  TagIcon,
+  SparklesIcon,
 } from '@heroicons/react/24/outline';
+import {
+  formatMembershipExpiry,
+  getMembershipBadgeClass,
+  getMembershipSourceLabel,
+  getMembershipTierLabel,
+  resolveDisplayMembership,
+} from '../utils/membershipDisplay';
 
 type GameMatchItem = {
   _id: string;
@@ -341,6 +349,17 @@ const Profile: React.FC = () => {
     }
   };
 
+  const platformMembership = resolveDisplayMembership(user);
+  const membershipLabel = getMembershipTierLabel(
+    platformMembership.tier,
+    platformMembership.isVipActive
+  );
+  const membershipBadgeClass = getMembershipBadgeClass(
+    platformMembership.tier,
+    platformMembership.isVipActive
+  );
+  const membershipSourceLabel = getMembershipSourceLabel(platformMembership.source);
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
@@ -537,18 +556,44 @@ const Profile: React.FC = () => {
                     )}
                   </div>
 
-                  {/* 會員等級 */}
+                  {/* PickCourt 聯盟會籍 */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      會員等級
+                      PickCourt 聯盟會籍
                     </label>
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">
-                        {user?.membershipLevel === 'basic' && '普通會員'}
-                        {user?.membershipLevel === 'premium' && '高級會員'}
-                        {user?.membershipLevel === 'vip' && 'VIP會員'}
-                        {!user?.membershipLevel && '普通會員'}
-                      </span>
+                    <div className="rounded-lg border border-gray-200 bg-gradient-to-br from-slate-50 to-white p-4 space-y-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <SparklesIcon className="w-5 h-5 text-amber-500 shrink-0" aria-hidden />
+                        <span
+                          className={`px-3 py-1 rounded-full text-sm font-semibold ${membershipBadgeClass}`}
+                        >
+                          {membershipLabel}
+                        </span>
+                        {platformMembership.tier === 'vip' && (
+                          <span className="text-xs text-gray-500">
+                            {platformMembership.isVipActive ? 'VIP 有效中' : 'VIP 已過期'}
+                          </span>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                        <div>
+                          <span className="text-gray-500">到期日</span>
+                          <p className="font-medium text-gray-900">
+                            {platformMembership.tier === 'vip'
+                              ? formatMembershipExpiry(platformMembership.expiry)
+                              : '—'}
+                          </p>
+                        </div>
+                        {membershipSourceLabel && (
+                          <div>
+                            <span className="text-gray-500">來源</span>
+                            <p className="font-medium text-gray-900">{membershipSourceLabel}</p>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        聯盟會籍適用於 PickCourt 跨店預約與平台優惠；店鋪積分 Tier 請見上方卡片。
+                      </p>
                     </div>
                   </div>
                 </div>

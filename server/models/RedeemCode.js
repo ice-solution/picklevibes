@@ -115,7 +115,14 @@ const redeemCodeSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  }
+  },
+  /** 所屬店鋪（null = 平台舊資料，僅平台 admin 可管理） */
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    default: null,
+    index: true,
+  },
 }, {
   timestamps: true
 });
@@ -124,6 +131,7 @@ const redeemCodeSchema = new mongoose.Schema({
 redeemCodeSchema.index({ code: 1 });
 redeemCodeSchema.index({ isActive: 1, validFrom: 1, validUntil: 1 });
 redeemCodeSchema.index({ batchId: 1, createdAt: -1 });
+redeemCodeSchema.index({ store: 1, createdAt: -1 });
 
 // 驗證兌換碼是否有效
 redeemCodeSchema.methods.isValid = function() {

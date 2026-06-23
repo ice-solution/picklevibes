@@ -77,6 +77,7 @@ function buildRedeemCodeDocuments(codes, batchId, template, createdBy) {
     applicableTypes: template.applicableTypes || ['all'],
     applicablePricingSlots: template.applicablePricingSlots || [],
     restrictedCode: template.restrictedCode || null,
+    store: template.store || null,
     createdBy,
     totalUsed: 0,
     totalDiscount: 0,
@@ -151,6 +152,7 @@ function normalizeTemplate(body, createdBy) {
     applicableTypes: body.applicableTypes || ['all'],
     applicablePricingSlots: body.applicablePricingSlots || [],
     restrictedCode: body.restrictedCode || null,
+    store: body.store || null,
     createdBy: new mongoose.Types.ObjectId(createdBy),
   };
 }
