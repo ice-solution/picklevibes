@@ -18,7 +18,7 @@ import RegularActivityManagement from '../components/Admin/RegularActivityManage
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import AccountingManagement from '../components/Admin/AccountingManagement';
-import { resolveMediaUrl, storeBrandStyles, storePrimaryColor } from '../utils/storeBranding';
+import { resolveMediaUrl, storeBrandStyles, storePrimaryColor } from '../utils/storeBrandUtils';
 import { PICKCOURT_HOME } from '../utils/pickcourtRoutes';
 
 import {

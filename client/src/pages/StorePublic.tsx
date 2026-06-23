@@ -5,7 +5,7 @@ import apiConfig from '../config/api';
 import SEO from '../components/SEO/SEO';
 import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
-import { resolveMediaUrl, storeBrandStyles, storePrimaryColor } from '../utils/storeBranding';
+import { resolveMediaUrl, storeBrandStyles, storePrimaryColor } from '../utils/storeBrandUtils';
 import { PICKCOURT_HOME, pickcourtHomeHash } from '../utils/pickcourtRoutes';
 import { useStoreTenantHost } from '../contexts/StoreTenantHostContext';
 import {

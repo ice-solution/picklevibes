@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import axios from 'axios';
 import { PhotoIcon } from '@heroicons/react/24/outline';
-import { resolveMediaUrl } from '../../utils/storeBranding';
+import { resolveMediaUrl } from '../../utils/storeBrandUtils';
 
 type Props = {
   storeId: string;
