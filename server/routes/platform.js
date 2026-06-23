@@ -76,10 +76,15 @@ router.get('/tenant/resolve', resolveTenant({ saasOnly: true }), async (req, res
     }
 
     const t = req.tenant;
+    const adminDomain = t.adminDomain ? String(t.adminDomain).toLowerCase() : null;
+    const consumerDomain = t.consumerDomain ? String(t.consumerDomain).toLowerCase() : null;
+
     res.json({
       resolved: true,
       host,
       source: req.tenantSource,
+      isAdminHost: Boolean(adminDomain && host === adminDomain),
+      isConsumerHost: Boolean(consumerDomain && host === consumerDomain),
       tenant: {
         id: t._id,
         name: t.name,
@@ -112,18 +117,41 @@ router.get('/stores/:storeSlug', async (req, res) => {
       return res.status(404).json({ message: '店鋪不存在或未加入聯盟' });
     }
 
-    const courtCount = await Court.countDocuments({
+    const courts = await Court.find({
       store: store._id,
       isActive: true,
       type: { $ne: 'full_venue' },
-    });
+    })
+      .sort({ number: 1 })
+      .select('name slug number type capacity description')
+      .lean();
+
+    const gameHalls = await GameHall.find({ store: store._id, isActive: true })
+      .sort({ name: 1 })
+      .select('name description seasonKey')
+      .lean();
 
     const b = store.branding || {};
     res.json({
       store: {
         ...serializeAllianceStore(store),
         intro: b.intro || '',
-        courtCount,
+        courtCount: courts.length,
+        courts: courts.map((c) => ({
+          id: String(c._id),
+          name: c.name,
+          slug: c.slug,
+          number: c.number,
+          type: c.type,
+          capacity: c.capacity,
+          description: c.description || '',
+        })),
+        gameHalls: gameHalls.map((h) => ({
+          id: String(h._id),
+          name: h.name,
+          description: h.description || '',
+          seasonKey: h.seasonKey || 'season-1',
+        })),
       },
     });
   } catch (error) {

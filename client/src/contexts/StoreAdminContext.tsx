@@ -70,3 +70,12 @@ export function useStoreAdmin() {
   if (!ctx) throw new Error('useStoreAdmin must be used within StoreAdminProvider');
   return ctx;
 }
+
+export function useOptionalStoreAdmin() {
+  return useContext(StoreAdminContext);
+}
+
+/** 店鋪後台內鎖定當前店鋪 ID（平台後台為 undefined） */
+export function useLockedStoreId(): string | undefined {
+  return useContext(StoreAdminContext)?.store?._id;
+}

@@ -17,6 +17,8 @@ import {
   scrollToBookingSectionWhenReady,
   sectionToProgressStep,
   inferBookingSection,
+  parseBookingSearchPrefill,
+  addMinutesToTimeHHmm,
   type BookingPathParams,
   type BookingSection,
 } from '../utils/bookingRoutes';
@@ -67,6 +69,7 @@ const Booking: React.FC = () => {
   const [routeError, setRouteError] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(false);
   const hydratedKey = useRef<string>('');
+  const prefillTimeAppliedRef = useRef(false);
 
   const stableAvailability = useMemo(() => availability, [availability]);
   const progressStep = sectionToProgressStep(activeSection);
@@ -184,6 +187,7 @@ const Booking: React.FC = () => {
 
     const hydrate = async () => {
       setHydrating(true);
+      prefillTimeAppliedRef.current = false;
       try {
         const storeRes = await axios.get(`/stores/by-slug/${routeParams.storeSlug}`);
         const store = storeRes.data.store;
@@ -236,6 +240,33 @@ const Booking: React.FC = () => {
     location.hash,
     isDeepLinkRoute,
     navigate,
+  ]);
+
+  // 聯盟搜尋深連結：?startTime=&duration= 預選時段
+  useEffect(() => {
+    if (prefillTimeAppliedRef.current || hydrating) return;
+    if (!selectedStore?.slug || !selectedCourt?.slug || !selectedDate) return;
+
+    const { startTime, duration } = parseBookingSearchPrefill(location.search);
+    if (!startTime) return;
+
+    const end = addMinutesToTimeHHmm(startTime, duration);
+    if (!end) return;
+
+    prefillTimeAppliedRef.current = true;
+    setSelectedTimeSlot({ start: startTime, end });
+    goToSection('details', {
+      storeSlug: selectedStore.slug,
+      courtSlug: selectedCourt.slug,
+      date: selectedDate,
+    });
+  }, [
+    hydrating,
+    selectedStore,
+    selectedCourt,
+    selectedDate,
+    location.search,
+    goToSection,
   ]);
 
   const handleSelectStore = (store: StoreSummary) => {

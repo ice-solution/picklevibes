@@ -7,6 +7,7 @@ import interactionPlugin from '@fullcalendar/interaction';
 import axios from 'axios';
 import CreateBookingModal from './CreateBookingModal';
 import UserAutocomplete from '../Common/UserAutocomplete';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 import {
   CalendarDaysIcon,
   ClockIcon,
@@ -26,6 +27,20 @@ interface StoreRef {
   _id: string;
   name: string;
   slug?: string;
+}
+
+function resolveBookingStoreId(
+  booking?: CalendarBooking | null,
+  fallbackStoreId?: string
+): string | undefined {
+  if (booking?.store) {
+    return typeof booking.store === 'string' ? booking.store : booking.store._id;
+  }
+  const courtStore = booking?.court?.store;
+  if (courtStore) {
+    return typeof courtStore === 'string' ? courtStore : courtStore._id;
+  }
+  return fallbackStoreId || undefined;
 }
 
 /** 日曆列表（精簡 API） */
@@ -229,6 +244,13 @@ const BookingCalendar: React.FC = () => {
   const calendarRangeRef = useRef<{ start: string; end: string } | null>(null);
   /** 避免 datesSet 與 events 更新連鎖造成重複請求／loading 卡死 */
   const lastFetchedRangeKeyRef = useRef<string>('');
+  const lockedStoreId = useLockedStoreId();
+
+  useEffect(() => {
+    if (lockedStoreId) {
+      setStoreFilterId(lockedStoreId);
+    }
+  }, [lockedStoreId]);
 
   const fetchBookings = useCallback(
     async (range?: { start: string; end: string }) => {
@@ -570,8 +592,11 @@ const BookingCalendar: React.FC = () => {
     setSettleUser(user);
     setSettleUserBalance(null);
     if (!user) return;
+    const lookupStoreId = resolveBookingStoreId(selectedBooking, storeFilterId);
     try {
-      const response = await axios.get(`/users/${user._id}`);
+      const response = await axios.get(`/users/${user._id}`, {
+        params: lookupStoreId ? { store: lookupStoreId } : undefined,
+      });
       setSettleUserBalance(response.data.user?.balance ?? null);
     } catch {
       setSettleUserBalance(null);
@@ -787,6 +812,7 @@ const BookingCalendar: React.FC = () => {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           {/* 店鋪篩選 + 視圖切換 */}
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+            {!lockedStoreId && (
             <div className="flex items-center gap-2">
               <BuildingStorefrontIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
               <select
@@ -805,6 +831,7 @@ const BookingCalendar: React.FC = () => {
                 ))}
               </select>
             </div>
+            )}
           <div className="flex space-x-2">
             <button
               onClick={() => handleViewChange('dayGridMonth')}
@@ -1244,6 +1271,7 @@ const BookingCalendar: React.FC = () => {
                       value={settleUser?._id || ''}
                       onChange={handleSettleUserChange}
                       placeholder="搜索姓名、電郵或電話…"
+                      storeId={resolveBookingStoreId(selectedBooking, storeFilterId)}
                     />
                     {settleUserBalance !== null && (
                       <p className="mt-1 text-xs text-gray-600">
@@ -1353,7 +1381,7 @@ const BookingCalendar: React.FC = () => {
           selectedDate={selectedDate}
           selectedCourt={selectedCourt}
           selectedTime={selectedTime}
-          initialStoreId={storeFilterId || undefined}
+          initialStoreId={lockedStoreId || storeFilterId || undefined}
         />
       )}
     </div>

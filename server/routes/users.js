@@ -19,6 +19,11 @@ const {
   suggestedSettlePoints,
   settleBookingWithPoints,
 } = require('../services/bookingSettleService');
+const {
+  resolveUserLookupScope,
+  assertStaffCanViewUser,
+  applyBookingUserFilter,
+} = require('../utils/storeUserVisibility');
 
 const router = express.Router();
 
@@ -136,6 +141,11 @@ router.get('/', [auth, adminAuth], async (req, res) => {
     }
     if (membershipLevel) query.membershipLevel = membershipLevel;
 
+    const lookupScope = await resolveUserLookupScope(req);
+    if (lookupScope.shouldFilter && lookupScope.storeId) {
+      Object.assign(query, await applyBookingUserFilter(query, lookupScope.storeId));
+    }
+
     const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     // 添加搜索功能
@@ -188,6 +198,9 @@ router.get('/', [auth, adminAuth], async (req, res) => {
       }
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error('獲取用戶列表錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
@@ -198,6 +211,9 @@ router.get('/', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/stats', [auth, adminAuth], async (req, res) => {
   try {
+    if (!req.tenantAccess?.isPlatformAdmin) {
+      return res.status(403).json({ message: '需要平台管理員權限' });
+    }
     const totalUsers = await User.countDocuments();
     const activeUsers = await User.countDocuments({ isActive: true });
     const adminUsers = await User.countDocuments({ role: 'admin' });
@@ -244,6 +260,9 @@ router.get('/stats', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/:id', [auth, adminAuth], async (req, res) => {
   try {
+    const storeId = req.query.store ? String(req.query.store).trim() : '';
+    await assertStaffCanViewUser(req, req.params.id, storeId || undefined);
+
     const user = await User.findById(req.params.id).select('-password');
     
     if (!user) {
@@ -262,6 +281,9 @@ router.get('/:id', [auth, adminAuth], async (req, res) => {
     
     res.json({ user: userWithBalance });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error('獲取用戶詳情錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }

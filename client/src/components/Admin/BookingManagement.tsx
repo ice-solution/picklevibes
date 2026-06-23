@@ -7,6 +7,7 @@ import {
   XMarkIcon,
   XCircleIcon
 } from '@heroicons/react/24/outline';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 interface Booking {
   _id: string;
@@ -47,6 +48,7 @@ interface Booking {
 }
 
 const BookingManagement: React.FC = () => {
+  const lockedStoreId = useLockedStoreId();
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +66,7 @@ const BookingManagement: React.FC = () => {
 
   useEffect(() => {
     fetchBookings();
-  }, [filters, pagination.current]);
+  }, [filters, pagination.current, lockedStoreId]);
 
   const fetchBookings = async () => {
     try {
@@ -76,6 +78,7 @@ const BookingManagement: React.FC = () => {
         limit: '20'
       });
       
+      if (lockedStoreId) params.append('store', lockedStoreId);
       if (filters.court) params.append('court', filters.court);
       if (filters.date) params.append('date', filters.date);
       

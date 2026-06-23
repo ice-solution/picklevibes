@@ -21,6 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import CourtPricingModal from './CourtPricingModal';
 import CourtFormModal from './CourtFormModal';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 import { PricingTimeSlot, resolveTimeSlotsFromCourt } from '../../constants/courtPricing';
 
 interface CourtImage {
@@ -67,6 +68,7 @@ interface StoreOption {
 }
 
 const CourtManagement: React.FC = () => {
+  const lockedStoreId = useLockedStoreId();
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [storeFilter, setStoreFilter] = useState<string>('');
   const [courts, setCourts] = useState<Court[]>([]);
@@ -84,6 +86,12 @@ const CourtManagement: React.FC = () => {
   useEffect(() => {
     fetchStores();
   }, []);
+
+  useEffect(() => {
+    if (lockedStoreId) {
+      setStoreFilter(lockedStoreId);
+    }
+  }, [lockedStoreId]);
 
   useEffect(() => {
     fetchCourts();
@@ -353,6 +361,8 @@ const CourtManagement: React.FC = () => {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-3">
+          {!lockedStoreId && (
+          <>
           <label className="text-sm font-medium text-gray-700">店鋪篩選</label>
           <select
             value={storeFilter}
@@ -364,6 +374,8 @@ const CourtManagement: React.FC = () => {
               <option key={s._id} value={s._id}>{s.name}</option>
             ))}
           </select>
+          </>
+          )}
         </div>
         <button
           type="button"

@@ -17,6 +17,7 @@ import {
 } from '@heroicons/react/24/outline';
 import CoachAutocomplete from '../Common/CoachAutocomplete';
 import UserAutocomplete from '../Common/UserAutocomplete';
+import { useOptionalStoreAdmin } from '../../contexts/StoreAdminContext';
 
 interface Activity {
   _id: string;
@@ -98,6 +99,8 @@ type ParticipantStats = typeof defaultParticipantStats;
 type ParticipantCountValue = number | '';
 
 const ActivityManagement: React.FC = () => {
+  const storeAdmin = useOptionalStoreAdmin();
+  const userLookupStoreId = storeAdmin?.store?._id;
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
   const fixedVenueLocation = '荔枝角福源廣場8樓B C D室';
   const customLocationOption = '__custom__';
@@ -1153,6 +1156,7 @@ const ActivityManagement: React.FC = () => {
                     value={selectedUserForAdd ? selectedUserForAdd._id : ''}
                     onChange={handleSelectUserForAdd}
                     placeholder="輸入姓名或電郵搜尋用戶"
+                    storeId={userLookupStoreId}
                   />
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>

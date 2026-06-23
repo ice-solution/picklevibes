@@ -90,6 +90,43 @@ export function buildBookingPath(
   return path || '/booking';
 }
 
+/** 聯盟搜尋帶入預約：?startTime=10:00&duration=60 */
+export function parseBookingSearchPrefill(search: string): {
+  startTime?: string;
+  duration: number;
+} {
+  const sp = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const startTime = sp.get('startTime')?.trim() || undefined;
+  const durationRaw = parseInt(sp.get('duration') || '60', 10);
+  const duration = [60, 120].includes(durationRaw) ? durationRaw : 60;
+  return { startTime, duration };
+}
+
+export function addMinutesToTimeHHmm(startTime: string, minutes: number): string | null {
+  const parts = startTime.split(':').map(Number);
+  if (parts.length < 2 || parts.some((n) => Number.isNaN(n))) return null;
+  const total = parts[0] * 60 + parts[1] + minutes;
+  if (total < 0) return null;
+  const endH = Math.floor(total / 60);
+  const endM = total % 60;
+  if (endH > 24 || (endH === 24 && endM > 0)) return null;
+  if (endH === 24 && endM === 0) return '24:00';
+  return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
+}
+
+export function buildBookingPathWithPrefill(
+  params: BookingPathParams,
+  prefill?: { startTime?: string; duration?: number },
+  options?: { deepLink?: boolean }
+): string {
+  const path = buildBookingPath(params, options);
+  if (!prefill?.startTime) return path;
+  const sp = new URLSearchParams();
+  sp.set('startTime', prefill.startTime);
+  if (prefill.duration) sp.set('duration', String(prefill.duration));
+  return `${path}?${sp.toString()}`;
+}
+
 export function parseBookingParams(
   storeSlug?: string,
   courtSlug?: string,

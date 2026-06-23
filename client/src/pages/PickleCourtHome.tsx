@@ -291,13 +291,22 @@ const PickleCourtHome: React.FC = () => {
                 {s.tagline && <p className="text-sm text-pickcourt-gold-dark mt-1">{s.tagline}</p>}
                 <p className="text-sm text-slate-600 mt-2">{s.address}</p>
                 <p className="text-xs text-slate-400 mt-2">{s.courtCount} 個場地</p>
-                <Link
-                  to={`/booking/${s.slug}`}
-                  className="inline-flex items-center gap-1 mt-4 text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold"
-                >
-                  預約此場地
-                  <ArrowRightIcon className="h-4 w-4" />
-                </Link>
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Link
+                    to={`/store/${s.slug}`}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold"
+                  >
+                    查看場地
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    to={`/booking/${s.slug}#court`}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-pickcourt-gold-dark hover:text-pickcourt-gold"
+                  >
+                    立即預約
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </Link>
+                </div>
               </motion.div>
             ))}
           </div>

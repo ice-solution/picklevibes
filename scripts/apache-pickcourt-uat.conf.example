@@ -1,0 +1,74 @@
+# PickCourt UAT — Apache2 多租戶 VirtualHost 範例
+# Test server: uat.pickcourt.hk
+#
+# 安裝前：
+#   sudo a2enmod proxy proxy_http rewrite headers ssl
+#   sudo a2enmod proxy_wstunnel   # 若將來用 Socket.IO
+#
+# 部署：
+#   sudo cp scripts/apache-pickcourt-uat.conf.example /etc/apache2/sites-available/pickcourt-uat.conf
+#   sudo ln -sf /etc/apache2/sites-available/pickcourt-uat.conf /etc/apache2/sites-enabled/
+#   sudo apache2ctl configtest && sudo systemctl reload apache2
+#
+# 路徑請按伺服器實際位置修改：
+#   DocumentRoot → npm run build 產物 client/build
+#   ProxyPass    → Node API（預設 127.0.0.1:5001）
+
+# ── HTTP → HTTPS ─────────────────────────────────────────────
+<VirtualHost *:80>
+    ServerName uat.pickcourt.hk
+    ServerAlias lck.uat.pickcourt.hk admin.lck.uat.pickcourt.hk *.uat.pickcourt.hk
+
+    RewriteEngine On
+    RewriteCond %{HTTPS} off
+    RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</VirtualHost>
+
+# ── HTTPS（聯盟主站 + 店鋪自訂域名）────────────────────────
+<VirtualHost *:443>
+    ServerName uat.pickcourt.hk
+    # 荔枝角 UAT 店鋪域名（DB consumerDomain / adminDomain 須一致）
+    ServerAlias lck.uat.pickcourt.hk
+    ServerAlias admin.lck.uat.pickcourt.hk
+    # 新加盟店：加 DNS + 通配 SSL 後可啟用下一行，不必每次改 Apache
+    # ServerAlias *.uat.pickcourt.hk
+
+    DocumentRoot /var/www/pickcourt/client/build
+
+    SSLEngine on
+    SSLCertificateFile      /etc/letsencrypt/live/uat.pickcourt.hk/fullchain.pem
+    SSLCertificateKeyFile   /etc/letsencrypt/live/uat.pickcourt.hk/privkey.pem
+    # 通配子域名憑證（certbot --dns-xxx -d '*.uat.pickcourt.hk' -d uat.pickcourt.hk）
+
+    ErrorLog  ${APACHE_LOG_DIR}/pickcourt-uat-error.log
+    CustomLog ${APACHE_LOG_DIR}/pickcourt-uat-access.log combined
+
+    # 上傳大小（店鋪 Logo 等）
+    LimitRequestBody 20971520
+
+    # ── API 反向代理（必須保留 Host，供 tenant/resolve）──
+    ProxyPreserveHost On
+    ProxyPass        /api/ http://127.0.0.1:5001/api/
+    ProxyPassReverse /api/ http://127.0.0.1:5001/api/
+
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
+    RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
+
+    # ── React SPA（/store、/booking、/login 等 client 路由）──
+    <Directory /var/www/pickcourt/client/build>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+
+        RewriteEngine On
+        RewriteBase /
+        # 已有實體檔案 → 直接提供
+        RewriteCond %{REQUEST_FILENAME} -f [OR]
+        RewriteCond %{REQUEST_FILENAME} -d
+        RewriteRule ^ - [L]
+        # /api 交給 ProxyPass，勿 fallback 到 index.html
+        RewriteCond %{REQUEST_URI} !^/api/
+        RewriteRule ^ /index.html [L]
+    </Directory>
+</VirtualHost>

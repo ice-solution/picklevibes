@@ -7,7 +7,7 @@ const rateLimit = require('express-rate-limit');
 const path = require('path');
 const { maintenanceMiddleware, maintenanceAdminMiddleware } = require('./middleware/maintenance');
 const weekendService = require('./services/weekendService');
-require('dotenv').config();
+const { buildAllowedOrigins, isOriginAllowed } = require('./utils/corsOrigins');
 
 const app = express();
 const server = http.createServer(app);
@@ -54,30 +54,27 @@ const batchLimiter = rateLimit({
 app.use(limiter);
 
 // CORS配置
-const allowedOrigins = [
+const allowedOrigins = buildAllowedOrigins([
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
   'https://uat.picklevibes.hk',
   'https://picklevibes.hk',
-  'https://www.picklevibes.hk', // 添加 www 子域名
-  'http://picklevibes.hk', // 添加 HTTP 版本（用於開發或重定向）
-  'http://www.picklevibes.hk' // 添加 HTTP www 版本
-];
+  'https://www.picklevibes.hk',
+  'http://picklevibes.hk',
+  'http://www.picklevibes.hk',
+  'https://pickcourt.hk',
+  'https://www.pickcourt.hk',
+  'https://uat.pickcourt.hk',
+]);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // 允許沒有 origin 的請求（如 Postman 或服務器端請求）
-    if (!origin) return callback(null, true);
-    
-    // 檢查是否在允許列表中
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (isOriginAllowed(origin, allowedOrigins)) {
       callback(null, true);
     } else {
-      // 記錄被拒絕的 origin 以便調試
       console.log(`🚫 CORS 拒絕的 origin: ${origin}`);
-      console.log(`📋 允許的 origins: ${allowedOrigins.join(', ')}`);
       callback(new Error('Not allowed by CORS'));
     }
   },

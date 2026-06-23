@@ -21,6 +21,8 @@ interface UserAutocompleteProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  /** 店鋪後台：僅搜尋曾於該店預約的會員（PickleVibes 主店除外，由後端判斷） */
+  storeId?: string;
 }
 
 const UserAutocomplete: React.FC<UserAutocompleteProps> = ({
@@ -28,7 +30,8 @@ const UserAutocomplete: React.FC<UserAutocompleteProps> = ({
   onChange,
   placeholder = "搜索用戶...",
   className = "",
-  disabled = false
+  disabled = false,
+  storeId,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [users, setUsers] = useState<User[]>([]);
@@ -52,7 +55,7 @@ const UserAutocomplete: React.FC<UserAutocompleteProps> = ({
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [searchQuery]);
+  }, [searchQuery, storeId]);
 
   // 點擊外部關閉下拉框
   useEffect(() => {
@@ -75,7 +78,12 @@ const UserAutocomplete: React.FC<UserAutocompleteProps> = ({
   const searchUsers = async (query: string) => {
     setLoading(true);
     try {
-      const response = await axios.get(`/users?search=${encodeURIComponent(query)}&limit=10`);
+      const params = new URLSearchParams({
+        search: query,
+        limit: '10',
+      });
+      if (storeId) params.set('store', storeId);
+      const response = await axios.get(`/users?${params.toString()}`);
       const userList = response.data.users || response.data || [];
       setFilteredUsers(userList);
       setIsOpen(userList.length > 0);
@@ -210,8 +218,10 @@ const UserAutocomplete: React.FC<UserAutocompleteProps> = ({
                 </button>
               ))
             ) : searchQuery.trim() ? (
-              <div className="px-4 py-3 text-center text-gray-500">
-                未找到匹配的用戶
+              <div className="px-4 py-3 text-center text-gray-500 text-sm">
+                {storeId
+                  ? '未找到曾於本店預約的會員'
+                  : '未找到匹配的用戶'}
               </div>
             ) : null}
           </motion.div>

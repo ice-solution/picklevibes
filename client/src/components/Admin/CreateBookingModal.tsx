@@ -450,6 +450,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               onChange={handleUserSelect}
               placeholder="輸入用戶姓名或郵箱搜索..."
               className="w-full"
+              storeId={storeId || undefined}
             />
             {selectedUser && (
               <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded-lg">

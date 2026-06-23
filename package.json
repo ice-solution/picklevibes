@@ -32,7 +32,8 @@
     "migrate-store-tenant": "node server/scripts/migrateStoreTenantFields.js",
     "migrate-store-district": "node server/scripts/migrateStoreDistrict.js",
     "migrate-game-hall-store": "node server/scripts/migrateGameHallStore.js",
-    "migrate-platform-membership": "node server/scripts/migratePlatformMembership.js"
+    "migrate-platform-membership": "node server/scripts/migratePlatformMembership.js",
+    "verify-tenant-domains": "node server/scripts/verifyTenantDomains.js"
   },
   "keywords": [
     "pickleball",

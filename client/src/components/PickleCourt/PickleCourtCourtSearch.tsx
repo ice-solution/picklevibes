@@ -57,6 +57,27 @@ const courtTypeBadge: Record<string, string> = {
   dink: '特色場',
 };
 
+function allianceBookingPath(item: SearchResult, query: SearchResponse['query']): string {
+  const params = new URLSearchParams();
+  if (query.startTime) params.set('startTime', query.startTime);
+  if (query.duration) params.set('duration', String(query.duration));
+  const qs = params.toString();
+  const qSuffix = qs ? `?${qs}` : '';
+
+  if (item.bookingUrl) {
+    try {
+      const u = new URL(item.bookingUrl);
+      return `${u.pathname}${qs ? `?${qs}` : u.search}#time`;
+    } catch {
+      if (item.bookingUrl.startsWith('/')) {
+        const base = item.bookingUrl.split('?')[0];
+        return `${base}${qSuffix}#time`;
+      }
+    }
+  }
+  return `/booking/${item.store.slug}/${item.court.slug}/${query.date}${qSuffix}#time`;
+}
+
 type Props = {
   /** 嵌入首頁時顯示精簡標題 */
   embedded?: boolean;
@@ -323,7 +344,12 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                       className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 rounded-xl border border-gray-200 hover:border-pickcourt-gold/40 hover:shadow-md transition-all bg-white"
                     >
                       <div className="flex-1 min-w-0">
-                        <p className="font-bold text-lg text-pickcourt-navy">{item.store.name}</p>
+                        <Link
+                          to={`/store/${item.store.slug}`}
+                          className="font-bold text-lg text-pickcourt-navy hover:text-pickcourt-gold transition-colors"
+                        >
+                          {item.store.name}
+                        </Link>
                         <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
                           <MapPinIcon className="h-4 w-4 shrink-0" />
                           {item.store.district ? `${item.store.district} · ` : ''}
@@ -355,10 +381,7 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                           </p>
                         </div>
                         <Link
-                          to={
-                            item.bookingUrl ||
-                            `/booking/${item.store.slug}/${item.court.slug}/${data.query.date}`
-                          }
+                          to={allianceBookingPath(item, data.query)}
                           className="inline-flex items-center gap-2 bg-pickcourt-navy text-white font-semibold px-5 py-3 rounded-lg hover:bg-pickcourt-navy-light transition-colors shrink-0"
                         >
                           預約
