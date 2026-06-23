@@ -1,12 +1,19 @@
 import type { CSSProperties } from 'react';
-import apiConfig from '../config/api';
 
 const DEFAULT_PRIMARY = '#0f1f3d';
+
+function getServerBaseUrl(): string {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.REACT_APP_SERVER_URL || '';
+  }
+  return process.env.REACT_APP_SERVER_URL || 'http://localhost:5001';
+}
 
 export function resolveMediaUrl(path?: string | null): string | null {
   if (!path?.trim()) return null;
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  return `${apiConfig.SERVER_URL}${path}`;
+  const base = getServerBaseUrl();
+  return base ? `${base}${path}` : path;
 }
 
 export function storePrimaryColor(store?: { branding?: { primaryColor?: string } } | null): string {
