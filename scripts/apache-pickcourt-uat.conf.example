@@ -48,15 +48,15 @@
 
     # ── API 反向代理（必須保留 Host，供 tenant/resolve）──
     ProxyPreserveHost On
-    ProxyPass        /api/ http://127.0.0.1:5001/api/
-    ProxyPassReverse /api/ http://127.0.0.1:5001/api/
+    ProxyPass        /api/ http://127.0.0.1:5011/api/
+    ProxyPassReverse /api/ http://127.0.0.1:5011/api/
 
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
     RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
 
     # ── React SPA（/store、/booking、/login 等 client 路由）──
-    <Directory /var/www/pickcourt/client/build>
+    <Directory /var/www/html/pickcourt/client/build>
         Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted

@@ -1,0 +1,46 @@
+# PickCourt UAT — Apache2 + Cloudflare Flexible SSL
+# 用戶 → Cloudflare：HTTPS；Cloudflare → 源站：HTTP :80
+# 源站只需此 :80 VirtualHost（勿設 443 / SSLEngine / HTTP→HTTPS 301）
+#
+# Cloudflare：SSL/TLS → Flexible
+# 部署：
+#   sudo cp scripts/apache-pickcourt-uat-cloudflare-flexible.conf.example \
+#          /etc/apache2/sites-available/pickcourt-uat.conf
+#   sudo a2enmod proxy proxy_http rewrite headers
+#   sudo ln -sf /etc/apache2/sites-available/pickcourt-uat.conf /etc/apache2/sites-enabled/
+#   sudo apache2ctl configtest && sudo systemctl reload apache2
+
+<VirtualHost *:80>
+    ServerName uat.pickcourt.hk
+    ServerAlias lck.uat.pickcourt.hk admin.lck.uat.pickcourt.hk
+
+    DocumentRoot /var/www/pickcourt/client/build
+
+    ErrorLog  ${APACHE_LOG_DIR}/pickcourt-uat-error.log
+    CustomLog ${APACHE_LOG_DIR}/pickcourt-uat-access.log combined
+
+    LimitRequestBody 20971520
+
+    ProxyPreserveHost On
+    ProxyPass        /api/ http://127.0.0.1:5001/api/
+    ProxyPassReverse /api/ http://127.0.0.1:5001/api/
+
+    # Flexible：告知 Node 對外為 HTTPS（配合 TRUST_PROXY_HOPS=1）
+    RequestHeader set X-Forwarded-Proto "https"
+    RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
+    RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
+
+    <Directory /var/www/pickcourt/client/build>
+        Options -Indexes +FollowSymLinks
+        AllowOverride None
+        Require all granted
+
+        RewriteEngine On
+        RewriteBase /
+        RewriteCond %{REQUEST_FILENAME} -f [OR]
+        RewriteCond %{REQUEST_FILENAME} -d
+        RewriteRule ^ - [L]
+        RewriteCond %{REQUEST_URI} !^/api/
+        RewriteRule ^ /index.html [L]
+    </Directory>
+</VirtualHost>
