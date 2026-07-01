@@ -102,8 +102,11 @@ const UserManagement: React.FC = () => {
   const [deductPoints, setDeductPoints] = useState('');
   const [deductReason, setDeductReason] = useState('');
   const [deductBookingId, setDeductBookingId] = useState('');
+  const [deductStoreId, setDeductStoreId] = useState('');
+  const [deductCourtId, setDeductCourtId] = useState('');
   const [deductibleBookings, setDeductibleBookings] = useState<DeductibleBooking[]>([]);
   const [deductBookingsLoading, setDeductBookingsLoading] = useState(false);
+  const [deductCourts, setDeductCourts] = useState<CourtOption[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [rechargeCourts, setRechargeCourts] = useState<CourtOption[]>([]);
   const [showBalanceHistory, setShowBalanceHistory] = useState(false);
@@ -175,6 +178,22 @@ const UserManagement: React.FC = () => {
       setRechargeCourtId('');
     } catch {
       setRechargeCourts([]);
+    }
+  };
+
+  const fetchDeductCourtsForStore = async (storeId: string) => {
+    if (!storeId) {
+      setDeductCourts([]);
+      setDeductCourtId('');
+      return;
+    }
+    try {
+      const response = await axios.get(`/courts?all=true&store=${storeId}`);
+      const courts = response.data.courts || response.data || [];
+      setDeductCourts(courts);
+      setDeductCourtId('');
+    } catch {
+      setDeductCourts([]);
     }
   };
 
@@ -306,6 +325,9 @@ const UserManagement: React.FC = () => {
     setDeductPoints('');
     setDeductReason('');
     setDeductBookingId('');
+    setDeductStoreId('');
+    setDeductCourtId('');
+    setDeductCourts([]);
     setDeductibleBookings([]);
     setShowDeductModal(true);
     fetchDeductibleBookings(user._id);
@@ -313,9 +335,14 @@ const UserManagement: React.FC = () => {
 
   const handleDeductBookingChange = (bookingId: string) => {
     setDeductBookingId(bookingId);
-    const booking = deductibleBookings.find((b) => b._id === bookingId);
-    if (booking && booking.suggestedPoints > 0) {
-      setDeductPoints(String(booking.suggestedPoints));
+    if (bookingId) {
+      setDeductStoreId('');
+      setDeductCourtId('');
+      setDeductCourts([]);
+      const booking = deductibleBookings.find((b) => b._id === bookingId);
+      if (booking && booking.suggestedPoints > 0) {
+        setDeductPoints(String(booking.suggestedPoints));
+      }
     }
   };
 
@@ -383,29 +410,43 @@ const UserManagement: React.FC = () => {
   };
 
   const handleSubmitDeduct = async () => {
-    if (!selectedUser || !deductPoints || !deductReason || !deductBookingId) return;
-    
+    if (!selectedUser || !deductPoints || !deductReason) return;
+    if (!deductBookingId && !deductStoreId) return;
+
     const pointsToDeduct = parseInt(deductPoints);
     if (pointsToDeduct <= 0) {
       alert('扣除積分必須大於0');
       return;
     }
-    
+
     if (selectedUser.balance < pointsToDeduct) {
       alert(`用戶餘額不足！當前餘額：${selectedUser.balance}，嘗試扣除：${pointsToDeduct}`);
       return;
     }
-    
+
     if (!window.confirm(`確定要扣除 ${selectedUser.name} 的 ${pointsToDeduct} 積分嗎？\n原因：${deductReason}`)) {
       return;
     }
-    
+
     try {
-      await axios.post(`/users/${selectedUser._id}/manual-deduct`, {
+      const payload: {
+        points: number;
+        reason: string;
+        bookingId?: string;
+        storeId?: string;
+        courtId?: string;
+      } = {
         points: pointsToDeduct,
         reason: deductReason,
-        bookingId: deductBookingId,
-      });
+      };
+      if (deductBookingId) {
+        payload.bookingId = deductBookingId;
+      } else {
+        payload.storeId = deductStoreId;
+        if (deductCourtId) payload.courtId = deductCourtId;
+      }
+
+      await axios.post(`/users/${selectedUser._id}/manual-deduct`, payload);
       
       setShowDeductModal(false);
       fetchUsers(); // 刷新用戶列表
@@ -1268,13 +1309,13 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  關聯預約 <span className="text-red-500">*</span>
+                  關聯預約（可選）
                 </label>
                 {deductBookingsLoading ? (
                   <p className="text-sm text-gray-500">載入預約中…</p>
                 ) : deductibleBookings.length === 0 ? (
                   <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-                    此用戶暫無可扣積分的預約（可能已全部付款或已取消）
+                    此用戶暫無可關聯的未付款預約（可能已全部扣款或已取消）。你仍可於下方選擇店鋪歸屬後扣除積分。
                   </p>
                 ) : (
                   <select
@@ -1282,16 +1323,58 @@ const UserManagement: React.FC = () => {
                     onChange={(e) => handleDeductBookingChange(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
-                    <option value="">請選擇預約場地</option>
+                    <option value="">不關聯預約（改選下方店鋪）</option>
                     {deductibleBookings.map((booking) => (
                       <option key={booking._id} value={booking._id}>{booking.label}</option>
                     ))}
                   </select>
                 )}
                 <p className="mt-1 text-xs text-gray-500">
-                  扣款會回寫至該預約，損益報表按預約日期／場地認列
+                  若選擇預約，扣款會回寫至該預約；否則請選擇店鋪作損益歸屬
                 </p>
               </div>
+
+              {!deductBookingId ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      歸屬店鋪 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={deductStoreId}
+                      onChange={(e) => {
+                        setDeductStoreId(e.target.value);
+                        void fetchDeductCourtsForStore(e.target.value);
+                      }}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="">請選擇店鋪</option>
+                      {stores.map((store) => (
+                        <option key={store._id} value={store._id}>{store.name}</option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-xs text-gray-500">用於損益報表歸屬追蹤</p>
+                  </div>
+
+                  {deductCourts.length > 0 ? (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        歸屬場地（可選）
+                      </label>
+                      <select
+                        value={deductCourtId}
+                        onChange={(e) => setDeductCourtId(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="">不指定場地</option>
+                        {deductCourts.map((court) => (
+                          <option key={court._id} value={court._id}>{court.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : null}
+                </>
+              ) : null}
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1343,7 +1426,7 @@ const UserManagement: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSubmitDeduct}
-                  disabled={!deductPoints || !deductReason || !deductBookingId || deductibleBookings.length === 0}
+                  disabled={!deductPoints || !deductReason || (!deductBookingId && !deductStoreId)}
                   className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   確認扣除
