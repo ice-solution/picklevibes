@@ -105,6 +105,45 @@ function allocateChargeAcrossCourts(chargeTotal, courtPrices) {
   });
 }
 
+const SPECIAL_REQUESTS_MAX = 500;
+
+/** 合併用戶特殊要求與包場系統資訊，優先保留用戶輸入 */
+function buildFullVenueSpecialRequests({
+  court,
+  bookingData,
+  courtCharge,
+  useCustomCharge,
+  chargeTotal,
+}) {
+  const userSpecial = String(bookingData.specialRequests || '').trim();
+  const adminNotes = String(bookingData.notes || '').trim();
+  const dateLabel = bookingData.date.toLocaleDateString('zh-TW');
+
+  const systemLine = `🏢 包場預約 - ${court.name} | ${dateLabel} ${bookingData.startTime}-${bookingData.endTime} | ${courtCharge}積分${useCustomCharge ? `（議價總額 ${chargeTotal}）` : ''}`;
+
+  const segments = [];
+  if (userSpecial) segments.push(userSpecial);
+  if (adminNotes && adminNotes !== userSpecial) segments.push(`備註：${adminNotes}`);
+  segments.push(systemLine);
+
+  let combined = segments.join('\n');
+  if (combined.length <= SPECIAL_REQUESTS_MAX) return combined;
+
+  // 超出字數上限時優先保留用戶內容，縮短系統行
+  const userParts = [];
+  if (userSpecial) userParts.push(userSpecial);
+  if (adminNotes && adminNotes !== userSpecial) userParts.push(`備註：${adminNotes}`);
+  const userBlock = userParts.join('\n');
+  const separator = userBlock ? '\n' : '';
+  const systemBudget = SPECIAL_REQUESTS_MAX - userBlock.length - separator.length;
+  const systemPart =
+    systemBudget >= 20
+      ? (systemLine.length > systemBudget ? `${systemLine.slice(0, systemBudget - 1)}…` : systemLine)
+      : '';
+  combined = `${userBlock}${separator}${systemPart}`.trim();
+  return combined.slice(0, SPECIAL_REQUESTS_MAX);
+}
+
 class FullVenueService {
   /**
    * 創建包場預約
@@ -195,7 +234,13 @@ class FullVenueService {
             originalPrice: courtPrice,
             paidAt: new Date(),
           },
-          specialRequests: `🏢 包場預約 - ${court.name}\n📅 預約日期: ${bookingData.date.toLocaleDateString('zh-TW')}\n⏰ 時間: ${bookingData.startTime}-${bookingData.endTime}\n👥 參與人數: ${bookingData.totalPlayers}人\n💰 場地費用: ${courtCharge}積分${useCustomCharge ? `（議價總額 ${chargeTotal}）` : ''}${bookingData.notes ? `\n📝 備註: ${bookingData.notes}` : ''}`
+          specialRequests: buildFullVenueSpecialRequests({
+            court,
+            bookingData,
+            courtCharge,
+            useCustomCharge,
+            chargeTotal,
+          }),
         });
 
         courtBookings.push(courtBooking);

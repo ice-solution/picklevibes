@@ -6,6 +6,9 @@ const pdfService = require('./pdfService');
 const {
   BOOKING_CANCELLATION_POLICY_HTML,
   BOOKING_CANCELLATION_POLICY_TEXT,
+  BOOKING_SHOE_REMINDER_LINE,
+  BOOKING_IMPORTANT_REMINDER_HTML,
+  BOOKING_IMPORTANT_REMINDER_TEXT,
 } = require('../constants/bookingCancellationPolicy');
 
 function orderItemDisplayName(item) {
@@ -402,6 +405,7 @@ class EmailService {
                 <li>請準時出席活動，遲到可能影響活動體驗</li>
                 <li>如有任何問題，請提前聯繫我們</li>
                 <li>活動當天請攜帶有效身份證明</li>
+                <li>${BOOKING_SHOE_REMINDER_LINE}</li>
                 ${activityData.requirements ? `<li>${activityData.requirements}</li>` : ''}
               </ul>
             </div>
@@ -591,6 +595,7 @@ class EmailService {
               <strong>⚠️ 重要提醒：</strong>
               <ul>
                 <li>請保持場地整潔，使用完畢後請清理現場</li>
+                <li>${BOOKING_SHOE_REMINDER_LINE}</li>
               </ul>
             </div>
 
@@ -635,6 +640,7 @@ class EmailService {
         重要提醒：
         - 請準時到達，遲到超過 15 分鐘將視為取消預約
         - 請保持場地整潔，使用完畢後請清理現場
+        - ${BOOKING_SHOE_REMINDER_LINE}
         
         ${BOOKING_CANCELLATION_POLICY_TEXT}
         
@@ -751,6 +757,7 @@ class EmailService {
             <p style="background:#f8f9fa;padding:15px;border-radius:8px;margin:20px 0">
               請於預約時段準時到場。此店鋪暫不提供自動門禁密碼，如有疑問請聯絡場地。
             </p>
+            ${BOOKING_IMPORTANT_REMINDER_HTML}
             ${BOOKING_CANCELLATION_POLICY_HTML}
             <p style="text-align:center;color:#666;font-size:14px;margin-top:30px">
               感謝您選擇 PickleVibes<br>info@picklevibes.hk
@@ -759,7 +766,7 @@ class EmailService {
         </body>
         </html>
       `,
-      text: `PickleVibes 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。\n\n${BOOKING_CANCELLATION_POLICY_TEXT}`,
+      text: `PickleVibes 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。\n\n${BOOKING_IMPORTANT_REMINDER_TEXT}\n\n${BOOKING_CANCELLATION_POLICY_TEXT}`,
     };
   }
 

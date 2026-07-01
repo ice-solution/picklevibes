@@ -289,7 +289,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
           email: formData.playerEmail,
           phone: formData.playerPhone
         }],
-        notes: `包場預約 - 所有場地${fullVenueDeduction > 0 ? ` (議價 ${fullVenueDeduction} 積分)` : ''}`,
+        specialRequests: formData.specialRequests.trim() || undefined,
         userId: formData.userId, // 管理員為指定用戶創建
         pointsDeduction: fullVenueDeduction, // 傳遞積分扣除數量
         bypassRestrictions: formData.bypassRestrictions

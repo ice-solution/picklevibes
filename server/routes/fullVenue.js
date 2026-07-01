@@ -15,7 +15,7 @@ const { isFullVenueEnabledForStore } = require('../utils/storeFeatures');
 // 創建包場預約
 router.post('/create', auth, async (req, res) => {
   try {
-    const { date, startTime, endTime, duration, players, totalPlayers, notes, userId, bypassRestrictions, storeId } = req.body;
+    const { date, startTime, endTime, duration, players, totalPlayers, notes, specialRequests, userId, bypassRestrictions, storeId } = req.body;
     // 如果是管理員創建，使用指定的userId，否則使用當前用戶
     const targetUserId = userId || req.user.id;
 
@@ -60,7 +60,8 @@ router.post('/create', auth, async (req, res) => {
       duration: parseInt(duration),
       players,
       totalPlayers: parseInt(totalPlayers),
-      notes
+      notes,
+      specialRequests: specialRequests || notes,
     }, user, {
       pointsDeduction: req.body.pointsDeduction || 0,
       bypassRestrictions: bypassRestrictions,
