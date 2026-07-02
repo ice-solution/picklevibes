@@ -165,8 +165,9 @@ const ActivityManagement: React.FC = () => {
   const [imagePreview, setImagePreview] = useState<string>('');
 
   useEffect(() => {
+    if (storeAdmin && !lockedStoreId) return;
     fetchActivities();
-  }, [currentPage, statusFilter, lockedStoreId]);
+  }, [currentPage, statusFilter, lockedStoreId, storeAdmin?.storeSlug]);
 
   useEffect(() => {
     if (!showCreateModal && !showEditModal) return;

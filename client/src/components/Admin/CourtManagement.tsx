@@ -21,7 +21,7 @@ import {
 } from '@heroicons/react/24/outline';
 import CourtPricingModal from './CourtPricingModal';
 import CourtFormModal from './CourtFormModal';
-import { useLockedStoreId } from '../../contexts/StoreAdminContext';
+import { useOptionalStoreAdmin, useLockedStoreId } from '../../contexts/StoreAdminContext';
 import { PricingTimeSlot, resolveTimeSlotsFromCourt } from '../../constants/courtPricing';
 
 interface CourtImage {
@@ -68,6 +68,7 @@ interface StoreOption {
 }
 
 const CourtManagement: React.FC = () => {
+  const storeAdminCtx = useOptionalStoreAdmin();
   const lockedStoreId = useLockedStoreId();
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [storeFilter, setStoreFilter] = useState<string>('');
@@ -83,19 +84,19 @@ const CourtManagement: React.FC = () => {
   const [formCourt, setFormCourt] = useState<Court | null>(null);
   const [showFormModal, setShowFormModal] = useState(false);
 
-  useEffect(() => {
-    fetchStores();
-  }, []);
+  const effectiveStoreId = lockedStoreId || storeFilter;
 
   useEffect(() => {
-    if (lockedStoreId) {
-      setStoreFilter(lockedStoreId);
+    if (!lockedStoreId) {
+      void fetchStores();
     }
   }, [lockedStoreId]);
 
   useEffect(() => {
-    fetchCourts();
-  }, [storeFilter]);
+    // 店鋪後台須等店鋪 ID 就緒，避免先拉全平台場地
+    if (storeAdminCtx && !lockedStoreId) return;
+    void fetchCourts();
+  }, [effectiveStoreId, storeAdminCtx?.storeSlug, lockedStoreId]);
 
   const fetchStores = async () => {
     try {
@@ -110,9 +111,18 @@ const CourtManagement: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const q = storeFilter ? `?all=true&store=${storeFilter}` : '?all=true';
+      const filterId = lockedStoreId || storeFilter;
+      const q = filterId ? `?all=true&store=${filterId}` : '?all=true';
       const response = await axios.get(`/courts${q}`);
-      setCourts(response.data.courts);
+      let list: Court[] = response.data.courts || [];
+      // 店鋪後台雙重保險：只顯示當前店
+      if (lockedStoreId) {
+        list = list.filter((court) => {
+          const sid = typeof court.store === 'object' ? court.store?._id : court.store;
+          return sid != null && String(sid) === String(lockedStoreId);
+        });
+      }
+      setCourts(list);
     } catch (error: any) {
       console.error('獲取場地列表失敗:', error);
       setError(error.response?.data?.message || '獲取場地列表失敗');
@@ -380,7 +390,7 @@ const CourtManagement: React.FC = () => {
         <button
           type="button"
           onClick={openCreateForm}
-          disabled={stores.length === 0}
+          disabled={!lockedStoreId && stores.length === 0}
           className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
         >
           <PlusIcon className="w-5 h-5" />
@@ -648,7 +658,7 @@ const CourtManagement: React.FC = () => {
         court={formCourt}
         stores={stores}
         isOpen={showFormModal}
-        defaultStoreId={storeFilter}
+        defaultStoreId={lockedStoreId || storeFilter}
         onClose={() => {
           setShowFormModal(false);
           setFormCourt(null);

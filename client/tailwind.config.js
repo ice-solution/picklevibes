@@ -7,16 +7,16 @@ module.exports = {
     extend: {
       colors: {
         primary: {
-          50: '#fdf2f8',
-          100: '#fce7f3',
-          200: '#fbcfe8',
-          300: '#f9a8d4',
-          400: '#f472b6',
-          500: '#ec4899', // 主要粉紅色 (來自 logo)
-          600: '#db2777',
-          700: '#be185d',
-          800: '#9d174d',
-          900: '#831843',
+          50: 'var(--color-primary-50, #fdf2f8)',
+          100: 'var(--color-primary-100, #fce7f3)',
+          200: 'var(--color-primary-200, #fbcfe8)',
+          300: 'var(--color-primary-300, #f9a8d4)',
+          400: 'var(--color-primary-400, #f472b6)',
+          500: 'var(--color-primary-500, #ec4899)',
+          600: 'var(--color-primary-600, #db2777)',
+          700: 'var(--color-primary-700, #be185d)',
+          800: 'var(--color-primary-800, #9d174d)',
+          900: 'var(--color-primary-900, #831843)',
         },
         secondary: {
           50: '#f0fdfa',

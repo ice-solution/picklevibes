@@ -1,53 +1,113 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Link, useLocation, useNavigate, type Location } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams, type Location } from 'react-router-dom';
+import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import { getPostAuthRedirectPath } from '../utils/authRedirect';
+import { getPostAuthRedirectPath, parseStoreSlugFromAdminPath } from '../utils/authRedirect';
+import { useDocumentStoreBrand } from '../hooks/useDocumentStoreBrand';
+import {
+  resolveMediaUrl,
+  storeBrandStyles,
+  storePrimaryColor,
+  STORE_BRAND_CLASS,
+} from '../utils/storeBrandUtils';
+
+type StoreLoginBrand = {
+  name: string;
+  slug: string;
+  branding?: {
+    displayName?: string;
+    logoUrl?: string;
+    primaryColor?: string;
+  };
+};
 
 const Login: React.FC = () => {
   const [formData, setFormData] = useState({
     email: '',
-    password: ''
+    password: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isLoading, setIsLoading] = useState(false);
+  const [storeBrand, setStoreBrand] = useState<StoreLoginBrand | null>(null);
+  const [storeBrandLoading, setStoreBrandLoading] = useState(false);
 
   const { login, user, loading: authLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { storeSlug: paramSlug } = useParams<{ storeSlug?: string }>();
   const redirectFrom = (location.state as { from?: Location } | null)?.from;
 
-  // 已登入則直接回到原本要去的頁面（例如 game join）
+  const storeSlug = useMemo(() => {
+    const fromSearch = new URLSearchParams(location.search).get('store');
+    return (
+      paramSlug ||
+      fromSearch ||
+      parseStoreSlugFromAdminPath(redirectFrom?.pathname) ||
+      null
+    )?.toLowerCase() || null;
+  }, [paramSlug, location.search, redirectFrom?.pathname]);
+
+  const isStoreLogin = Boolean(storeSlug);
+
+  useEffect(() => {
+    if (!storeSlug) {
+      setStoreBrand(null);
+      return;
+    }
+    let cancelled = false;
+    setStoreBrandLoading(true);
+    axios
+      .get(`/stores/by-slug/${encodeURIComponent(storeSlug)}`)
+      .then((res) => {
+        if (!cancelled) setStoreBrand(res.data.store || null);
+      })
+      .catch(() => {
+        if (!cancelled) setStoreBrand(null);
+      })
+      .finally(() => {
+        if (!cancelled) setStoreBrandLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [storeSlug]);
+
+  const primaryColor = storePrimaryColor(storeBrand);
+  const brandStyles = storeBrandStyles(primaryColor);
+  const logoSrc = resolveMediaUrl(storeBrand?.branding?.logoUrl);
+  const displayName = storeBrand?.branding?.displayName || storeBrand?.name || storeSlug || '店鋪';
+
+  useDocumentStoreBrand(isStoreLogin ? primaryColor : null);
+
   useEffect(() => {
     if (!authLoading && user) {
       navigate(getPostAuthRedirectPath(redirectFrom, user), { replace: true });
     }
   }, [authLoading, user, redirectFrom, navigate]);
 
-  // 載入頁面時檢查是否有儲存的 email
   useEffect(() => {
     const savedEmail = localStorage.getItem('rememberedEmail');
     if (savedEmail) {
-      setFormData(prev => ({ ...prev, email: savedEmail }));
+      setFormData((prev) => ({ ...prev, email: savedEmail }));
       setRememberMe(true);
     }
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
-    
-    // 清除該字段的錯誤
+
     if (errors[name]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [name]: ''
+        [name]: '',
       }));
     }
   };
@@ -71,7 +131,7 @@ const Login: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -87,15 +147,23 @@ const Login: React.FC = () => {
       }
 
       navigate(getPostAuthRedirectPath(redirectFrom, loggedInUser), { replace: true });
-    } catch (error: any) {
-      setErrors({ general: error.message });
+    } catch (error: unknown) {
+      const err = error as { message?: string };
+      setErrors({ general: err.message || '登入失敗' });
     } finally {
       setIsLoading(false);
     }
   };
 
+  const registerState = redirectFrom ? { from: redirectFrom } : undefined;
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
+    <div
+      className={`min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 ${
+        isStoreLogin ? STORE_BRAND_CLASS : ''
+      }`}
+      style={isStoreLogin ? brandStyles : undefined}
+    >
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -103,22 +171,47 @@ const Login: React.FC = () => {
           transition={{ duration: 0.6 }}
           className="text-center"
         >
-          <Link to="/" className="flex items-center justify-center">
-            <img src="/pickcourt_logo.jpg" alt="PickCourt" className="h-14 w-auto object-contain" />
-          </Link>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            登入 PickCourt
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            或者{' '}
-            <Link
-              to="/register"
-              state={redirectFrom ? { from: redirectFrom } : undefined}
-              className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
-            >
-              創建新帳戶
-            </Link>
-          </p>
+          {isStoreLogin ? (
+            <div className="flex flex-col items-center">
+              {storeBrandLoading ? (
+                <div className="h-16 w-16 rounded-xl bg-gray-100 animate-pulse" />
+              ) : logoSrc ? (
+                <img
+                  src={logoSrc}
+                  alt={displayName}
+                  className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl bg-white shadow-sm border border-gray-100 p-1"
+                />
+              ) : (
+                <div
+                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-sm"
+                  style={{ backgroundColor: primaryColor }}
+                >
+                  {displayName.charAt(0)}
+                </div>
+              )}
+              <h2 className="mt-6 text-2xl sm:text-3xl font-bold text-gray-900">
+                登入 {displayName}
+              </h2>
+              <p className="mt-2 text-sm text-gray-600">店鋪員工後台</p>
+            </div>
+          ) : (
+            <>
+              <Link to="/" className="flex items-center justify-center">
+                <img src="/pickcourt_logo.jpg" alt="PickCourt" className="h-14 w-auto object-contain" />
+              </Link>
+              <h2 className="mt-6 text-3xl font-bold text-gray-900">登入 PickCourt</h2>
+              <p className="mt-2 text-sm text-gray-600">
+                或者{' '}
+                <Link
+                  to="/register"
+                  state={registerState}
+                  className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
+                >
+                  創建新帳戶
+                </Link>
+              </p>
+            </>
+          )}
         </motion.div>
       </div>
 
@@ -130,14 +223,12 @@ const Login: React.FC = () => {
       >
         <div className="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10">
           <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* 一般錯誤信息 */}
             {errors.general && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                 <p className="text-sm text-red-800">{errors.general}</p>
               </div>
             )}
 
-            {/* 電子郵件 */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
                 電子郵件地址
@@ -150,18 +241,13 @@ const Login: React.FC = () => {
                   autoComplete="email"
                   value={formData.email}
                   onChange={handleChange}
-                  className={`input-field ${
-                    errors.email ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
+                  className={`input-field ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
                   placeholder="請輸入您的電子郵件"
                 />
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                )}
+                {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
               </div>
             </div>
 
-            {/* 密碼 */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
                 密碼
@@ -190,13 +276,10 @@ const Login: React.FC = () => {
                     <EyeIcon className="h-5 w-5 text-gray-400" />
                   )}
                 </button>
-                {errors.password && (
-                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-                )}
+                {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
               </div>
             </div>
 
-            {/* 記住我和忘記密碼 */}
             <div className="flex items-center justify-between">
               <div className="flex items-center">
                 <input
@@ -222,7 +305,6 @@ const Login: React.FC = () => {
               </div>
             </div>
 
-            {/* 提交按鈕 */}
             <div>
               <button
                 type="submit"
@@ -238,6 +320,13 @@ const Login: React.FC = () => {
             </div>
           </form>
 
+          {isStoreLogin && storeSlug && (
+            <p className="mt-6 text-center text-xs text-gray-500">
+              <Link to={`/store/${storeSlug}`} className="text-primary-600 hover:underline">
+                返回店鋪公開頁
+              </Link>
+            </p>
+          )}
         </div>
       </motion.div>
     </div>

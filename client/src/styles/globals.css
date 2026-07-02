@@ -84,9 +84,10 @@
   @apply border-2 border-gray-300 focus:border-primary-500 focus:ring-primary-500 rounded-lg;
 }
 
-/* 自定義滾動條 */
+/* 自定義滾動條（全站預設） */
 ::-webkit-scrollbar {
   width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -100,6 +101,58 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-primary-500);
+}
+
+/* 店鋪後台／白標：跟隨品牌主色（含 html 層級捲軸） */
+html.store-branded {
+  scrollbar-width: thin;
+  scrollbar-color: var(--store-primary) var(--store-primary-soft);
+}
+
+html.store-branded::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html.store-branded::-webkit-scrollbar-track {
+  background: var(--store-primary-soft);
+}
+
+html.store-branded::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--store-primary) 62%, white);
+  border-radius: 4px;
+}
+
+html.store-branded::-webkit-scrollbar-thumb:hover {
+  background: var(--store-primary);
+}
+
+.store-branded,
+.store-branded * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--store-primary) var(--store-primary-soft);
+}
+
+.store-branded::-webkit-scrollbar,
+.store-branded ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.store-branded::-webkit-scrollbar-track,
+.store-branded ::-webkit-scrollbar-track {
+  background: var(--store-primary-soft);
+}
+
+.store-branded::-webkit-scrollbar-thumb,
+.store-branded ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--store-primary) 62%, white);
+  border-radius: 4px;
+}
+
+.store-branded::-webkit-scrollbar-thumb:hover,
+.store-branded ::-webkit-scrollbar-thumb:hover {
+  background: var(--store-primary);
 }
 
 /* 動畫增強 */

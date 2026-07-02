@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
+import { getStoreLoginPath, parseStoreSlugFromAdminPath } from '../../utils/authRedirect';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -22,8 +23,9 @@ const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   }
 
   if (!user) {
-    // 重定向到登入頁面，並保存當前位置
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    const storeSlug = parseStoreSlugFromAdminPath(location.pathname);
+    const loginTo = storeSlug ? getStoreLoginPath(storeSlug) : '/login';
+    return <Navigate to={loginTo} state={{ from: location }} replace />;
   }
 
   return <>{children}</>;

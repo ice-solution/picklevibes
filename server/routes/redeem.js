@@ -19,6 +19,7 @@ const {
   checkDocumentStoreAccess,
   resolveStoreForCreate,
 } = require('../utils/tenantAccess');
+const { applyRequestedStoreFilter } = require('../utils/legacyStoreScope');
 
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { normalizeApplicablePricingSlots } = require('../utils/redeemPricingSlots');
@@ -430,7 +431,7 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
     }
 
     if (store && String(store).trim() !== '') {
-      query.store = String(store).trim();
+      query = await applyRequestedStoreFilter(query, store);
     }
 
     if (batchId && String(batchId).trim() !== '') {
@@ -636,7 +637,7 @@ router.get('/admin/groups', [auth, adminAuth], async (req, res) => {
     }
 
     if (req.query.store && String(req.query.store).trim() !== '') {
-      match.store = String(req.query.store).trim();
+      match = await applyRequestedStoreFilter(match, req.query.store);
     }
 
     const q = normalizeSearchQ(qRaw);
@@ -950,7 +951,10 @@ router.put('/admin/:id/status', [
 router.get('/admin/stats', [auth, adminAuth], async (req, res) => {
   try {
     const now = new Date();
-    const baseQuery = scopeRedeemQuery({}, req.tenantAccess);
+    let baseQuery = scopeRedeemQuery({}, req.tenantAccess);
+    if (req.query.store && String(req.query.store).trim() !== '') {
+      baseQuery = await applyRequestedStoreFilter(baseQuery, req.query.store);
+    }
     
     // 總兌換碼數量
     const totalCodes = await RedeemCode.countDocuments(baseQuery);

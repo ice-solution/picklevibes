@@ -22,6 +22,7 @@ const {
   checkDocumentStoreAccess,
   resolveStoreForCreate,
 } = require('../utils/tenantAccess');
+const { applyRequestedStoreFilter } = require('../utils/legacyStoreScope');
 
 const router = express.Router();
 const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
@@ -78,7 +79,7 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
       query.status = status;
     }
     if (store && String(store).trim() !== '') {
-      query.store = String(store).trim();
+      query = await applyRequestedStoreFilter(query, store);
     }
     query = applyStoreScope(query, req.tenantAccess, 'store');
 

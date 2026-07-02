@@ -13,7 +13,7 @@ import {
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { PRICING_SLOT_NAMES } from '../../constants/courtPricing';
-import { useLockedStoreId } from '../../contexts/StoreAdminContext';
+import { useOptionalStoreAdmin, useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 interface RedeemCode {
   _id: string;
@@ -133,6 +133,7 @@ function ApplicablePricingSlotsPicker({
 }
 
 const RedeemCodeManagement: React.FC = () => {
+  const storeAdminCtx = useOptionalStoreAdmin();
   const lockedStoreId = useLockedStoreId();
   const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([]);
   const [redeemGroups, setRedeemGroups] = useState<RedeemCodeGroup[]>([]);
@@ -206,9 +207,10 @@ const RedeemCodeManagement: React.FC = () => {
   });
 
   useEffect(() => {
+    if (storeAdminCtx && !lockedStoreId) return;
     fetchRedeemCodes();
     fetchStats();
-  }, [lockedStoreId]);
+  }, [lockedStoreId, storeAdminCtx?.storeSlug]);
 
   const appendStoreParam = (params: URLSearchParams) => {
     if (lockedStoreId) {
@@ -298,7 +300,10 @@ const RedeemCodeManagement: React.FC = () => {
   // 獲取統計數據
   const fetchStats = async () => {
     try {
-      const response = await axios.get('/redeem/admin/stats');
+      const params = new URLSearchParams();
+      if (lockedStoreId) params.append('store', lockedStoreId);
+      const qs = params.toString();
+      const response = await axios.get(`/redeem/admin/stats${qs ? `?${qs}` : ''}`);
       setStats(response.data.stats);
     } catch (error) {
       console.error('獲取統計數據失敗:', error);

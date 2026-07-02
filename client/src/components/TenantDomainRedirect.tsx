@@ -16,11 +16,16 @@ export default function TenantDomainRedirect() {
     const slug = tenant.slug;
     const storePrefix = `/store/${slug}`;
     const adminPrefix = `${storePrefix}/admin`;
+    const storeLoginPath = `${storePrefix}/login`;
     const path = location.pathname;
 
-    if (path === '/login' || path.startsWith(storePrefix)) return;
+    if (path.startsWith(storePrefix)) return;
 
     if (isAdminHost) {
+      if (path === '/login') {
+        navigate(`${storeLoginPath}${location.search}`, { replace: true });
+        return;
+      }
       if (path === '/' || path === '/admin' || path.startsWith('/admin/')) {
         const rest = path === '/' || path === '/admin' ? '' : path.slice('/admin'.length);
         navigate(`${adminPrefix}${rest}${location.search}`, { replace: true });

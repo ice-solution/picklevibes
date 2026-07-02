@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs').promises;
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
-const { auth, adminAuth } = require('../middleware/auth');
+const { auth, optionalAuth, adminAuth } = require('../middleware/auth');
+const { applyStoreScope } = require('../utils/tenantAccess');
 const {
   normalizeTimeSlots,
   syncLegacyPricingFromSlots,
@@ -50,7 +51,7 @@ function calculateDuration(startTime, endTime) {
 // @route   GET /api/courts
 // @desc    獲取所有場地
 // @access  Public
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { type, available, all, store: storeId } = req.query;
     
@@ -58,7 +59,10 @@ router.get('/', async (req, res) => {
     
     // 如果是管理員請求所有場地（包括停用的）
     if (all === 'true') {
-      // 不添加 isActive 篩選條件
+      // 店鋪 staff 僅能看自己管理的店；平台 admin 可看全部
+      if (req.tenantAccess && !req.tenantAccess.isPlatformAdmin) {
+        query = applyStoreScope(query, req.tenantAccess, 'store');
+      }
     } else {
       // 默認只返回啟用的場地
       query.isActive = true;

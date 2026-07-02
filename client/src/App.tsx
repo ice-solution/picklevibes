@@ -77,8 +77,9 @@ function App() {
 function AppShell() {
   const location = useLocation();
   const isStoreAdmin = /^\/store\/[^/]+\/admin/.test(location.pathname);
+  const isStoreLogin = /^\/store\/[^/]+\/login$/.test(location.pathname);
   const { resolved: isTenantHost } = useStoreTenantHost();
-  const hideMainChrome = isPickCourtPublicPath(location.pathname) || isStoreAdmin || isTenantHost;
+  const hideMainChrome = isPickCourtPublicPath(location.pathname) || isStoreAdmin || isStoreLogin || isTenantHost;
 
   return (
     <div className={hideMainChrome ? 'min-h-screen' : 'min-h-screen bg-gray-50'}>
@@ -140,6 +141,7 @@ function AppShell() {
                 />
                 {/* Deep link 分享：/lai-chi-kok/match-court/2026-06-13 — 須在靜態路由之後、catch-all 之前 */}
                 <Route path="/login" element={<Login />} />
+                <Route path="/store/:storeSlug/login" element={<Login />} />
                 <Route path="/pickcourt/login" element={<Navigate to="/login" replace />} />
                 <Route path="/picklecourt/login" element={<Navigate to="/login" replace />} />
                 <Route path="/register" element={<Register />} />

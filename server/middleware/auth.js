@@ -36,6 +36,24 @@ const auth = async (req, res, next) => {
   }
 };
 
+// 可選認證：有 token 則載入 user／tenantAccess，無 token 不阻擋
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.isActive) return next();
+
+    req.user = user;
+    req.tenantAccess = await loadTenantAccess(user);
+  } catch {
+    // 忽略無效 token，維持公開請求
+  }
+  next();
+};
+
 // 後台權限：平台 admin 或已指派店鋪的 staff
 const adminAuth = async (req, res, next) => {
   if (!req.user) {
@@ -77,6 +95,6 @@ const coachOrAdminAuth = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, adminAuth, platformAdminAuth, coachOrAdminAuth };
+module.exports = { auth, optionalAuth, adminAuth, platformAdminAuth, coachOrAdminAuth };
 
 

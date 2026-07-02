@@ -3,7 +3,7 @@ import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { StoreAdminProvider, useStoreAdmin } from '../contexts/StoreAdminContext';
-import { canAccessStoreAdmin } from '../utils/authRedirect';
+import { canAccessStoreAdmin, getStoreLoginPath } from '../utils/authRedirect';
 
 import StoreIntroSettings from '../components/Admin/StoreIntroSettings';
 import BookingManagement from '../components/Admin/BookingManagement';
@@ -18,7 +18,8 @@ import RegularActivityManagement from '../components/Admin/RegularActivityManage
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import AccountingManagement from '../components/Admin/AccountingManagement';
-import { resolveMediaUrl, storeBrandStyles, storePrimaryColor } from '../utils/storeBrandUtils';
+import { resolveMediaUrl, storeBrandStyles, storePrimaryColor, STORE_BRAND_CLASS } from '../utils/storeBrandUtils';
+import { useDocumentStoreBrand } from '../hooks/useDocumentStoreBrand';
 import { PICKCOURT_HOME } from '../utils/pickcourtRoutes';
 
 import {
@@ -80,6 +81,9 @@ function StoreAdminShell() {
 
   const current = tabs.find((t) => t.id === activeTab) || tabs[0];
 
+  const primaryColor = store ? storePrimaryColor(store) : undefined;
+  useDocumentStoreBrand(primaryColor);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -100,25 +104,28 @@ function StoreAdminShell() {
   }
 
   const displayName = store.branding?.displayName || store.name;
-  const primaryColor = storePrimaryColor(store);
   const logoSrc = resolveMediaUrl(store.branding?.logoUrl);
-  const brandStyles = storeBrandStyles(primaryColor);
+  const brandStyles = storeBrandStyles(primaryColor!);
 
-  const BrandHeader = () => (
+  const BrandHeader = ({ compact = false }: { compact?: boolean }) => (
     <div className="flex items-center gap-3 min-w-0">
       {logoSrc ? (
-        <img src={logoSrc} alt="" className="h-10 w-10 object-contain rounded-lg shrink-0" />
+        <img
+          src={logoSrc}
+          alt={displayName}
+          className={`object-contain rounded-lg shrink-0 bg-white/90 ${compact ? 'h-9 w-9 p-0.5' : 'h-11 w-11 p-1 shadow-sm border border-gray-100'}`}
+        />
       ) : (
         <div
-          className="h-10 w-10 rounded-lg shrink-0 flex items-center justify-center text-white text-sm font-bold"
+          className={`rounded-lg shrink-0 flex items-center justify-center text-white font-bold ${compact ? 'h-9 w-9 text-sm' : 'h-11 w-11 text-base'}`}
           style={{ backgroundColor: primaryColor }}
         >
           {displayName.charAt(0)}
         </div>
       )}
       <div className="min-w-0">
-        <div className="font-bold text-gray-900 truncate">{displayName}</div>
-        <div className="text-xs text-gray-500">店鋪後台 · {store.slug}</div>
+        <div className={`font-bold text-gray-900 truncate ${compact ? 'text-sm' : ''}`}>{displayName}</div>
+        <div className="text-xs text-gray-500 truncate">店鋪後台 · {store.slug}</div>
       </div>
     </div>
   );
@@ -162,12 +169,15 @@ function StoreAdminShell() {
   );
 
   return (
-    <div className="bg-gray-50 min-h-screen flex flex-col overflow-hidden" style={brandStyles}>
+    <div className={`${STORE_BRAND_CLASS} bg-gray-50 min-h-screen flex flex-col overflow-hidden`} style={brandStyles}>
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} aria-hidden />
           <div className="absolute inset-y-0 left-0 w-[18rem] max-w-[85vw] bg-white shadow-xl border-r flex flex-col">
-            <div className="flex items-center justify-between px-4 h-16 border-b gap-2">
+            <div
+              className="flex items-center justify-between px-4 h-16 border-b gap-2"
+              style={{ borderBottomColor: 'var(--store-primary-border)' }}
+            >
               <div className="min-w-0 flex-1"><BrandHeader /></div>
               <button type="button" onClick={() => setMobileOpen(false)}><XMarkIcon className="w-6 h-6 shrink-0" /></button>
             </div>
@@ -178,34 +188,55 @@ function StoreAdminShell() {
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
         <aside className="hidden lg:flex lg:flex-col lg:w-72 shrink-0 bg-white border-r min-h-0">
-          <div className="h-16 flex items-center px-5 border-b">
+          <div
+            className="h-[4.25rem] flex items-center px-5 border-b"
+            style={{
+              borderBottomColor: 'var(--store-primary-border)',
+              background: `linear-gradient(135deg, var(--store-primary-soft) 0%, white 72%)`,
+            }}
+          >
             <BrandHeader />
           </div>
           <div className="flex-1 overflow-y-auto"><Nav /></div>
-          <div className="p-3 border-t text-xs text-gray-500 space-y-2">
+          <div className="p-3 border-t text-xs text-gray-500 space-y-2" style={{ borderTopColor: 'var(--store-primary-border)' }}>
             {isPlatformAdmin && (
-              <Link to="/admin-v2" className="flex items-center gap-1 hover:underline" style={{ color: primaryColor }}>
+              <Link to="/admin-v2" className="flex items-center gap-1 text-primary-600 hover:underline">
                 <ArrowLeftIcon className="w-4 h-4" /> 平台管理後台
               </Link>
             )}
-            <Link to={`/store/${store.slug}`} className="block hover:underline" style={{ color: primaryColor }}>
+            <Link to={`/store/${store.slug}`} className="block text-primary-600 hover:underline">
               查看公開頁
             </Link>
           </div>
         </aside>
 
         <div className="flex flex-col flex-1 min-w-0 min-h-0">
-          <header className="h-16 bg-white border-b flex items-center justify-between px-4 sm:px-6 shrink-0">
+          <header
+            className="h-16 bg-white border-b flex items-center justify-between px-4 sm:px-6 shrink-0"
+            style={{ borderBottomColor: 'var(--store-primary-border)' }}
+          >
             <div className="flex items-center gap-3 min-w-0">
-              <button type="button" className="lg:hidden p-2" onClick={() => setMobileOpen(true)}>
+              <button type="button" className="lg:hidden p-2 -ml-2" onClick={() => setMobileOpen(true)}>
                 <Bars3Icon className="w-6 h-6" />
               </button>
-              {logoSrc && (
-                <img src={logoSrc} alt="" className="h-8 w-8 object-contain rounded shrink-0 lg:hidden" />
-              )}
-              <div className="min-w-0">
-                <div className="text-xs text-gray-500">{store.district || '香港'}</div>
-                <div className="font-semibold truncate">{current.name}</div>
+              <div className="lg:hidden min-w-0">
+                <BrandHeader compact />
+              </div>
+              <div className="hidden lg:flex items-center gap-3 min-w-0">
+                {logoSrc ? (
+                  <img src={logoSrc} alt="" className="h-8 w-8 object-contain rounded shrink-0" />
+                ) : (
+                  <div
+                    className="h-8 w-8 rounded shrink-0 flex items-center justify-center text-white text-xs font-bold"
+                    style={{ backgroundColor: primaryColor }}
+                  >
+                    {displayName.charAt(0)}
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <div className="text-xs text-gray-500">{store.district || '香港'}</div>
+                  <div className="font-semibold truncate">{current.name}</div>
+                </div>
               </div>
             </div>
             <div className="text-sm text-gray-600 truncate">{user?.name}</div>
@@ -234,7 +265,13 @@ const StoreAdmin: React.FC = () => {
   }
 
   if (!user) {
-    return <Navigate to="/login" state={{ from: { pathname: `/store/${storeSlug}/admin` } }} replace />;
+    return (
+      <Navigate
+        to={getStoreLoginPath(storeSlug)}
+        state={{ from: { pathname: `/store/${storeSlug}/admin`, search: '', hash: '' } }}
+        replace
+      />
+    );
   }
 
   if (!canAccessStoreAdmin(user, storeSlug)) {
