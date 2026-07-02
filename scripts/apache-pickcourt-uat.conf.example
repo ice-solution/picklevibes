@@ -6,6 +6,8 @@
 #   sudo a2enmod proxy_wstunnel   # 若將來用 Socket.IO
 #
 # 部署：
+#   sudo ./scripts/setup-apache-pickcourt-uat.sh
+#   或手動：
 #   sudo cp scripts/apache-pickcourt-uat.conf.example /etc/apache2/sites-available/pickcourt-uat.conf
 #   sudo ln -sf /etc/apache2/sites-available/pickcourt-uat.conf /etc/apache2/sites-enabled/
 #   sudo apache2ctl configtest && sudo systemctl reload apache2
@@ -56,7 +58,7 @@
     RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
 
     # ── React SPA（/store、/booking、/login 等 client 路由）──
-    <Directory /var/www/html/pickcourt/client/build>
+    <Directory /var/www/pickcourt/client/build>
         Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted

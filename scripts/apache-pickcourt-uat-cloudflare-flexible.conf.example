@@ -2,19 +2,17 @@
 # 用戶 → Cloudflare：HTTPS；Cloudflare → 源站：HTTP :80
 # 源站只需此 :80 VirtualHost（勿設 443 / SSLEngine / HTTP→HTTPS 301）
 #
+# 佔位符（由 setup-apache-pickcourt-uat.sh 取代）：
+#   @APP_ROOT@   例：/var/www/pickcourt/client/build
+#   @API_PORT@   例：5001
+#
 # Cloudflare：SSL/TLS → Flexible
-# 部署：
-#   sudo cp scripts/apache-pickcourt-uat-cloudflare-flexible.conf.example \
-#          /etc/apache2/sites-available/pickcourt-uat.conf
-#   sudo a2enmod proxy proxy_http rewrite headers
-#   sudo ln -sf /etc/apache2/sites-available/pickcourt-uat.conf /etc/apache2/sites-enabled/
-#   sudo apache2ctl configtest && sudo systemctl reload apache2
 
 <VirtualHost *:80>
     ServerName uat.pickcourt.hk
     ServerAlias lck.uat.pickcourt.hk admin.lck.uat.pickcourt.hk
 
-    DocumentRoot /var/www/pickcourt/client/build
+    DocumentRoot @APP_ROOT@
 
     ErrorLog  ${APACHE_LOG_DIR}/pickcourt-uat-error.log
     CustomLog ${APACHE_LOG_DIR}/pickcourt-uat-access.log combined
@@ -22,25 +20,72 @@
     LimitRequestBody 20971520
 
     ProxyPreserveHost On
-    ProxyPass        /api/ http://127.0.0.1:5001/api/
-    ProxyPassReverse /api/ http://127.0.0.1:5001/api/
+    ProxyTimeout 300
+    Timeout 300
 
-    # Flexible：告知 Node 對外為 HTTPS（配合 TRUST_PROXY_HOPS=1）
+    # Socket.IO（Game client 等）
+    ProxyPass /socket.io/ http://127.0.0.1:@API_PORT@/socket.io/
+    ProxyPassReverse /socket.io/ http://127.0.0.1:@API_PORT@/socket.io/
+    RewriteEngine On
+    RewriteCond %{HTTP:Upgrade} =websocket [NC]
+    RewriteRule ^/socket.io/(.*) ws://127.0.0.1:@API_PORT@/socket.io/$1 [P,L]
+    RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+    RewriteRule ^/socket.io/(.*) http://127.0.0.1:@API_PORT@/socket.io/$1 [P,L]
+
+    # API（必須保留 Host，供 tenant/resolve）
+    ProxyPass /api http://127.0.0.1:@API_PORT@/api
+    ProxyPassReverse /api http://127.0.0.1:@API_PORT@/api
+
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
     RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
 
-    <Directory /var/www/pickcourt/client/build>
+    <Directory @APP_ROOT@>
         Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted
 
         RewriteEngine On
         RewriteBase /
-        RewriteCond %{REQUEST_FILENAME} -f [OR]
-        RewriteCond %{REQUEST_FILENAME} -d
-        RewriteRule ^ - [L]
-        RewriteCond %{REQUEST_URI} !^/api/
-        RewriteRule ^ /index.html [L]
+        RewriteRule ^index\.html$ - [L]
+        RewriteCond %{REQUEST_FILENAME} !-f
+        RewriteCond %{REQUEST_FILENAME} !-d
+        RewriteCond %{REQUEST_URI} !^/api
+        RewriteCond %{REQUEST_URI} !^/socket.io
+        RewriteRule . /index.html [L]
     </Directory>
+
+    <FilesMatch "\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$">
+        ExpiresActive On
+        ExpiresDefault "access plus 1 year"
+        Header set Cache-Control "public, immutable"
+    </FilesMatch>
+
+    <IfModule mod_deflate.c>
+        AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css text/javascript application/javascript application/json
+    </IfModule>
+
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    <IfModule mod_remoteip.c>
+        RemoteIPHeader CF-Connecting-IP
+        RemoteIPTrustedProxy 173.245.48.0/20
+        RemoteIPTrustedProxy 103.21.244.0/22
+        RemoteIPTrustedProxy 103.22.200.0/22
+        RemoteIPTrustedProxy 103.31.4.0/22
+        RemoteIPTrustedProxy 141.101.64.0/18
+        RemoteIPTrustedProxy 108.162.192.0/18
+        RemoteIPTrustedProxy 190.93.240.0/20
+        RemoteIPTrustedProxy 188.114.96.0/20
+        RemoteIPTrustedProxy 197.234.240.0/22
+        RemoteIPTrustedProxy 198.41.128.0/17
+        RemoteIPTrustedProxy 162.158.0.0/15
+        RemoteIPTrustedProxy 104.16.0.0/13
+        RemoteIPTrustedProxy 104.24.0.0/14
+        RemoteIPTrustedProxy 172.64.0.0/13
+        RemoteIPTrustedProxy 131.0.72.0/22
+    </IfModule>
 </VirtualHost>
