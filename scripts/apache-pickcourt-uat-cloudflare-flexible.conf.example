@@ -3,7 +3,7 @@
 # 源站只需此 :80 VirtualHost（勿設 443 / SSLEngine / HTTP→HTTPS 301）
 #
 # 佔位符（由 setup-apache-pickcourt-uat.sh 取代）：
-#   @APP_ROOT@   例：/var/www/pickcourt/client/build
+#   @APP_ROOT@   例：/var/www/html/pickcourt/client/build
 #   @API_PORT@   例：5001
 #
 # Cloudflare：SSL/TLS → Flexible
@@ -40,19 +40,20 @@
     RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
     RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
 
+    # ── React SPA：子路徑（/admin、/search、/login…）必須 fallback 到 index.html ──
+    # 注意：只有 / 會自動讀 index.html；/admin/ 等若無此規則會 Apache 404
+    RewriteCond %{REQUEST_URI} !^/api
+    RewriteCond %{REQUEST_URI} !^/socket\.io
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d
+    RewriteRule ^ /index.html [L]
+
     <Directory @APP_ROOT@>
         Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted
-
-        RewriteEngine On
-        RewriteBase /
-        RewriteRule ^index\.html$ - [L]
-        RewriteCond %{REQUEST_FILENAME} !-f
-        RewriteCond %{REQUEST_FILENAME} !-d
-        RewriteCond %{REQUEST_URI} !^/api
-        RewriteCond %{REQUEST_URI} !^/socket.io
-        RewriteRule . /index.html [L]
+        # 雙保險（Apache 2.4+）
+        FallbackResource /index.html
     </Directory>
 
     <FilesMatch "\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|webp)$">

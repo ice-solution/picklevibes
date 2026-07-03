@@ -4,14 +4,17 @@ import { Link, useLocation, useNavigate, useParams, type Location } from 'react-
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
-import { getPostAuthRedirectPath, parseStoreSlugFromAdminPath } from '../utils/authRedirect';
+import { getPostAuthRedirectPath, parseStoreSlugFromAdminPath, parseStoreSlugFromStorePath, type PostAuthRedirectFrom } from '../utils/authRedirect';
 import { useDocumentStoreBrand } from '../hooks/useDocumentStoreBrand';
+import { useStoreTenantHost } from '../contexts/StoreTenantHostContext';
 import {
-  resolveMediaUrl,
+  getStoreDisplayName,
+  getStoreLogoPath,
   storeBrandStyles,
   storePrimaryColor,
   STORE_BRAND_CLASS,
 } from '../utils/storeBrandUtils';
+import StoreBrandLogo from '../components/StoreBrandLogo';
 
 type StoreLoginBrand = {
   name: string;
@@ -23,7 +26,13 @@ type StoreLoginBrand = {
   };
 };
 
-const Login: React.FC = () => {
+type LoginProps = {
+  /** 在 /store/:slug/admin 內嵌登入時由父層傳入 */
+  storeContextSlug?: string;
+  defaultRedirect?: PostAuthRedirectFrom;
+};
+
+const Login: React.FC<LoginProps> = ({ storeContextSlug, defaultRedirect }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
@@ -39,47 +48,179 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { storeSlug: paramSlug } = useParams<{ storeSlug?: string }>();
-  const redirectFrom = (location.state as { from?: Location } | null)?.from;
+  const { tenant: hostTenant, resolved: hostResolved, host: requestHost } = useStoreTenantHost();
+  const redirectFrom =
+    (location.state as { from?: Location } | null)?.from ?? defaultRedirect;
 
   const storeSlug = useMemo(() => {
+    if (storeContextSlug) return storeContextSlug.toLowerCase();
     const fromSearch = new URLSearchParams(location.search).get('store');
-    return (
+    const fromPath =
       paramSlug ||
       fromSearch ||
+      parseStoreSlugFromStorePath(location.pathname) ||
       parseStoreSlugFromAdminPath(redirectFrom?.pathname) ||
-      null
-    )?.toLowerCase() || null;
-  }, [paramSlug, location.search, redirectFrom?.pathname]);
+      null;
+    if (fromPath) return fromPath.toLowerCase();
+    if (hostResolved && hostTenant?.slug) return hostTenant.slug.toLowerCase();
+    return null;
+  }, [
+    storeContextSlug,
+    paramSlug,
+    location.pathname,
+    location.search,
+    redirectFrom?.pathname,
+    hostResolved,
+    hostTenant?.slug,
+  ]);
 
-  const isStoreLogin = Boolean(storeSlug);
+  const isStoreLogin = Boolean(storeSlug) || (hostResolved && Boolean(hostTenant?.slug));
 
   useEffect(() => {
     if (!storeSlug) {
       setStoreBrand(null);
       return;
     }
+    const slug = storeSlug;
     let cancelled = false;
     setStoreBrandLoading(true);
-    axios
-      .get(`/stores/by-slug/${encodeURIComponent(storeSlug)}`)
-      .then((res) => {
-        if (!cancelled) setStoreBrand(res.data.store || null);
-      })
-      .catch(() => {
-        if (!cancelled) setStoreBrand(null);
-      })
-      .finally(() => {
-        if (!cancelled) setStoreBrandLoading(false);
-      });
+
+    const applyBrand = (data: StoreLoginBrand | null) => {
+      if (!cancelled) setStoreBrand(data);
+    };
+
+    const mapStoreToBrand = (s: {
+      name: string;
+      slug: string;
+      branding?: StoreLoginBrand['branding'];
+      logoUrl?: string;
+      primaryColor?: string;
+    }): StoreLoginBrand => ({
+      name: s.name,
+      slug: s.slug,
+      branding: {
+        displayName: s.branding?.displayName || s.name,
+        logoUrl: s.branding?.logoUrl || s.logoUrl || '',
+        primaryColor: s.branding?.primaryColor || s.primaryColor || '',
+      },
+    });
+
+    async function loadBrand() {
+      if (hostResolved) {
+        const host = requestHost || window.location.hostname;
+        if (host && host !== 'localhost' && host !== '127.0.0.1') {
+          try {
+            const res = await axios.get('/stores/login-brand-by-host', {
+              params: { host },
+            });
+            if (res.data?.store) {
+              applyBrand(res.data.store);
+              return;
+            }
+          } catch {
+            /* try slug-based */
+          }
+        }
+      }
+
+      try {
+        const res = await axios.get(`/stores/by-slug/${encodeURIComponent(slug)}/login-brand`);
+        if (res.data?.store) {
+          applyBrand(res.data.store);
+          return;
+        }
+      } catch {
+        /* try next */
+      }
+
+      try {
+        const res = await axios.get(`/stores/by-slug/${encodeURIComponent(slug)}`, {
+          params: { forLogin: '1' },
+        });
+        if (res.data?.store) {
+          applyBrand(mapStoreToBrand(res.data.store));
+          return;
+        }
+      } catch {
+        /* try next */
+      }
+
+      try {
+        const res = await axios.get(`/platform/stores/${encodeURIComponent(slug)}`);
+        const s = res.data?.store;
+        if (s) {
+          applyBrand({
+            name: s.name,
+            slug: s.slug,
+            branding: {
+              displayName: s.name,
+              logoUrl: s.logoUrl || '',
+              primaryColor: s.primaryColor || '',
+            },
+          });
+          return;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      if (hostResolved && hostTenant?.slug === slug && hostTenant.branding) {
+        applyBrand({
+          name: hostTenant.name || slug,
+          slug: hostTenant.slug,
+          branding: {
+            displayName: hostTenant.branding.displayName || hostTenant.name || slug,
+            logoUrl: hostTenant.branding.logoUrl || '',
+            primaryColor: hostTenant.branding.primaryColor || '',
+          },
+        });
+        return;
+      }
+
+      applyBrand(null);
+    }
+
+    void loadBrand().finally(() => {
+      if (!cancelled) setStoreBrandLoading(false);
+    });
+
     return () => {
       cancelled = true;
     };
-  }, [storeSlug]);
+  }, [storeSlug, hostResolved, hostTenant, requestHost]);
 
-  const primaryColor = storePrimaryColor(storeBrand);
+  const tenantBrand =
+    hostResolved && hostTenant?.branding ? hostTenant.branding : undefined;
+
+  const mergedBrand = useMemo(() => {
+    if (storeBrand) {
+      return {
+        ...storeBrand,
+        branding: {
+          ...tenantBrand,
+          ...storeBrand.branding,
+        },
+      };
+    }
+    if (hostResolved && hostTenant?.slug) {
+      const b = hostTenant.branding || {};
+      return {
+        name: b.displayName || hostTenant.name || hostTenant.slug,
+        slug: hostTenant.slug,
+        branding: {
+          displayName: b.displayName || hostTenant.name || hostTenant.slug,
+          logoUrl: b.logoUrl || '',
+          primaryColor: b.primaryColor || '',
+        },
+      };
+    }
+    return null;
+  }, [storeBrand, hostResolved, hostTenant]);
+
+  const primaryColor = storePrimaryColor(mergedBrand);
   const brandStyles = storeBrandStyles(primaryColor);
-  const logoSrc = resolveMediaUrl(storeBrand?.branding?.logoUrl);
-  const displayName = storeBrand?.branding?.displayName || storeBrand?.name || storeSlug || '店鋪';
+  const logoPath = getStoreLogoPath(mergedBrand);
+  const displayName = getStoreDisplayName(mergedBrand, storeSlug || '店鋪');
 
   useDocumentStoreBrand(isStoreLogin ? primaryColor : null);
 
@@ -174,20 +315,13 @@ const Login: React.FC = () => {
           {isStoreLogin ? (
             <div className="flex flex-col items-center">
               {storeBrandLoading ? (
-                <div className="h-16 w-16 rounded-xl bg-gray-100 animate-pulse" />
-              ) : logoSrc ? (
-                <img
-                  src={logoSrc}
-                  alt={displayName}
-                  className="h-16 w-16 sm:h-20 sm:w-20 object-contain rounded-xl bg-white shadow-sm border border-gray-100 p-1"
-                />
+                <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl bg-gray-100 animate-pulse" />
               ) : (
-                <div
-                  className="h-16 w-16 sm:h-20 sm:w-20 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-sm"
-                  style={{ backgroundColor: primaryColor }}
-                >
-                  {displayName.charAt(0)}
-                </div>
+                <StoreBrandLogo
+                  logoPath={logoPath}
+                  displayName={displayName}
+                  primaryColor={primaryColor}
+                />
               )}
               <h2 className="mt-6 text-2xl sm:text-3xl font-bold text-gray-900">
                 登入 {displayName}

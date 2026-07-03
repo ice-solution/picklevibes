@@ -29,6 +29,8 @@ interface CourtFormModalProps {
   stores: StoreOption[];
   isOpen: boolean;
   defaultStoreId?: string;
+  /** 店鋪後台：鎖定當前店鋪，不顯示空白下拉 */
+  lockStoreSelection?: boolean;
   onClose: () => void;
   onSaved: () => void;
 }
@@ -89,6 +91,7 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
   stores,
   isOpen,
   defaultStoreId = '',
+  lockStoreSelection = false,
   onClose,
   onSaved,
 }) => {
@@ -126,15 +129,26 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
   }, [court, isOpen, defaultStoreId, stores]);
 
   useEffect(() => {
+    if (!isOpen || !lockStoreSelection || court) return;
+    if (defaultStoreId) setStoreId(defaultStoreId);
+  }, [isOpen, lockStoreSelection, defaultStoreId, court]);
+
+  useEffect(() => {
     if (!isOpen || court) return;
     setSlug(suggestCourtSlug(type, number));
   }, [type, number, isOpen, court]);
 
   if (!isOpen) return null;
 
+  const lockedStoreName =
+    stores.find((s) => s._id === storeId)?.name ||
+    stores.find((s) => s._id === defaultStoreId)?.name ||
+    '';
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!storeId) {
+    const effectiveStoreId = lockStoreSelection ? (defaultStoreId || storeId) : storeId;
+    if (!effectiveStoreId) {
       setError('請選擇所屬店鋪');
       return;
     }
@@ -170,7 +184,7 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
 
       if (isEdit && court) {
         await axios.put(`/courts/${court._id}`, {
-          store: storeId,
+          store: effectiveStoreId,
           name: name.trim(),
           number: num,
           capacity: cap,
@@ -180,7 +194,7 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
       } else {
         const pricing = buildDefaultPricing(type);
         await axios.post('/courts', {
-          store: storeId,
+          store: effectiveStoreId,
           name: name.trim(),
           number: num,
           type,
@@ -217,17 +231,23 @@ const CourtFormModal: React.FC<CourtFormModalProps> = ({
         <form onSubmit={handleSubmit} className="px-6 py-4 overflow-y-auto flex-1 space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">所屬店鋪 *</label>
-            <select
-              value={storeId}
-              onChange={(e) => setStoreId(e.target.value)}
-              required
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
-            >
-              <option value="">請選擇店鋪</option>
-              {stores.map((s) => (
-                <option key={s._id} value={s._id}>{s.name}</option>
-              ))}
-            </select>
+            {lockStoreSelection ? (
+              <div className="w-full border border-gray-200 bg-gray-50 rounded-md px-3 py-2 text-sm text-gray-800">
+                {lockedStoreName || '當前店鋪'}
+              </div>
+            ) : (
+              <select
+                value={storeId}
+                onChange={(e) => setStoreId(e.target.value)}
+                required
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
+              >
+                <option value="">請選擇店鋪</option>
+                {stores.map((s) => (
+                  <option key={s._id} value={s._id}>{s.name}</option>
+                ))}
+              </select>
+            )}
             <p className="text-xs text-gray-500 mt-1">同店內場地編號不可重複</p>
           </div>
 

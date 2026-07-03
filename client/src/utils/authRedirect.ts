@@ -13,6 +13,13 @@ export function parseStoreSlugFromAdminPath(pathname?: string | null): string | 
   return m ? decodeURIComponent(m[1]).toLowerCase() : null;
 }
 
+/** 從任意店鋪路徑解析 slug（公開頁 / 登入 / 後台） */
+export function parseStoreSlugFromStorePath(pathname?: string | null): string | null {
+  if (!pathname) return null;
+  const m = pathname.match(/^\/store\/([^/]+)/);
+  return m ? decodeURIComponent(m[1]).toLowerCase() : null;
+}
+
 export function getStoreLoginPath(storeSlug: string): string {
   return `/store/${encodeURIComponent(storeSlug)}/login`;
 }
@@ -31,11 +38,14 @@ export function getDefaultHomeForUser(user?: User | null): string {
   return '/my-bookings';
 }
 
+/** 登入後導向目標（唔需要完整 Location） */
+export type PostAuthRedirectFrom = Pick<Location, 'pathname' | 'search' | 'hash'>;
+
 /**
  * 登入／註冊成功後要回到的 path（含 query，例如 game join 的 sig、code）
  */
 export function getPostAuthRedirectPath(
-  from?: Location | null,
+  from?: PostAuthRedirectFrom | Location | null,
   user?: User | null,
   fallback?: string
 ): string {

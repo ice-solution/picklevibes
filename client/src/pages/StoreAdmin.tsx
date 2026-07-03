@@ -3,7 +3,8 @@ import { Link, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { StoreAdminProvider, useStoreAdmin } from '../contexts/StoreAdminContext';
-import { canAccessStoreAdmin, getStoreLoginPath } from '../utils/authRedirect';
+import Login from './Login';
+import { canAccessStoreAdmin } from '../utils/authRedirect';
 
 import StoreIntroSettings from '../components/Admin/StoreIntroSettings';
 import BookingManagement from '../components/Admin/BookingManagement';
@@ -47,7 +48,7 @@ type Tab = {
 };
 
 function StoreAdminShell() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { storeSlug = '', store, loading, error } = useStoreAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('bookings');
@@ -182,6 +183,14 @@ function StoreAdminShell() {
               <button type="button" onClick={() => setMobileOpen(false)}><XMarkIcon className="w-6 h-6 shrink-0" /></button>
             </div>
             <div className="flex-1 overflow-y-auto"><Nav onSelect={() => setMobileOpen(false)} /></div>
+            <div className="p-3 border-t text-xs text-gray-500 space-y-2" style={{ borderTopColor: 'var(--store-primary-border)' }}>
+              <Link to={`/store/${store.slug}`} className="block text-primary-600 hover:underline" onClick={() => setMobileOpen(false)}>
+                查看公開頁
+              </Link>
+              <button type="button" onClick={() => { setMobileOpen(false); logout(); }} className="block text-red-600 hover:underline">
+                登出
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -207,6 +216,13 @@ function StoreAdminShell() {
             <Link to={`/store/${store.slug}`} className="block text-primary-600 hover:underline">
               查看公開頁
             </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="block w-full text-left text-red-600 hover:underline"
+            >
+              登出
+            </button>
           </div>
         </aside>
 
@@ -239,7 +255,16 @@ function StoreAdminShell() {
                 </div>
               </div>
             </div>
-            <div className="text-sm text-gray-600 truncate">{user?.name}</div>
+            <div className="flex items-center gap-3 shrink-0">
+              <span className="text-sm text-gray-600 truncate max-w-[8rem] sm:max-w-none">{user?.name}</span>
+              <button
+                type="button"
+                onClick={logout}
+                className="text-sm font-medium text-gray-600 hover:text-red-600 transition-colors shrink-0"
+              >
+                登出
+              </button>
+            </div>
           </header>
           <main className="flex-1 overflow-y-auto p-4 sm:p-6">
             <motion.div key={current.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
@@ -265,11 +290,11 @@ const StoreAdmin: React.FC = () => {
   }
 
   if (!user) {
+    const adminPath = { pathname: `/store/${storeSlug}/admin`, search: '', hash: '' };
     return (
-      <Navigate
-        to={getStoreLoginPath(storeSlug)}
-        state={{ from: { pathname: `/store/${storeSlug}/admin`, search: '', hash: '' } }}
-        replace
+      <Login
+        storeContextSlug={storeSlug}
+        defaultRedirect={adminPath}
       />
     );
   }

@@ -47,6 +47,33 @@ async function assertCourtSlugUnique(Court, storeId, slug, excludeCourtId) {
   return slug;
 }
 
+/** 同店同類型場地數量 → 計算有效 slug（含舊資料缺 slug） */
+function typeCountsForCourts(courts) {
+  const counts = new Map();
+  for (const court of courts) {
+    const key = String(court.type || '');
+    counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
+function effectiveCourtSlug(court, typeCounts) {
+  const existing = court.slug && String(court.slug).trim();
+  if (existing) return existing.toLowerCase();
+  const count = typeCounts.get(String(court.type || '')) || 1;
+  return buildCourtSlug(court.type, court.number, count);
+}
+
+/** 在記憶體中的場地列表依 slug 解析（DB slug 或推算 slug） */
+function findCourtInListBySlug(courts, courtSlug) {
+  const normalized = normalizeCourtSlug(courtSlug);
+  if (!normalized) return null;
+  const typeCounts = typeCountsForCourts(courts);
+  return (
+    courts.find((c) => effectiveCourtSlug(c, typeCounts) === normalized) || null
+  );
+}
+
 module.exports = {
   TYPE_SLUG_PREFIX,
   SLUG_PATTERN,
@@ -55,4 +82,7 @@ module.exports = {
   buildCourtSlug,
   suggestCourtSlug,
   assertCourtSlugUnique,
+  typeCountsForCourts,
+  effectiveCourtSlug,
+  findCourtInListBySlug,
 };

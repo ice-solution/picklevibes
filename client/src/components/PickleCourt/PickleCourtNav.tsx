@@ -16,9 +16,8 @@ type NavLink =
 const navLinks: NavLink[] = [
   { href: pickcourtHomeHash('search'), label: '搜尋場地' },
   { href: pickcourtHomeHash('platform'), label: '平台介紹' },
-  { href: pickcourtHomeHash('venues'), label: '場地 SaaS' },
-  { href: pickcourtHomeHash('players'), label: '球友聯盟' },
-  { href: pickcourtHomeHash('how-it-works'), label: '運作方式' },
+  { href: pickcourtHomeHash('alliance'), label: 'PickCourt 聯盟' },
+  { href: pickcourtHomeHash('activities'), label: '活動中心' },
 ];
 
 const linkClass =
@@ -48,7 +47,12 @@ function NavItem({
 }
 
 function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: () => void }) {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
+
+  const handleLogout = () => {
+    onNavigate?.();
+    logout();
+  };
 
   if (loading) {
     return (
@@ -88,6 +92,15 @@ function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: 
             餘額
           </Link>
         )}
+        <button
+          type="button"
+          onClick={handleLogout}
+          className={`text-sm font-medium text-pickcourt-navy/70 hover:text-red-600 transition-colors ${
+            compact ? 'w-full py-2 text-center' : ''
+          }`}
+        >
+          登出
+        </button>
       </div>
     );
   }

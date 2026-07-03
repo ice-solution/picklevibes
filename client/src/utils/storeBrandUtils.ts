@@ -1,19 +1,58 @@
 import type { CSSProperties } from 'react';
+import apiConfig from '../config/api';
 
 const DEFAULT_PRIMARY = '#0f1f3d';
 
-function getServerBaseUrl(): string {
-  if (process.env.NODE_ENV === 'production') {
-    return process.env.REACT_APP_SERVER_URL || '';
-  }
-  return process.env.REACT_APP_SERVER_URL || 'http://localhost:5001';
+type StoreLogoSource = {
+  branding?: { logoUrl?: string | null };
+  logoUrl?: string | null;
+};
+
+export function getStoreLogoPath(store?: StoreLogoSource | null): string | null {
+  const path = store?.branding?.logoUrl?.trim() || store?.logoUrl?.trim();
+  return path || null;
+}
+
+export function getStoreDisplayName(
+  store?: { name?: string; branding?: { displayName?: string } } | null,
+  fallback = '店鋪'
+): string {
+  const display = store?.branding?.displayName?.trim();
+  if (display) return display;
+  const name = store?.name?.trim();
+  if (name) return name;
+  return fallback;
+}
+
+/** 依環境產生多個候選 URL（登入頁／上傳預覽用） */
+export function resolveStoreLogoUrls(path?: string | null): string[] {
+  if (!path?.trim()) return [];
+  if (path.startsWith('http://') || path.startsWith('https://')) return [path];
+
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  const urls: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (url: string) => {
+    if (!seen.has(url)) {
+      seen.add(url);
+      urls.push(url);
+    }
+  };
+
+  const serverRoot = (apiConfig.SERVER_URL || '').replace(/\/$/, '');
+  const apiBase = (apiConfig.API_BASE_URL || '').replace(/\/$/, '');
+
+  if (serverRoot) push(`${serverRoot}${normalized}`);
+  if (apiBase) push(`${apiBase}${normalized}`);
+  push(normalized);
+
+  return urls;
 }
 
 export function resolveMediaUrl(path?: string | null): string | null {
-  if (!path?.trim()) return null;
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  const base = getServerBaseUrl();
-  return base ? `${base}${path}` : path;
+  const urls = resolveStoreLogoUrls(path);
+  return urls[0] || null;
 }
 
 export function storePrimaryColor(store?: { branding?: { primaryColor?: string } } | null): string {

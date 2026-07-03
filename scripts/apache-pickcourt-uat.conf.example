@@ -19,7 +19,7 @@
 # ── HTTP → HTTPS ─────────────────────────────────────────────
 <VirtualHost *:80>
     ServerName uat.pickcourt.hk
-    ServerAlias lck.uat.pickcourt.hk admin.lck.uat.pickcourt.hk *.uat.pickcourt.hk
+    ServerAlias lck.uat.pickcourt.hk admin.lck.uat.pickcourt.hk
 
     RewriteEngine On
     RewriteCond %{HTTPS} off
@@ -57,20 +57,17 @@
     RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
     RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
 
-    # ── React SPA（/store、/booking、/login 等 client 路由）──
+    # React SPA fallback（/admin、/search 等子路徑）
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/api
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f
+    RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d
+    RewriteRule ^ /index.html [L]
+
     <Directory /var/www/pickcourt/client/build>
         Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted
-
-        RewriteEngine On
-        RewriteBase /
-        # 已有實體檔案 → 直接提供
-        RewriteCond %{REQUEST_FILENAME} -f [OR]
-        RewriteCond %{REQUEST_FILENAME} -d
-        RewriteRule ^ - [L]
-        # /api 交給 ProxyPass，勿 fallback 到 index.html
-        RewriteCond %{REQUEST_URI} !^/api/
-        RewriteRule ^ /index.html [L]
+        FallbackResource /index.html
     </Directory>
 </VirtualHost>

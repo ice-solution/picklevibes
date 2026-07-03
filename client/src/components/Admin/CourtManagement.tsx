@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import apiConfig from '../../config/api';
@@ -85,6 +85,16 @@ const CourtManagement: React.FC = () => {
   const [showFormModal, setShowFormModal] = useState(false);
 
   const effectiveStoreId = lockedStoreId || storeFilter;
+
+  /** 店鋪後台不拉 /stores/admin/all，直接用當前店鋪供表單使用 */
+  const formStores = useMemo<StoreOption[]>(() => {
+    if (storeAdminCtx?.store?._id) {
+      return [{ _id: storeAdminCtx.store._id, name: storeAdminCtx.store.name }];
+    }
+    return stores;
+  }, [storeAdminCtx?.store, stores]);
+
+  const canCreateCourt = Boolean(lockedStoreId) || stores.length > 0;
 
   useEffect(() => {
     if (!lockedStoreId) {
@@ -333,11 +343,12 @@ const CourtManagement: React.FC = () => {
   const getStoreName = (court: Court) => {
     if (!court.store) return '未指派店鋪';
     if (typeof court.store === 'object') return court.store.name;
-    const found = stores.find((s) => s._id === court.store);
-    return found?.name || '未知店鋪';
+    const found = formStores.find((s) => s._id === court.store);
+    return found?.name || storeAdminCtx?.store?.name || '未知店鋪';
   };
 
   const openCreateForm = () => {
+    if (!canCreateCourt) return;
     setFormCourt(null);
     setShowFormModal(true);
   };
@@ -390,7 +401,7 @@ const CourtManagement: React.FC = () => {
         <button
           type="button"
           onClick={openCreateForm}
-          disabled={!lockedStoreId && stores.length === 0}
+          disabled={!canCreateCourt}
           className="inline-flex items-center gap-2 bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 text-sm font-medium"
         >
           <PlusIcon className="w-5 h-5" />
@@ -656,9 +667,10 @@ const CourtManagement: React.FC = () => {
 
       <CourtFormModal
         court={formCourt}
-        stores={stores}
+        stores={formStores}
         isOpen={showFormModal}
         defaultStoreId={lockedStoreId || storeFilter}
+        lockStoreSelection={Boolean(lockedStoreId)}
         onClose={() => {
           setShowFormModal(false);
           setFormCourt(null);

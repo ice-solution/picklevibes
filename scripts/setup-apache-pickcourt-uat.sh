@@ -10,6 +10,7 @@
 #   PICKCOURT_APP_DIR=/var/www/pickcourt     專案根目錄
 #   PICKCOURT_API_PORT=5001                  Node API port（與 PM2 / .env PORT 一致）
 #   PICKCOURT_APACHE_SITE=pickcourt-uat      sites-available 檔名
+#   PICKCOURT_APACHE_PRIORITY=010           sites-enabled 載入順序（數字大=較後；避免搶 default）
 #
 set -euo pipefail
 
@@ -44,9 +45,11 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 PICKCOURT_APP_DIR="${PICKCOURT_APP_DIR:-/var/www/pickcourt}"
 PICKCOURT_API_PORT="${PICKCOURT_API_PORT:-5001}"
 PICKCOURT_APACHE_SITE="${PICKCOURT_APACHE_SITE:-pickcourt-uat}"
+PICKCOURT_APACHE_PRIORITY="${PICKCOURT_APACHE_PRIORITY:-010}"
 APP_BUILD_DIR="${PICKCOURT_APP_DIR}/client/build"
 SITE_AVAILABLE="/etc/apache2/sites-available/${PICKCOURT_APACHE_SITE}.conf"
-SITE_ENABLED="/etc/apache2/sites-enabled/${PICKCOURT_APACHE_SITE}.conf"
+# 用數字前綴避免成為 *:80 第一個 VirtualHost（default），搶走其他域名
+SITE_ENABLED="/etc/apache2/sites-enabled/${PICKCOURT_APACHE_PRIORITY}-${PICKCOURT_APACHE_SITE}.conf"
 
 if [ "$MODE" = "cloudflare" ]; then
   TEMPLATE="${SCRIPT_DIR}/apache-pickcourt-uat-cloudflare-flexible.conf.example"
@@ -66,6 +69,17 @@ echo "📦 啟用 Apache 模組..."
 a2enmod proxy proxy_http rewrite headers expires deflate remoteip 2>/dev/null || true
 a2enmod proxy_wstunnel 2>/dev/null || true
 success "模組已啟用"
+
+# 消除 "Could not reliably determine the server's fully qualified domain name"
+APACHE_GLOBAL_SERVERNAME="${APACHE_GLOBAL_SERVERNAME:-uat.pickcourt.hk}"
+GLOBAL_SN_CONF="/etc/apache2/conf-available/servername.conf"
+if [ ! -f "$GLOBAL_SN_CONF" ] || ! grep -q "^ServerName " "$GLOBAL_SN_CONF" 2>/dev/null; then
+  echo "ServerName ${APACHE_GLOBAL_SERVERNAME}" > "$GLOBAL_SN_CONF"
+  a2enconf servername >/dev/null 2>&1 || true
+  success "已設定全域 ServerName：${APACHE_GLOBAL_SERVERNAME}"
+else
+  success "全域 ServerName 已存在（${GLOBAL_SN_CONF}）"
+fi
 
 if [ ! -d "$APP_BUILD_DIR" ]; then
   warning "前端 build 目錄尚未存在：${APP_BUILD_DIR}"
@@ -90,7 +104,9 @@ fi
 success "設定檔已寫入"
 
 ln -sf "$SITE_AVAILABLE" "$SITE_ENABLED"
-success "已啟用 site：${PICKCOURT_APACHE_SITE}"
+# 移除舊的無前綴 symlink（曾令 pickcourt 按字母序排第一，變成 default vhost）
+rm -f "/etc/apache2/sites-enabled/${PICKCOURT_APACHE_SITE}.conf" 2>/dev/null || true
+success "已啟用 site：$(basename "$SITE_ENABLED")"
 
 echo "🔍 驗證設定..."
 apache2ctl configtest
@@ -100,6 +116,9 @@ echo "🔄 重新載入 Apache..."
 systemctl reload apache2
 success "Apache 已 reload"
 
+echo ""
+echo "📋 VirtualHost 對照（請確認 pickcourt 唔係 default，且各域名有獨立 vhost）："
+apache2ctl -S 2>/dev/null | sed -n '1,40p' || true
 echo ""
 success "PickCourt UAT Apache 設定完成"
 echo ""

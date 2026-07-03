@@ -7,6 +7,13 @@ const GameHall = require('../models/GameHall');
 const { resolveTenant } = require('../middleware/resolveTenant');
 const { getRequestHost } = require('../utils/tenantResolver');
 const { searchAllianceCourtAvailability } = require('../utils/allianceCourtSearch');
+const Activity = require('../models/Activity');
+const ActivityRegistration = require('../models/ActivityRegistration');
+const {
+  buildActivityListSortStages,
+  withActivityPinFields,
+} = require('../utils/activityPin');
+const { typeCountsForCourts, effectiveCourtSlug } = require('../utils/courtSlug');
 
 const router = express.Router();
 
@@ -126,6 +133,8 @@ router.get('/stores/:storeSlug', async (req, res) => {
       .select('name slug number type capacity description')
       .lean();
 
+    const courtTypeCounts = typeCountsForCourts(courts);
+
     const gameHalls = await GameHall.find({ store: store._id, isActive: true })
       .sort({ name: 1 })
       .select('name description seasonKey')
@@ -140,7 +149,7 @@ router.get('/stores/:storeSlug', async (req, res) => {
         courts: courts.map((c) => ({
           id: String(c._id),
           name: c.name,
-          slug: c.slug,
+          slug: effectiveCourtSlug(c, courtTypeCounts),
           number: c.number,
           type: c.type,
           capacity: c.capacity,
@@ -223,6 +232,111 @@ router.get('/search/courts', async (req, res) => {
       });
     }
     console.error('聯盟場地搜尋錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+/** GET /api/platform/alliance/activities — 聯盟各店活動／課堂（依日期接近今天排序） */
+router.get('/alliance/activities', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 12));
+    const skip = (page - 1) * limit;
+    const now = new Date();
+
+    const allianceStores = await Store.find({
+      isActive: true,
+      allianceEnabled: true,
+    })
+      .select('_id name slug district branding')
+      .lean();
+    const storeIds = allianceStores.map((s) => s._id);
+    if (storeIds.length === 0) {
+      return res.json({ activities: [], total: 0, totalPages: 0, currentPage: page });
+    }
+
+    const storeMap = new Map(
+      allianceStores.map((s) => [
+        String(s._id),
+        {
+          id: String(s._id),
+          name: s.branding?.displayName || s.name,
+          slug: s.slug,
+          logoUrl: s.branding?.logoUrl || null,
+          district: s.district || null,
+        },
+      ])
+    );
+
+    const query = { isActive: true, store: { $in: storeIds } };
+    const sortPipeline = buildActivityListSortStages(now);
+
+    const idRows = await Activity.aggregate([
+      { $match: query },
+      ...sortPipeline,
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { _id: 1 } },
+    ]);
+    const orderedIds = idRows.map((r) => r._id);
+
+    let activities = [];
+    if (orderedIds.length > 0) {
+      const found = await Activity.find({ _id: { $in: orderedIds } })
+        .populate('store', 'name slug branding district')
+        .lean();
+      const byId = new Map(found.map((a) => [String(a._id), a]));
+      activities = orderedIds.map((id) => byId.get(String(id))).filter(Boolean);
+    }
+
+    const total = await Activity.countDocuments(query);
+
+    const registrations = await ActivityRegistration.aggregate([
+      { $match: { activity: { $in: orderedIds }, status: 'registered' } },
+      { $group: { _id: '$activity', total: { $sum: '$participantCount' } } },
+    ]);
+    const regMap = Object.fromEntries(registrations.map((r) => [String(r._id), r.total]));
+
+    res.json({
+      activities: activities.map((activity) => {
+        const storeDoc = activity.store;
+        const storeId = storeDoc?._id ? String(storeDoc._id) : null;
+        const storeInfo = storeId
+          ? storeMap.get(storeId) || {
+              id: storeId,
+              name: storeDoc.branding?.displayName || storeDoc.name,
+              slug: storeDoc.slug,
+              logoUrl: storeDoc.branding?.logoUrl || null,
+              district: storeDoc.district || null,
+            }
+          : null;
+        const totalRegistered = regMap[String(activity._id)] || 0;
+        const pinned = withActivityPinFields(activity, now);
+        return {
+          id: String(activity._id),
+          title: activity.title,
+          description: activity.description,
+          poster: activity.poster || null,
+          posterThumb: activity.posterThumb || null,
+          startDate: activity.startDate,
+          endDate: activity.endDate,
+          registrationDeadline: activity.registrationDeadline,
+          location: activity.location,
+          price: activity.price,
+          maxParticipants: activity.maxParticipants,
+          status: activity.status,
+          totalRegistered,
+          availableSpots: Math.max(0, activity.maxParticipants - totalRegistered),
+          isEffectivelyPinned: pinned.isEffectivelyPinned,
+          store: storeInfo,
+        };
+      }),
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+    });
+  } catch (error) {
+    console.error('聯盟活動列表錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

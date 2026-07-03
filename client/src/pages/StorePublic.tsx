@@ -7,6 +7,7 @@ import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
 import { resolveMediaUrl, storeBrandStyles, storePrimaryColor } from '../utils/storeBrandUtils';
 import { PICKCOURT_HOME, pickcourtHomeHash } from '../utils/pickcourtRoutes';
+import { suggestCourtSlug } from '../constants/courtSlug';
 import { useStoreTenantHost } from '../contexts/StoreTenantHostContext';
 import {
   MapPinIcon,
@@ -242,7 +243,7 @@ const StorePublic: React.FC = () => {
                   )}
                   <p className="mt-2 text-xs text-gray-500">最多 {court.capacity} 人</p>
                   <Link
-                    to={`/booking/${store.slug}/${court.slug}#date`}
+                    to={`/booking/${store.slug}/${court.slug || suggestCourtSlug(court.type, court.number)}#date`}
                     className="mt-4 inline-flex items-center gap-1 text-sm font-semibold hover:opacity-80"
                     style={{ color: primary }}
                   >

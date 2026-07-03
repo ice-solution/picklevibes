@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useMemo, useState } from '
 import apiConfig from '../config/api';
 
 type TenantInfo = {
+  name?: string;
   slug: string;
   adminDomain?: string | null;
   consumerDomain?: string | null;

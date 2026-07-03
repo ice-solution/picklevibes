@@ -49,7 +49,6 @@ async function findTenantByDomain(host) {
   if (!domain) return null;
   return Store.findOne({
     isActive: true,
-    allianceEnabled: true,
     $or: [{ adminDomain: domain }, { consumerDomain: domain }],
   }).lean();
 }

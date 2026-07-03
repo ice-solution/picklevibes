@@ -224,13 +224,81 @@ router.post('/:id/upload-logo', [
   }
 });
 
+// @route   GET /api/stores/login-brand-by-host
+// @desc    依自訂域名取得登入頁白標（admin / consumer domain）
+// @access  Public
+router.get('/login-brand-by-host', async (req, res) => {
+  try {
+    const host = normalizeDomain(req.query.host);
+    if (!host) {
+      return res.status(400).json({ message: '請提供 host' });
+    }
+    const store = await Store.findOne({
+      $or: [{ adminDomain: host }, { consumerDomain: host }],
+    })
+      .select('name slug branding isActive')
+      .lean();
+    if (!store) {
+      return res.status(404).json({ message: '店鋪不存在' });
+    }
+    const b = store.branding || {};
+    res.json({
+      store: {
+        name: store.name,
+        slug: store.slug,
+        branding: {
+          displayName: b.displayName || store.name,
+          logoUrl: b.logoUrl || '',
+          primaryColor: b.primaryColor || '',
+        },
+      },
+    });
+  } catch (error) {
+    console.error('依域名獲取店鋪登入品牌錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/stores/by-slug/:slug/login-brand
+// @desc    登入頁白標（displayName、logo、主色）
+// @access  Public
+router.get('/by-slug/:slug/login-brand', async (req, res) => {
+  try {
+    const slug = String(req.params.slug).trim().toLowerCase();
+    const store = await Store.findOne({ slug })
+      .select('name slug branding')
+      .lean();
+    if (!store) {
+      return res.status(404).json({ message: '店鋪不存在' });
+    }
+    const b = store.branding || {};
+    res.json({
+      store: {
+        name: store.name,
+        slug: store.slug,
+        branding: {
+          displayName: b.displayName || store.name,
+          logoUrl: b.logoUrl || '',
+          primaryColor: b.primaryColor || '',
+        },
+      },
+    });
+  } catch (error) {
+    console.error('獲取店鋪登入品牌錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/stores/by-slug/:slug
 // @desc    以 slug 取得上線店鋪
 // @access  Public
 router.get('/by-slug/:slug', async (req, res) => {
   try {
     const slug = String(req.params.slug).trim().toLowerCase();
-    const store = await Store.findOne({ slug, isActive: true })
+    const forLogin = req.query.forLogin === '1' || req.query.forLogin === 'true';
+    const filter = { slug };
+    if (!forLogin) filter.isActive = true;
+    const store = await Store.findOne(filter)
       .select('name slug address phone district allianceEnabled branding operatingHours sortOrder enableHikAccess');
     if (!store) {
       return res.status(404).json({ message: '店鋪不存在' });

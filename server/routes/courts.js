@@ -17,6 +17,7 @@ const {
   isValidCourtSlug,
   suggestCourtSlug,
   assertCourtSlugUnique,
+  findCourtInListBySlug,
 } = require('../utils/courtSlug');
 
 // 為批量 API 創建專門的速率限制
@@ -83,11 +84,24 @@ router.get('/', optionalAuth, async (req, res) => {
       if (!store) {
         return res.status(404).json({ message: '店鋪不存在' });
       }
-      const court = await Court.findOne({
+      const slugQuery = {
         store: store._id,
-        slug: String(courtSlug).trim().toLowerCase(),
         ...(all !== 'true' ? { isActive: true } : {}),
+      };
+      let court = await Court.findOne({
+        ...slugQuery,
+        slug: String(courtSlug).trim().toLowerCase(),
       }).populate('store', 'name slug address enableHikAccess');
+      if (!court) {
+        const storeCourts = await Court.find(slugQuery).sort({ number: 1 });
+        const matched = findCourtInListBySlug(storeCourts, courtSlug);
+        if (matched) {
+          court = await Court.findById(matched._id).populate(
+            'store',
+            'name slug address enableHikAccess'
+          );
+        }
+      }
       if (!court) {
         return res.status(404).json({ message: '場地不存在' });
       }

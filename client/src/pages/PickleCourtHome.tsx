@@ -6,6 +6,8 @@ import SEO from '../components/SEO/SEO';
 import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
 import PickleCourtCourtSearch from '../components/PickleCourt/PickleCourtCourtSearch';
+import PickCourtAllianceActivities from '../components/PickleCourt/PickCourtAllianceActivities';
+import { resolveMediaUrl } from '../utils/storeBrandUtils';
 import {
   BuildingStorefrontIcon,
   CalendarDaysIcon,
@@ -112,6 +114,7 @@ type AllianceStore = {
   district?: string | null;
   courtCount: number;
   tagline?: string | null;
+  logoUrl?: string | null;
 };
 
 const PickleCourtHome: React.FC = () => {
@@ -137,6 +140,75 @@ const PickleCourtHome: React.FC = () => {
     <PickleCourtNav />
 
     <PickleCourtCourtSearch embedded syncUrl />
+
+    {/* 聯盟合作場地 */}
+    <section id="alliance" className="py-12 lg:py-16 bg-white border-b border-slate-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <motion.div {...fadeUp} className="text-center max-w-2xl mx-auto mb-10">
+          <h2 className="text-2xl lg:text-3xl font-bold text-pickcourt-navy">聯盟合作場地</h2>
+        </motion.div>
+        {allianceStores.length === 0 ? (
+          <p className="text-center text-slate-500 text-sm">
+            暫無聯盟場地。請於後台店鋪管理啟用「上架 PickCourt 聯盟」。
+          </p>
+        ) : (
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {allianceStores.map((s, i) => {
+              const logoSrc = resolveMediaUrl(s.logoUrl);
+              return (
+              <motion.div
+                key={s.id}
+                {...fadeUp}
+                transition={{ delay: i * 0.05 }}
+                className="rounded-2xl border border-slate-200 overflow-hidden hover:border-pickcourt-gold/50 hover:shadow-md transition-all flex flex-col bg-white"
+              >
+                <div className="flex items-center justify-center min-h-[148px] px-6 py-8 bg-slate-50 border-b border-slate-100">
+                  {logoSrc ? (
+                    <img
+                      src={logoSrc}
+                      alt={s.name}
+                      className="max-h-24 max-w-[85%] w-auto object-contain"
+                    />
+                  ) : (
+                    <div className="w-20 h-20 rounded-2xl bg-pickcourt-navy/5 border border-slate-200 flex items-center justify-center">
+                      <BuildingStorefrontIcon className="h-10 w-10 text-pickcourt-navy/40" />
+                    </div>
+                  )}
+                </div>
+                <div className="p-6 flex flex-col flex-1 text-center">
+                <h3 className="font-bold text-lg text-pickcourt-navy">{s.name}</h3>
+                {s.district && (
+                  <p className="text-xs font-medium text-pickcourt-gold-dark mt-1">{s.district}</p>
+                )}
+                {s.tagline && <p className="text-sm text-pickcourt-gold-dark mt-1">{s.tagline}</p>}
+                <p className="text-sm text-slate-600 mt-2">{s.address}</p>
+                <p className="text-xs text-slate-400 mt-2">{s.courtCount} 個場地</p>
+                <div className="mt-4 flex flex-wrap gap-3 justify-center">
+                  <Link
+                    to={`/store/${s.slug}`}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold"
+                  >
+                    查看場地
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </Link>
+                  <Link
+                    to={`/booking/${s.slug}#court`}
+                    className="inline-flex items-center gap-1 text-sm font-semibold text-pickcourt-gold-dark hover:text-pickcourt-gold"
+                  >
+                    立即預約
+                    <ArrowRightIcon className="h-4 w-4" />
+                  </Link>
+                </div>
+                </div>
+              </motion.div>
+            );
+            })}
+          </div>
+        )}
+      </div>
+    </section>
+
+    <PickCourtAllianceActivities />
 
     {/* Platform intro */}
     <section id="platform" className="py-20 lg:py-28 bg-slate-50">
@@ -261,56 +333,6 @@ const PickleCourtHome: React.FC = () => {
             </motion.div>
           ))}
         </div>
-      </div>
-    </section>
-
-    {/* Live alliance venues */}
-    <section id="venues-list" className="py-16 lg:py-20 bg-white border-y border-slate-100">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <motion.div {...fadeUp} className="text-center max-w-2xl mx-auto mb-10">
-          <h2 className="text-2xl lg:text-3xl font-bold text-pickcourt-navy">聯盟合作場地</h2>
-          <p className="mt-3 text-slate-600">已上架 PickCourt 的場地（即時由平台 API 載入）</p>
-        </motion.div>
-        {allianceStores.length === 0 ? (
-          <p className="text-center text-slate-500 text-sm">
-            暫無聯盟場地。請於後台店鋪管理啟用「上架 PickCourt 聯盟」。
-          </p>
-        ) : (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {allianceStores.map((s, i) => (
-              <motion.div
-                key={s.id}
-                {...fadeUp}
-                transition={{ delay: i * 0.05 }}
-                className="rounded-2xl border border-slate-200 p-6 hover:border-pickcourt-gold/50 hover:shadow-md transition-all"
-              >
-                <h3 className="font-bold text-lg text-pickcourt-navy">{s.name}</h3>
-                {s.district && (
-                  <p className="text-xs font-medium text-pickcourt-gold-dark mt-1">{s.district}</p>
-                )}
-                {s.tagline && <p className="text-sm text-pickcourt-gold-dark mt-1">{s.tagline}</p>}
-                <p className="text-sm text-slate-600 mt-2">{s.address}</p>
-                <p className="text-xs text-slate-400 mt-2">{s.courtCount} 個場地</p>
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Link
-                    to={`/store/${s.slug}`}
-                    className="inline-flex items-center gap-1 text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold"
-                  >
-                    查看場地
-                    <ArrowRightIcon className="h-4 w-4" />
-                  </Link>
-                  <Link
-                    to={`/booking/${s.slug}#court`}
-                    className="inline-flex items-center gap-1 text-sm font-semibold text-pickcourt-gold-dark hover:text-pickcourt-gold"
-                  >
-                    立即預約
-                    <ArrowRightIcon className="h-4 w-4" />
-                  </Link>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
       </div>
     </section>
 

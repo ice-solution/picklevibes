@@ -6,9 +6,17 @@ import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import BookingPicker from '../components/Booking/BookingPicker';
+import PickCourtBookingPicker from '../components/Booking/PickCourtBookingPicker';
 import PlayerForm from '../components/Booking/PlayerForm';
 import BookingSummary from '../components/Booking/BookingSummary';
 import BackToTop from '../components/Common/BackToTop';
+import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
+import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
+import { useStoreTenantHost } from '../contexts/StoreTenantHostContext';
+import { isPickCourtBookingPath, isPickCourtPresetBooking } from '../utils/pickcourtRoutes';
+import { suggestCourtSlug } from '../constants/courtSlug';
+import { useDocumentStoreBrand } from '../hooks/useDocumentStoreBrand';
+import { storePrimaryColor } from '../utils/storeBrandUtils';
 import { CalendarDaysIcon, ClockIcon, UsersIcon } from '@heroicons/react/24/outline';
 import {
   buildBookingUrl,
@@ -19,6 +27,7 @@ import {
   inferBookingSection,
   parseBookingSearchPrefill,
   addMinutesToTimeHHmm,
+  isBookingSectionReady,
   type BookingPathParams,
   type BookingSection,
 } from '../utils/bookingRoutes';
@@ -54,6 +63,14 @@ const Booking: React.FC = () => {
   } = useBooking();
 
   const { user } = useAuth();
+  const { isConsumerHost } = useStoreTenantHost();
+  const isPickCourtBooking = isPickCourtBookingPath(location.pathname);
+  const isPresetBooking = isPickCourtPresetBooking(location.pathname, routeParams);
+  const storePrimary = useMemo(
+    () => storePrimaryColor(selectedStore),
+    [selectedStore]
+  );
+  useDocumentStoreBrand(isPickCourtBooking ? storePrimary : null);
   const [availability, setAvailability] = useState<any>(null);
   const [maxAdvanceDaysByRole, setMaxAdvanceDaysByRole] = useState<Record<string, number>>({
     user: 7,
@@ -69,6 +86,8 @@ const Booking: React.FC = () => {
   const [routeError, setRouteError] = useState<string | null>(null);
   const [hydrating, setHydrating] = useState(false);
   const hydratedKey = useRef<string>('');
+  const hydrateInFlightKey = useRef<string | null>(null);
+  const lastAutoScrollKeyRef = useRef('');
   const prefillTimeAppliedRef = useRef(false);
 
   const stableAvailability = useMemo(() => availability, [availability]);
@@ -79,19 +98,30 @@ const Booking: React.FC = () => {
       ? maxAdvanceDaysByRole[user.role]
       : maxAdvanceDaysByRole.user ?? 7;
 
-  const steps = [
-    { id: 1, name: '選擇預約', icon: CalendarDaysIcon },
-    { id: 2, name: '填寫資料', icon: UsersIcon },
-    { id: 3, name: '確認預約', icon: ClockIcon },
-  ];
+  const steps = isPresetBooking
+    ? [
+        { id: 1, name: '選日期時段', icon: CalendarDaysIcon },
+        { id: 2, name: '填寫資料', icon: UsersIcon },
+        { id: 3, name: '確認預約', icon: ClockIcon },
+      ]
+    : [
+        { id: 1, name: '選擇預約', icon: CalendarDaysIcon },
+        { id: 2, name: '填寫資料', icon: UsersIcon },
+        { id: 3, name: '確認預約', icon: ClockIcon },
+      ];
+
+  const courtSlugForUrl = useCallback((court: typeof selectedCourt) => {
+    if (!court) return undefined;
+    return court.slug || suggestCourtSlug(court.type, court.number);
+  }, []);
 
   const pathParams = useCallback((): BookingPathParams => {
     return {
       storeSlug: selectedStore?.slug,
-      courtSlug: selectedCourt?.slug,
+      courtSlug: courtSlugForUrl(selectedCourt),
       date: selectedDate || undefined,
     };
-  }, [selectedStore?.slug, selectedCourt?.slug, selectedDate]);
+  }, [selectedStore?.slug, selectedCourt, selectedDate, courtSlugForUrl]);
 
   const scrollReadiness = useMemo(
     () => ({
@@ -125,21 +155,34 @@ const Booking: React.FC = () => {
     [isDeepLinkRoute, location.pathname, location.hash, navigate, pathParams]
   );
 
-  // hash / 資料就緒後才捲動到對應 section
+  // hash / 路徑變更時才自動捲動一次（避免 loading 等狀態更新時反覆跳動）
   useEffect(() => {
     const section = parseBookingSection(location.hash);
+    const key = `${location.pathname}${location.hash}`;
+
+    if (lastAutoScrollKeyRef.current === key) {
+      return;
+    }
+
+    if (!isBookingSectionReady(section, scrollReadiness)) {
+      return;
+    }
+
+    lastAutoScrollKeyRef.current = key;
     return scrollToBookingSectionWhenReady(section, scrollReadiness);
   }, [location.hash, location.pathname, scrollReadiness]);
 
   useEffect(() => {
-    fetchStores();
-  }, [fetchStores]);
+    if (!isPresetBooking) {
+      fetchStores();
+    }
+  }, [fetchStores, isPresetBooking]);
 
   useEffect(() => {
-    if (selectedStore?._id) {
+    if (!isPresetBooking && selectedStore?._id) {
       fetchCourts(selectedStore._id);
     }
-  }, [selectedStore?._id, fetchCourts]);
+  }, [selectedStore?._id, fetchCourts, isPresetBooking]);
 
   useEffect(() => {
     const loadBookingConfig = async () => {
@@ -176,6 +219,25 @@ const Booking: React.FC = () => {
     setRouteError(null);
 
     const key = `${routeParams.storeSlug || ''}|${routeParams.courtSlug || ''}|${routeParams.date || ''}`;
+    if (key === hydratedKey.current) return;
+
+    const courtSlugMatches =
+      !routeParams.courtSlug ||
+      selectedCourt?.slug === routeParams.courtSlug ||
+      (selectedCourt &&
+        suggestCourtSlug(selectedCourt.type, selectedCourt.number) === routeParams.courtSlug);
+
+    const alreadySynced =
+      hydratedKey.current !== '' &&
+      (!routeParams.storeSlug || selectedStore?.slug === routeParams.storeSlug) &&
+      courtSlugMatches &&
+      (!routeParams.date || selectedDate === routeParams.date);
+
+    if (alreadySynced) {
+      hydratedKey.current = key;
+      return;
+    }
+
     if (!routeParams.storeSlug) {
       hydratedKey.current = key;
       if (!location.hash) {
@@ -183,16 +245,17 @@ const Booking: React.FC = () => {
       }
       return;
     }
-    if (key === hydratedKey.current) return;
 
     const hydrate = async () => {
+      if (hydrateInFlightKey.current === key) return;
+      hydrateInFlightKey.current = key;
       setHydrating(true);
       prefillTimeAppliedRef.current = false;
       try {
         const storeRes = await axios.get(`/stores/by-slug/${routeParams.storeSlug}`);
         const store = storeRes.data.store;
         setSelectedStore(store);
-        await fetchCourts(store._id);
+        await fetchCourts(store._id, { silent: isPresetBooking });
 
         if (routeParams.courtSlug) {
           const courtRes = await axios.get(
@@ -226,6 +289,7 @@ const Booking: React.FC = () => {
         setRouteError('找不到指定的店鋪或場地，請重新選擇');
         hydratedKey.current = key;
       } finally {
+        hydrateInFlightKey.current = null;
         setHydrating(false);
       }
     };
@@ -233,6 +297,7 @@ const Booking: React.FC = () => {
     hydrate();
   }, [
     routeParams,
+    isPresetBooking,
     setSelectedStore,
     setSelectedCourt,
     setSelectedDate,
@@ -245,7 +310,7 @@ const Booking: React.FC = () => {
   // 聯盟搜尋深連結：?startTime=&duration= 預選時段
   useEffect(() => {
     if (prefillTimeAppliedRef.current || hydrating) return;
-    if (!selectedStore?.slug || !selectedCourt?.slug || !selectedDate) return;
+    if (!selectedStore?.slug || !courtSlugForUrl(selectedCourt) || !selectedDate) return;
 
     const { startTime, duration } = parseBookingSearchPrefill(location.search);
     if (!startTime) return;
@@ -257,7 +322,7 @@ const Booking: React.FC = () => {
     setSelectedTimeSlot({ start: startTime, end });
     goToSection('details', {
       storeSlug: selectedStore.slug,
-      courtSlug: selectedCourt.slug,
+      courtSlug: courtSlugForUrl(selectedCourt)!,
       date: selectedDate,
     });
   }, [
@@ -280,8 +345,11 @@ const Booking: React.FC = () => {
     setSelectedDate('');
     setSelectedTimeSlot(null);
     setAvailability(null);
-    if (selectedStore?.slug && court.slug) {
-      goToSection('date', { storeSlug: selectedStore.slug, courtSlug: court.slug });
+    if (selectedStore?.slug) {
+      goToSection('date', {
+        storeSlug: selectedStore.slug,
+        courtSlug: courtSlugForUrl(court),
+      });
     }
   };
 
@@ -289,23 +357,29 @@ const Booking: React.FC = () => {
     setSelectedDate(date);
     setSelectedTimeSlot(null);
     setAvailability(null);
-    if (selectedStore?.slug && selectedCourt?.slug) {
-      goToSection('time', {
-        storeSlug: selectedStore.slug,
-        courtSlug: selectedCourt.slug,
-        date,
-      });
+    if (selectedStore?.slug && selectedCourt) {
+      const slug = courtSlugForUrl(selectedCourt);
+      if (slug) {
+        goToSection('time', {
+          storeSlug: selectedStore.slug,
+          courtSlug: slug,
+          date,
+        });
+      }
     }
   };
 
   const handleSelectTime = (slot: { start: string; end: string } | null) => {
     setSelectedTimeSlot(slot);
-    if (slot && selectedStore?.slug && selectedCourt?.slug && selectedDate) {
-      goToSection('details', {
-        storeSlug: selectedStore.slug,
-        courtSlug: selectedCourt.slug,
-        date: selectedDate,
-      });
+    if (slot && selectedStore?.slug && selectedCourt && selectedDate) {
+      const slug = courtSlugForUrl(selectedCourt);
+      if (slug) {
+        goToSection('details', {
+          storeSlug: selectedStore.slug,
+          courtSlug: slug,
+          date: selectedDate,
+        });
+      }
     }
   };
 
@@ -321,6 +395,23 @@ const Booking: React.FC = () => {
   };
 
   const goBack = () => {
+    if (isPresetBooking) {
+      switch (activeSection) {
+        case 'confirm':
+          goToSection('details');
+          break;
+        case 'details':
+          goToSection('time');
+          break;
+        case 'time':
+          goToSection('date');
+          break;
+        default:
+          break;
+      }
+      return;
+    }
+
     switch (activeSection) {
       case 'confirm':
         goToSection('details');
@@ -353,6 +444,17 @@ const Booking: React.FC = () => {
       contactPhone: '',
     });
     setAvailability(null);
+    if (isPresetBooking && routeParams?.storeSlug && routeParams?.courtSlug) {
+      navigate(
+        buildBookingUrl(
+          { storeSlug: routeParams.storeSlug, courtSlug: routeParams.courtSlug },
+          'date',
+          { deepLink: false }
+        ),
+        { replace: true }
+      );
+      return;
+    }
     navigate(buildBookingUrl({}, 'store', { deepLink: false }), { replace: true });
   };
 
@@ -370,7 +472,9 @@ const Booking: React.FC = () => {
   const showConfirm = activeSection === 'confirm' && canProceedToConfirm();
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
+    <div className={`min-h-screen ${isPickCourtBooking ? 'bg-slate-50' : 'bg-gray-50'}`}>
+      {isPickCourtBooking && !isConsumerHost && <PickleCourtNav />}
+      <div className={`${isPickCourtBooking ? 'pt-20' : ''} py-8`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -378,9 +482,15 @@ const Booking: React.FC = () => {
           transition={{ duration: 0.6 }}
           className="text-center mb-12"
         >
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">預約場地</h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            選擇店鋪、場地、日期後即可在同一頁挑選時段
+          <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+            {isPresetBooking && selectedCourt
+              ? `預約 ${selectedCourt.name}`
+              : '預約場地'}
+          </h1>
+          <p className="text-lg text-gray-600 max-w-3xl mx-auto">
+            {isPresetBooking && selectedStore
+              ? `${selectedStore.name} · 選擇日期與時段即可完成預約`
+              : '選擇店鋪、場地、日期後即可在同一頁挑選時段'}
           </p>
         </motion.div>
 
@@ -442,7 +552,19 @@ const Booking: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2">
               <div className="bg-white rounded-2xl shadow-lg p-8">
-                {!showConfirm && (
+                {!showConfirm && isPresetBooking ? (
+                  <PickCourtBookingPicker
+                    store={selectedStore}
+                    court={selectedCourt}
+                    selectedDate={selectedDate}
+                    selectedTimeSlot={selectedTimeSlot}
+                    maxAdvanceDays={maxAdvanceDays}
+                    loading={showLoading}
+                    onSelectDate={handleSelectDate}
+                    onSelectTime={handleSelectTime}
+                    onAvailabilityChange={setAvailability}
+                  />
+                ) : !showConfirm ? (
                   <BookingPicker
                     stores={stores}
                     selectedStore={selectedStore}
@@ -457,7 +579,7 @@ const Booking: React.FC = () => {
                     onSelectTime={handleSelectTime}
                     onAvailabilityChange={setAvailability}
                   />
-                )}
+                ) : null}
 
                 {showDetails && !showConfirm && (
                   <section
@@ -564,6 +686,8 @@ const Booking: React.FC = () => {
         )}
       </div>
       <BackToTop />
+      </div>
+      {isPickCourtBooking && !isConsumerHost && <PickleCourtFooter />}
     </div>
   );
 };

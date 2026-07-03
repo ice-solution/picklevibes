@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useBooking } from '../../contexts/BookingContext';
 import { ClockIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
@@ -19,189 +19,143 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   onAvailabilityChange
 }) => {
   const { checkAvailability, checkBatchAvailability } = useBooking();
-  const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number; slotName?: string }>>([]);
+  const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number; slotName?: string; isPast?: boolean }>>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDuration, setSelectedDuration] = useState(60); // 默認1小時
-  const [currentTime, setCurrentTime] = useState(new Date()); // 添加當前時間狀態
-  const [forceUpdate, setForceUpdate] = useState(0); // 強制更新計數器
+  const [selectedDuration, setSelectedDuration] = useState(60);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const batchRequestIdRef = useRef(0);
+  const courtId = court?._id as string | undefined;
 
   const durations = [
     { value: 60, label: '1小時' },
     { value: 120, label: '2小時' }
   ];
 
-  // 定期更新當前時間
+  const isPastSlotAt = (timeString: string, selectedDate: string, now: Date) => {
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const selectedDateObj = new Date(selectedDate);
+    if (today.toDateString() !== selectedDateObj.toDateString()) return false;
+    const [hour, minute] = timeString.split(':').map(Number);
+    const slotTime = new Date(today.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000);
+    return slotTime <= new Date(now.getTime() + 15 * 60 * 1000);
+  };
+
+  const isTimeInPast = useCallback((timeString: string, selectedDate: string) => {
+    return isPastSlotAt(timeString, selectedDate, currentTime);
+  }, [currentTime]);
+
+  // 每 30 秒更新「已過期」標記，不重新打 batch API
   useEffect(() => {
-    // 立即更新一次
-    setCurrentTime(new Date());
-    setForceUpdate(prev => prev + 1);
-    
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-      setForceUpdate(prev => prev + 1);
-    }, 30000); // 每30秒更新一次
-
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
-  // 檢查時間是否已經過去
-  const isTimeInPast = useCallback((timeString: string, selectedDate: string) => {
-    const now = currentTime; // 使用狀態中的當前時間
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const selectedDateObj = new Date(selectedDate);
-    
-    // 使用日期字符串比較而不是時間戳比較
-    const todayString = today.toDateString();
-    const selectedDateString = selectedDateObj.toDateString();
-    const isToday = todayString === selectedDateString;
-    
-    // 如果選擇的不是今天，則不是過去時間
-    if (!isToday) {
-      return false;
-    }
-    
-    // 如果是今天，檢查時間是否已經過去
-    const [hour, minute] = timeString.split(':').map(Number);
-    const slotTime = new Date(today.getTime() + hour * 60 * 60 * 1000 + minute * 60 * 1000);
-    
-    // 添加緩衝時間，提前15分鐘就不能預約
-    const bufferTime = 15 * 60 * 1000; // 15分鐘的毫秒數
-    const cutoffTime = new Date(now.getTime() + bufferTime);
-    
-    const isPast = slotTime <= cutoffTime;
-    
-    return isPast;
-  }, [currentTime]);
-
-  const generateTimeSlots = useCallback(() => {
-    const slots = [];
-    
-    // 根據場地類型確定營業時間
-    let startHour, endHour;
-    if (court?.type === 'solo') {
-      // 單人場營業時間：08:00-23:00
-      startHour = 8;
-      endHour = 23;
-    } else {
-      // 其他場地24小時營業
-      startHour = 0;
-      endHour = 24;
-    }
-    
-    // 每1小時為一組，不提供半小時選項
-    for (let hour = startHour; hour < endHour; hour++) {
-      const startTime = `${hour.toString().padStart(2, '0')}:00`;
-      const endHour = hour + Math.floor(selectedDuration / 60);
-      const endTime = `${endHour.toString().padStart(2, '0')}:00`;
-      
-      if (endHour <= 24) {
-        const isPast = isTimeInPast(startTime, date);
-        slots.push({
-          start: startTime,
-          end: endTime,
-          available: !isPast, // 過去的時間設為不可用
-          price: 0,
-          isPast: isPast // 標記是否為過去時間
-        });
-      }
-    }
-    
-    return slots;
-  }, [selectedDuration, date, isTimeInPast, currentTime, forceUpdate, court?.type]);
+  useEffect(() => {
+    setTimeSlots((prev) => {
+      if (prev.length === 0) return prev;
+      return prev.map((slot) => {
+        const isPast = isTimeInPast(slot.start, date);
+        return {
+          ...slot,
+          isPast,
+          available: isPast ? false : slot.available,
+        };
+      });
+    });
+  }, [currentTime, date, isTimeInPast]);
 
   const checkSlotAvailability = useCallback(async (slot: { start: string; end: string }) => {
-    if (!court || !date) return { available: false, price: 0 };
-    
+    if (!courtId || !date) return { available: false, price: 0 };
     try {
-      const availability = await checkAvailability(court._id, date, slot.start, slot.end);
+      const availability = await checkAvailability(courtId, date, slot.start, slot.end);
       return {
         available: availability.available,
         price: availability.pricing?.totalPrice || 0,
-        slotName: availability.pricing?.slotName
+        slotName: availability.pricing?.slotName,
       };
     } catch (error) {
       console.error('檢查可用性失敗:', error);
       return { available: false, price: 0 };
     }
-  }, [court, date, checkAvailability]);
+  }, [courtId, date, checkAvailability]);
+
+  const buildSlotsForDay = useCallback(() => {
+    const slots: Array<{ start: string; end: string; available: boolean; price: number; isPast: boolean }> = [];
+    const startHour = court?.type === 'solo' ? 8 : 0;
+    const endHour = court?.type === 'solo' ? 23 : 24;
+    const now = new Date();
+
+    for (let hour = startHour; hour < endHour; hour++) {
+      const startTime = `${hour.toString().padStart(2, '0')}:00`;
+      const slotEndHour = hour + Math.floor(selectedDuration / 60);
+      const endTime = `${slotEndHour.toString().padStart(2, '0')}:00`;
+
+      if (slotEndHour <= 24) {
+        const isPast = isPastSlotAt(startTime, date, now);
+        slots.push({
+          start: startTime,
+          end: endTime,
+          available: !isPast,
+          price: 0,
+          isPast,
+        });
+      }
+    }
+    return slots;
+  }, [court?.type, date, selectedDuration]);
 
   useEffect(() => {
-    if (court && date) {
-      setLoading(true);
-      
-      // 直接在useEffect內部生成時間段，確保使用最新的currentTime
-      const slots: Array<{ start: string; end: string; available: boolean; price: number; isPast: boolean }> = [];
-      
-      // 根據場地類型確定營業時間
-      let startHour, endHour;
-      if (court?.type === 'solo') {
-        // 單人場營業時間：08:00-23:00
-        startHour = 8;
-        endHour = 23;
-      } else {
-        // 其他場地24小時營業
-        startHour = 0;
-        endHour = 24;
-      }
-      
-      for (let hour = startHour; hour < endHour; hour++) {
-        const startTime = `${hour.toString().padStart(2, '0')}:00`;
-        const slotEndHour = hour + Math.floor(selectedDuration / 60);
-        const endTime = `${slotEndHour.toString().padStart(2, '0')}:00`;
-        
-        if (slotEndHour <= 24) {
-          const isPast = isTimeInPast(startTime, date);
-          slots.push({
-            start: startTime,
-            end: endTime,
-            available: !isPast, // 過去的時間設為不可用
-            price: 0,
-            isPast: isPast // 標記是否為過去時間
-          });
-        }
-      }
-      
-      // 使用批量 API 檢查所有時段的可用性
-      const timeSlotData = slots.map(slot => ({
-        startTime: slot.start,
-        endTime: slot.end
-      }));
-      
-      checkBatchAvailability(court._id, date, timeSlotData)
-        .then((batchResult) => {
-          const results = slots.map((slot, index) => {
-            const availability = batchResult.timeSlots[index];
+    if (!courtId || !date) return;
+
+    const requestId = ++batchRequestIdRef.current;
+    const slots = buildSlotsForDay();
+    setLoading(true);
+
+    const timeSlotData = slots.map((slot) => ({
+      startTime: slot.start,
+      endTime: slot.end,
+    }));
+
+    checkBatchAvailability(courtId, date, timeSlotData)
+      .then((batchResult) => {
+        if (requestId !== batchRequestIdRef.current) return;
+        const results = slots.map((slot, index) => {
+          const availability = batchResult.timeSlots[index];
+          return {
+            ...slot,
+            available: slot.isPast ? false : availability.available,
+            price: availability.pricing?.totalPrice || 0,
+            slotName: availability.pricing?.slotName,
+          };
+        });
+        setTimeSlots(results);
+        setLoading(false);
+      })
+      .catch(async (error) => {
+        if (requestId !== batchRequestIdRef.current) return;
+        console.error('批量檢查可用性失敗:', error);
+        const results = await Promise.all(
+          slots.map(async (slot) => {
+            const availability = await checkSlotAvailability(slot);
             return {
               ...slot,
-              available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
-              price: availability.pricing?.totalPrice || 0,
-              slotName: availability.pricing?.slotName
+              available: slot.isPast ? false : availability.available,
+              price: availability.price,
+              slotName: availability.slotName,
             };
-          });
-          
-          setTimeSlots(results);
-          setLoading(false);
-        })
-        .catch((error) => {
-          console.error('批量檢查可用性失敗:', error);
-          // 如果批量 API 失敗，回退到原來的單個檢查方式
-          Promise.all(
-            slots.map(async (slot) => {
-              const availability = await checkSlotAvailability(slot);
-              return { 
-                ...slot, 
-                available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
-                price: availability.price,
-                slotName: availability.slotName
-              };
-            })
-          ).then((results) => {
-            setTimeSlots(results);
-            setLoading(false);
-          });
-        });
-    }
-  }, [court, date, selectedDuration, forceUpdate, currentTime]);
+          })
+        );
+        if (requestId !== batchRequestIdRef.current) return;
+        setTimeSlots(results);
+        setLoading(false);
+      });
+
+    return () => {
+      batchRequestIdRef.current += 1;
+    };
+  }, [courtId, date, selectedDuration, court?.type, buildSlotsForDay, checkBatchAvailability, checkSlotAvailability]);
 
   const handleSlotSelect = (slot: { start: string; end: string; available: boolean; price: number }) => {
     if (slot.available) {
@@ -283,23 +237,6 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               {duration.label}
             </button>
           ))}
-        </div>
-        
-        {/* 調試按鈕 */}
-        <div className="mt-4">
-          <button
-            onClick={() => {
-              setCurrentTime(new Date());
-              setForceUpdate(prev => prev + 1);
-              console.log('🔄 手動更新時間:', new Date().toLocaleTimeString());
-            }}
-            className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-          >
-            刷新時間檢查
-          </button>
-          <span className="ml-2 text-xs text-gray-500">
-            當前時間: {currentTime.toLocaleTimeString()}
-          </span>
         </div>
       </div>
 

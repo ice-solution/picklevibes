@@ -12,6 +12,7 @@ export interface StoreSummary {
   address: string;
   phone?: string;
   enableHikAccess?: boolean;
+  branding?: { primaryColor?: string };
 }
 
 interface Court {
@@ -103,7 +104,7 @@ interface BookingContextType {
   
   // Actions
   fetchStores: () => Promise<void>;
-  fetchCourts: (storeId?: string) => Promise<void>;
+  fetchCourts: (storeId?: string, options?: { silent?: boolean }) => Promise<void>;
   fetchBookings: () => Promise<void>;
   setSelectedStore: (store: StoreSummary | null) => void;
   checkAvailability: (courtId: string, date: string, startTime: string, endTime: string) => Promise<any>;
@@ -148,6 +149,7 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
   // 防止重複調用的 ref
   const fetchingCourts = useRef(false);
   const fetchingBookings = useRef(false);
+  const selectedStoreIdRef = useRef<string | null>(null);
 
   const fetchStores = useCallback(async () => {
     try {
@@ -170,6 +172,13 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
   }, []);
 
   const setSelectedStore = useCallback((store: StoreSummary | null) => {
+    const nextId = store?._id ?? null;
+    if (selectedStoreIdRef.current !== nextId) {
+      setSelectedCourt(null);
+      setSelectedDate('');
+      setSelectedTimeSlot(null);
+      selectedStoreIdRef.current = nextId;
+    }
     setSelectedStoreState(store);
     if (store) {
       localStorage.setItem(BOOKING_STORE_STORAGE_KEY, store._id);
@@ -178,12 +187,9 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       localStorage.removeItem(BOOKING_STORE_STORAGE_KEY);
       localStorage.removeItem(BOOKING_STORE_SLUG_STORAGE_KEY);
     }
-    setSelectedCourt(null);
-    setSelectedDate('');
-    setSelectedTimeSlot(null);
   }, []);
 
-  const fetchCourts = useCallback(async (storeId?: string) => {
+  const fetchCourts = useCallback(async (storeId?: string, options?: { silent?: boolean }) => {
     if (fetchingCourts.current) {
       return;
     }
@@ -192,14 +198,18 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
 
     try {
       fetchingCourts.current = true;
-      setLoading(true);
+      if (!options?.silent) {
+        setLoading(true);
+      }
       const response = await axios.get(url);
       setCourts(response.data.courts || []);
     } catch (error: any) {
       console.error('獲取場地信息失敗:', error);
       setError(error.response?.data?.message || '獲取場地信息失敗');
     } finally {
-      setLoading(false);
+      if (!options?.silent) {
+        setLoading(false);
+      }
       fetchingCourts.current = false;
     }
   }, [selectedStore?._id]);

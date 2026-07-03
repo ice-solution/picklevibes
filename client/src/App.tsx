@@ -177,11 +177,7 @@ function AppShell() {
                 />
                 <Route
                   path="/store/:storeSlug/admin"
-                  element={
-                    <ProtectedRoute>
-                      <StoreAdmin />
-                    </ProtectedRoute>
-                  }
+                  element={<StoreAdmin />}
                 />
                 <Route path="/store/:storeSlug" element={<StorePublic />} />
                 <Route 
