@@ -56,7 +56,13 @@ server {
     proxy_set_header Connection "";
   }
 
-  # 上傳靜態（若 API 亦提供 /api/uploads）
+  # 上傳靜態（檔案在專案 uploads/，唔在 SPA build）
+  location /uploads/ {
+    alias /var/www/pickcourt/uploads/;
+    access_log off;
+    expires 30d;
+  }
+
   location /api/uploads/ {
     proxy_pass http://pickcourt_api;
     proxy_set_header Host $host;

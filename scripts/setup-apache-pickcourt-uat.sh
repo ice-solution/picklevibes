@@ -47,6 +47,7 @@ PICKCOURT_API_PORT="${PICKCOURT_API_PORT:-5001}"
 PICKCOURT_APACHE_SITE="${PICKCOURT_APACHE_SITE:-pickcourt-uat}"
 PICKCOURT_APACHE_PRIORITY="${PICKCOURT_APACHE_PRIORITY:-010}"
 APP_BUILD_DIR="${PICKCOURT_APP_DIR}/client/build"
+UPLOADS_DIR="${PICKCOURT_APP_DIR}/uploads"
 SITE_AVAILABLE="/etc/apache2/sites-available/${PICKCOURT_APACHE_SITE}.conf"
 # 用數字前綴避免成為 *:80 第一個 VirtualHost（default），搶走其他域名
 SITE_ENABLED="/etc/apache2/sites-enabled/${PICKCOURT_APACHE_PRIORITY}-${PICKCOURT_APACHE_SITE}.conf"
@@ -62,11 +63,12 @@ fi
 echo "🔧 PickCourt UAT Apache2 設定（模式：${MODE}）"
 echo "   專案目錄: ${PICKCOURT_APP_DIR}"
 echo "   前端 build: ${APP_BUILD_DIR}"
+echo "   上傳目錄: ${UPLOADS_DIR}"
 echo "   API port: ${PICKCOURT_API_PORT}"
 echo ""
 
 echo "📦 啟用 Apache 模組..."
-a2enmod proxy proxy_http rewrite headers expires deflate remoteip 2>/dev/null || true
+a2enmod proxy proxy_http rewrite headers expires deflate remoteip alias 2>/dev/null || true
 a2enmod proxy_wstunnel 2>/dev/null || true
 success "模組已啟用"
 
@@ -86,16 +88,23 @@ if [ ! -d "$APP_BUILD_DIR" ]; then
   warning "請先 deploy（npm run build:pickcourtuat）再 reload Apache"
 fi
 
+if [ ! -d "$UPLOADS_DIR" ]; then
+  warning "上傳目錄尚未存在：${UPLOADS_DIR}"
+  warning "請確認 deploy 後 uploads/ 存在，否則 /uploads/* 會 404"
+fi
+
 echo "📝 寫入 ${SITE_AVAILABLE} ..."
 if [ "$MODE" = "cloudflare" ]; then
   sed \
     -e "s|@APP_ROOT@|${APP_BUILD_DIR}|g" \
+    -e "s|@UPLOADS_ROOT@|${UPLOADS_DIR}|g" \
     -e "s|@API_PORT@|${PICKCOURT_API_PORT}|g" \
     "$TEMPLATE" > "$SITE_AVAILABLE"
 else
   # 直接 HTTPS 範本：修正 Directory 路徑並替換常見佔位
   sed \
     -e "s|/var/www/pickcourt/client/build|${APP_BUILD_DIR}|g" \
+    -e "s|/var/www/pickcourt/uploads|${UPLOADS_DIR}|g" \
     -e "s|/var/www/html/pickcourt/client/build|${APP_BUILD_DIR}|g" \
     -e "s|127.0.0.1:5011|127.0.0.1:${PICKCOURT_API_PORT}|g" \
     -e "s|127.0.0.1:5001|127.0.0.1:${PICKCOURT_API_PORT}|g" \

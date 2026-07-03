@@ -53,6 +53,13 @@
     ProxyPass        /api/ http://127.0.0.1:5011/api/
     ProxyPassReverse /api/ http://127.0.0.1:5011/api/
 
+    # 上傳靜態（店鋪 Logo、場地圖等；檔案在專案 uploads/，唔在 client/build）
+    Alias /uploads /var/www/pickcourt/uploads
+    <Directory /var/www/pickcourt/uploads>
+        Options -Indexes +FollowSymLinks
+        Require all granted
+    </Directory>
+
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
     RequestHeader set X-Real-IP expr=%{REMOTE_ADDR}
@@ -60,6 +67,7 @@
     # React SPA fallback（/admin、/search 等子路徑）
     RewriteEngine On
     RewriteCond %{REQUEST_URI} !^/api
+    RewriteCond %{REQUEST_URI} !^/uploads
     RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-f
     RewriteCond %{DOCUMENT_ROOT}%{REQUEST_URI} !-d
     RewriteRule ^ /index.html [L]

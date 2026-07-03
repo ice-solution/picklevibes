@@ -43,8 +43,10 @@ export function resolveStoreLogoUrls(path?: string | null): string[] {
   const serverRoot = (apiConfig.SERVER_URL || '').replace(/\/$/, '');
   const apiBase = (apiConfig.API_BASE_URL || '').replace(/\/$/, '');
 
-  if (serverRoot) push(`${serverRoot}${normalized}`);
+  // UAT／生產：Apache 只 proxy /api，/uploads 會 fallback 去 SPA；優先試 /api/uploads
   if (apiBase) push(`${apiBase}${normalized}`);
+  if (serverRoot) push(`${serverRoot}${normalized}`);
+  if (normalized.startsWith('/uploads/')) push(`/api${normalized}`);
   push(normalized);
 
   return urls;
