@@ -245,6 +245,8 @@ const BookingCalendar: React.FC = () => {
   /** 避免 datesSet 與 events 更新連鎖造成重複請求／loading 卡死 */
   const lastFetchedRangeKeyRef = useRef<string>('');
   const lockedStoreId = useLockedStoreId();
+  /** 店鋪後台鎖定店鋪；平台後台用下拉選擇 */
+  const activeStoreId = lockedStoreId || storeFilterId;
 
   useEffect(() => {
     if (lockedStoreId) {
@@ -258,6 +260,10 @@ const BookingCalendar: React.FC = () => {
       if (!r?.start || !r?.end) {
         return;
       }
+      // 店鋪後台：必須等鎖定店鋪 ID，避免首次 datesSet 拉取全平台預約
+      if (lockedStoreId && !activeStoreId) {
+        return;
+      }
       try {
         setEventsLoading(true);
         setError(null);
@@ -265,8 +271,8 @@ const BookingCalendar: React.FC = () => {
           dateFrom: r.start,
           dateTo: r.end,
         });
-        if (storeFilterId) {
-          params.append('store', storeFilterId);
+        if (activeStoreId) {
+          params.append('store', activeStoreId);
         }
         const response = await axios.get(`/bookings/admin/calendar?${params.toString()}`);
         setBookings(response.data.bookings || []);
@@ -277,7 +283,7 @@ const BookingCalendar: React.FC = () => {
         setEventsLoading(false);
       }
     },
-    [storeFilterId]
+    [activeStoreId, lockedStoreId]
   );
 
   useEffect(() => {
@@ -317,7 +323,7 @@ const BookingCalendar: React.FC = () => {
     if (calendarRangeRef.current) {
       fetchBookings(calendarRangeRef.current);
     }
-  }, [storeFilterId, fetchBookings]);
+  }, [activeStoreId, fetchBookings]);
 
   useEffect(() => {
     const onFocus = () => {
@@ -458,10 +464,10 @@ const BookingCalendar: React.FC = () => {
 
     const storeLabel = resolveBookingStoreName(booking);
     const title = isCollapsedFullVenue
-      ? (storeFilterId
+      ? (activeStoreId
           ? `🏢 包場 (${collapsedCount}場) - ${booking.user.name}`
           : `[${storeLabel}] 🏢 包場 (${collapsedCount}場) - ${booking.user.name}`)
-      : (storeFilterId
+      : (activeStoreId
           ? `${booking.court.name} - ${booking.user.name}`
           : `[${storeLabel}] ${booking.court.name} - ${booking.user.name}`);
 
@@ -481,7 +487,7 @@ const BookingCalendar: React.FC = () => {
       }
     };
       }),
-    [bookings, storeFilterId]
+    [bookings, activeStoreId]
   );
 
   const getStatusText = (status: string) => {

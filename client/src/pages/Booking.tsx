@@ -218,7 +218,8 @@ const Booking: React.FC = () => {
     }
     setRouteError(null);
 
-    const key = `${routeParams.storeSlug || ''}|${routeParams.courtSlug || ''}|${routeParams.date || ''}`;
+    const courtIdFromSearch = new URLSearchParams(location.search).get('courtId')?.trim() || '';
+    const key = `${routeParams.storeSlug || ''}|${routeParams.courtSlug || ''}|${routeParams.date || ''}|${courtIdFromSearch}`;
     if (key === hydratedKey.current) return;
 
     const courtSlugMatches =
@@ -257,30 +258,42 @@ const Booking: React.FC = () => {
         setSelectedStore(store);
         await fetchCourts(store._id, { silent: isPresetBooking });
 
+        const courtIdParam = new URLSearchParams(location.search).get('courtId')?.trim();
+        let resolvedCourt: typeof selectedCourt = null;
+
         if (routeParams.courtSlug) {
           const courtRes = await axios.get(
             `/courts?storeSlug=${routeParams.storeSlug}&courtSlug=${routeParams.courtSlug}`
           );
-          setSelectedCourt(courtRes.data.court);
+          resolvedCourt = courtRes.data.court;
+          setSelectedCourt(resolvedCourt);
+        } else if (courtIdParam) {
+          const courtRes = await axios.get(`/courts/${courtIdParam}`);
+          resolvedCourt = courtRes.data.court;
+          setSelectedCourt(resolvedCourt);
         }
 
         if (routeParams.date) {
           setSelectedDate(routeParams.date);
         }
 
+        const courtSlugInPath =
+          routeParams.courtSlug || (resolvedCourt ? courtSlugForUrl(resolvedCourt) : undefined);
+
         const targetSection = inferBookingSection({
           storeSlug: routeParams.storeSlug,
-          courtSlug: routeParams.courtSlug,
+          courtSlug: courtSlugInPath,
           date: routeParams.date,
           hash: location.hash,
         });
         const p: BookingPathParams = {
           storeSlug: routeParams.storeSlug,
-          courtSlug: routeParams.courtSlug,
+          courtSlug: courtSlugInPath,
           date: routeParams.date,
         };
         const url = buildBookingUrl(p, targetSection, { deepLink: isDeepLinkRoute });
-        if (`${location.pathname}${location.hash}` !== url) {
+        const currentUrl = `${location.pathname}${location.search}${location.hash}`;
+        if (currentUrl !== url) {
           navigate(url, { replace: true });
         }
 
@@ -303,8 +316,10 @@ const Booking: React.FC = () => {
     setSelectedDate,
     fetchCourts,
     location.hash,
+    location.search,
     isDeepLinkRoute,
     navigate,
+    courtSlugForUrl,
   ]);
 
   // 聯盟搜尋深連結：?startTime=&duration= 預選時段

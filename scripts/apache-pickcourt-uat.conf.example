@@ -53,12 +53,9 @@
     ProxyPass        /api/ http://127.0.0.1:5011/api/
     ProxyPassReverse /api/ http://127.0.0.1:5011/api/
 
-    # 上傳靜態（店鋪 Logo、場地圖等；檔案在專案 uploads/，唔在 client/build）
-    Alias /uploads /var/www/pickcourt/uploads
-    <Directory /var/www/pickcourt/uploads>
-        Options -Indexes +FollowSymLinks
-        Require all granted
-    </Directory>
+    # 上傳靜態：proxy 去 Node（同 /api/uploads）
+    ProxyPass        /uploads/ http://127.0.0.1:5011/uploads/
+    ProxyPassReverse /uploads/ http://127.0.0.1:5011/uploads/
 
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}

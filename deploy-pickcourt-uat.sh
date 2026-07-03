@@ -16,9 +16,9 @@ success() { echo -e "${GREEN}✓ $1${NC}"; }
 warning() { echo -e "${YELLOW}⚠ $1${NC}"; }
 error() { echo -e "${RED}✗ $1${NC}"; exit 1; }
 
-APP_DIR="${PICKCOURT_APP_DIR:-/var/www/pickcourt}"
+APP_DIR="${PICKCOURT_APP_DIR:-/var/www/html/pickcourt}"
 PM2_APP_NAME="${PICKCOURT_PM2_NAME:-pickcourt-uat}"
-HEALTH_PORT="${PICKCOURT_API_PORT:-5001}"
+HEALTH_PORT="${PICKCOURT_API_PORT:-5111}"
 GIT_BRANCH="${PICKCOURT_GIT_BRANCH:-uat}"
 
 echo "🚀 開始部署 PickCourt UAT..."

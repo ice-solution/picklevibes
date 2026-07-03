@@ -7,8 +7,8 @@
 #   sudo ./scripts/setup-apache-pickcourt-uat.sh --ssl
 #
 # 環境變數（可選）：
-#   PICKCOURT_APP_DIR=/var/www/pickcourt     專案根目錄
-#   PICKCOURT_API_PORT=5001                  Node API port（與 PM2 / .env PORT 一致）
+#   PICKCOURT_APP_DIR=/var/www/html/pickcourt     專案根目錄
+#   PICKCOURT_API_PORT=5111                  Node API port（與 PM2 / .env PORT 一致）
 #   PICKCOURT_APACHE_SITE=pickcourt-uat      sites-available 檔名
 #   PICKCOURT_APACHE_PRIORITY=010           sites-enabled 載入順序（數字大=較後；避免搶 default）
 #
@@ -42,8 +42,8 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-PICKCOURT_APP_DIR="${PICKCOURT_APP_DIR:-/var/www/pickcourt}"
-PICKCOURT_API_PORT="${PICKCOURT_API_PORT:-5001}"
+PICKCOURT_APP_DIR="${PICKCOURT_APP_DIR:-/var/www/html/pickcourt}"
+PICKCOURT_API_PORT="${PICKCOURT_API_PORT:-5111}"
 PICKCOURT_APACHE_SITE="${PICKCOURT_APACHE_SITE:-pickcourt-uat}"
 PICKCOURT_APACHE_PRIORITY="${PICKCOURT_APACHE_PRIORITY:-010}"
 APP_BUILD_DIR="${PICKCOURT_APP_DIR}/client/build"
@@ -107,6 +107,7 @@ else
     -e "s|/var/www/pickcourt/uploads|${UPLOADS_DIR}|g" \
     -e "s|/var/www/html/pickcourt/client/build|${APP_BUILD_DIR}|g" \
     -e "s|127.0.0.1:5011|127.0.0.1:${PICKCOURT_API_PORT}|g" \
+    -e "s|127.0.0.1:5111|127.0.0.1:${PICKCOURT_API_PORT}|g" \
     -e "s|127.0.0.1:5001|127.0.0.1:${PICKCOURT_API_PORT}|g" \
     "$TEMPLATE" > "$SITE_AVAILABLE"
 fi
@@ -124,6 +125,30 @@ success "configtest 通過"
 echo "🔄 重新載入 Apache..."
 systemctl reload apache2
 success "Apache 已 reload"
+
+echo ""
+echo "🧪 本機驗證（經 Apache → Node）..."
+TEST_LOGO="stores/store-logo-1783077570230-671089210.jpg"
+UPLOADS_HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: uat.pickcourt.hk" "http://127.0.0.1/uploads/${TEST_LOGO}" 2>/dev/null || echo "000")"
+API_UPLOADS_HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' -H "Host: uat.pickcourt.hk" "http://127.0.0.1/api/uploads/${TEST_LOGO}" 2>/dev/null || echo "000")"
+NODE_UPLOADS_HTTP_CODE="$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:${PICKCOURT_API_PORT}/uploads/${TEST_LOGO}" 2>/dev/null || echo "000")"
+
+echo "   Node 直連 /uploads/...     → HTTP ${NODE_UPLOADS_HTTP_CODE}"
+echo "   Apache /uploads/...        → HTTP ${UPLOADS_HTTP_CODE}"
+echo "   Apache /api/uploads/...    → HTTP ${API_UPLOADS_HTTP_CODE}"
+
+if [ "$NODE_UPLOADS_HTTP_CODE" != "200" ]; then
+  warning "Node 直連唔係 200：請確認 PM2 port=${PICKCOURT_API_PORT}，同檔案存在於 ${UPLOADS_DIR}/stores/"
+  warning "  ls -la \"${UPLOADS_DIR}/stores/\" | head"
+fi
+if [ "$UPLOADS_HTTP_CODE" = "200" ]; then
+  success "/uploads/ 經 Apache 正常"
+elif [ "$API_UPLOADS_HTTP_CODE" = "200" ]; then
+  warning "/api/uploads/ OK 但 /uploads/ 係 ${UPLOADS_HTTP_CODE} — 請確認 vhost 有 ProxyPass /uploads/"
+else
+  warning "Apache /uploads 仍唔係 200（/uploads=${UPLOADS_HTTP_CODE}，/api/uploads=${API_UPLOADS_HTTP_CODE}）"
+  warning "請檢查 vhost 有 ProxyPass /uploads/，同 RewriteCond !^/uploads"
+fi
 
 echo ""
 echo "📋 VirtualHost 對照（請確認 pickcourt 唔係 default，且各域名有獨立 vhost）："

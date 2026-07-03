@@ -10,6 +10,8 @@ import {
 } from '@heroicons/react/24/outline';
 import apiConfig from '../../config/api';
 import { COURT_TYPE_OPTIONS, HK_DISTRICTS } from '../../constants/hkDistricts';
+import { suggestCourtSlug } from '../../constants/courtSlug';
+import { isValidBookingDate } from '../../utils/bookingRoutes';
 
 type SearchResult = {
   store: { id: string; name: string; slug: string; address: string; district?: string | null };
@@ -57,25 +59,43 @@ const courtTypeBadge: Record<string, string> = {
   dink: '特色場',
 };
 
+function searchCourtSlug(item: SearchResult): string {
+  if (item.court.slug?.trim()) return item.court.slug.trim().toLowerCase();
+  return suggestCourtSlug(item.court.type, item.court.number);
+}
+
+/** 後端 bookingUrl 缺 court slug 時會變成 /booking/store/date（3 段），不可直接用 */
+function isBrokenSearchBookingPath(pathname: string): boolean {
+  const parts = pathname.replace(/^\/+/, '').split('/').filter(Boolean);
+  if (parts[0] !== 'booking' || parts.length !== 3) return false;
+  return isValidBookingDate(parts[2]);
+}
+
 function allianceBookingPath(item: SearchResult, query: SearchResponse['query']): string {
   const params = new URLSearchParams();
   if (query.startTime) params.set('startTime', query.startTime);
   if (query.duration) params.set('duration', String(query.duration));
+  params.set('courtId', item.court.id);
   const qs = params.toString();
   const qSuffix = qs ? `?${qs}` : '';
+
+  const courtSlug = searchCourtSlug(item);
+  const canonical = `/booking/${item.store.slug}/${courtSlug}/${query.date}${qSuffix}#time`;
 
   if (item.bookingUrl) {
     try {
       const u = new URL(item.bookingUrl);
-      return `${u.pathname}${qs ? `?${qs}` : u.search}#time`;
+      if (!isBrokenSearchBookingPath(u.pathname)) {
+        return `${u.pathname}${qs ? `?${qs}` : u.search}#time`;
+      }
     } catch {
-      if (item.bookingUrl.startsWith('/')) {
+      if (item.bookingUrl.startsWith('/') && !isBrokenSearchBookingPath(item.bookingUrl.split('?')[0])) {
         const base = item.bookingUrl.split('?')[0];
         return `${base}${qSuffix}#time`;
       }
     }
   }
-  return `/booking/${item.store.slug}/${item.court.slug}/${query.date}${qSuffix}#time`;
+  return canonical;
 }
 
 type Props = {

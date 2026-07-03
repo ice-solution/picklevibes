@@ -135,10 +135,20 @@ export function parseBookingParams(
   if (!storeSlug) return {};
   if (BOOKING_RESERVED_SEGMENTS.has(storeSlug.toLowerCase())) return null;
   const result: BookingPathParams = { storeSlug: storeSlug.toLowerCase() };
-  if (courtSlug) result.courtSlug = courtSlug.toLowerCase();
-  if (date) {
-    if (!isValidBookingDate(date)) return null;
-    result.date = date;
+
+  let resolvedCourtSlug = courtSlug?.toLowerCase();
+  let resolvedDate = date;
+
+  // /booking/:store/:date — 舊搜尋連結缺 court slug 時，日期會落入 courtSlug 段
+  if (resolvedCourtSlug && isValidBookingDate(resolvedCourtSlug) && !resolvedDate) {
+    resolvedDate = resolvedCourtSlug;
+    resolvedCourtSlug = undefined;
+  }
+
+  if (resolvedCourtSlug) result.courtSlug = resolvedCourtSlug;
+  if (resolvedDate) {
+    if (!isValidBookingDate(resolvedDate)) return null;
+    result.date = resolvedDate;
   }
   return result;
 }

@@ -17,10 +17,13 @@ export function isPickCourtPresetBooking(
   pathname: string,
   routeParams?: { storeSlug?: string; courtSlug?: string } | null
 ): boolean {
+  const courtSlug = routeParams?.courtSlug;
+  const looksLikeDate = courtSlug ? /^\d{4}-\d{2}-\d{2}$/.test(courtSlug) : false;
   return (
     isPickCourtBookingPath(pathname) &&
     Boolean(routeParams?.storeSlug) &&
-    Boolean(routeParams?.courtSlug)
+    Boolean(courtSlug) &&
+    !looksLikeDate
   );
 }
 

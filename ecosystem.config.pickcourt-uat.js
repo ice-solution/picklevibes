@@ -9,7 +9,7 @@ module.exports = {
       max_memory_restart: '500M',
       env: {
         NODE_ENV: 'uat',
-        PORT: 5001,
+        PORT: 5111,
       },
       error_file: './logs/pickcourt-uat-error.log',
       out_file: './logs/pickcourt-uat-out.log',

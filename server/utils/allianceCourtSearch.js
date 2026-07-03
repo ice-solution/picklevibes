@@ -8,6 +8,7 @@ const {
   buildBookingUrls,
 } = require('./bookingDeepLink');
 const { buildDistrictAddressFilter } = require('./hkDistricts');
+const { typeCountsForCourts, effectiveCourtSlug } = require('./courtSlug');
 
 function addMinutesToTime(startTime, minutes) {
   const [h, m] = startTime.split(':').map(Number);
@@ -62,7 +63,7 @@ async function findStoresForDistrict(district) {
   );
 }
 
-async function checkCourtSlot(court, store, { date, startTime, duration }) {
+async function checkCourtSlot(court, store, { date, startTime, duration }, courtSlug) {
   const endTime = addMinutesToTime(startTime, duration);
   if (!endTime) {
     return { available: false, reason: '超出可預約時段' };
@@ -89,7 +90,8 @@ async function checkCourtSlot(court, store, { date, startTime, duration }) {
 
   const basePrice = court.getPriceForTime(startTime, bookingDate);
   const totalPrice = Math.round((basePrice * duration) / 60);
-  const urls = buildBookingUrls(store.slug, court.slug, date);
+  const slug = courtSlug || court.slug;
+  const urls = buildBookingUrls(store.slug, slug, date);
 
   return {
     available: true,
@@ -171,15 +173,25 @@ async function searchAllianceCourtAvailability({
 
   const courts = await Court.find(courtFilter).sort({ store: 1, number: 1 });
 
+  const courtsByStore = new Map();
+  for (const court of courts) {
+    const sid = String(court.store);
+    if (!courtsByStore.has(sid)) courtsByStore.set(sid, []);
+    courtsByStore.get(sid).push(court);
+  }
+
   const results = [];
   for (const court of courts) {
     const store = storeMap[String(court.store)];
     if (!store) continue;
+    const storeCourts = courtsByStore.get(String(court.store)) || [court];
+    const typeCounts = typeCountsForCourts(storeCourts);
+    const effectiveSlug = effectiveCourtSlug(court, typeCounts);
     const check = await checkCourtSlot(court, store, {
       date,
       startTime,
       duration: durationNum,
-    });
+    }, effectiveSlug);
     results.push({
       store: {
         id: String(store._id),
@@ -192,7 +204,7 @@ async function searchAllianceCourtAvailability({
       court: {
         id: String(court._id),
         name: court.name,
-        slug: court.slug,
+        slug: effectiveSlug,
         number: court.number,
         type: court.type,
       },

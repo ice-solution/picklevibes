@@ -5,7 +5,7 @@
 # 佔位符（由 setup-apache-pickcourt-uat.sh 取代）：
 #   @APP_ROOT@      例：/var/www/html/pickcourt/client/build
 #   @UPLOADS_ROOT@  例：/var/www/html/pickcourt/uploads
-#   @API_PORT@      例：5001
+#   @API_PORT@      例：5111（與 PM2 / .env PORT 一致）
 #
 # Cloudflare：SSL/TLS → Flexible
 
@@ -37,12 +37,9 @@
     ProxyPass /api http://127.0.0.1:@API_PORT@/api
     ProxyPassReverse /api http://127.0.0.1:@API_PORT@/api
 
-    # 上傳靜態（店鋪 Logo、場地圖等；檔案在專案 uploads/，唔在 client/build）
-    Alias /uploads @UPLOADS_ROOT@
-    <Directory @UPLOADS_ROOT@>
-        Options -Indexes +FollowSymLinks
-        Require all granted
-    </Directory>
+    # 上傳靜態：proxy 去 Node（同 /api/uploads），避免 Alias 路徑錯／FallbackResource 搶去 index.html
+    ProxyPass /uploads/ http://127.0.0.1:@API_PORT@/uploads/
+    ProxyPassReverse /uploads/ http://127.0.0.1:@API_PORT@/uploads/
 
     RequestHeader set X-Forwarded-Proto "https"
     RequestHeader set X-Forwarded-Host expr=%{HTTP_HOST}
