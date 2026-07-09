@@ -40,11 +40,19 @@ import ProductDetail from './pages/ProductDetail';
 import Cart from './pages/Cart';
 import Checkout from './pages/Checkout';
 import OrderHistory from './pages/OrderHistory';
+import AccountBookings from './pages/pickcourt/AccountBookings';
+import AccountProfile from './pages/pickcourt/AccountProfile';
+import AccountBalance from './pages/pickcourt/AccountBalance';
+import AccountOrders from './pages/pickcourt/AccountOrders';
+import AccountRecharge from './pages/pickcourt/AccountRecharge';
+import { PickCourtMemberRedirect, PickCourtOrderDetailRedirect } from './components/PickleCourt/PickCourtMemberRedirect';
+import { PICKCOURT_ACCOUNT } from './utils/pickcourtRoutes';
 import Vlog from './pages/Vlog';
 import GameJoin from './pages/GameJoin';
 import PickleCourtHome from './pages/PickleCourtHome';
 import PickleCourtSearch from './pages/PickleCourtSearch';
 import { isPickCourtPublicPath } from './utils/pickcourtRoutes';
+import { useDocumentPlatformBrand } from './hooks/useDocumentPlatformBrand';
 import StoreAdmin from './pages/StoreAdmin';
 import StorePublic from './pages/StorePublic';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -80,6 +88,7 @@ function AppShell() {
   const isStoreLogin = /^\/store\/[^/]+\/login$/.test(location.pathname);
   const { resolved: isTenantHost } = useStoreTenantHost();
   const hideMainChrome = isPickCourtPublicPath(location.pathname) || isStoreAdmin || isStoreLogin || isTenantHost;
+  useDocumentPlatformBrand(hideMainChrome);
 
   return (
     <div className={hideMainChrome ? 'min-h-screen' : 'min-h-screen bg-gray-50'}>
@@ -149,22 +158,86 @@ function AppShell() {
                 <Route path="/reset-password/:token" element={<ResetPassword />} />
                 <Route 
                   path="/dashboard" 
-                  element={<Navigate to="/my-bookings" replace />}
+                  element={<Navigate to={PICKCOURT_ACCOUNT.bookings} replace />}
                 />
+                {/* PickCourt 會員中心 */}
+                <Route
+                  path="/account"
+                  element={<Navigate to={PICKCOURT_ACCOUNT.bookings} replace />}
+                />
+                <Route
+                  path="/account/bookings"
+                  element={
+                    <ProtectedRoute>
+                      <AccountBookings />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/account/profile"
+                  element={
+                    <ProtectedRoute>
+                      <AccountProfile />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/account/balance"
+                  element={
+                    <ProtectedRoute>
+                      <AccountBalance />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/account/recharge"
+                  element={
+                    <ProtectedRoute>
+                      <AccountRecharge />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/account/orders"
+                  element={
+                    <ProtectedRoute>
+                      <AccountOrders />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/account/orders/:id"
+                  element={
+                    <ProtectedRoute>
+                      <AccountOrders />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* 舊路徑 → PickCourt 會員中心（PickleVibes 子站保留舊頁） */}
                 <Route 
                   path="/my-bookings" 
                   element={
-                    <ProtectedRoute>
-                      <MyBookings />
-                    </ProtectedRoute>
+                    <PickCourtMemberRedirect
+                      to={PICKCOURT_ACCOUNT.bookings}
+                      legacy={
+                        <ProtectedRoute>
+                          <MyBookings />
+                        </ProtectedRoute>
+                      }
+                    />
                   } 
                 />
                 <Route 
                   path="/profile" 
                   element={
-                    <ProtectedRoute>
-                      <Profile />
-                    </ProtectedRoute>
+                    <PickCourtMemberRedirect
+                      to={PICKCOURT_ACCOUNT.profile}
+                      legacy={
+                        <ProtectedRoute>
+                          <Profile />
+                        </ProtectedRoute>
+                      }
+                    />
                   } 
                 />
                 <Route
@@ -200,9 +273,14 @@ function AppShell() {
                 <Route 
                   path="/recharge" 
                   element={
-                    <ProtectedRoute>
-                      <Recharge />
-                    </ProtectedRoute>
+                    <PickCourtMemberRedirect
+                      to={PICKCOURT_ACCOUNT.recharge}
+                      legacy={
+                        <ProtectedRoute>
+                          <Recharge />
+                        </ProtectedRoute>
+                      }
+                    />
                   } 
                 />
                 <Route 
@@ -216,9 +294,14 @@ function AppShell() {
                 <Route 
                   path="/balance" 
                   element={
-                    <ProtectedRoute>
-                      <Balance />
-                    </ProtectedRoute>
+                    <PickCourtMemberRedirect
+                      to={PICKCOURT_ACCOUNT.balance}
+                      legacy={
+                        <ProtectedRoute>
+                          <Balance />
+                        </ProtectedRoute>
+                      }
+                    />
                   } 
                 />
                 <Route path="/maintenance" element={<Maintenance />} />
@@ -277,16 +360,23 @@ function AppShell() {
                 <Route 
                   path="/orders" 
                   element={
-                    <ProtectedRoute>
-                      <OrderHistory />
-                    </ProtectedRoute>
+                    <PickCourtMemberRedirect
+                      to={PICKCOURT_ACCOUNT.orders}
+                      legacy={
+                        <ProtectedRoute>
+                          <OrderHistory />
+                        </ProtectedRoute>
+                      }
+                    />
                   } 
                 />
                 <Route 
                   path="/orders/:id" 
                   element={
                     <ProtectedRoute>
-                      <OrderHistory />
+                      <PickCourtOrderDetailRedirect
+                        legacy={<OrderHistory />}
+                      />
                     </ProtectedRoute>
                   } 
                 />

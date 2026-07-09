@@ -3,6 +3,11 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import apiConfig from '../config/api';
 import SEO from '../components/SEO/SEO';
+import {
+  DEFAULT_SEO_DESCRIPTION,
+  DEFAULT_SEO_KEYWORDS,
+  DEFAULT_SEO_TITLE,
+} from '../constants/platformBrand';
 import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
 import PickleCourtCourtSearch from '../components/PickleCourt/PickleCourtCourtSearch';
@@ -131,9 +136,9 @@ const PickleCourtHome: React.FC = () => {
   return (
   <div id="top" className="min-h-screen bg-white text-pickcourt-navy">
     <SEO
-      title="PickCourt | 聯盟式匹克球平台 · Pick Friends"
-      description="PickCourt 連結全港匹克球場地與球友。場地以 SaaS 獨立營運，球友以聯盟會籍預約、參與活動與比賽。Pick Friends."
-      keywords="PickCourt,匹克球,場地預約,匹克球聯盟,SaaS,智能球場,比賽計分"
+      title={DEFAULT_SEO_TITLE}
+      description={DEFAULT_SEO_DESCRIPTION}
+      keywords={DEFAULT_SEO_KEYWORDS}
       url="/"
     />
 

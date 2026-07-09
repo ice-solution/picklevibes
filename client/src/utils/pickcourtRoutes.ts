@@ -2,6 +2,20 @@
 export const PICKCOURT_HOME = '/';
 export const PICKCOURT_SEARCH = '/search';
 
+/** PickCourt 會員中心（獨立於 PickleVibes /profile、/my-bookings 等） */
+export const PICKCOURT_ACCOUNT = {
+  root: '/account',
+  bookings: '/account/bookings',
+  profile: '/account/profile',
+  balance: '/account/balance',
+  recharge: '/account/recharge',
+  orders: '/account/orders',
+} as const;
+
+export function isPickCourtMemberPath(pathname: string): boolean {
+  return pathname === PICKCOURT_ACCOUNT.root || pathname.startsWith(`${PICKCOURT_ACCOUNT.root}/`);
+}
+
 /** 店鋪公開頁（不含 /admin） */
 export function isStorePublicPath(pathname: string): boolean {
   return /^\/store\/[^/]+$/.test(pathname);
@@ -32,6 +46,7 @@ export function isPickCourtPublicPath(pathname: string): boolean {
   if (pathname === '/pickcourt' || pathname.startsWith('/pickcourt/')) return true;
   if (isStorePublicPath(pathname)) return true;
   if (isPickCourtBookingPath(pathname)) return true;
+  if (isPickCourtMemberPath(pathname)) return true;
   return false;
 }
 

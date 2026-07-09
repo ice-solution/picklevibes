@@ -1,5 +1,6 @@
 import type { Location } from 'react-router-dom';
 import type { User } from '../contexts/AuthContext';
+import { PICKCOURT_ACCOUNT } from './pickcourtRoutes';
 
 const AUTH_PATHS = new Set(['/login', '/register', '/forgot-password', '/pickcourt/login', '/picklecourt/login']);
 
@@ -30,12 +31,12 @@ function isAuthPath(pathname: string): boolean {
 }
 
 export function getDefaultHomeForUser(user?: User | null): string {
-  if (!user) return '/my-bookings';
+  if (!user) return PICKCOURT_ACCOUNT.bookings;
   if (user.isPlatformAdmin || user.role === 'admin') return '/admin-v2';
   if (user.role === 'staff' && user.managedStores?.length) {
     return `/store/${user.managedStores[0].slug}/admin`;
   }
-  return '/my-bookings';
+  return PICKCOURT_ACCOUNT.bookings;
 }
 
 /** 登入後導向目標（唔需要完整 Location） */

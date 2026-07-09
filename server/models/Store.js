@@ -107,9 +107,19 @@ const storeSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  /** 門禁廠商：hik（海康）| dahua（大華） */
+  accessControlVendor: {
+    type: String,
+    enum: ['hik', 'dahua'],
+    default: 'hik',
+  },
   hikKey: { type: String, default: null },
   hikSecret: { type: String, default: null },
   hikAccessLevelId: { type: String, default: null },
+  /** 大華門禁（DSS Pro / 訪客 QR，型號如 DHI-ASI3213A-W） */
+  dahuaClientId: { type: String, default: null },
+  dahuaClientSecret: { type: String, default: null },
+  dahuaDeviceModel: { type: String, default: 'DHI-ASI3213A-W' },
   /** Tuya 智能家居（店鋪級 API 憑證，設備綁在 Court） */
   enableTuyaAutomation: {
     type: Boolean,

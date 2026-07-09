@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bars3Icon, XMarkIcon, UserCircleIcon } from '@heroicons/react/24/outline';
-import { PICKCOURT_HOME, pickcourtHomeHash } from '../../utils/pickcourtRoutes';
+import { PICKCOURT_HOME, pickcourtHomeHash, PICKCOURT_ACCOUNT } from '../../utils/pickcourtRoutes';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getMembershipBadgeClass,
@@ -71,7 +71,7 @@ function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: 
     return (
       <div className={`flex items-center ${compact ? 'flex-col gap-2 w-full' : 'gap-3'}`}>
         <Link
-          to="/profile"
+          to={PICKCOURT_ACCOUNT.profile}
           onClick={onNavigate}
           className={`flex items-center gap-2 ${compact ? 'w-full justify-center py-2' : ''} text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold transition-colors`}
         >
@@ -84,13 +84,22 @@ function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: 
           {tierLabel}
         </span>
         {!compact && (
-          <Link
-            to="/balance"
-            onClick={onNavigate}
-            className="text-sm font-medium text-pickcourt-navy/70 hover:text-pickcourt-gold transition-colors"
-          >
-            餘額
-          </Link>
+          <>
+            <Link
+              to={PICKCOURT_ACCOUNT.bookings}
+              onClick={onNavigate}
+              className="text-sm font-medium text-pickcourt-navy/70 hover:text-pickcourt-gold transition-colors"
+            >
+              我的預約
+            </Link>
+            <Link
+              to={PICKCOURT_ACCOUNT.balance}
+              onClick={onNavigate}
+              className="text-sm font-medium text-pickcourt-navy/70 hover:text-pickcourt-gold transition-colors"
+            >
+              餘額
+            </Link>
+          </>
         )}
         <button
           type="button"

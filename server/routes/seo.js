@@ -28,12 +28,15 @@ router.get('/sitemap.xml', async (req, res) => {
     const base = getBaseUrl(req);
     const staticUrls = [
       { loc: `${base}/`, changefreq: 'daily', priority: '1.0' },
-      { loc: `${base}/about`, changefreq: 'monthly', priority: '0.7' },
-      { loc: `${base}/faq`, changefreq: 'monthly', priority: '0.5' },
+      { loc: `${base}/search`, changefreq: 'daily', priority: '0.9' },
+      { loc: `${base}/login`, changefreq: 'monthly', priority: '0.5' },
+      { loc: `${base}/register`, changefreq: 'monthly', priority: '0.5' },
+      { loc: `${base}/picklevibes`, changefreq: 'monthly', priority: '0.4' },
+      { loc: `${base}/about`, changefreq: 'monthly', priority: '0.4' },
+      { loc: `${base}/faq`, changefreq: 'monthly', priority: '0.4' },
       { loc: `${base}/terms`, changefreq: 'yearly', priority: '0.2' },
       { loc: `${base}/privacy`, changefreq: 'yearly', priority: '0.2' },
-      { loc: `${base}/activities`, changefreq: 'weekly', priority: '0.6' },
-      { loc: `${base}/shop`, changefreq: 'weekly', priority: '0.6' },
+      { loc: `${base}/activities`, changefreq: 'weekly', priority: '0.5' },
     ];
 
     const vlogs = await Vlog.find({ isPublished: true })

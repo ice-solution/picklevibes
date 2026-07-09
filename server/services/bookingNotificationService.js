@@ -1,7 +1,8 @@
 const Store = require('../models/Store');
-const accessControlService = require('./accessControlService');
 const emailService = require('./emailService');
-const { getStoreHikConfig } = require('../utils/storeHikConfig');
+const { getStoreAccessControlConfig, isAccessControlEnabled } = require('../utils/storeAccessControlConfig');
+const { processAccessControl, createAccessPass } = require('./accessControlRouter');
+const accessControlService = require('./accessControlService');
 
 function buildVisitorData(booking, userFallback) {
   return {
@@ -34,21 +35,17 @@ async function resolveStore(booking, courtDoc) {
 }
 
 /**
- * 預約建立／重發：HIK 店發門禁郵件；非 HIK 店發純確認郵件
+ * 預約建立／重發：門禁店（HIK / 大華）發門禁郵件；非門禁店發純確認郵件
  */
 async function sendBookingNotification({ booking, courtDoc, store: storeInput, userFallback, emailOverrides }) {
   const store = storeInput || await resolveStore(booking, courtDoc);
   const visitorData = buildVisitorData(booking, userFallback);
   const bookingData = buildBookingEmailData(booking, courtDoc, store, emailOverrides);
 
-  if (store?.enableHikAccess) {
-    const hikConfig = getStoreHikConfig(store);
-    const accessControlResult = await accessControlService.processAccessControl(
-      visitorData,
-      bookingData,
-      hikConfig
-    );
-    return { mode: 'hik', accessControlResult };
+  if (isAccessControlEnabled(store)) {
+    const acConfig = getStoreAccessControlConfig(store);
+    const accessControlResult = await processAccessControl(acConfig, visitorData, bookingData);
+    return { mode: acConfig.vendor, accessControlResult };
   }
 
   await emailService.sendBookingConfirmationEmail(visitorData, bookingData, store);
@@ -80,7 +77,7 @@ async function applyTempAuthToBooking(booking, accessControlResult) {
 }
 
 /**
- * 管理員重發：HIK 店可重建 tempAuth；非 HIK 店重發確認信
+ * 管理員重發：門禁店可重建 tempAuth；非門禁店重發確認信
  */
 async function resendBookingNotification(booking) {
   const court = booking.court;
@@ -89,39 +86,22 @@ async function resendBookingNotification(booking) {
   const visitorData = buildVisitorData(booking, booking.user);
   const bookingData = buildBookingEmailData(booking, court, store);
 
-  if (store?.enableHikAccess) {
-    const hikConfig = getStoreHikConfig(store);
+  if (isAccessControlEnabled(store)) {
+    const acConfig = getStoreAccessControlConfig(store);
     let qrCodeData = null;
     let password = null;
     let tempAuthCreated = false;
 
     if (!booking.tempAuth?.code) {
-      const tempAuth = await accessControlService.createTempAuth(visitorData, bookingData, hikConfig);
+      const tempAuth = await createAccessPass(acConfig, visitorData, bookingData);
       if (tempAuth?.code) {
         qrCodeData = tempAuth.code;
         password = tempAuth.password;
-        const earlyStartTime = accessControlService.subtractMinutes(bookingData.startTime, 15);
-        const usePreviousDayForEarly =
-          accessControlService._timeToMinutes(earlyStartTime) >
-          accessControlService._timeToMinutes(bookingData.startTime);
-        const startTimeISO = accessControlService.convertToISOString(
-          bookingData.date,
-          earlyStartTime,
-          null,
-          null,
-          usePreviousDayForEarly
-        );
-        const endTimeISO = accessControlService.convertToISOString(
-          bookingData.date,
-          bookingData.endTime,
-          bookingData.endDate || null,
-          earlyStartTime
-        );
         booking.tempAuth = {
           code: tempAuth.code || null,
           password: tempAuth.password || null,
-          startTime: startTimeISO || null,
-          endTime: endTimeISO || null,
+          startTime: tempAuth.startTime || null,
+          endTime: tempAuth.endTime || null,
           createdAt: new Date(),
         };
         await booking.save();
@@ -135,9 +115,13 @@ async function resendBookingNotification(booking) {
     }
 
     await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
+
+    const vendorLabel = acConfig.vendor === 'dahua' ? '大華' : 'HIK';
     return {
-      mode: 'hik',
-      message: tempAuthCreated ? '臨時授權已重新創建，開門通知郵件已發送' : '開門通知郵件已重新發送',
+      mode: acConfig.vendor,
+      message: tempAuthCreated
+        ? `${vendorLabel} 臨時授權已重新創建，開門通知郵件已發送`
+        : '開門通知郵件已重新發送',
       tempAuthCreated,
     };
   }

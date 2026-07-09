@@ -1,6 +1,4 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
 Allow: /
 
-# Sitemap
-Sitemap: https://picklevibes.hk/sitemap.xml
+Sitemap: https://pickcourt.hk/sitemap.xml

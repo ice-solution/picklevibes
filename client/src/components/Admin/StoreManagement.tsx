@@ -4,6 +4,12 @@ import { PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 import { TUYA_BASE_URL_OPTIONS } from '../../constants/tuyaRegions';
 import { HK_DISTRICTS } from '../../constants/hkDistricts';
+import {
+  ACCESS_CONTROL_VENDORS,
+  AccessControlVendor,
+  DAHUA_DEFAULT_DEVICE_MODEL,
+  accessControlVendorLabel,
+} from '../../constants/accessControlVendors';
 import StoreTuyaZonesModal from './StoreTuyaZonesModal';
 import StoreLogoField from './StoreLogoField';
 
@@ -17,9 +23,13 @@ interface Store {
   sortOrder: number;
   isActive: boolean;
   enableHikAccess: boolean;
+  accessControlVendor?: AccessControlVendor;
   hikKey?: string;
   hikSecret?: string;
   hikAccessLevelId?: string;
+  dahuaClientId?: string;
+  dahuaClientSecret?: string;
+  dahuaDeviceModel?: string;
   openApiEnabled?: boolean;
   openApiKey?: string | null;
   allianceEnabled?: boolean;
@@ -54,9 +64,13 @@ interface StoreForm {
   sortOrder: number;
   isActive: boolean;
   enableHikAccess: boolean;
+  accessControlVendor: AccessControlVendor;
   hikKey: string;
   hikSecret: string;
   hikAccessLevelId: string;
+  dahuaClientId: string;
+  dahuaClientSecret: string;
+  dahuaDeviceModel: string;
   openApiEnabled: boolean;
   openApiKey: string;
   allianceEnabled: boolean;
@@ -86,9 +100,13 @@ const emptyForm: StoreForm = {
   sortOrder: 0,
   isActive: true,
   enableHikAccess: false,
+  accessControlVendor: 'hik',
   hikKey: '',
   hikSecret: '',
   hikAccessLevelId: '',
+  dahuaClientId: '',
+  dahuaClientSecret: '',
+  dahuaDeviceModel: DAHUA_DEFAULT_DEVICE_MODEL,
   openApiEnabled: false,
   openApiKey: '',
   allianceEnabled: true,
@@ -154,9 +172,13 @@ const StoreManagement: React.FC = () => {
       sortOrder: s.sortOrder ?? 0,
       isActive: s.isActive,
       enableHikAccess: s.enableHikAccess,
+      accessControlVendor: (s.accessControlVendor || 'hik') as AccessControlVendor,
       hikKey: s.hikKey || '',
       hikSecret: s.hikSecret || '',
       hikAccessLevelId: s.hikAccessLevelId || '',
+      dahuaClientId: s.dahuaClientId || '',
+      dahuaClientSecret: s.dahuaClientSecret || '',
+      dahuaDeviceModel: s.dahuaDeviceModel || DAHUA_DEFAULT_DEVICE_MODEL,
       openApiEnabled: Boolean(s.openApiEnabled),
       openApiKey: s.openApiKey || '',
       allianceEnabled: Boolean(s.allianceEnabled),
@@ -188,6 +210,10 @@ const StoreManagement: React.FC = () => {
         hikKey: form.hikKey || null,
         hikSecret: form.hikSecret || null,
         hikAccessLevelId: form.hikAccessLevelId || null,
+        accessControlVendor: form.enableHikAccess ? form.accessControlVendor : 'hik',
+        dahuaClientId: form.dahuaClientId || null,
+        dahuaClientSecret: form.dahuaClientSecret || null,
+        dahuaDeviceModel: form.dahuaDeviceModel || DAHUA_DEFAULT_DEVICE_MODEL,
         enableTuyaAutomation: form.enableTuyaAutomation,
         tuyaAccessKey: form.tuyaAccessKey || null,
         tuyaSecretKey: form.tuyaSecretKey || null,
@@ -235,7 +261,7 @@ const StoreManagement: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">店鋪管理</h2>
-          <p className="text-gray-600">管理加盟店鋪資料、地區、門禁（HIK）與 Tuya 智能家居憑證</p>
+          <p className="text-gray-600">管理加盟店鋪資料、地區、門禁（HIK / 大華）與 Tuya 智能家居憑證</p>
         </div>
         {isPlatformAdmin && (
         <button
@@ -274,7 +300,9 @@ const StoreManagement: React.FC = () => {
                     {s.isActive ? '上線' : '停用'}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm">{s.enableHikAccess ? 'HIK' : '僅確認信'}</td>
+                <td className="px-4 py-3 text-sm">
+                  {accessControlVendorLabel(s.enableHikAccess, s.accessControlVendor)}
+                </td>
                 <td className="px-4 py-3 text-sm">
                   {s.allianceEnabled ? (
                     <span className="text-amber-600">PickCourt</span>
@@ -339,13 +367,57 @@ const StoreManagement: React.FC = () => {
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={form.enableHikAccess} onChange={(e) => setForm({ ...form, enableHikAccess: e.target.checked })} />
-                啟用 HIK 門禁
+                啟用門禁（HIK / 大華）
               </label>
               {form.enableHikAccess && (
                 <>
-                  <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK App Key（留空用全域 .env）" value={form.hikKey} onChange={(e) => setForm({ ...form, hikKey: e.target.value })} />
-                  <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK Secret" value={form.hikSecret} onChange={(e) => setForm({ ...form, hikSecret: e.target.value })} />
-                  <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK Access Level ID" value={form.hikAccessLevelId} onChange={(e) => setForm({ ...form, hikAccessLevelId: e.target.value })} />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">門禁廠商</label>
+                    <select
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      value={form.accessControlVendor}
+                      onChange={(e) =>
+                        setForm({ ...form, accessControlVendor: e.target.value as AccessControlVendor })
+                      }
+                    >
+                      {ACCESS_CONTROL_VENDORS.map((v) => (
+                        <option key={v.value} value={v.value}>
+                          {v.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {form.accessControlVendor === 'hik' ? (
+                    <>
+                      <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK App Key（留空用全域 .env）" value={form.hikKey} onChange={(e) => setForm({ ...form, hikKey: e.target.value })} />
+                      <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK Secret" value={form.hikSecret} onChange={(e) => setForm({ ...form, hikSecret: e.target.value })} />
+                      <input className="w-full border rounded-md px-3 py-2 text-sm" placeholder="HIK Access Level ID" value={form.hikAccessLevelId} onChange={(e) => setForm({ ...form, hikAccessLevelId: e.target.value })} />
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        className="w-full border rounded-md px-3 py-2 text-sm bg-slate-50"
+                        placeholder="設備型號"
+                        value={form.dahuaDeviceModel}
+                        onChange={(e) => setForm({ ...form, dahuaDeviceModel: e.target.value })}
+                      />
+                      <p className="text-xs text-gray-500">預設 DHI-ASI3213A-W（大華人臉門禁）</p>
+                      <input
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        placeholder="Client ID（留空用全域 .env DAHUA_CLIENT_ID）"
+                        value={form.dahuaClientId}
+                        onChange={(e) => setForm({ ...form, dahuaClientId: e.target.value })}
+                      />
+                      <input
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        placeholder="Client Secret"
+                        type="password"
+                        autoComplete="new-password"
+                        value={form.dahuaClientSecret}
+                        onChange={(e) => setForm({ ...form, dahuaClientSecret: e.target.value })}
+                      />
+                    </>
+                  )}
                 </>
               )}
               <hr className="border-gray-200" />

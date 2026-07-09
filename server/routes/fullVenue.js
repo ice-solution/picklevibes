@@ -77,7 +77,7 @@ router.post('/create', auth, async (req, res) => {
         userFallback: user,
         emailOverrides: { courtName: '包場預約 - 所有場地' },
       });
-      if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
+      if (['hik', 'dahua'].includes(notifyResult.mode) && notifyResult.accessControlResult) {
         const Booking = require('../models/Booking');
         const b = await Booking.findById(firstBooking._id);
         await applyTempAuthToBooking(b, notifyResult.accessControlResult);

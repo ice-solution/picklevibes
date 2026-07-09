@@ -562,7 +562,7 @@ router.post('/', [
         store: storeDoc,
         userFallback: bookingUser,
       });
-      if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
+      if (['hik', 'dahua'].includes(notifyResult.mode) && notifyResult.accessControlResult) {
         await applyTempAuthToBooking(booking, notifyResult.accessControlResult);
         console.log('✅ 門禁／開門郵件流程完成');
       } else {

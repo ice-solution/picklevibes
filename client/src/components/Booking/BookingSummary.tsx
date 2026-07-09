@@ -203,7 +203,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       
       // 顯示成功消息並跳轉
       alert('預約成功！已扣除積分。請留意您的郵箱，已發送預約碼到您的郵箱。');
-      window.location.href = '/my-bookings';
+      window.location.href = '/account/bookings';
     } catch (error: any) {
       console.error('❌ 支付流程錯誤:', error);
       const message = error?.message || '預約失敗，請稍後再試';
@@ -214,7 +214,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
 
       if (isInsufficientBalance) {
         alert('積分餘額不足，請先充值後再完成預約。');
-        window.location.assign('/recharge?from=booking&reason=insufficient_balance');
+        window.location.assign('/account/recharge?from=booking&reason=insufficient_balance');
         return;
       }
       alert(message);
