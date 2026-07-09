@@ -1,13 +1,17 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Booking = require('../models/Booking');
 const StripeTransaction = require('../models/StripeTransaction');
 const Recharge = require('../models/Recharge');
-const UserBalance = require('../models/UserBalance');
-const User = require('../models/User');
-const emailService = require('../services/emailService');
 const { auth } = require('../middleware/auth');
+const { getPaymentProvider } = require('../config/paymentProvider');
+const {
+  completeRechargePayment,
+  parseRechargeIdFromReference,
+} = require('../services/rechargePaymentService');
+
+const stripe =
+  process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
 
 const router = express.Router();
 
@@ -65,6 +69,9 @@ router.post('/refund', [
     }
 
     // 創建Stripe退款
+    if (!stripe) {
+      return res.status(503).json({ message: 'Stripe 退款未啟用' });
+    }
     const refund = await stripe.refunds.create({
       payment_intent: booking.payment.transactionId,
       reason: 'requested_by_customer',
@@ -210,11 +217,54 @@ router.post('/test-callback', async (req, res) => {
 
 // 預約現在使用積分支付，不再需要 Stripe Checkout 成功回調
 
+// @route   POST /api/payments/wonder/webhook
+// @desc    Wonder Payment webhook（與 checkinSystem 相同：body 為 Invoice JSON）
+router.post('/wonder/webhook', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const query = req.query || {};
+
+    console.log('📨 Wonder webhook:', {
+      time: new Date().toISOString(),
+      headers: req.headers,
+      query,
+      body,
+    });
+
+    const referenceNumber = body.reference_number || query.reference_number || body.order?.reference_number;
+    const state = String(body.state || body.order?.state || '').toLowerCase();
+    const correspondenceState = String(
+      body.correspondence_state || body.order?.correspondence_state || ''
+    ).toLowerCase();
+    const isPaid = state === 'completed' || correspondenceState === 'paid';
+
+    const rechargeId = parseRechargeIdFromReference(referenceNumber);
+    if (!rechargeId) {
+      console.warn('⚠️ Wonder webhook: 找不到 recharge reference_number', referenceNumber);
+      return res.status(200).json({ received: true, warning: 'Recharge not found' });
+    }
+
+    if (isPaid) {
+      const orderNumber = body.number || body.order?.number || referenceNumber;
+      await completeRechargePayment(rechargeId, orderNumber);
+      console.log('✅ Wonder 充值已完成:', rechargeId);
+    } else {
+      console.log('ℹ️ Wonder webhook 非 paid 狀態:', { state, correspondenceState, referenceNumber });
+    }
+
+    res.status(200).json({ received: true });
+  } catch (error) {
+    console.error('Wonder webhook 錯誤:', error);
+    res.status(200).json({ received: true, error: error.message });
+  }
+});
+
 // @route   POST /api/payments/webhook
 // @desc    Stripe webhook處理
-// @access  Public
-// 注意: express.raw() 已在 server/index.js 中為此路由設置
 router.post('/webhook', async (req, res) => {
+  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+    return res.status(503).json({ message: 'Stripe webhook 未啟用' });
+  }
   const sig = req.headers['stripe-signature'];
   let event;
 
@@ -264,41 +314,11 @@ router.post('/webhook', async (req, res) => {
         // 處理充值訂單
         if (rechargeId) {
           console.log('💰 處理充值訂單:', rechargeId);
-          
-          const recharge = await Recharge.findById(rechargeId);
-          if (recharge && recharge.status === 'pending') {
-            // 更新充值狀態
-            recharge.status = 'completed';
-            recharge.payment.status = 'paid';
-            recharge.payment.paidAt = new Date();
-            recharge.payment.transactionId = session.id;
-            await recharge.save();
-            
-            // 更新用戶餘額
-            let userBalance = await UserBalance.findOne({ user: recharge.user });
-            if (!userBalance) {
-              userBalance = new UserBalance({ user: recharge.user });
-            }
-            
-            await userBalance.addBalance(recharge.points, `充值 ${recharge.points} 分`);
-            
-            // 發送充值發票郵件
-            try {
-              const user = await User.findById(recharge.user);
-              if (user) {
-                await emailService.sendRechargeInvoiceEmail(user, recharge);
-                console.log('📧 充值發票郵件發送成功');
-              } else {
-                console.error('❌ 找不到用戶信息，無法發送發票郵件');
-              }
-            } catch (emailError) {
-              console.error('❌ 發送充值發票郵件失敗:', emailError);
-              // 不影響充值流程，只記錄錯誤
-            }
-            
+          try {
+            await completeRechargePayment(rechargeId, session.id);
             console.log('✅ 充值已完成，用戶餘額已更新');
-          } else {
-            console.error('❌ 找不到充值記錄或狀態不正確:', rechargeId);
+          } catch (rechargeErr) {
+            console.error('❌ 充值完成處理失敗:', rechargeErr);
           }
         }
         

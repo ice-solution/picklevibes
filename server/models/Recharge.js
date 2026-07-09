@@ -49,7 +49,7 @@ const rechargeSchema = new mongoose.Schema({
   payment: {
     method: {
       type: String,
-      enum: ['stripe', 'alipay', 'wechat', 'manual'],
+      enum: ['stripe', 'wonder', 'alipay', 'wechat', 'manual'],
       required: true
     },
     transactionId: String,

@@ -105,7 +105,7 @@ io.on('connection', (socket) => {
 // 遊戲相關 socket handlers
 require('./sockets/gameSockets')(io);
 
-// Stripe Webhook 需要原始請求體，必須在 express.json() 之前
+// Stripe webhook 需要原始請求體（Wonder 與 checkinSystem 相同，用 JSON body）
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 
 // 解析JSON（其他路由）
@@ -173,6 +173,7 @@ app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/tuya', require('./routes/tuya'));
 app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
+app.use('/api/bot', require('./routes/bot')); // n8n / WhatsApp bot API
 app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes
 app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes
 app.use('/api/bulk-upgrade', require('./routes/bulk-upgrade')); // Added bulk upgrade routes

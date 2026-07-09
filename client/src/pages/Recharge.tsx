@@ -101,7 +101,7 @@ const Recharge: React.FC = () => {
         // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
       });
 
-      // 重定向到 Stripe Checkout
+      // 重定向到支付頁面（Stripe / Wonder）
       window.location.href = response.data.url;
     } catch (error: any) {
       console.error('充值失敗:', error);
@@ -153,7 +153,7 @@ const Recharge: React.FC = () => {
         // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
       });
 
-      // 重定向到 Stripe Checkout
+      // 重定向到支付頁面（Stripe / Wonder）
       window.location.href = response.data.url;
     } catch (error: any) {
       console.error('充值失敗:', error);

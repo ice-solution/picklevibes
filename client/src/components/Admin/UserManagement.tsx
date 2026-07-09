@@ -1656,6 +1656,7 @@ const UserManagement: React.FC = () => {
                       <td className="px-4 py-2 text-sm text-gray-600">
                         {record.payment.method === 'manual'
                           ? (record.pointsDeducted ? '手動扣款' : '手動充值')
+                          : record.payment.method === 'wonder' ? 'Wonder'
                           : record.payment.method === 'stripe' ? 'Stripe'
                           : record.payment.method === 'alipay' ? '支付寶' : '微信支付'}
                       </td>

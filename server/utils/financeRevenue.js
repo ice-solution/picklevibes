@@ -10,7 +10,7 @@ require('../models/Court');
 require('../models/User');
 
 const HK_TZ = 'Asia/Hong_Kong';
-const PAID_RECHARGE_METHODS = ['stripe', 'alipay', 'wechat'];
+const PAID_RECHARGE_METHODS = ['stripe', 'wonder', 'alipay', 'wechat'];
 
 /** 會計 API 預設查詢起日：當月 1 日（避免預設全年掃描） */
 function defaultFinanceFromYmd(today = formatHkYmd()) {
@@ -202,6 +202,7 @@ function paymentMethodLabel(method) {
   if (method === 'cash') return '現金';
   if (method === 'bank_transfer') return '銀行轉帳';
   if (method === 'stripe') return 'Stripe';
+  if (method === 'wonder') return 'Wonder';
   return method || '積分';
 }
 
