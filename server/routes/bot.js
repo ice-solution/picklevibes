@@ -2,7 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const { body, query, validationResult } = require('express-validator');
 const { botAuth } = require('../middleware/botAuth');
-const { getUserBalanceByPhone } = require('../services/botUserService');
+const { getUserBalanceByPhone, getUserBalanceByEmail } = require('../services/botUserService');
 const { searchAvailability } = require('../services/botAvailabilityService');
 const { createBookingViaBot } = require('../services/botBookingService');
 
@@ -57,7 +57,10 @@ function handleServiceError(res, error) {
 // @access  Bot API Key
 router.get(
   '/balance',
-  [query('phone').notEmpty().withMessage('請提供 phone')],
+  [
+    query('phone').optional().trim(),
+    query('email').optional().trim().isEmail().withMessage('請提供有效的 email'),
+  ],
   async (req, res) => {
     try {
       const errors = validationResult(req);
@@ -69,7 +72,19 @@ router.get(
         });
       }
 
-      const data = await getUserBalanceByPhone(req.query.phone);
+      const phone = String(req.query.phone || '').trim();
+      const email = String(req.query.email || '').trim();
+
+      if (!phone && !email) {
+        return res.status(400).json({
+          success: false,
+          message: '請提供 phone 或 email',
+        });
+      }
+
+      const data = phone
+        ? await getUserBalanceByPhone(phone)
+        : await getUserBalanceByEmail(email);
       res.json({ success: true, data });
     } catch (error) {
       handleServiceError(res, error);

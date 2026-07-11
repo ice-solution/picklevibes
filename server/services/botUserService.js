@@ -16,7 +16,21 @@ async function findUserByPhone(phone) {
     isActive: true,
     phone: { $regex: `${hk}$` },
   });
+  if (user) return user;
+
+  // 兼容資料庫以空格/括號儲存電話（例如 +852 9123 4567）
+  const spaced = hk.replace(/(\d{4})(\d{4})$/, '$1 $2');
+  const variantsSpaced = [`${spaced}`, `852 ${spaced}`, `+852 ${spaced}`];
+  user = await User.findOne({ phone: { $in: variantsSpaced }, isActive: true });
   return user;
+}
+
+async function findUserByEmail(email) {
+  const normalized = String(email || '').trim().toLowerCase();
+  if (!normalized || !normalized.includes('@')) {
+    return null;
+  }
+  return User.findOne({ email: normalized, isActive: true });
 }
 
 async function getUserBalanceSummary(userId) {
@@ -42,7 +56,22 @@ async function getUserBalanceByPhone(phone) {
   }
 
   const balance = await getUserBalanceSummary(user._id);
+  return formatUserBalanceResponse(user, balance);
+}
 
+async function getUserBalanceByEmail(email) {
+  const user = await findUserByEmail(email);
+  if (!user) {
+    const err = new Error('找不到此電郵的用戶');
+    err.code = 'USER_NOT_FOUND';
+    throw err;
+  }
+
+  const balance = await getUserBalanceSummary(user._id);
+  return formatUserBalanceResponse(user, balance);
+}
+
+function formatUserBalanceResponse(user, balance) {
   return {
     user: {
       id: user._id,
@@ -58,6 +87,8 @@ async function getUserBalanceByPhone(phone) {
 
 module.exports = {
   findUserByPhone,
+  findUserByEmail,
   getUserBalanceSummary,
   getUserBalanceByPhone,
+  getUserBalanceByEmail,
 };

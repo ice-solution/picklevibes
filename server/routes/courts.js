@@ -11,6 +11,30 @@ const {
   syncLegacyPricingFromSlots,
 } = require('../utils/courtPricing');
 const { courtUpload, processCourtImage, deleteFile } = require('../middleware/upload');
+const {
+  normalizeCourtSlug,
+  isValidCourtSlug,
+  suggestCourtSlug,
+  assertCourtSlugUnique,
+  assertCourtNumberUnique,
+  formatCourtDuplicateKeyError,
+} = require('../utils/courtSlug');
+
+function handleCourtWriteError(res, error) {
+  if (error.code === 'DUPLICATE_NUMBER' || error.code === 'DUPLICATE_SLUG') {
+    return res.status(400).json({ message: error.message, code: error.code });
+  }
+  const dupMsg = formatCourtDuplicateKeyError(error);
+  if (dupMsg) {
+    return res.status(400).json({
+      message: dupMsg,
+      code: 'DUPLICATE_KEY',
+      keyPattern: error.keyPattern,
+      keyValue: error.keyValue,
+    });
+  }
+  return null;
+}
 
 // 為批量 API 創建專門的速率限制
 const batchLimiter = rateLimit({
@@ -330,6 +354,7 @@ router.post('/', [
   body('number').isInt({ min: 1 }).withMessage('場地編號必須是正整數'),
   body('type').isIn(['competition', 'training', 'solo', 'dink', 'full_venue']).withMessage('場地類型無效'),
   body('capacity').isInt({ min: 2, max: 8 }).withMessage('場地容量必須在2-8人之間'),
+  body('slug').optional().trim().isLength({ min: 2, max: 60 }).withMessage('slug 長度須為 2–60'),
   body('pricing.peakHour').isFloat({ min: 0 }).withMessage('高峰時段價格不能為負數'),
   body('pricing.offPeak').isFloat({ min: 0 }).withMessage('非高峰時段價格不能為負數')
 ], async (req, res) => {
@@ -342,7 +367,20 @@ router.post('/', [
       });
     }
 
-    const court = new Court(req.body);
+    const payload = { ...req.body };
+    await assertCourtNumberUnique(Court, payload.store, payload.number);
+
+    let slug = normalizeCourtSlug(payload.slug);
+    if (!slug) {
+      slug = await suggestCourtSlug(Court, payload.store, payload.type, payload.number);
+    }
+    if (!isValidCourtSlug(slug)) {
+      return res.status(400).json({ message: 'slug 只能包含小寫字母、數字與連字號（如 match-court）' });
+    }
+    await assertCourtSlugUnique(Court, payload.store, slug);
+    payload.slug = slug;
+
+    const court = new Court(payload);
     await court.save();
 
     res.status(201).json({
@@ -350,10 +388,9 @@ router.post('/', [
       court
     });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ message: '此店鋪內場地編號已存在' });
-    }
-    
+    const handled = handleCourtWriteError(res, error);
+    if (handled) return handled;
+
     console.error('創建場地錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
@@ -419,6 +456,7 @@ router.put('/:id', [
   body('name').optional().trim().isLength({ min: 1, max: 50 }).withMessage('場地名稱必須在1-50個字符之間'),
   body('number').optional().isInt({ min: 1 }).withMessage('場地編號必須是正整數'),
   body('capacity').optional().isInt({ min: 2, max: 8 }).withMessage('場地容量必須在2-8人之間'),
+  body('slug').optional().trim().isLength({ min: 2, max: 60 }).withMessage('slug 長度須為 2–60'),
   body('pricing.peakHour').optional().isFloat({ min: 0 }).withMessage('高峰時段價格不能為負數'),
   body('pricing.offPeak').optional().isFloat({ min: 0 }).withMessage('非高峰時段價格不能為負數')
 ], async (req, res) => {
@@ -431,24 +469,41 @@ router.put('/:id', [
       });
     }
 
-    const court = await Court.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('store', 'name slug address enableHikAccess');
-
-    if (!court) {
+    const courtDoc = await Court.findById(req.params.id);
+    if (!courtDoc) {
       return res.status(404).json({ message: '場地不存在' });
     }
+
+    const update = { ...req.body };
+    const storeId = update.store || courtDoc.store;
+    if (update.number != null) {
+      await assertCourtNumberUnique(Court, storeId, update.number, courtDoc._id);
+    }
+    if (update.slug !== undefined) {
+      const slug = normalizeCourtSlug(update.slug);
+      if (slug && !isValidCourtSlug(slug)) {
+        return res.status(400).json({ message: 'slug 只能包含小寫字母、數字與連字號（如 match-court）' });
+      }
+      if (slug) {
+        await assertCourtSlugUnique(Court, storeId, slug, courtDoc._id);
+        update.slug = slug;
+      }
+    }
+
+    const court = await Court.findByIdAndUpdate(
+      req.params.id,
+      update,
+      { new: true, runValidators: true }
+    ).populate('store', 'name slug address enableHikAccess');
 
     res.json({
       message: '場地更新成功',
       court
     });
   } catch (error) {
-    if (error.code === 11000) {
-      return res.status(400).json({ message: '此店鋪內場地編號已存在' });
-    }
+    const handled = handleCourtWriteError(res, error);
+    if (handled) return handled;
+
     console.error('更新場地錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
