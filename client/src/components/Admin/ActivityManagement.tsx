@@ -103,7 +103,8 @@ const ActivityManagement: React.FC = () => {
   const userLookupStoreId = storeAdmin?.store?._id;
   const lockedStoreId = useLockedStoreId();
   const apiBaseUrl = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-  const fixedVenueLocation = '荔枝角福源廣場8樓B C D室';
+  /** 店鋪活動預設地點 = 該店地址（不再寫死荔枝角） */
+  const fixedVenueLocation = (storeAdmin?.store?.address || '').trim();
   const customLocationOption = '__custom__';
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -156,7 +157,7 @@ const ActivityManagement: React.FC = () => {
     venueHoldMode: 'full_venue' as 'full_venue' | 'single_court',
     venueHoldCourtId: ''
   });
-  const [locationOption, setLocationOption] = useState<string>(fixedVenueLocation);
+  const [locationOption, setLocationOption] = useState<string>(customLocationOption);
   const [customLocation, setCustomLocation] = useState<string>('');
   const [venueCourts, setVenueCourts] = useState<VenueCourtOption[]>([]);
 
@@ -170,10 +171,17 @@ const ActivityManagement: React.FC = () => {
   }, [currentPage, statusFilter, lockedStoreId, storeAdmin?.storeSlug]);
 
   useEffect(() => {
+    if (fixedVenueLocation && locationOption === customLocationOption && !customLocation && showCreateModal) {
+      setLocationOption(fixedVenueLocation);
+    }
+  }, [fixedVenueLocation]);
+
+  useEffect(() => {
     if (!showCreateModal && !showEditModal) return;
     const loadCourts = async () => {
       try {
-        const res = await fetch(`${apiBaseUrl}/courts`);
+        const qs = lockedStoreId ? `?store=${encodeURIComponent(lockedStoreId)}` : '';
+        const res = await fetch(`${apiBaseUrl}/courts${qs}`);
         const data = await res.json();
         const list = (data.courts || []) as VenueCourtOption[];
         const allowed = new Set(['competition', 'training', 'solo']);
@@ -183,7 +191,7 @@ const ActivityManagement: React.FC = () => {
       }
     };
     loadCourts();
-  }, [showCreateModal, showEditModal, apiBaseUrl]);
+  }, [showCreateModal, showEditModal, apiBaseUrl, lockedStoreId]);
 
   const fetchActivities = async () => {
     try {
@@ -235,7 +243,7 @@ const ActivityManagement: React.FC = () => {
     });
     setSelectedFile(null);
     setImagePreview('');
-    setLocationOption(fixedVenueLocation);
+    setLocationOption(fixedVenueLocation || customLocationOption);
     setCustomLocation('');
     setShowCreateModal(true);
   };
@@ -322,7 +330,7 @@ const ActivityManagement: React.FC = () => {
     });
     setSelectedFile(null);
     setImagePreview(activity.poster ? getImageUrl(activity.poster) : '');
-    if (activity.location === fixedVenueLocation) {
+    if (fixedVenueLocation && activity.location === fixedVenueLocation) {
       setLocationOption(fixedVenueLocation);
       setCustomLocation('');
     } else {
@@ -351,7 +359,7 @@ const ActivityManagement: React.FC = () => {
         return;
       }
 
-      if (finalLocation === fixedVenueLocation) {
+      if (fixedVenueLocation && finalLocation === fixedVenueLocation) {
         if (formData.venueHoldMode === 'single_court' && !formData.venueHoldCourtId) {
           alert('請選擇要佔用的場地');
           return;
@@ -397,7 +405,7 @@ const ActivityManagement: React.FC = () => {
       if (lockedStoreId) {
         formDataToSend.append('store', lockedStoreId);
       }
-      if (finalLocation === fixedVenueLocation) {
+      if (fixedVenueLocation && finalLocation === fixedVenueLocation) {
         formDataToSend.append('venueHoldMode', formData.venueHoldMode);
         if (formData.venueHoldMode === 'single_court' && formData.venueHoldCourtId) {
           formDataToSend.append('venueHoldCourtId', formData.venueHoldCourtId);
@@ -1421,7 +1429,7 @@ const ActivityManagement: React.FC = () => {
                       onChange={(e) => {
                         const v = e.target.value;
                         setLocationOption(v);
-                        if (v !== fixedVenueLocation) {
+                        if (!fixedVenueLocation || v !== fixedVenueLocation) {
                           setFormData((prev) => ({
                             ...prev,
                             venueHoldMode: 'full_venue',
@@ -1432,7 +1440,15 @@ const ActivityManagement: React.FC = () => {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                       required
                     >
-                      <option value={fixedVenueLocation}>{fixedVenueLocation}</option>
+                      {fixedVenueLocation ? (
+                        <option value={fixedVenueLocation}>
+                          店鋪地址：{fixedVenueLocation}
+                        </option>
+                      ) : (
+                        <option value={customLocationOption} disabled>
+                          （尚無店鋪地址，請使用自訂地點）
+                        </option>
+                      )}
                       <option value={customLocationOption}>自訂地點</option>
                     </select>
                     {locationOption === customLocationOption && (
@@ -1445,7 +1461,7 @@ const ActivityManagement: React.FC = () => {
                         required
                       />
                     )}
-                    {locationOption === fixedVenueLocation && (
+                    {fixedVenueLocation && locationOption === fixedVenueLocation && (
                       <div className="mt-3 space-y-2 rounded-lg border border-amber-100 bg-amber-50/80 p-3">
                         <label className="block text-sm font-medium text-gray-800">
                           場地佔用方式
@@ -1462,7 +1478,9 @@ const ActivityManagement: React.FC = () => {
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         >
-                          <option value="full_venue">包場（三場地）</option>
+                          <option value="full_venue">
+                            包場（{venueCourts.length > 0 ? `${venueCourts.length} 場地` : '全部場地'}）
+                          </option>
                           <option value="single_court">單一場地</option>
                         </select>
                         {formData.venueHoldMode === 'single_court' && (

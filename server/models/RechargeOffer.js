@@ -39,13 +39,21 @@ const rechargeOfferSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
-  }
+  },
+  /** 歸屬店鋪（null = PickCourt 平台充值優惠） */
+  store: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Store',
+    default: null,
+    index: true,
+  },
 }, {
   timestamps: true
 });
 
 // 索引優化查詢
+rechargeOfferSchema.index({ store: 1, isActive: 1, expiryDate: 1 });
+rechargeOfferSchema.index({ store: 1, sortOrder: 1 });
 rechargeOfferSchema.index({ isActive: 1, expiryDate: 1 });
-rechargeOfferSchema.index({ sortOrder: 1 });
 
 module.exports = mongoose.model('RechargeOffer', rechargeOfferSchema);

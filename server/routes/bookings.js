@@ -5,6 +5,12 @@ const Booking = require('../models/Booking');
 const Court = require('../models/Court');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
+const {
+  getAvailableBalanceForStore,
+  deductForStoreBooking,
+  refundForStoreBooking,
+  attachRelatedBookingToSpend,
+} = require('../services/storeBalanceService');
 const { auth, adminAuth } = require('../middleware/auth');
 const { applyStoreScope } = require('../utils/tenantAccess');
 const { isUserVipActive, resolveMembership } = require('../utils/platformMembershipService');
@@ -316,29 +322,40 @@ router.post('/', [
       }
     }
     
-    // 檢查用戶餘額（使用預約用戶的 ID，而不是當前登錄用戶）
-    let userBalance = await UserBalance.findOne({ user: bookingUserId });
-    if (!userBalance) {
-      userBalance = new UserBalance({ user: bookingUserId });
-    }
+    // 檢查該店可用積分（店鋪積分 + PickCourt 平台積分）
+    const storeId = courtDoc.store;
+    let deductionSplit = { storeUsed: 0, platformUsed: 0, total: 0 };
     
     // 如果不是管理員 bypass，檢查積分餘額
-    if (!bypassRestrictions && userBalance.balance < pointsToDeduct) {
-      return res.status(400).json({ 
-        message: '積分餘額不足',
-        required: pointsToDeduct,
-        available: userBalance.balance,
-        discount: isVip ? 'VIP會員8折' : '無折扣'
-      });
+    if (!bypassRestrictions) {
+      const finalPointsToDeduct = isCustomPoints ? customPoints : pointsToDeduct;
+      const available = await getAvailableBalanceForStore(bookingUserId, storeId);
+      if (available.total < finalPointsToDeduct) {
+        const storeDoc = await Store.findById(storeId).select('name slug').lean();
+        return res.status(400).json({ 
+          message: '積分餘額不足',
+          code: 'INSUFFICIENT_STORE_BALANCE',
+          required: finalPointsToDeduct,
+          available: available.total,
+          availableStore: available.store,
+          availablePlatform: available.platform,
+          discount: isVip ? 'VIP會員8折' : '無折扣',
+          storeId: String(storeId),
+          storeSlug: storeDoc?.slug || null,
+          storeName: storeDoc?.name || null,
+        });
+      }
     }
     
     // 如果不是管理員 bypass，扣除積分
     if (!bypassRestrictions) {
       const finalPointsToDeduct = isCustomPoints ? customPoints : pointsToDeduct;
-      await userBalance.deductBalance(
+      deductionSplit = await deductForStoreBooking(
+        bookingUserId,
+        storeId,
         finalPointsToDeduct, 
         `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}${isCustomPoints ? ' (自訂積分)' : ''}`,
-        null // 稍後會更新為實際的預約ID
+        null
       );
     }
     
@@ -372,6 +389,8 @@ router.post('/', [
         // 管理員繞過限制：未扣積分，標記 admin_waived 並記 pointsDeducted=0，避免取消時誤退
         method: bypassRestrictions ? 'admin_waived' : 'points',
         pointsDeducted: bypassRestrictions ? 0 : pointsToDeduct,
+        storePointsDeducted: bypassRestrictions ? 0 : deductionSplit.storeUsed,
+        platformPointsDeducted: bypassRestrictions ? 0 : deductionSplit.platformUsed,
         originalPrice: tempBooking.pricing.totalPrice,
         discount: isVip ? 20 : 0 // VIP折扣百分比
       },
@@ -527,13 +546,14 @@ router.post('/', [
       });
     }
     
-    // 更新用戶餘額記錄中的預約ID（僅在有實際扣款時，避免誤掛到無關交易）
-    if (!bypassRestrictions) {
-      const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
-      if (latestTransaction) {
-        latestTransaction.relatedBooking = booking._id;
-        await userBalance.save();
-      }
+    // 更新餘額交易記錄中的預約ID
+    if (!bypassRestrictions && booking?._id) {
+      await attachRelatedBookingToSpend(
+        bookingUserId,
+        storeId,
+        deductionSplit,
+        booking._id
+      );
     }
 
     // 填充場地信息
@@ -577,12 +597,18 @@ router.post('/', [
     if (soloCourtBooking?.court) tuyaCourtIds.push(soloCourtBooking.court);
     scheduleTuyaCourtsSync(tuyaCourtIds, 'booking_created');
 
+    const availableAfter = await getAvailableBalanceForStore(bookingUserId, storeId);
+
     // 準備響應數據
     const responseData = {
       message: '預約創建成功',
       booking,
-      pointsDeducted: pointsToDeduct,
-      remainingBalance: userBalance.balance,
+      pointsDeducted: bypassRestrictions ? 0 : (isCustomPoints ? customPoints : pointsToDeduct),
+      storePointsDeducted: deductionSplit.storeUsed,
+      platformPointsDeducted: deductionSplit.platformUsed,
+      remainingBalance: availableAfter.total,
+      remainingStoreBalance: availableAfter.store,
+      remainingPlatformBalance: availableAfter.platform,
       discount: isVip ? 'VIP會員8折' : '無折扣'
     };
 
@@ -1133,12 +1159,22 @@ router.put('/:id/cancel', [
           booking.payment.status = 'pending_refund'; // 標記為待退款
           booking.payment.requiresManualRefund = true; // 需要手動退款
         } else {
-          // 普通預約自動退款
-          let userBalance = await UserBalance.findOne({ user: booking.user });
-          if (!userBalance) {
-            userBalance = new UserBalance({ user: booking.user, balance: 0, totalRecharged: 0, totalSpent: 0, transactions: [] });
+          const refundStoreId = booking.store || booking.court?.store;
+          if (refundStoreId) {
+            let storeUsed = Number(booking.payment?.storePointsDeducted || 0);
+            let platformUsed = Number(booking.payment?.platformPointsDeducted || 0);
+            if (storeUsed === 0 && platformUsed === 0) {
+              storeUsed = pointsToRefund;
+            }
+            await refundForStoreBooking(
+              booking.user,
+              refundStoreId,
+              storeUsed,
+              platformUsed,
+              `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`,
+              booking._id
+            );
           }
-          await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
           booking.payment.status = 'refunded';
           booking.payment.refundedAt = new Date();
         }

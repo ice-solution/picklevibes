@@ -141,6 +141,16 @@ const bookingSchema = new mongoose.Schema({
       type: Number,
       default: 0
     },
+    /** 扣款來源：該店積分 */
+    storePointsDeducted: {
+      type: Number,
+      default: 0
+    },
+    /** 扣款來源：PickCourt 平台積分 */
+    platformPointsDeducted: {
+      type: Number,
+      default: 0
+    },
     originalPrice: {
       type: Number,
       default: 0

@@ -51,7 +51,7 @@ import Vlog from './pages/Vlog';
 import GameJoin from './pages/GameJoin';
 import PickleCourtHome from './pages/PickleCourtHome';
 import PickleCourtSearch from './pages/PickleCourtSearch';
-import { isPickCourtPublicPath } from './utils/pickcourtRoutes';
+import { isPickCourtPublicPath, isPickCourtAdminPath } from './utils/pickcourtRoutes';
 import { useDocumentPlatformBrand } from './hooks/useDocumentPlatformBrand';
 import StoreAdmin from './pages/StoreAdmin';
 import StorePublic from './pages/StorePublic';
@@ -87,7 +87,12 @@ function AppShell() {
   const isStoreAdmin = /^\/store\/[^/]+\/admin/.test(location.pathname);
   const isStoreLogin = /^\/store\/[^/]+\/login$/.test(location.pathname);
   const { resolved: isTenantHost } = useStoreTenantHost();
-  const hideMainChrome = isPickCourtPublicPath(location.pathname) || isStoreAdmin || isStoreLogin || isTenantHost;
+  const hideMainChrome =
+    isPickCourtPublicPath(location.pathname) ||
+    isPickCourtAdminPath(location.pathname) ||
+    isStoreAdmin ||
+    isStoreLogin ||
+    isTenantHost;
   useDocumentPlatformBrand(hideMainChrome);
 
   return (

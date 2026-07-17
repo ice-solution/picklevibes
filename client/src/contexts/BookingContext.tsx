@@ -321,10 +321,29 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       setBookings(prev => [newBooking, ...prev]);
       return newBooking;
     } catch (error: any) {
-      const message = error.response?.data?.message || '創建預約失敗';
-      const bookingError = new Error(message) as Error & { isInsufficientBalance?: boolean };
+      const data = error.response?.data || {};
+      const message = data.message || '創建預約失敗';
+      const bookingError = new Error(message) as Error & {
+        isInsufficientBalance?: boolean;
+        storeSlug?: string | null;
+        storeId?: string | null;
+        storeName?: string | null;
+        requiredPoints?: number;
+        availablePoints?: number;
+      };
       bookingError.isInsufficientBalance =
-        message.includes('積分餘額不足') || message.includes('餘額不足');
+        data.code === 'INSUFFICIENT_STORE_BALANCE' ||
+        message.includes('積分餘額不足') ||
+        message.includes('餘額不足');
+      bookingError.storeSlug = data.storeSlug ?? null;
+      bookingError.storeId = data.storeId ?? null;
+      bookingError.storeName = data.storeName ?? null;
+      bookingError.requiredPoints = data.required;
+      bookingError.availablePoints = data.available;
+      (bookingError as typeof bookingError & { availableStore?: number; availablePlatform?: number }).availableStore =
+        data.availableStore;
+      (bookingError as typeof bookingError & { availableStore?: number; availablePlatform?: number }).availablePlatform =
+        data.availablePlatform;
       throw bookingError;
     } finally {
       setLoading(false);

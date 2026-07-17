@@ -206,11 +206,17 @@ const StoreManagement: React.FC = () => {
     try {
       setSaving(true);
       const payload = {
-        ...form,
+        name: form.name,
+        slug: form.slug,
+        address: form.address,
+        district: form.district || null,
+        phone: form.phone,
+        isActive: form.isActive,
+        enableHikAccess: form.enableHikAccess,
+        accessControlVendor: form.enableHikAccess ? form.accessControlVendor : 'hik',
         hikKey: form.hikKey || null,
         hikSecret: form.hikSecret || null,
         hikAccessLevelId: form.hikAccessLevelId || null,
-        accessControlVendor: form.enableHikAccess ? form.accessControlVendor : 'hik',
         dahuaClientId: form.dahuaClientId || null,
         dahuaClientSecret: form.dahuaClientSecret || null,
         dahuaDeviceModel: form.dahuaDeviceModel || DAHUA_DEFAULT_DEVICE_MODEL,
@@ -222,7 +228,6 @@ const StoreManagement: React.FC = () => {
         tuyaPostBufferMinutes: Number(form.tuyaPostBufferMinutes) || 15,
         tuyaMergeGapMinutes: Number(form.tuyaMergeGapMinutes) || 0,
         allianceEnabled: form.allianceEnabled,
-        district: form.district || null,
         adminDomain: form.adminDomain.trim() || null,
         consumerDomain: form.consumerDomain.trim() || null,
         subscriptionPlan: form.subscriptionPlan,

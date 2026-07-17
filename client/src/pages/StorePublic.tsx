@@ -6,7 +6,7 @@ import SEO from '../components/SEO/SEO';
 import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
 import { resolveMediaUrl, storeBrandStyles, storePrimaryColor } from '../utils/storeBrandUtils';
-import { PICKCOURT_HOME, pickcourtHomeHash } from '../utils/pickcourtRoutes';
+import { PICKCOURT_HOME, PICKCOURT_ACCOUNT, pickcourtHomeHash } from '../utils/pickcourtRoutes';
 import { suggestCourtSlug } from '../constants/courtSlug';
 import { useStoreTenantHost } from '../contexts/StoreTenantHostContext';
 import {
@@ -16,6 +16,7 @@ import {
   ArrowRightIcon,
   TrophyIcon,
   UserGroupIcon,
+  CreditCardIcon,
 } from '@heroicons/react/24/outline';
 
 type StoreCourt = {
@@ -191,6 +192,13 @@ const StorePublic: React.FC = () => {
             >
               <CalendarDaysIcon className="w-5 h-5" />
               立即預約
+            </Link>
+            <Link
+              to={`${PICKCOURT_ACCOUNT.recharge}?store=${encodeURIComponent(store.slug)}`}
+              className="inline-flex items-center gap-2 border border-white/40 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/10 transition-colors"
+            >
+              <CreditCardIcon className="w-5 h-5" />
+              充值此店積分
             </Link>
             <Link
               to={pickcourtHomeHash('search')}

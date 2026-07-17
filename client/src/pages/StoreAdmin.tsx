@@ -14,8 +14,8 @@ import CoachClassManagement from '../components/Admin/CoachClassManagement';
 import CourtManagement from '../components/Admin/CourtManagement';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
+import StoreMemberManagement from '../components/Admin/StoreMemberManagement';
 import ActivityManagement from '../components/Admin/ActivityManagement';
-import RegularActivityManagement from '../components/Admin/RegularActivityManagement';
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import AccountingManagement from '../components/Admin/AccountingManagement';
@@ -38,6 +38,7 @@ import {
   ChatBubbleLeftRightIcon,
   BuildingStorefrontIcon,
   ArrowLeftIcon,
+  UsersIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -63,7 +64,7 @@ function StoreAdminShell() {
       { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
       { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
       { id: 'activities', name: '活動中心', icon: CalendarIcon, element: <ActivityManagement /> },
-      { id: 'regular-activities', name: '恆常活動', icon: CalendarIcon, element: <RegularActivityManagement /> },
+      { id: 'members', name: '店鋪會員', icon: UsersIcon, element: <StoreMemberManagement /> },
       { id: 'redeem', name: '兌換券', icon: TicketIcon, element: <RedeemCodeManagement /> },
       { id: 'recharge-offers', name: '充值優惠', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
       { id: 'accounting', name: '會計／用量', icon: CurrencyDollarIcon, element: <AccountingManagement /> },
@@ -77,8 +78,13 @@ function StoreAdminShell() {
 
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab) setActiveTab(tab);
-  }, [searchParams]);
+    if (!tab) return;
+    if (tabs.some((t) => t.id === tab)) {
+      setActiveTab(tab);
+    } else {
+      setActiveTab('bookings');
+    }
+  }, [searchParams, tabs]);
 
   const current = tabs.find((t) => t.id === activeTab) || tabs[0];
 

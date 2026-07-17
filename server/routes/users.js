@@ -2,6 +2,15 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
+const {
+  getStoreBalanceSummary,
+  getAvailableBalanceForStore,
+  addStoreBalance,
+  deductForStoreBooking,
+  completeRechargePayment,
+  reverseRechargePayment,
+} = require('../services/storeBalanceService');
+const { checkDocumentStoreAccess } = require('../utils/tenantAccess');
 const Recharge = require('../models/Recharge');
 const Store = require('../models/Store');
 const Court = require('../models/Court');
@@ -176,14 +185,29 @@ router.get('/', [auth, adminAuth], async (req, res) => {
       .limit(limit * 1)
       .skip((page - 1) * limit);
     
-    // 為每個用戶添加積分信息
+    // 為每個用戶添加積分信息（店鋪查詢時顯示該店餘額）
+    const balanceStoreId = lookupScope.storeId || null;
     const usersWithBalance = await Promise.all(users.map(async (user) => {
+      if (balanceStoreId) {
+        const [summary, available] = await Promise.all([
+          getStoreBalanceSummary(user._id, balanceStoreId),
+          getAvailableBalanceForStore(user._id, balanceStoreId),
+        ]);
+        return {
+          ...user.toObject(),
+          balance: summary.balance,
+          platformBalance: available.platform,
+          availableForBooking: available.total,
+          totalRecharged: summary.totalRecharged,
+          totalSpent: summary.totalSpent,
+        };
+      }
       const balance = await UserBalance.findOne({ user: user._id });
       return {
         ...user.toObject(),
         balance: balance ? balance.balance : 0,
         totalRecharged: balance ? balance.totalRecharged : 0,
-        totalSpent: balance ? balance.totalSpent : 0
+        totalSpent: balance ? balance.totalSpent : 0,
       };
     }));
     
@@ -270,13 +294,24 @@ router.get('/:id', [auth, adminAuth], async (req, res) => {
     }
     
     // 獲取用戶積分信息
-    const balance = await UserBalance.findOne({ user: user._id });
+    let balanceSummary;
+    if (storeId) {
+      balanceSummary = await getStoreBalanceSummary(user._id, storeId);
+    } else {
+      const balance = await UserBalance.findOne({ user: user._id });
+      balanceSummary = {
+        balance: balance ? balance.balance : 0,
+        totalRecharged: balance ? balance.totalRecharged : 0,
+        totalSpent: balance ? balance.totalSpent : 0,
+        transactions: balance ? balance.transactions : [],
+      };
+    }
     const userWithBalance = {
       ...user.toObject(),
-      balance: balance ? balance.balance : 0,
-      totalRecharged: balance ? balance.totalRecharged : 0,
-      totalSpent: balance ? balance.totalSpent : 0,
-      recentTransactions: balance ? balance.transactions.slice(-10).reverse() : []
+      balance: balanceSummary.balance,
+      totalRecharged: balanceSummary.totalRecharged,
+      totalSpent: balanceSummary.totalSpent,
+      recentTransactions: (balanceSummary.transactions || []).slice(-10).reverse(),
     };
     
     res.json({ user: userWithBalance });
@@ -502,26 +537,24 @@ router.post('/:id/manual-recharge', [
     const userId = req.params.id;
     
     const { store, court } = await resolveManualAdjustStoreCourt(storeId, courtId || null);
-    
-    // 檢查用戶是否存在
+    const storeAccess = checkDocumentStoreAccess(req.tenantAccess, store._id);
+    if (!storeAccess.ok) {
+      return res.status(storeAccess.status).json({ message: storeAccess.message });
+    }
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
     }
-    
-    // 獲取或創建用戶餘額記錄
-    let userBalance = await UserBalance.findOne({ user: userId });
-    if (!userBalance) {
-      userBalance = new UserBalance({ user: userId });
-    }
-    
-    // 創建充值記錄（模擬完整支付流程）
+
+    await assertStaffCanViewUser(req, userId, String(store._id));
+
     const recharge = new Recharge({
       user: userId,
       points: points,
-      amount: points, // 1積分 = 1港幣
-      status: 'completed', // 直接完成
-      paymentIntentId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
+      amount: points,
+      status: 'completed',
+      paymentIntentId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       description: `管理員手動充值 - ${reason}`,
       store: store._id,
       court: court?._id || null,
@@ -530,25 +563,23 @@ router.post('/:id/manual-recharge', [
         status: 'paid',
         method: 'manual',
         paidAt: new Date(),
-        transactionId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        transactionId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       },
-      pointsAdded: true, // 手動充值直接標記為已添加
-      pointsDeducted: false
+      pointsAdded: false,
+      pointsDeducted: false,
     });
     await recharge.save();
-    
-    // 增加用戶積分
-    await userBalance.addBalance(
-      points, 
-      `管理員手動充值 - ${reason} (管理員: ${req.user.name})`
+
+    const storeBalance = await addStoreBalance(
+      userId,
+      store._id,
+      points,
+      `管理員手動充值 - ${reason} (管理員: ${req.user.name})`,
+      recharge._id
     );
-    
-    // 更新充值記錄的關聯
-    const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
-    if (latestTransaction) {
-      latestTransaction.relatedBooking = null; // 手動充值不關聯預約
-    }
-    
+    recharge.pointsAdded = true;
+    await recharge.save();
+
     res.json({
       message: '手動充值成功',
       recharge: {
@@ -559,13 +590,13 @@ router.post('/:id/manual-recharge', [
         store: { id: store._id, name: store.name },
         court: court ? { id: court._id, name: court.name } : null,
         adminName: req.user.name,
-        completedAt: recharge.payment.paidAt
+        completedAt: recharge.payment.paidAt,
       },
       userBalance: {
-        balance: userBalance.balance,
-        totalRecharged: userBalance.totalRecharged,
-        totalSpent: userBalance.totalSpent
-      }
+        balance: storeBalance.balance,
+        totalRecharged: storeBalance.totalRecharged,
+        totalSpent: storeBalance.totalSpent,
+      },
     });
   } catch (error) {
     if (error.status) {
@@ -723,24 +754,35 @@ router.post('/:id/manual-deduct', [
         });
       }
 
-      // 獲取用戶餘額記錄
-      userBalance = await UserBalance.findOne({ user: userId });
-      if (!userBalance) {
-        return res.status(400).json({ message: '用戶沒有積分記錄' });
+      // 獲取店鋪餘額
+      const storeAccess = checkDocumentStoreAccess(req.tenantAccess, store._id);
+      if (!storeAccess.ok) {
+        return res.status(storeAccess.status).json({ message: storeAccess.message });
       }
-      
-      // 檢查餘額是否足夠
-      if (userBalance.balance < points) {
-        return res.status(400).json({ 
-          message: `餘額不足！當前餘額：${userBalance.balance}，嘗試扣除：${points}` 
+      await assertStaffCanViewUser(req, userId, String(store._id));
+
+      const summary = await getStoreBalanceSummary(userId, store._id);
+      const available = await getAvailableBalanceForStore(userId, store._id);
+      if (available.total < points) {
+        return res.status(400).json({
+          message: `餘額不足！店鋪 ${available.store} + 平台 ${available.platform} = ${available.total}，嘗試扣除：${points}`,
         });
       }
-      
-      // 扣除用戶積分
-      await userBalance.deductBalance(
-        points, 
+
+      const deductionSplit = await deductForStoreBooking(
+        userId,
+        store._id,
+        points,
         `管理員手動扣除 - ${reason} (管理員: ${req.user.name})`
       );
+      const updatedAvailable = await getAvailableBalanceForStore(userId, store._id);
+      userBalance = {
+        balance: updatedAvailable.store,
+        platformBalance: updatedAvailable.platform,
+        availableForBooking: updatedAvailable.total,
+        storeUsed: deductionSplit.storeUsed,
+        platformUsed: deductionSplit.platformUsed,
+      };
       
       // 創建扣除記錄（用於審計）
       deductRecord = new Recharge({
@@ -874,22 +916,30 @@ router.get('/:id/balance-history', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/:id/recharge-records', [auth, adminAuth], async (req, res) => {
   try {
-    const { page = 1, limit = 20, status } = req.query;
+    const { page = 1, limit = 20, status, store } = req.query;
     const userId = req.params.id;
-    
-    // 檢查用戶是否存在
+    const storeId = store ? String(store).trim() : '';
+
+    await assertStaffCanViewUser(req, userId, storeId || undefined);
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
     }
-    
-    // 構建查詢條件
+
     const query = { user: userId };
     if (status) {
       query.status = status;
     }
-    
-    // 獲取充值記錄
+    if (storeId) {
+      const storeDoc = await Store.findById(storeId).select('_id');
+      if (!storeDoc) {
+        return res.status(404).json({ message: '店鋪不存在' });
+      }
+      // 分店後台：顯示本店充值 + 平台充值（客人可用於本店）
+      query.$or = [{ store: storeDoc._id }, { store: null }];
+    }
+
     const rechargeRecords = await Recharge.find(query)
       .populate('redeemCode', 'code name')
       .populate('store', 'name slug')
@@ -898,18 +948,21 @@ router.get('/:id/recharge-records', [auth, adminAuth], async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
-    
+
     const total = await Recharge.countDocuments(query);
-    
+
     res.json({
       rechargeRecords,
       pagination: {
-        current: parseInt(page),
+        current: parseInt(page, 10),
         pages: Math.ceil(total / limit),
-        total
-      }
+        total,
+      },
     });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     console.error('獲取充值記錄錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
@@ -974,49 +1027,75 @@ router.put('/:id/recharge-records/:rechargeId/status', [
     }
     
     await recharge.save();
-    
-    // 處理積分變更
-    let userBalance = await UserBalance.findOne({ user: userId });
-    if (!userBalance) {
-      userBalance = new UserBalance({ user: userId });
+
+    let balanceResponse = { balance: 0, totalRecharged: 0, totalSpent: 0 };
+
+    if (recharge.store) {
+      const descBase = recharge.description || '充值';
+      if (status === 'completed' && oldStatus !== 'completed' && !recharge.pointsAdded) {
+        await completeRechargePayment(
+          recharge,
+          `充值確認 - ${descBase}${reason ? ` (${reason})` : ''}`
+        );
+      } else if (status === 'cancelled' && oldStatus === 'completed' && !recharge.pointsDeducted) {
+        await reverseRechargePayment(
+          recharge,
+          `充值取消 - ${descBase}${reason ? ` (${reason})` : ''}`
+        );
+      } else if (status === 'completed' && oldStatus === 'cancelled' && !recharge.pointsAdded) {
+        await completeRechargePayment(
+          recharge,
+          `充值重新確認 - ${descBase}${reason ? ` (${reason})` : ''}`
+        );
+      } else if (status === 'failed') {
+        recharge.pointsAdded = false;
+        recharge.pointsDeducted = false;
+        await recharge.save();
+      }
+      const summary = await getStoreBalanceSummary(userId, recharge.store);
+      balanceResponse = {
+        balance: summary.balance,
+        totalRecharged: summary.totalRecharged,
+        totalSpent: summary.totalSpent,
+      };
+    } else {
+      let userBalance = await UserBalance.findOne({ user: userId });
+      if (!userBalance) {
+        userBalance = new UserBalance({ user: userId });
+      }
+      if (status === 'completed' && oldStatus !== 'completed' && !recharge.pointsAdded) {
+        await userBalance.addBalance(
+          recharge.points,
+          `充值確認 - ${recharge.description}${reason ? ` (${reason})` : ''}`
+        );
+        recharge.pointsAdded = true;
+        recharge.pointsDeducted = false;
+      } else if (status === 'cancelled' && oldStatus === 'completed' && !recharge.pointsDeducted) {
+        await userBalance.deductBalance(
+          recharge.points,
+          `充值取消 - ${recharge.description}${reason ? ` (${reason})` : ''}`
+        );
+        recharge.pointsDeducted = true;
+        recharge.pointsAdded = false;
+      } else if (status === 'completed' && oldStatus === 'cancelled' && !recharge.pointsAdded) {
+        await userBalance.addBalance(
+          recharge.points,
+          `充值重新確認 - ${recharge.description}${reason ? ` (${reason})` : ''}`
+        );
+        recharge.pointsAdded = true;
+        recharge.pointsDeducted = false;
+      } else if (status === 'failed') {
+        recharge.pointsAdded = false;
+        recharge.pointsDeducted = false;
+      }
+      await recharge.save();
+      balanceResponse = {
+        balance: userBalance.balance,
+        totalRecharged: userBalance.totalRecharged,
+        totalSpent: userBalance.totalSpent,
+      };
     }
-    
-    // 如果從非完成狀態變為完成狀態，且尚未添加過積分
-    if (status === 'completed' && oldStatus !== 'completed' && !recharge.pointsAdded) {
-      await userBalance.addBalance(
-        recharge.points, 
-        `充值確認 - ${recharge.description}${reason ? ` (${reason})` : ''}`
-      );
-      recharge.pointsAdded = true;
-      recharge.pointsDeducted = false; // 重置扣除標記
-    }
-    // 如果從完成狀態變為取消狀態，且尚未扣除過積分
-    else if (status === 'cancelled' && oldStatus === 'completed' && !recharge.pointsDeducted) {
-      await userBalance.deductBalance(
-        recharge.points, 
-        `充值取消 - ${recharge.description}${reason ? ` (${reason})` : ''}`
-      );
-      recharge.pointsDeducted = true;
-      recharge.pointsAdded = false; // 重置添加標記
-    }
-    // 如果從取消狀態變為完成狀態，且尚未重新添加過積分
-    else if (status === 'completed' && oldStatus === 'cancelled' && !recharge.pointsAdded) {
-      await userBalance.addBalance(
-        recharge.points, 
-        `充值重新確認 - ${recharge.description}${reason ? ` (${reason})` : ''}`
-      );
-      recharge.pointsAdded = true;
-      recharge.pointsDeducted = false; // 重置扣除標記
-    }
-    // 如果變為失敗狀態，重置所有標記
-    else if (status === 'failed') {
-      recharge.pointsAdded = false;
-      recharge.pointsDeducted = false;
-    }
-    
-    // 保存更新後的記錄
-    await recharge.save();
-    
+
     res.json({
       message: '充值狀態更新成功',
       recharge: {
@@ -1025,13 +1104,9 @@ router.put('/:id/recharge-records/:rechargeId/status', [
         paymentStatus: recharge.payment.status,
         points: recharge.points,
         amount: recharge.amount,
-        updatedAt: recharge.updatedAt
+        updatedAt: recharge.updatedAt,
       },
-      userBalance: {
-        balance: userBalance.balance,
-        totalRecharged: userBalance.totalRecharged,
-        totalSpent: userBalance.totalSpent
-      }
+      userBalance: balanceResponse,
     });
   } catch (error) {
     console.error('更新充值狀態錯誤:', error);

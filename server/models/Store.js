@@ -168,8 +168,23 @@ storeSchema.index({ isActive: 1, sortOrder: 1 });
 storeSchema.index({ openApiEnabled: 1, openApiKey: 1 }, { sparse: true });
 storeSchema.index({ allianceEnabled: 1, isActive: 1 });
 storeSchema.index({ district: 1, allianceEnabled: 1, isActive: 1 });
-storeSchema.index({ adminDomain: 1 }, { unique: true, sparse: true });
-storeSchema.index({ consumerDomain: 1 }, { unique: true, sparse: true });
+// 僅對真正有值的域名做唯一約束；null / 缺欄位不佔索引（避免多店 adminDomain:null 互撞）
+storeSchema.index(
+  { adminDomain: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { adminDomain: { $type: 'string' } },
+    name: 'adminDomain_1_partial',
+  }
+);
+storeSchema.index(
+  { consumerDomain: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { consumerDomain: { $type: 'string' } },
+    name: 'consumerDomain_1_partial',
+  }
+);
 
 storeSchema.pre('save', function normalizeTenantDomains(next) {
   const { normalizeDomain } = require('../utils/tenantResolver');

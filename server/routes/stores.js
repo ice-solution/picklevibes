@@ -12,6 +12,44 @@ const { storeLogoUpload, processStoreLogo, deleteFile } = require('../middleware
 
 const router = express.Router();
 
+function duplicateKeyMessage(error) {
+  const key = Object.keys(error.keyPattern || {})[0] || '';
+  if (key === 'adminDomain') return '後台域名已被其他店鋪使用';
+  if (key === 'consumerDomain') return '前台域名已被其他店鋪使用';
+  if (key === 'slug') return 'slug 已存在';
+  if (key.includes('openApi')) return 'Open API 金鑰衝突，請重新產生';
+  return '資料與現有店鋪衝突（可能是 slug 或域名重複）';
+}
+
+/** 空域名改為 unset，避免 sparse unique 把 null 當成可碰撞值 */
+function applyDomainFields(update, unset = {}) {
+  if (Object.prototype.hasOwnProperty.call(update, 'adminDomain')) {
+    const v = update.adminDomain ? normalizeDomain(update.adminDomain) : null;
+    if (v) update.adminDomain = v;
+    else {
+      delete update.adminDomain;
+      unset.adminDomain = 1;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'consumerDomain')) {
+    const v = update.consumerDomain ? normalizeDomain(update.consumerDomain) : null;
+    if (v) update.consumerDomain = v;
+    else {
+      delete update.consumerDomain;
+      unset.consumerDomain = 1;
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(update, 'openApiKey')) {
+    const key = update.openApiKey ? String(update.openApiKey).trim() : '';
+    if (key) update.openApiKey = key;
+    else {
+      delete update.openApiKey;
+      unset.openApiKey = 1;
+    }
+  }
+  return unset;
+}
+
 // @route   GET /api/stores
 // @desc    取得上線店鋪（預約選店用）
 // @access  Public
@@ -70,12 +108,15 @@ router.post('/', [
       return res.status(400).json({ message: '加盟店鋪必須設定地區（香港 18 區）' });
     }
     if (payload.adminDomain) payload.adminDomain = normalizeDomain(payload.adminDomain);
+    else delete payload.adminDomain;
     if (payload.consumerDomain) payload.consumerDomain = normalizeDomain(payload.consumerDomain);
+    else delete payload.consumerDomain;
+    if (!payload.openApiKey) delete payload.openApiKey;
     const store = await Store.create(payload);
     res.status(201).json({ message: '店鋪建立成功', store });
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'slug 已存在' });
+      return res.status(400).json({ message: duplicateKeyMessage(error) });
     }
     console.error('建立店鋪錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
@@ -124,6 +165,13 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
     }
 
     const update = { ...req.body };
+    // 前端表單多餘欄位，勿寫入 Store schema
+    delete update.brandingDisplayName;
+    delete update.brandingTagline;
+    delete update.brandingIntro;
+    delete update.brandingLogoUrl;
+    delete update.brandingPrimaryColor;
+
     if (!req.tenantAccess?.isPlatformAdmin) {
       delete update.allianceEnabled;
       delete update.subscriptionPlan;
@@ -133,12 +181,9 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
       delete update.openApiEnabled;
     }
     if (update.slug) update.slug = String(update.slug).trim().toLowerCase();
-    if (update.adminDomain !== undefined) {
-      update.adminDomain = update.adminDomain ? normalizeDomain(update.adminDomain) : null;
-    }
-    if (update.consumerDomain !== undefined) {
-      update.consumerDomain = update.consumerDomain ? normalizeDomain(update.consumerDomain) : null;
-    }
+
+    const unset = applyDomainFields(update);
+
     if (update.district !== undefined) {
       if (!isValidDistrict(update.district)) {
         return res.status(400).json({ message: '請選擇有效的香港區域' });
@@ -147,19 +192,30 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
     }
     if (update.allianceEnabled === true || (update.allianceEnabled === undefined && existing.allianceEnabled)) {
       const merged = { ...existing.toObject(), ...update };
+      if (Object.keys(unset).length) {
+        for (const k of Object.keys(unset)) merged[k] = null;
+      }
       if (merged.allianceEnabled && !merged.district) {
         return res.status(400).json({ message: '加盟店鋪必須設定地區（香港 18 區）' });
       }
     }
     if (update.allianceEnabled === false && existing.allianceEnabled) {
-      const hasDomains = update.adminDomain || update.consumerDomain || existing.adminDomain || existing.consumerDomain;
-      if (hasDomains) {
+      const hasDomains =
+        update.adminDomain ||
+        existing.adminDomain ||
+        update.consumerDomain ||
+        existing.consumerDomain;
+      if (hasDomains && !unset.adminDomain && !unset.consumerDomain) {
         return res.status(400).json({
           message: '已設定 SaaS 域名的加盟店鋪不可直接退出聯盟，請先清除域名設定',
         });
       }
     }
-    const store = await Store.findByIdAndUpdate(req.params.id, update, {
+
+    const mongoUpdate = { $set: update };
+    if (Object.keys(unset).length) mongoUpdate.$unset = unset;
+
+    const store = await Store.findByIdAndUpdate(req.params.id, mongoUpdate, {
       new: true,
       runValidators: true,
     });
@@ -167,7 +223,11 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
     res.json({ message: '店鋪更新成功', store });
   } catch (error) {
     if (error.code === 11000) {
-      return res.status(400).json({ message: 'slug 已存在' });
+      return res.status(400).json({ message: duplicateKeyMessage(error) });
+    }
+    if (error.name === 'ValidationError') {
+      const first = Object.values(error.errors || {})[0];
+      return res.status(400).json({ message: first?.message || '輸入驗證失敗' });
     }
     console.error('更新店鋪錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useBooking } from '../../contexts/BookingContext';
+import { useBooking, BOOKING_STORE_SLUG_STORAGE_KEY } from '../../contexts/BookingContext';
+import { buildAccountRechargeUrl } from '../../utils/pickcourtRoutes';
 import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
 import apiConfig from '../../config/api';
@@ -52,7 +53,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   storeName,
   storeAddress,
 }) => {
-  const { createBooking } = useBooking();
+  const { createBooking, selectedStore } = useBooking();
   const { user } = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [specialRequests, setSpecialRequests] = useState('');
@@ -213,8 +214,34 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         message.includes('餘額不足');
 
       if (isInsufficientBalance) {
-        alert('積分餘額不足，請先充值後再完成預約。');
-        window.location.assign('/account/recharge?from=booking&reason=insufficient_balance');
+        const storeSlug =
+          error?.storeSlug ||
+          selectedStore?.slug ||
+          localStorage.getItem(BOOKING_STORE_SLUG_STORAGE_KEY) ||
+          undefined;
+        const storeLabel = error?.storeName || selectedStore?.name || '此店鋪';
+        const required = error?.requiredPoints;
+        const available = error?.availablePoints;
+        const availableStore = (error as { availableStore?: number })?.availableStore;
+        const availablePlatform = (error as { availablePlatform?: number })?.availablePlatform;
+        let detail = '';
+        if (typeof required === 'number' && typeof available === 'number') {
+          detail = `\n\n需要 ${required} 分，可用 ${available} 分`;
+          if (typeof availableStore === 'number' && typeof availablePlatform === 'number') {
+            detail += `（店鋪 ${availableStore} + 平台 ${availablePlatform}）`;
+          }
+        }
+        const ok = window.confirm(
+          `${storeLabel} 預約積分不足，建議先充值 PickCourt 平台積分（全聯盟通用）。${detail}\n\n是否前往充值頁？`
+        );
+        if (ok) {
+          window.location.assign(
+            buildAccountRechargeUrl(undefined, {
+              from: 'booking',
+              reason: 'insufficient_balance',
+            })
+          );
+        }
         return;
       }
       alert(message);

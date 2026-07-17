@@ -11,6 +11,9 @@ import {
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
+/** PickleVibes 主站預設充值店鋪 */
+const LEGACY_RECHARGE_STORE = 'lai-chi-kok';
+
 interface RechargeOption {
   _id?: string; // 充值優惠ID
   name: string;
@@ -51,8 +54,8 @@ const Recharge: React.FC = () => {
   const fetchData = async () => {
     try {
       const [offersRes, balanceRes] = await Promise.all([
-        axios.get('/recharge-offers'),
-        axios.get('/recharge/balance')
+        axios.get(`/recharge-offers?store=${LEGACY_RECHARGE_STORE}`),
+        axios.get(`/recharge/balance?store=${LEGACY_RECHARGE_STORE}`)
       ]);
       
       // 將 API 返回的優惠轉換為 RechargeOption 格式
@@ -97,8 +100,8 @@ const Recharge: React.FC = () => {
       const response = await axios.post('/recharge/create-checkout-session', {
         points: option.points,
         amount: option.amount,
-        rechargeOfferId: option._id || null // 傳遞優惠ID，如果有的話
-        // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
+        rechargeOfferId: option._id || null,
+        store: LEGACY_RECHARGE_STORE,
       });
 
       // 重定向到 Stripe Checkout
@@ -149,8 +152,8 @@ const Recharge: React.FC = () => {
       const response = await axios.post('/recharge/create-checkout-session', {
         points: points,
         amount: amount,
-        rechargeOfferId: null // 自定義充值，不使用優惠
-        // redeemCodeId: redeemData?.id // 兌換碼已移至預約確認頁面
+        rechargeOfferId: null,
+        store: LEGACY_RECHARGE_STORE,
       });
 
       // 重定向到 Stripe Checkout

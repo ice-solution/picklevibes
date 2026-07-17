@@ -1,6 +1,10 @@
 const Booking = require('../models/Booking');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
+const {
+  getAvailableBalanceForStore,
+  deductForStoreBooking,
+} = require('../services/storeBalanceService');
 const Recharge = require('../models/Recharge');
 const Store = require('../models/Store');
 const { collectBundledBookingIds } = require('../utils/bookingBundle');
@@ -200,13 +204,13 @@ async function settleBookingWithPoints({
       String(booking.specialRequests || '').includes('包場'));
   const perBookingPoints = allocateBundlePoints(bundle, deductPoints, { isFullVenue });
   const { store, court } = await resolveBookingStoreCourt(booking);
+  const storeId = store?._id || store;
 
-  let userBalance = await UserBalance.findOne({ user: targetUserId });
-  if (!userBalance) {
-    userBalance = new UserBalance({ user: targetUserId });
-  }
-  if (userBalance.balance < deductPoints) {
-    const err = new Error(`餘額不足！當前餘額：${userBalance.balance}，需要：${deductPoints}`);
+  const available = await getAvailableBalanceForStore(targetUserId, storeId);
+  if (available.total < deductPoints) {
+    const err = new Error(
+      `餘額不足！店鋪 ${available.store} + 平台 ${available.platform} = ${available.total}，需要：${deductPoints}`
+    );
     err.status = 400;
     throw err;
   }
@@ -221,9 +225,12 @@ async function settleBookingWithPoints({
     day: '2-digit',
   }).format(new Date(booking.date));
 
-  await userBalance.deductBalance(
+  const settleDescription = `${isFullVenue ? '包場結算' : '預約結算'} - ${courtLabel} ${dateLabel} ${booking.startTime}-${booking.endTime} (${reason})`;
+  const deductionSplit = await deductForStoreBooking(
+    targetUserId,
+    storeId,
     deductPoints,
-    `${isFullVenue ? '包場結算' : '預約結算'} - ${courtLabel} ${dateLabel} ${booking.startTime}-${booking.endTime} (${reason})`
+    settleDescription
   );
 
   const player = buildPlayerFromUser(targetUser);
@@ -239,6 +246,8 @@ async function settleBookingWithPoints({
     }
     b.payment.method = 'points';
     b.payment.pointsDeducted = courtPts;
+    b.payment.storePointsDeducted = i === 0 ? deductionSplit.storeUsed : 0;
+    b.payment.platformPointsDeducted = i === 0 ? deductionSplit.platformUsed : 0;
     b.payment.originalPrice = b.pricing?.totalPrice || courtPts;
     b.payment.status = 'paid';
     b.payment.paidAt = paidAt;
@@ -282,13 +291,17 @@ async function settleBookingWithPoints({
     populate: { path: 'store', select: 'name slug' },
   });
 
+  const updatedAvailable = await getAvailableBalanceForStore(targetUserId, storeId);
+
   return {
     booking,
     deductRecord,
     userBalance: {
-      balance: userBalance.balance,
-      totalRecharged: userBalance.totalRecharged,
-      totalSpent: userBalance.totalSpent,
+      balance: updatedAvailable.store,
+      platformBalance: updatedAvailable.platform,
+      availableForBooking: updatedAvailable.total,
+      storeUsed: deductionSplit.storeUsed,
+      platformUsed: deductionSplit.platformUsed,
     },
     reassigned: !isSameUser,
     bundleCount: bundle.length,

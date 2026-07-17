@@ -15,6 +15,8 @@ import {
   STORE_BRAND_CLASS,
 } from '../utils/storeBrandUtils';
 import StoreBrandLogo from '../components/StoreBrandLogo';
+import PickCourtAuthLayout from '../layouts/PickCourtAuthLayout';
+import { PICKCOURT_HOME } from '../utils/pickcourtRoutes';
 
 type StoreLoginBrand = {
   name: string;
@@ -298,12 +300,138 @@ const Login: React.FC<LoginProps> = ({ storeContextSlug, defaultRedirect }) => {
 
   const registerState = redirectFrom ? { from: redirectFrom } : undefined;
 
+  const loginForm = (
+    <form className="space-y-6" onSubmit={handleSubmit}>
+      {errors.general && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <p className="text-sm text-red-800">{errors.general}</p>
+        </div>
+      )}
+
+      <div>
+        <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+          電子郵件地址
+        </label>
+        <div className="mt-1">
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            value={formData.email}
+            onChange={handleChange}
+            className={`input-field ${errors.email ? 'border-red-500 focus:ring-red-500' : 'focus:ring-pickcourt-gold focus:border-pickcourt-gold'}`}
+            placeholder="請輸入您的電子郵件"
+          />
+          {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+          密碼
+        </label>
+        <div className="mt-1 relative">
+          <input
+            id="password"
+            name="password"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="current-password"
+            value={formData.password}
+            onChange={handleChange}
+            className={`input-field pr-10 ${
+              errors.password ? 'border-red-500 focus:ring-red-500' : 'focus:ring-pickcourt-gold focus:border-pickcourt-gold'
+            }`}
+            placeholder="請輸入您的密碼"
+          />
+          <button
+            type="button"
+            className="absolute inset-y-0 right-0 pr-3 flex items-center"
+            onClick={() => setShowPassword(!showPassword)}
+          >
+            {showPassword ? (
+              <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+            ) : (
+              <EyeIcon className="h-5 w-5 text-gray-400" />
+            )}
+          </button>
+          {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <input
+            id="remember-me"
+            name="remember-me"
+            type="checkbox"
+            checked={rememberMe}
+            onChange={(e) => setRememberMe(e.target.checked)}
+            className="h-4 w-4 text-pickcourt-navy focus:ring-pickcourt-gold border-gray-300 rounded"
+          />
+          <label htmlFor="remember-me" className="ml-2 block text-sm text-slate-900">
+            記住我
+          </label>
+        </div>
+
+        <div className="text-sm">
+          <Link
+            to="/forgot-password"
+            className="font-medium text-pickcourt-navy hover:text-pickcourt-gold transition-colors duration-200"
+          >
+            忘記密碼？
+          </Link>
+        </div>
+      </div>
+
+      <div>
+        <button
+          type="submit"
+          disabled={isLoading}
+          className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold transition-colors duration-200 ${
+            isLoading
+              ? 'bg-gray-400 text-white cursor-not-allowed'
+              : 'bg-pickcourt-gold text-pickcourt-navy-dark hover:bg-pickcourt-gold-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pickcourt-gold'
+          }`}
+        >
+          {isLoading ? '登入中...' : '登入'}
+        </button>
+      </div>
+    </form>
+  );
+
+  if (!isStoreLogin) {
+    return (
+      <PickCourtAuthLayout
+        title="登入 PickCourt"
+        subtitle={
+          <>
+            或者{' '}
+            <Link
+              to="/register"
+              state={registerState}
+              className="font-medium text-pickcourt-navy hover:text-pickcourt-gold transition-colors duration-200"
+            >
+              創建新帳戶
+            </Link>
+          </>
+        }
+      >
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          {loginForm}
+        </motion.div>
+      </PickCourtAuthLayout>
+    );
+  }
+
   return (
     <div
-      className={`min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 ${
-        isStoreLogin ? STORE_BRAND_CLASS : ''
-      }`}
-      style={isStoreLogin ? brandStyles : undefined}
+      className={`min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 ${STORE_BRAND_CLASS}`}
+      style={brandStyles}
     >
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <motion.div
@@ -312,40 +440,21 @@ const Login: React.FC<LoginProps> = ({ storeContextSlug, defaultRedirect }) => {
           transition={{ duration: 0.6 }}
           className="text-center"
         >
-          {isStoreLogin ? (
-            <div className="flex flex-col items-center">
-              {storeBrandLoading ? (
-                <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl bg-gray-100 animate-pulse" />
-              ) : (
-                <StoreBrandLogo
-                  logoPath={logoPath}
-                  displayName={displayName}
-                  primaryColor={primaryColor}
-                />
-              )}
-              <h2 className="mt-6 text-2xl sm:text-3xl font-bold text-gray-900">
-                登入 {displayName}
-              </h2>
-              <p className="mt-2 text-sm text-gray-600">店鋪員工後台</p>
-            </div>
-          ) : (
-            <>
-              <Link to="/" className="flex items-center justify-center">
-                <img src="/pickcourt_logo.jpg" alt="PickCourt" className="h-14 w-auto object-contain" />
-              </Link>
-              <h2 className="mt-6 text-3xl font-bold text-gray-900">登入 PickCourt</h2>
-              <p className="mt-2 text-sm text-gray-600">
-                或者{' '}
-                <Link
-                  to="/register"
-                  state={registerState}
-                  className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
-                >
-                  創建新帳戶
-                </Link>
-              </p>
-            </>
-          )}
+          <div className="flex flex-col items-center">
+            {storeBrandLoading ? (
+              <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl bg-gray-100 animate-pulse" />
+            ) : (
+              <StoreBrandLogo
+                logoPath={logoPath}
+                displayName={displayName}
+                primaryColor={primaryColor}
+              />
+            )}
+            <h2 className="mt-6 text-2xl sm:text-3xl font-bold text-gray-900">
+              登入 {displayName}
+            </h2>
+            <p className="mt-2 text-sm text-gray-600">店鋪員工後台</p>
+          </div>
         </motion.div>
       </div>
 
@@ -356,108 +465,15 @@ const Login: React.FC<LoginProps> = ({ storeContextSlug, defaultRedirect }) => {
         className="mt-8 sm:mx-auto sm:w-full sm:max-w-md"
       >
         <div className="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {errors.general && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-800">{errors.general}</p>
-              </div>
-            )}
-
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                電子郵件地址
-              </label>
-              <div className="mt-1">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={`input-field ${errors.email ? 'border-red-500 focus:ring-red-500' : ''}`}
-                  placeholder="請輸入您的電子郵件"
-                />
-                {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                密碼
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="current-password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className={`input-field pr-10 ${
-                    errors.password ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
-                  placeholder="請輸入您的密碼"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeSlashIcon className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <EyeIcon className="h-5 w-5 text-gray-400" />
-                  )}
-                </button>
-                {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
-                <input
-                  id="remember-me"
-                  name="remember-me"
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                />
-                <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  記住我
-                </label>
-              </div>
-
-              <div className="text-sm">
-                <Link
-                  to="/forgot-password"
-                  className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
-                >
-                  忘記密碼？
-                </Link>
-              </div>
-            </div>
-
-            <div>
-              <button
-                type="submit"
-                disabled={isLoading}
-                className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white transition-colors duration-200 ${
-                  isLoading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500'
-                }`}
-              >
-                {isLoading ? '登入中...' : '登入'}
-              </button>
-            </div>
-          </form>
-
-          {isStoreLogin && storeSlug && (
+          {loginForm}
+          {storeSlug && (
             <p className="mt-6 text-center text-xs text-gray-500">
               <Link to={`/store/${storeSlug}`} className="text-primary-600 hover:underline">
                 返回店鋪公開頁
+              </Link>
+              <span className="mx-2">·</span>
+              <Link to={PICKCOURT_HOME} className="text-primary-600 hover:underline">
+                PickCourt
               </Link>
             </p>
           )}

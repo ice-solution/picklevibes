@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate, type Location } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { getPostAuthRedirectPath } from '../utils/authRedirect';
+import PickCourtAuthLayout from '../layouts/PickCourtAuthLayout';
 
 const Register: React.FC = () => {
   const [formData, setFormData] = useState({
@@ -11,7 +12,7 @@ const Register: React.FC = () => {
     email: '',
     password: '',
     confirmPassword: '',
-    phone: ''
+    phone: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -31,16 +32,15 @@ const Register: React.FC = () => {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value
+      [name]: value,
     }));
-    
-    // 清除該字段的錯誤
+
     if (errors[name]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [name]: ''
+        [name]: '',
       }));
     }
   };
@@ -86,7 +86,7 @@ const Register: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!validateForm()) {
       return;
     }
@@ -97,7 +97,7 @@ const Register: React.FC = () => {
         name: formData.name.trim(),
         email: formData.email.trim(),
         password: formData.password,
-        phone: formData.phone.trim()
+        phone: formData.phone.trim(),
       });
       navigate(getPostAuthRedirectPath(redirectFrom), { replace: true });
     } catch (error: any) {
@@ -107,235 +107,197 @@ const Register: React.FC = () => {
     }
   };
 
+  const fieldFocus = 'focus:ring-pickcourt-gold focus:border-pickcourt-gold';
+
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
-      <div className="sm:mx-auto sm:w-full sm:max-w-md">
-        <motion.div
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center"
-        >
-          <Link to="/" className="flex items-center justify-center">
-            <img src="/pickcourt_logo.jpg" alt="PickCourt" className="h-14 w-auto object-contain" />
+    <PickCourtAuthLayout
+      title="加入 PickCourt"
+      subtitle={
+        <>
+          或者{' '}
+          <Link
+            to="/login"
+            state={redirectFrom ? { from: redirectFrom } : undefined}
+            className="font-medium text-pickcourt-navy hover:text-pickcourt-gold transition-colors duration-200"
+          >
+            登入現有帳戶
           </Link>
-          <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            加入 PickCourt
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            或者{' '}
-            <Link
-              to="/login"
-              state={redirectFrom ? { from: redirectFrom } : undefined}
-              className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
-            >
-              登入現有帳戶
-            </Link>
-          </p>
-        </motion.div>
-      </div>
-
+        </>
+      }
+    >
       <motion.div
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.2 }}
-        className="mt-8 sm:mx-auto sm:w-full sm:max-w-md"
+        transition={{ duration: 0.4 }}
       >
-        <div className="bg-white py-8 px-4 shadow-xl rounded-2xl sm:px-10">
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            {/* 一般錯誤信息 */}
-            {errors.general && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-                <p className="text-sm text-red-800">{errors.general}</p>
-              </div>
-            )}
-
-            {/* 姓名 */}
-            <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                姓名
-              </label>
-              <div className="mt-1">
-                <input
-                  id="name"
-                  name="name"
-                  type="text"
-                  autoComplete="name"
-                  value={formData.name}
-                  onChange={handleChange}
-                  className={`input-field ${
-                    errors.name ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
-                  placeholder="請輸入您的姓名"
-                />
-                {errors.name && (
-                  <p className="mt-1 text-sm text-red-600">{errors.name}</p>
-                )}
-              </div>
+        <form className="space-y-6" onSubmit={handleSubmit}>
+          {errors.general && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <p className="text-sm text-red-800">{errors.general}</p>
             </div>
+          )}
 
-            {/* 電子郵件 */}
-            <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                電子郵件地址
-              </label>
-              <div className="mt-1">
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  className={`input-field ${
-                    errors.email ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
-                  placeholder="請輸入您的電子郵件"
-                />
-                {errors.email && (
-                  <p className="mt-1 text-sm text-red-600">{errors.email}</p>
-                )}
-              </div>
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-slate-700">
+              姓名
+            </label>
+            <div className="mt-1">
+              <input
+                id="name"
+                name="name"
+                type="text"
+                autoComplete="name"
+                value={formData.name}
+                onChange={handleChange}
+                className={`input-field ${errors.name ? 'border-red-500 focus:ring-red-500' : fieldFocus}`}
+                placeholder="請輸入您的姓名"
+              />
+              {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
             </div>
+          </div>
 
-            {/* 電話號碼 */}
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                電話號碼
-              </label>
-              <div className="mt-1">
-                <input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  autoComplete="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className={`input-field ${
-                    errors.phone ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
-                  placeholder="請輸入您的電話號碼"
-                />
-                {errors.phone && (
-                  <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
-                )}
-              </div>
+          <div>
+            <label htmlFor="email" className="block text-sm font-medium text-slate-700">
+              電子郵件地址
+            </label>
+            <div className="mt-1">
+              <input
+                id="email"
+                name="email"
+                type="email"
+                autoComplete="email"
+                value={formData.email}
+                onChange={handleChange}
+                className={`input-field ${errors.email ? 'border-red-500 focus:ring-red-500' : fieldFocus}`}
+                placeholder="請輸入您的電子郵件"
+              />
+              {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
             </div>
+          </div>
 
-            {/* 密碼 */}
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                密碼
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  value={formData.password}
-                  onChange={handleChange}
-                  className={`input-field pr-10 ${
-                    errors.password ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
-                  placeholder="請輸入您的密碼"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeSlashIcon className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <EyeIcon className="h-5 w-5 text-gray-400" />
-                  )}
-                </button>
-                {errors.password && (
-                  <p className="mt-1 text-sm text-red-600">{errors.password}</p>
-                )}
-              </div>
+          <div>
+            <label htmlFor="phone" className="block text-sm font-medium text-slate-700">
+              電話號碼
+            </label>
+            <div className="mt-1">
+              <input
+                id="phone"
+                name="phone"
+                type="tel"
+                autoComplete="tel"
+                value={formData.phone}
+                onChange={handleChange}
+                className={`input-field ${errors.phone ? 'border-red-500 focus:ring-red-500' : fieldFocus}`}
+                placeholder="請輸入您的電話號碼"
+              />
+              {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
             </div>
+          </div>
 
-            {/* 確認密碼 */}
-            <div>
-              <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                確認密碼
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  autoComplete="new-password"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  className={`input-field pr-10 ${
-                    errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : ''
-                  }`}
-                  placeholder="請再次輸入您的密碼"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                >
-                  {showConfirmPassword ? (
-                    <EyeSlashIcon className="h-5 w-5 text-gray-400" />
-                  ) : (
-                    <EyeIcon className="h-5 w-5 text-gray-400" />
-                  )}
-                </button>
-                {errors.confirmPassword && (
-                  <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
-                )}
-              </div>
-            </div>
-
-            {/* 服務條款 */}
-            <div className="flex items-start">
-              <div className="flex items-center h-5">
-                <input
-                  id="terms"
-                  name="terms"
-                  type="checkbox"
-                  required
-                  className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
-                />
-              </div>
-              <div className="ml-3 text-sm">
-                <label htmlFor="terms" className="text-gray-700">
-                  我同意{' '}
-                  <a href="/terms" className="text-primary-600 hover:text-primary-500">
-                    服務條款
-                  </a>{' '}
-                  和{' '}
-                  <a href="/privacy" className="text-primary-600 hover:text-primary-500">
-                    隱私政策
-                  </a>
-                </label>
-              </div>
-            </div>
-
-            {/* 提交按鈕 */}
-            <div>
+          <div>
+            <label htmlFor="password" className="block text-sm font-medium text-slate-700">
+              密碼
+            </label>
+            <div className="mt-1 relative">
+              <input
+                id="password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={formData.password}
+                onChange={handleChange}
+                className={`input-field pr-10 ${errors.password ? 'border-red-500 focus:ring-red-500' : fieldFocus}`}
+                placeholder="請輸入您的密碼"
+              />
               <button
-                type="submit"
-                disabled={isLoading}
-                className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white transition-colors duration-200 ${
-                  isLoading
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500'
-                }`}
+                type="button"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                onClick={() => setShowPassword(!showPassword)}
               >
-                {isLoading ? '註冊中...' : '創建帳戶'}
+                {showPassword ? (
+                  <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <EyeIcon className="h-5 w-5 text-gray-400" />
+                )}
               </button>
+              {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
             </div>
-          </form>
+          </div>
 
-        </div>
+          <div>
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-slate-700">
+              確認密碼
+            </label>
+            <div className="mt-1 relative">
+              <input
+                id="confirmPassword"
+                name="confirmPassword"
+                type={showConfirmPassword ? 'text' : 'password'}
+                autoComplete="new-password"
+                value={formData.confirmPassword}
+                onChange={handleChange}
+                className={`input-field pr-10 ${
+                  errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : fieldFocus
+                }`}
+                placeholder="請再次輸入您的密碼"
+              />
+              <button
+                type="button"
+                className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? (
+                  <EyeSlashIcon className="h-5 w-5 text-gray-400" />
+                ) : (
+                  <EyeIcon className="h-5 w-5 text-gray-400" />
+                )}
+              </button>
+              {errors.confirmPassword && (
+                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-start">
+            <div className="flex items-center h-5">
+              <input
+                id="terms"
+                name="terms"
+                type="checkbox"
+                required
+                className="h-4 w-4 text-pickcourt-navy focus:ring-pickcourt-gold border-gray-300 rounded"
+              />
+            </div>
+            <div className="ml-3 text-sm">
+              <label htmlFor="terms" className="text-slate-700">
+                我同意{' '}
+                <a href="/terms" className="text-pickcourt-navy hover:text-pickcourt-gold">
+                  服務條款
+                </a>{' '}
+                和{' '}
+                <a href="/privacy" className="text-pickcourt-navy hover:text-pickcourt-gold">
+                  隱私政策
+                </a>
+              </label>
+            </div>
+          </div>
+
+          <div>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className={`w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-semibold transition-colors duration-200 ${
+                isLoading
+                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                  : 'bg-pickcourt-gold text-pickcourt-navy-dark hover:bg-pickcourt-gold-light focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-pickcourt-gold'
+              }`}
+            >
+              {isLoading ? '註冊中...' : '創建帳戶'}
+            </button>
+          </div>
+        </form>
       </motion.div>
-    </div>
+    </PickCourtAuthLayout>
   );
 };
 

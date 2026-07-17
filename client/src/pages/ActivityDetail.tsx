@@ -246,7 +246,7 @@ const ActivityDetail: React.FC = () => {
             name: activity.location,
             address: {
               '@type': 'PostalAddress',
-              addressLocality: '荔枝角',
+              streetAddress: activity.location,
               addressRegion: '香港',
               addressCountry: 'HK'
             }

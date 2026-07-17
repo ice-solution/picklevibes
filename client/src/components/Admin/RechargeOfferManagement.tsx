@@ -12,6 +12,7 @@ import {
   EyeSlashIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { useLockedStoreId, useOptionalStoreAdmin } from '../../contexts/StoreAdminContext';
 
 interface RechargeOffer {
   _id: string;
@@ -55,6 +56,10 @@ interface RechargeUsage {
 }
 
 const RechargeOfferManagement: React.FC = () => {
+  const storeAdmin = useOptionalStoreAdmin();
+  const lockedStoreId = useLockedStoreId();
+  const [stores, setStores] = useState<Array<{ _id: string; name: string }>>([]);
+  const [selectedStoreId, setSelectedStoreId] = useState('');
   const [offers, setOffers] = useState<RechargeOffer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -80,13 +85,24 @@ const RechargeOfferManagement: React.FC = () => {
   const [usageTotal, setUsageTotal] = useState(0);
 
   useEffect(() => {
+    if (!lockedStoreId) {
+      axios.get('/stores/admin/all')
+        .then((res) => setStores(res.data.stores || []))
+        .catch(() => setStores([]));
+    }
+  }, [lockedStoreId]);
+
+  useEffect(() => {
+    if (storeAdmin && !lockedStoreId) return;
     fetchOffers();
-  }, []);
+  }, [lockedStoreId, storeAdmin?.storeSlug, selectedStoreId]);
 
   const fetchOffers = async () => {
     try {
       setLoading(true);
-      const response = await axios.get('/recharge-offers/admin');
+      const storeFilter = lockedStoreId || selectedStoreId;
+      const params = storeFilter ? `?store=${storeFilter}` : '';
+      const response = await axios.get(`/recharge-offers/admin${params}`);
       setOffers(response.data.offers);
     } catch (error) {
       console.error('獲取充值優惠失敗:', error);
@@ -150,7 +166,13 @@ const RechargeOfferManagement: React.FC = () => {
     }
 
     try {
-      await axios.post('/recharge-offers', formData);
+      const storeId = lockedStoreId || selectedStoreId;
+      if (!storeId) {
+        alert('請選擇歸屬店鋪');
+        return;
+      }
+      const payload = { ...formData, store: storeId };
+      await axios.post('/recharge-offers', payload);
       setShowCreateModal(false);
       setFormData({
         name: '',
@@ -286,11 +308,26 @@ const RechargeOfferManagement: React.FC = () => {
   return (
     <div>
       {/* Header */}
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">充值優惠管理</h2>
-          <p className="text-gray-600 mt-1">管理所有充值優惠方案</p>
+          <p className="text-gray-600 mt-1">
+            {lockedStoreId ? '管理本店充值優惠方案' : '管理各店充值優惠方案（各店獨立）'}
+          </p>
         </div>
+        <div className="flex flex-wrap items-center gap-3">
+          {!lockedStoreId && stores.length > 0 && (
+            <select
+              value={selectedStoreId}
+              onChange={(e) => setSelectedStoreId(e.target.value)}
+              className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+            >
+              <option value="">全部店鋪</option>
+              {stores.map((s) => (
+                <option key={s._id} value={s._id}>{s.name}</option>
+              ))}
+            </select>
+          )}
         <button
           onClick={() => setShowCreateModal(true)}
           className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
@@ -298,6 +335,7 @@ const RechargeOfferManagement: React.FC = () => {
           <PlusIcon className="w-5 h-5" />
           新增優惠
         </button>
+        </div>
       </div>
 
       {/* Offers List */}

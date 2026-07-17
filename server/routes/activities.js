@@ -5,6 +5,7 @@ const Activity = require('../models/Activity');
 const ActivityRegistration = require('../models/ActivityRegistration');
 const Booking = require('../models/Booking');
 const Court = require('../models/Court');
+const Store = require('../models/Store');
 const UserBalance = require('../models/UserBalance');
 const User = require('../models/User');
 const RedeemCode = require('../models/RedeemCode');
@@ -25,7 +26,25 @@ const {
 const { applyRequestedStoreFilter } = require('../utils/legacyStoreScope');
 
 const router = express.Router();
-const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
+/** 舊版寫死地點（遷移前活動相容） */
+const LEGACY_FIXED_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
+
+async function getStoreVenueAddress(storeId) {
+  if (!storeId) return null;
+  const store = await Store.findById(storeId).select('address').lean();
+  const address = store?.address ? String(store.address).trim() : '';
+  return address || null;
+}
+
+/** 活動地點是否為該店店鋪地址（會佔用場地） */
+function isStoreVenueLocation(location, storeAddress) {
+  const loc = String(location || '').trim();
+  if (!loc) return false;
+  if (storeAddress && loc === String(storeAddress).trim()) return true;
+  // 無店鋪或尚未遷移：相容舊荔枝角固定字串
+  if (!storeAddress && loc === LEGACY_FIXED_VENUE_LOCATION) return true;
+  return false;
+}
 
 /**
  * 將 datetime-local 格式的字符串轉換為正確的 Date 對象
@@ -226,7 +245,7 @@ async function getActivityVenueBookingIdList(activityId, previousTitle) {
     .map((row) => row._id);
 }
 
-/** 荔枝角固定場地活動：要佔用的場地清單（包場=三場；單一場地=一場） */
+/** 店鋪地址活動：要佔用的場地清單（包場=該店全部；單一場地=一場） */
 async function getActivityTargetCourts(activity) {
   const storeFilter = activity.store ? { store: activity.store } : {};
   const mode = activity.venueHoldMode || 'full_venue';
@@ -1045,6 +1064,9 @@ router.post('/', [
       return res.status(storeResult.status).json({ message: storeResult.message });
     }
 
+    const storeVenueAddress = await getStoreVenueAddress(storeResult.storeId);
+    const holdVenue = isStoreVenueLocation(location, storeVenueAddress);
+
     const venueHoldMode =
       req.body.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue';
     let venueHoldCourtId = null;
@@ -1052,7 +1074,7 @@ router.post('/', [
       venueHoldCourtId = new mongoose.Types.ObjectId(String(req.body.venueHoldCourtId));
     }
 
-    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
+    if (holdVenue) {
       if (venueHoldMode === 'single_court' && !venueHoldCourtId) {
         return res.status(400).json({ message: '請選擇要佔用的場地' });
       }
@@ -1062,7 +1084,8 @@ router.post('/', [
           endDate: end,
           title,
           venueHoldMode,
-          venueHoldCourtId
+          venueHoldCourtId,
+          store: storeResult.storeId,
         });
       } catch (slotErr) {
         return res.status(400).json({
@@ -1086,16 +1109,16 @@ router.post('/', [
       organizer: req.user.id,
       coaches: coachIds,
       store: storeResult.storeId,
-      venueHoldMode: location === FIXED_ACTIVITY_VENUE_LOCATION ? venueHoldMode : 'full_venue',
+      venueHoldMode: holdVenue ? venueHoldMode : 'full_venue',
       venueHoldCourtId:
-        location === FIXED_ACTIVITY_VENUE_LOCATION && venueHoldMode === 'single_court'
+        holdVenue && venueHoldMode === 'single_court'
           ? venueHoldCourtId
           : null
     });
 
     await activity.save();
 
-    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
+    if (holdVenue) {
       const adminUser = await User.findById(req.user.id).select('name email phone');
       if (!adminUser) {
         await Activity.findByIdAndDelete(activity._id);
@@ -1842,8 +1865,9 @@ router.put('/:id', [
         ? updates.venueHoldCourtId
         : activity.venueHoldCourtId;
 
-    const wasFixed = previousLocation === FIXED_ACTIVITY_VENUE_LOCATION;
-    const nextIsFixed = effectiveLocation === FIXED_ACTIVITY_VENUE_LOCATION;
+    const storeVenueAddress = await getStoreVenueAddress(activity.store);
+    const wasFixed = isStoreVenueLocation(previousLocation, storeVenueAddress);
+    const nextIsFixed = isStoreVenueLocation(effectiveLocation, storeVenueAddress);
     /** 以「實際時間／標題是否與資料庫不同」為準，避免 multipart 未帶齊欄位時只改日期卻不觸發同步 */
     const tMs = (d) => new Date(d).getTime();
     const startMoved = tMs(effectiveStart) !== tMs(activity.startDate);
@@ -1854,7 +1878,7 @@ router.put('/:id', [
       updates.venueHoldMode !== undefined || updates.venueHoldCourtId !== undefined;
 
     if (nextIsFixed && effectiveVenueHoldMode === 'single_court' && !effectiveVenueHoldCourtId) {
-      return res.status(400).json({ message: '荔枝角場地請選擇要佔用的場地' });
+      return res.status(400).json({ message: '請選擇要佔用的場地' });
     }
 
     const needSlotAssert = nextIsFixed && (!wasFixed || timeChanged || venueScopeChanged);
@@ -1871,7 +1895,8 @@ router.put('/:id', [
             endDate: effectiveEnd,
             title: effectiveTitle,
             venueHoldMode: effectiveVenueHoldMode,
-            venueHoldCourtId: effectiveVenueHoldCourtId
+            venueHoldCourtId: effectiveVenueHoldCourtId,
+            store: activity.store,
           },
           { excludeBookingIds: excludeIds }
         );
