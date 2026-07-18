@@ -72,6 +72,9 @@ function buildConflictError(conflictCheck) {
 
 /** 包場 = 店鋪內所有可預約場地（不限類型；排除 full_venue 虛擬類型） */
 async function resolveStoreCourtsForFullVenue(storeId, options = {}) {
+  if (!storeId) {
+    throw new Error('請選擇店鋪');
+  }
   const courtQuery = {
     store: storeId,
     type: { $ne: 'full_venue' },
@@ -79,9 +82,15 @@ async function resolveStoreCourtsForFullVenue(storeId, options = {}) {
   if (!options.includeInactive) {
     courtQuery.isActive = true;
   }
+  // includeInactive: true（後台包場）→ 含停用／未 public 場地
   const courts = await Court.find(courtQuery).sort({ number: 1, name: 1 });
   if (!courts.length) {
-    throw new Error('此店鋪沒有可包場的場地');
+    const Store = require('../models/Store');
+    const store = await Store.findById(storeId).select('name slug isActive').lean();
+    const storeLabel = store?.name || String(storeId);
+    throw new Error(
+      `此店鋪沒有可包場的場地（${storeLabel} 尚未建立任何場地資料）。請先在「場地管理」為該店建立場地並綁定此店鋪。`
+    );
   }
   return courts;
 }
@@ -170,7 +179,8 @@ class FullVenueService {
         bookingDate,
         bookingData.startTime,
         bookingData.endTime,
-        storeId
+        storeId,
+        options
       );
       if (conflictCheck.hasConflict) {
         throw buildConflictError(conflictCheck);
@@ -181,7 +191,22 @@ class FullVenueService {
       const requestedCharge = Math.max(0, Number(options.pointsDeduction) || 0);
       const useCustomCharge = requestedCharge > 0;
 
-      // 計算包場牌價總和
+      const Store = require('../models/Store');
+      const storeDoc = await Store.findById(storeId).select('name fullVenueHourlyRate').lean();
+      const hours = (() => {
+        const toMin = (t) => {
+          const s = String(t || '');
+          if (s === '24:00') return 24 * 60;
+          const [h, m] = s.split(':').map(Number);
+          return (h || 0) * 60 + (m || 0);
+        };
+        const mins = Math.max(0, toMin(bookingData.endTime) - toMin(bookingData.startTime));
+        return Math.max(1, Math.round(mins / 60) || 1);
+      })();
+      const storeRate = Math.max(0, Number(storeDoc?.fullVenueHourlyRate) || 0);
+      const storeRateTotal = storeRate > 0 ? storeRate * hours : 0;
+
+      // 計算包場牌價總和（各場加總；未設店鋪包場價時作為預設）
       let listTotalPrice = 0;
       const courtBookings = [];
       const courtPrices = [];
@@ -193,7 +218,9 @@ class FullVenueService {
         listTotalPrice += courtPrice;
       }
 
-      const chargeTotal = useCustomCharge ? requestedCharge : listTotalPrice;
+      const chargeTotal = useCustomCharge
+        ? requestedCharge
+        : (storeRateTotal > 0 ? storeRateTotal : listTotalPrice);
       const allocatedCharges = allocateChargeAcrossCourts(chargeTotal, courtPrices);
       const balanceDeduction = bypassRestrictions ? 0 : chargeTotal;
       const unpaidHold = bypassRestrictions || balanceDeduction <= 0;

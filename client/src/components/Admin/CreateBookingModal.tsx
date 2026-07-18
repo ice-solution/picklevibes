@@ -116,12 +116,29 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   
 
   // 數據選項
-  const [stores, setStores] = useState<{ _id: string; name: string; slug?: string; isActive?: boolean }[]>([]);
+  const [stores, setStores] = useState<{ _id: string; name: string; slug?: string; isActive?: boolean; fullVenueHourlyRate?: number }[]>([]);
   const [storeId, setStoreId] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
 
   const selectedStore = stores.find((s) => s._id === storeId);
   const fullVenueEnabled = isFullVenueEnabledForStoreSlug(selectedStore?.slug);
+
+  const calcBookingHours = (startTime: string, endTime: string) => {
+    const toMin = (t: string) => {
+      if (t === '24:00') return 24 * 60;
+      const [h, m] = t.split(':').map(Number);
+      return (h || 0) * 60 + (m || 0);
+    };
+    if (!startTime || !endTime) return 1;
+    const mins = Math.max(0, toMin(endTime) - toMin(startTime));
+    return Math.max(1, Math.round(mins / 60) || 1);
+  };
+
+  const suggestedFullVenueCharge = () => {
+    const hours = calcBookingHours(formData.startTime, formData.endTime);
+    const rate = Math.max(0, Number(selectedStore?.fullVenueHourlyRate) || 0);
+    return rate > 0 ? rate * hours : 0;
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -277,12 +294,13 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       }
 
       // 包場扣款由 API 統一處理（含自訂議價；避免重複扣款）
+      const hours = calcBookingHours(formData.startTime, formData.endTime);
       const fullVenueData = {
         storeId,
         date: formData.date,
         startTime: formData.startTime,
         endTime: formData.endTime,
-        duration: 60, // 默認1小時，可以根據需要調整
+        duration: hours * 60,
         totalPlayers: formData.totalPlayers,
         players: [{
           name: formData.playerName,
@@ -291,7 +309,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         }],
         specialRequests: formData.specialRequests.trim() || undefined,
         userId: formData.userId, // 管理員為指定用戶創建
-        pointsDeduction: fullVenueDeduction, // 傳遞積分扣除數量
+        pointsDeduction: fullVenueDeduction, // 傳遞積分扣除數量（可改店鋪預設）
         bypassRestrictions: formData.bypassRestrictions
       };
 
@@ -513,6 +531,13 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
             {storeId && !fullVenueEnabled && (
               <p className="mt-1 text-xs text-amber-700">此店鋪暫不開放包場預約。</p>
             )}
+            {storeId &&
+              formData.courtId === 'full_venue' &&
+              courts.filter((c) => c.type !== 'full_venue').length === 0 && (
+              <p className="mt-1 text-xs text-red-600">
+                此店鋪目前沒有可包場的場地資料，請先在「場地管理」為該店建立／啟用場地。
+              </p>
+            )}
           </div>
 
           {/* 日期選擇 */}
@@ -733,14 +758,27 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                       <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
                         <h4 className="text-sm font-medium text-blue-900 mb-2">💰 包場價格參考</h4>
                         <div className="text-xs text-blue-800 space-y-1">
-                          <div>• 非繁忙時間: $604/小時</div>
-                          <div>• 繁忙時間: $884/小時</div>
-                          <div>• 貓頭鷹時間: $456/小時</div>
+                          {suggestedFullVenueCharge() > 0 ? (
+                            <>
+                              <div>• 店鋪包場時薪：{selectedStore?.fullVenueHourlyRate} 積分／小時</div>
+                              <div>
+                                • 此時段建議：{suggestedFullVenueCharge()} 積分
+                                （{calcBookingHours(formData.startTime, formData.endTime)} 小時）
+                              </div>
+                              <div className="text-blue-700/80">下一步可自行修改扣款金額</div>
+                            </>
+                          ) : (
+                            <>
+                              <div>• 此店尚未設定包場時薪</div>
+                              <div>• 未輸入扣款時，將改用各場牌價加總</div>
+                              <div>• 請至「店鋪管理」設定 fullVenueHourlyRate，或下一步手動輸入</div>
+                            </>
+                          )}
                         </div>
                       </div>
                       
                       <p className="text-sm text-gray-500 mb-6">
-                        包場將同時 hold 店鋪內所有啟用場地，該時段不可再被預約
+                        包場將同時 hold 店鋪內所有場地（含停用），該時段不可再被預約
                       </p>
                     </div>
                   )}
@@ -777,11 +815,23 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                             placeholder="請輸入扣除積分數量"
                             min="0"
                           />
+                          {suggestedFullVenueCharge() > 0 && (
+                            <p className="text-xs text-yellow-800">
+                              建議（店鋪時薪 × 時數）：{suggestedFullVenueCharge()} 積分
+                              <button
+                                type="button"
+                                className="ml-2 underline"
+                                onClick={() => setFullVenueDeduction(suggestedFullVenueCharge())}
+                              >
+                                套用
+                              </button>
+                            </p>
+                          )}
                         </div>
                       </div>
                       
                       <p className="text-sm text-gray-500 mb-6">
-                        請輸入要扣除的積分數量
+                        可依店鋪包場價預填，亦可自行修改
                       </p>
                     </div>
                   )}
@@ -813,6 +863,10 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                           if (!ok) return;
                           setFullVenueStep('confirm');
                         } else if (fullVenueStep === 'confirm') {
+                          const suggested = suggestedFullVenueCharge();
+                          if (suggested > 0) {
+                            setFullVenueDeduction(suggested);
+                          }
                           setFullVenueStep('points');
                         } else if (fullVenueStep === 'points') {
                           await handleFullVenueBooking();

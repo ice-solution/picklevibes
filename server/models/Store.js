@@ -52,6 +52,12 @@ const storeSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  /** 包場每小時價錢（積分）；0 = 未設定，改用各場牌價加總 */
+  fullVenueHourlyRate: {
+    type: Number,
+    default: 0,
+    min: [0, '包場時薪不能為負數'],
+  },
   hikKey: { type: String, default: null },
   hikSecret: { type: String, default: null },
   hikAccessLevelId: { type: String, default: null },

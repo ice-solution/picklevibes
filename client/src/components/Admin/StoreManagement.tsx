@@ -23,6 +23,7 @@ interface Store {
   tuyaPreBufferMinutes?: number;
   tuyaPostBufferMinutes?: number;
   tuyaMergeGapMinutes?: number;
+  fullVenueHourlyRate?: number;
   tuyaZones?: { _id?: string; name: string }[];
 }
 
@@ -44,6 +45,7 @@ const emptyForm = {
   tuyaPreBufferMinutes: 15,
   tuyaPostBufferMinutes: 15,
   tuyaMergeGapMinutes: 0,
+  fullVenueHourlyRate: 0,
 };
 
 const StoreManagement: React.FC = () => {
@@ -98,6 +100,7 @@ const StoreManagement: React.FC = () => {
       tuyaPreBufferMinutes: s.tuyaPreBufferMinutes ?? 15,
       tuyaPostBufferMinutes: s.tuyaPostBufferMinutes ?? 15,
       tuyaMergeGapMinutes: s.tuyaMergeGapMinutes ?? 0,
+      fullVenueHourlyRate: s.fullVenueHourlyRate ?? 0,
     });
     setShowForm(true);
   };
@@ -118,6 +121,7 @@ const StoreManagement: React.FC = () => {
         tuyaPreBufferMinutes: Number(form.tuyaPreBufferMinutes) || 15,
         tuyaPostBufferMinutes: Number(form.tuyaPostBufferMinutes) || 15,
         tuyaMergeGapMinutes: Number(form.tuyaMergeGapMinutes) || 0,
+        fullVenueHourlyRate: Math.max(0, Number(form.fullVenueHourlyRate) || 0),
       };
       if (editing) {
         await axios.put(`/stores/${editing._id}`, payload);
@@ -165,6 +169,7 @@ const StoreManagement: React.FC = () => {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">名稱</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">地址</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">包場時薪</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">門禁</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">智能設備</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
@@ -179,6 +184,11 @@ const StoreManagement: React.FC = () => {
                   <span className={s.isActive ? 'text-green-600' : 'text-gray-500'}>
                     {s.isActive ? '上線' : '停用'}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {s.fullVenueHourlyRate && s.fullVenueHourlyRate > 0
+                    ? `${s.fullVenueHourlyRate}/時`
+                    : '—'}
                 </td>
                 <td className="px-4 py-3 text-sm">{s.enableHikAccess ? 'HIK' : '僅確認信'}</td>
                 <td className="px-4 py-3 text-sm">
@@ -219,6 +229,19 @@ const StoreManagement: React.FC = () => {
                 <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
                 上線（用戶可見）
               </label>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">包場時薪（積分／小時）</label>
+                <input
+                  type="number"
+                  min={0}
+                  step={1}
+                  className="w-full border rounded-md px-3 py-2"
+                  placeholder="例如 604；0 = 未設定，改用各場牌價加總"
+                  value={form.fullVenueHourlyRate}
+                  onChange={(e) => setForm({ ...form, fullVenueHourlyRate: Number(e.target.value) })}
+                />
+                <p className="mt-1 text-xs text-gray-500">手動包場時會以此 × 時數預填扣款，仍可臨時改價。</p>
+              </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={form.enableHikAccess} onChange={(e) => setForm({ ...form, enableHikAccess: e.target.checked })} />
                 啟用 HIK 門禁

@@ -66,7 +66,8 @@ router.post('/create', auth, async (req, res) => {
       pointsDeduction: req.body.pointsDeduction || 0,
       bypassRestrictions: bypassRestrictions,
       storeId: resolvedStoreId,
-      includeInactive: req.user.role === 'admin',
+      // 後台預先包場：未上線／停用場地亦一併 hold
+      includeInactive: true,
     });
 
     try {
@@ -211,7 +212,8 @@ router.post('/check-availability', auth, async (req, res) => {
       startTime,
       endTime,
       resolvedStoreId,
-      { includeInactive: req.user.role === 'admin' }
+      // 後台預先包場：不檢查場地 isActive
+      { includeInactive: true }
     );
 
     res.json({
