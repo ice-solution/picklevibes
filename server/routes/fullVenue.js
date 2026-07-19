@@ -103,11 +103,17 @@ router.post('/create', auth, async (req, res) => {
 
   } catch (error) {
     console.error('創建包場預約失敗:', error);
-    const status = error.statusCode === 409 ? 409 : 500;
+    const status =
+      error.statusCode === 409
+        ? 409
+        : error.code === 'INSUFFICIENT_BALANCE'
+          ? 400
+          : 500;
     res.status(status).json({
       success: false,
       message: error.message || '創建包場預約失敗',
-      conflicts: error.conflicts || []
+      conflicts: error.conflicts || [],
+      code: error.code || undefined
     });
   }
 });

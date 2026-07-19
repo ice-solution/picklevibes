@@ -225,6 +225,25 @@ class FullVenueService {
       const balanceDeduction = bypassRestrictions ? 0 : chargeTotal;
       const unpaidHold = bypassRestrictions || balanceDeduction <= 0;
 
+      // 先檢查餘額，不足則不寫入任何預約（避免「餘額不足仍留下 confirmed 記錄」）
+      const UserBalance = require('../models/UserBalance');
+      let userBalance = null;
+      if (balanceDeduction > 0 && !bypassRestrictions) {
+        userBalance = await UserBalance.findOne({ user: user._id });
+        if (!userBalance) {
+          userBalance = new UserBalance({ user: user._id });
+          await userBalance.save();
+        }
+        const available = Number(userBalance.balance) || 0;
+        if (available < balanceDeduction) {
+          const err = new Error(
+            `餘額不足：需要 ${balanceDeduction} 積分，目前餘額 ${available}。預約未建立。`
+          );
+          err.code = 'INSUFFICIENT_BALANCE';
+          throw err;
+        }
+      }
+
       courtPrices.forEach(({ court, courtPrice }, index) => {
         const courtCharge = allocatedCharges[index] || 0;
         const courtPointsShare = unpaidHold ? 0 : courtCharge;
@@ -273,40 +292,53 @@ class FullVenueService {
         courtBookings.push(courtBooking);
       });
 
-      // 保存所有預約
-      const savedBookings = await Booking.insertMany(courtBookings);
+      // 保存所有預約（餘額已預先確認足夠）
+      let savedBookings;
+      try {
+        savedBookings = await Booking.insertMany(courtBookings);
 
-      // 舊版「主預約」標記：第一筆為主並指向其餘場地，供舊 cancel API 相容
-      if (savedBookings.length > 1) {
-        const [main, ...rest] = savedBookings;
-        await Booking.updateOne(
-          { _id: main._id },
-          {
-            $set: {
-              isFullVenue: true,
-              fullVenueBookings: rest.map((b) => b._id)
+        // 舊版「主預約」標記：第一筆為主並指向其餘場地，供舊 cancel API 相容
+        if (savedBookings.length > 1) {
+          const [main, ...rest] = savedBookings;
+          await Booking.updateOne(
+            { _id: main._id },
+            {
+              $set: {
+                isFullVenue: true,
+                fullVenueBookings: rest.map((b) => b._id)
+              }
             }
-          }
-        );
-      }
-
-      // 非 bypass 且有指定扣款：從用戶餘額扣除（CreateBookingModal 可能已先 manual-deduct，此處僅在直接 API 建單時生效）
-      if (balanceDeduction > 0 && !bypassRestrictions) {
-        const UserBalance = require('../models/UserBalance');
-        let userBalance = await UserBalance.findOne({ user: user._id });
-
-        if (!userBalance) {
-          userBalance = new UserBalance({ user: user._id });
-          await userBalance.save();
+          );
         }
 
-        await userBalance.deductBalance(
-          balanceDeduction,
-          `包場預約積分扣除 - ${savedBookings.length}個場地${useCustomCharge ? `（議價 ${chargeTotal}）` : ''}`,
-          savedBookings[0]._id
-        );
-
-        console.log(`💰 包場積分扣除: ${balanceDeduction} 分`);
+        // 非 bypass 且有扣款：從用戶餘額扣除
+        if (balanceDeduction > 0 && !bypassRestrictions && userBalance) {
+          // 重新載入避免並行請求導致 stale balance
+          userBalance = await UserBalance.findOne({ user: user._id });
+          if (!userBalance || Number(userBalance.balance) < balanceDeduction) {
+            const available = userBalance ? Number(userBalance.balance) || 0 : 0;
+            const err = new Error(
+              `餘額不足：需要 ${balanceDeduction} 積分，目前餘額 ${available}。預約未建立。`
+            );
+            err.code = 'INSUFFICIENT_BALANCE';
+            throw err;
+          }
+          await userBalance.deductBalance(
+            balanceDeduction,
+            `包場預約積分扣除 - ${savedBookings.length}個場地${useCustomCharge ? `（議價 ${chargeTotal}）` : ''}`,
+            savedBookings[0]._id
+          );
+          console.log(`💰 包場積分扣除: ${balanceDeduction} 分`);
+        }
+      } catch (persistErr) {
+        // 扣款失敗或寫入中途失敗：清掉已寫入的預約，避免幽靈 confirmed
+        if (savedBookings && savedBookings.length) {
+          const ids = savedBookings.map((b) => b._id);
+          await Booking.deleteMany({ _id: { $in: ids } }).catch((cleanupErr) => {
+            console.error('❌ 包場失敗後清理預約失敗:', cleanupErr);
+          });
+        }
+        throw persistErr;
       }
 
       console.log(`✅ 包場預約創建成功: ${savedBookings.length} 個場地`);
