@@ -295,14 +295,19 @@ const StoreManagement: React.FC = () => {
               {form.overnightDutyEnabled && (
                 <>
                   <div>
-                    <label className="block text-xs text-gray-500 mb-1">通知電話 notifyPhones（逗號分隔，例 91234567, 8529xxxxxxx）</label>
+                    <label className="block text-xs text-gray-500 mb-1">
+                      通知對象（逗號分隔）：電話或 OpenWA chatId
+                    </label>
                     <textarea
                       className="w-full border rounded-md px-3 py-2 text-sm"
                       rows={2}
-                      placeholder="91234567, 85298765432"
+                      placeholder="91234567, 85298765432@c.us, 1203xxxxx@g.us"
                       value={form.overnightNotifyPhones}
                       onChange={(e) => setForm({ ...form, overnightNotifyPhones: e.target.value })}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      電話會自動轉成 852…@c.us；亦可直接貼 chatId（個人或群組）。
+                    </p>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>

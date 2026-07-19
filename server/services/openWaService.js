@@ -31,16 +31,23 @@ function isOpenWaConfigured() {
   return Boolean(base && key && session);
 }
 
-/** 轉成 OpenWA chatId：852xxxxxxxx@c.us */
-function toChatId(phone) {
-  let d = String(phone || '').replace(/\D/g, '');
+/** 轉成 OpenWA chatId：支援電話或已是 chatId（含 @c.us / @g.us） */
+function toChatId(raw) {
+  const input = String(raw || '').trim();
+  if (!input) return '';
+
+  // 已是 OpenWA chatId（個人 @c.us 或群組 @g.us 等）→ 原樣使用
+  if (input.includes('@')) {
+    return input;
+  }
+
+  let d = input.replace(/\D/g, '');
   if (!d) return '';
   if (d.startsWith('852') && d.length >= 11) {
     // ok
   } else if (d.length === 8) {
     d = `852${d}`;
   }
-  if (d.endsWith('@c.us') || d.includes('@')) return String(phone).trim();
   return `${d}@c.us`;
 }
 
