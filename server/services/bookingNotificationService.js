@@ -55,17 +55,6 @@ async function sendBookingNotification({ booking, courtDoc, store: storeInput, u
   return { mode: 'confirmation' };
 }
 
-/**
- * WhatsApp 預約確認（預留，尚未啟用）
- */
-async function sendWhatsAppBookingConfirmationStub(booking, store) {
-  if (process.env.WHATSAPP_BOOKING_ENABLED !== '1') {
-    return { skipped: true, reason: 'not_enabled' };
-  }
-  // TODO: 依 store 發送不同 WhatsApp 模板
-  return { skipped: true, reason: 'not_implemented', storeId: store?._id };
-}
-
 async function applyTempAuthToBooking(booking, accessControlResult) {
   if (!accessControlResult?.tempAuth) return booking;
   booking.tempAuth = {
@@ -152,7 +141,6 @@ async function resendBookingNotification(booking) {
 
 module.exports = {
   sendBookingNotification,
-  sendWhatsAppBookingConfirmationStub,
   applyTempAuthToBooking,
   resendBookingNotification,
   buildVisitorData,

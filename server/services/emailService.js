@@ -1037,10 +1037,6 @@ class EmailService {
                         <span class="feature-icon">💳</span>
                         <span>在線支付</span>
                     </div>
-                    <div class="feature-item">
-                        <span class="feature-icon">📱</span>
-                        <span>WhatsApp 通知</span>
-                    </div>
                     ${membershipLevel === 'vip' ? `
                     <div class="feature-item">
                         <span class="feature-icon">⭐</span>

@@ -3,7 +3,6 @@ import { motion } from 'framer-motion';
 import { 
   PhoneIcon, 
   EnvelopeIcon, 
-  MapPinIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
 
@@ -26,7 +25,7 @@ const ContactInfo: React.FC = () => {
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {/* 營業時間 */}
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -99,53 +98,7 @@ const ContactInfo: React.FC = () => {
               </div>
             </div>
           </motion.div>
-
-          {/* 地址 */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            viewport={{ once: true }}
-            className="bg-white rounded-2xl p-8 shadow-lg hover:shadow-xl transition-shadow duration-300"
-          >
-            <div className="text-center">
-              <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                <MapPinIcon className="w-8 h-8 text-red-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-gray-900 mb-4">地址</h3>
-              <div className="space-y-2 text-gray-600">
-                <p className="text-lg">我們的位置</p>
-                <div className="text-sm font-semibold text-red-600 leading-relaxed">
-                  <p>Shop 338, 3/F</p>
-                  <p>Hopewell Mall</p>
-                  <p>15 Kennedy Road</p>
-                  <p>Hong Kong</p>
-                </div>
-                <p className="text-sm text-gray-500">地鐵站：金鐘站</p>
-              </div>
-            </div>
-          </motion.div>
         </div>
-
-        {/* 地圖區域 - 預留給 Google Maps Embed */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          viewport={{ once: true }}
-          className="mt-16"
-        >
-          <div className="bg-white rounded-2xl p-8 shadow-lg">
-            <h3 className="text-2xl font-bold text-gray-900 text-center mb-8">找到我們</h3>
-            <div className="bg-gray-200 rounded-xl h-96 flex items-center justify-center">
-              <div className="text-center text-gray-500">
-                <MapPinIcon className="w-16 h-16 mx-auto mb-4" />
-                <p className="text-lg font-semibold">Google Maps 將在此處顯示</p>
-                <p className="text-sm">請添加 Google Maps Embed 代碼</p>
-              </div>
-            </div>
-          </div>
-        </motion.div>
       </div>
     </section>
   );

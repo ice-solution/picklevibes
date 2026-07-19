@@ -1,42 +1,56 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useBooking } from '../contexts/BookingContext';
-import CurrentBookings from '../components/Booking/CurrentBookings';
+import { BOOKING_CANCELLATION_POLICY_LINES } from '../constants/bookingCancellationPolicy';
 import { 
   CalendarDaysIcon, 
   ClockIcon, 
   MapPinIcon,
   UserIcon,
   TableCellsIcon,
-  ListBulletIcon,
   ChevronLeftIcon,
-  ChevronRightIcon
+  ChevronRightIcon,
+  XMarkIcon,
+  EnvelopeIcon,
+  KeyIcon,
+  QrCodeIcon
 } from '@heroicons/react/24/outline';
+
+function resolveStore(booking: any) {
+  if (booking?.store && typeof booking.store === 'object') return booking.store;
+  if (booking?.court?.store && typeof booking.court.store === 'object') return booking.court.store;
+  return null;
+}
+
+function hasHikAccessData(booking: any) {
+  return !!(booking?.tempAuth?.code || booking?.tempAuth?.password);
+}
+
+function getTempAuthQrSrc(code?: string | null) {
+  if (!code) return null;
+  if (code.startsWith('data:')) return code;
+  return `data:image/png;base64,${code}`;
+}
 
 const MyBookings: React.FC = () => {
   const { user } = useAuth();
-  const { t } = useTranslation();
   const { bookings, fetchBookings, loading } = useBooking();
   
-  // 狀態管理
   const [viewMode, setViewMode] = useState<'upcoming' | 'all'>('upcoming');
   const [currentPage, setCurrentPage] = useState(1);
   const [filteredBookings, setFilteredBookings] = useState<any[]>([]);
   const [upcomingBookings, setUpcomingBookings] = useState<any[]>([]);
+  const [selectedBooking, setSelectedBooking] = useState<any | null>(null);
   
   const itemsPerPage = 10;
 
-  // 獲取預約數據
   useEffect(() => {
     fetchBookings();
   }, [fetchBookings]);
 
-  // 處理預約數據
   useEffect(() => {
     if (bookings && bookings.length > 0 && user) {
-      // 過濾當前用戶的預約
       const userBookings = bookings.filter(booking => {
         try {
           const userId = typeof booking.user === 'string' ? booking.user : booking.user?._id;
@@ -47,16 +61,13 @@ const MyBookings: React.FC = () => {
         }
       });
 
-      // 按日期和時間排序（最新的在前面）
       userBookings.sort((a, b) => {
         try {
           const dateA = new Date(a.date);
           const dateB = new Date(b.date);
           if (dateA.getTime() === dateB.getTime()) {
-            // 同一天的話，按開始時間降序排序（最新的時間在前面）
             return b.startTime.localeCompare(a.startTime);
           }
-          // 按日期降序排序（最新的日期在前面）
           return dateB.getTime() - dateA.getTime();
         } catch (error) {
           console.warn('Error sorting bookings:', error);
@@ -64,7 +75,6 @@ const MyBookings: React.FC = () => {
         }
       });
 
-      // 分離即將到來的預約（今天及以後）
       const now = new Date();
       const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       
@@ -87,24 +97,20 @@ const MyBookings: React.FC = () => {
     }
   }, [bookings, user]);
 
-  // 分頁計算
   const totalPages = Math.ceil(filteredBookings.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentBookings = filteredBookings.slice(startIndex, endIndex);
 
-  // 切換視圖模式
   const handleViewModeChange = (mode: 'upcoming' | 'all') => {
     setViewMode(mode);
     setCurrentPage(1);
   };
 
-  // 分頁處理
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
 
-  // 格式化函數
   const formatDate = (date: string) => {
     const d = new Date(date);
     return d.toLocaleDateString('zh-TW', {
@@ -115,9 +121,7 @@ const MyBookings: React.FC = () => {
     });
   };
 
-  const formatTime = (time: string) => {
-    return time;
-  };
+  const formatTime = (time: string) => time;
 
   const formatCreatedDate = (dateString: string) => {
     if (!dateString) return '-';
@@ -164,10 +168,78 @@ const MyBookings: React.FC = () => {
     }
   };
 
+  const selectedStore = selectedBooking ? resolveStore(selectedBooking) : null;
+  const selectedHasHik = selectedBooking ? hasHikAccessData(selectedBooking) : false;
+  const selectedQrSrc = selectedHasHik
+    ? getTempAuthQrSrc(selectedBooking?.tempAuth?.code)
+    : null;
+
+  const renderBookingCard = (booking: any) => {
+    const store = resolveStore(booking);
+    const hik = hasHikAccessData(booking);
+    return (
+      <button
+        type="button"
+        key={booking._id}
+        onClick={() => setSelectedBooking(booking)}
+        className="w-full text-left bg-gray-50 rounded-xl p-6 border border-gray-200 hover:shadow-md hover:border-primary-300 transition-all"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-3">
+              <span className="font-medium text-gray-900">
+                {booking.court?.name || '未知場地'}
+              </span>
+              <span className="text-sm text-gray-500">
+                ({booking.court?.number}號場)
+              </span>
+              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
+                {getStatusText(booking.status)}
+              </span>
+              {hik && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                  <KeyIcon className="w-3.5 h-3.5" />
+                  門禁資料
+                </span>
+              )}
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
+              <div className="flex items-center space-x-1">
+                <CalendarDaysIcon className="w-4 h-4" />
+                <span>{formatDate(booking.date)}</span>
+              </div>
+              
+              <div className="flex items-center space-x-1">
+                <ClockIcon className="w-4 h-4" />
+                <span>{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</span>
+              </div>
+              
+              <div className="flex items-center space-x-1">
+                <UserIcon className="w-4 h-4" />
+                <span>{booking.totalPlayers} 人</span>
+              </div>
+
+              {store?.name && (
+                <div className="flex items-center space-x-1">
+                  <MapPinIcon className="w-4 h-4" />
+                  <span className="truncate">{store.name}</span>
+                </div>
+              )}
+            </div>
+
+            <p className="mt-3 text-xs text-primary-600">
+              {hik ? '點擊查看門禁 QR Code 與進門密碼（同確認電郵內容）' : '點擊查看預約確認電郵資料'}
+            </p>
+          </div>
+        </div>
+      </button>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -180,12 +252,11 @@ const MyBookings: React.FC = () => {
             </div>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">我的預約</h1>
-              <p className="text-gray-600">查看和管理您的所有預約</p>
+              <p className="text-gray-600">查看預約詳情與門禁／確認電郵資料</p>
             </div>
           </div>
         </motion.div>
 
-        {/* 視圖切換按鈕 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -228,7 +299,6 @@ const MyBookings: React.FC = () => {
           </div>
         </motion.div>
 
-        {/* 即將到來的預約 */}
         {viewMode === 'upcoming' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -262,59 +332,7 @@ const MyBookings: React.FC = () => {
                 </div>
               ) : upcomingBookings.length > 0 ? (
                 <div className="space-y-4">
-                  {upcomingBookings.map((booking) => (
-                    <div
-                      key={booking._id}
-                      className="bg-gray-50 rounded-xl p-6 border border-gray-200 hover:shadow-md transition-shadow"
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center space-x-2 mb-3">
-                            <span className="font-medium text-gray-900">
-                              {booking.court?.name || '未知場地'}
-                            </span>
-                            <span className="text-sm text-gray-500">
-                              ({booking.court?.number}號場)
-                            </span>
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                              {getStatusText(booking.status)}
-                            </span>
-                          </div>
-                          
-                          <div className="grid grid-cols-2 gap-4 text-sm text-gray-600">
-                            <div className="flex items-center space-x-1">
-                              <CalendarDaysIcon className="w-4 h-4" />
-                              <span>{formatDate(booking.date)}</span>
-                            </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <ClockIcon className="w-4 h-4" />
-                              <span>{formatTime(booking.startTime)} - {formatTime(booking.endTime)}</span>
-                            </div>
-                            
-                            <div className="flex items-center space-x-1">
-                              <UserIcon className="w-4 h-4" />
-                              <span>{booking.totalPlayers} 人</span>
-                            </div>
-                            
-                            {/* 隱藏積分顯示，避免與充值功能混淆 */}
-                            {/* <div className="text-right">
-                              <span className="font-medium text-green-600">
-                                {(() => {
-                                  // 如果是單人場且備註包含"與主場地同時段使用"，顯示 --
-                                  if (booking.court?.type === 'solo' && 
-                                      booking.specialRequests?.includes('與主場地同時段使用')) {
-                                    return '--';
-                                  }
-                                  return `${booking.pricing?.totalPrice || 0} 積分`;
-                                })()}
-                              </span>
-                            </div> */}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                  {upcomingBookings.map((booking) => renderBookingCard(booking))}
                 </div>
               ) : (
                 <div className="text-center py-12">
@@ -327,7 +345,6 @@ const MyBookings: React.FC = () => {
           </motion.div>
         )}
 
-        {/* 全部記錄 - 表格格式 */}
         {viewMode === 'all' && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -377,73 +394,68 @@ const MyBookings: React.FC = () => {
                           狀態
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          特殊要求
+                          電郵／門禁
                         </th>
-                        {/* 隱藏費用欄位，避免與充值功能混淆 */}
-                        {/* <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          費用
-                        </th> */}
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {currentBookings.map((booking) => (
-                        <tr key={booking._id} className="hover:bg-gray-50">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center">
-                              <MapPinIcon className="w-4 h-4 text-gray-400 mr-2" />
-                              <div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {booking.court?.name || '未知場地'}
-                                </div>
-                                <div className="text-sm text-gray-500">
-                                  {booking.court?.number}號場
+                      {currentBookings.map((booking) => {
+                        const hik = hasHikAccessData(booking);
+                        return (
+                          <tr
+                            key={booking._id}
+                            className="hover:bg-gray-50 cursor-pointer"
+                            onClick={() => setSelectedBooking(booking)}
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center">
+                                <MapPinIcon className="w-4 h-4 text-gray-400 mr-2" />
+                                <div>
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {booking.court?.name || '未知場地'}
+                                  </div>
+                                  <div className="text-sm text-gray-500">
+                                    {booking.court?.number}號場
+                                  </div>
                                 </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {formatCreatedDate(booking.createdAt)}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-900">{formatDate(booking.date)}</div>
-                            <div className="text-sm text-gray-500">
-                              {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                            {booking.totalPlayers} 人
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
-                              {getStatusText(booking.status)}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-sm text-gray-900 max-w-xs">
-                            {booking.specialRequests && booking.specialRequests.trim() ? (
-                              <div className="truncate" title={booking.specialRequests}>
-                                {booking.specialRequests}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {formatCreatedDate(booking.createdAt)}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="text-sm text-gray-900">{formatDate(booking.date)}</div>
+                              <div className="text-sm text-gray-500">
+                                {formatTime(booking.startTime)} - {formatTime(booking.endTime)}
                               </div>
-                            ) : (
-                              <span className="text-gray-400">無</span>
-                            )}
-                          </td>
-                          {/* 隱藏積分顯示，避免與充值功能混淆 */}
-                          {/* <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
-                            {(() => {
-                              // 如果是單人場且備註包含"與主場地同時段使用"，顯示 --
-                              if (booking.court?.type === 'solo' && 
-                                  booking.specialRequests?.includes('與主場地同時段使用')) {
-                                return '--';
-                              }
-                              return `${booking.pricing?.totalPrice || 0} 積分`;
-                            })()}
-                          </td> */}
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                              {booking.totalPlayers} 人
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(booking.status)}`}>
+                                {getStatusText(booking.status)}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              {hik ? (
+                                <span className="inline-flex items-center gap-1 text-emerald-700 font-medium">
+                                  <QrCodeIcon className="w-4 h-4" />
+                                  查看 QR／密碼
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-primary-600">
+                                  <EnvelopeIcon className="w-4 h-4" />
+                                  查看確認資料
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
 
-                  {/* 分頁 */}
                   {totalPages > 1 && (
                     <div className="bg-gray-50 px-6 py-3 flex items-center justify-between border-t border-gray-200">
                       <div className="flex items-center">
@@ -499,6 +511,155 @@ const MyBookings: React.FC = () => {
           </motion.div>
         )}
       </div>
+
+      {/* 預約詳情／電郵資料彈窗 */}
+      {selectedBooking && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[90vh] flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  {selectedHasHik ? '門禁／確認電郵資料' : '預約確認電郵資料'}
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">與系統發送給您的電郵內容一致</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedBooking(null)}
+                className="p-2 rounded-full hover:bg-gray-100"
+                aria-label="關閉"
+              >
+                <XMarkIcon className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+              <div className="rounded-xl bg-gray-50 border border-gray-200 p-4 space-y-2 text-sm">
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">預約編號</span>
+                  <span className="font-mono text-gray-900 text-xs break-all text-right">{selectedBooking._id}</span>
+                </div>
+                {selectedStore?.name && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">店鋪</span>
+                    <span className="text-gray-900 text-right">{selectedStore.name}</span>
+                  </div>
+                )}
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">場地</span>
+                  <span className="text-gray-900 text-right">
+                    {selectedBooking.court?.name || '未知場地'}
+                    {selectedBooking.court?.number != null ? `（${selectedBooking.court.number}號場）` : ''}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">日期</span>
+                  <span className="text-gray-900">{formatDate(selectedBooking.date)}</span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">時間</span>
+                  <span className="text-gray-900">
+                    {formatTime(selectedBooking.startTime)} - {formatTime(selectedBooking.endTime)}
+                  </span>
+                </div>
+                <div className="flex justify-between gap-3">
+                  <span className="text-gray-500">狀態</span>
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(selectedBooking.status)}`}>
+                    {getStatusText(selectedBooking.status)}
+                  </span>
+                </div>
+                {selectedBooking.players?.[0]?.email && (
+                  <div className="flex justify-between gap-3">
+                    <span className="text-gray-500">收件電郵</span>
+                    <span className="text-gray-900 text-right break-all">{selectedBooking.players[0].email}</span>
+                  </div>
+                )}
+              </div>
+
+              {selectedHasHik ? (
+                <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+                      <KeyIcon className="w-5 h-5" />
+                      進場門禁資料
+                    </h4>
+                    <p className="text-sm text-blue-800 mt-1">
+                      系統已發送門禁通知電郵。請於預約時間前約 10 分鐘到達，使用以下 QR Code 或密碼開門。
+                    </p>
+                  </div>
+
+                  {selectedQrSrc && (
+                    <div className="text-center bg-white rounded-lg border border-blue-100 p-4">
+                      <p className="text-sm font-medium text-gray-800 mb-3">開門二維碼</p>
+                      <img
+                        src={selectedQrSrc}
+                        alt="開門二維碼"
+                        className="mx-auto max-w-[200px] w-full border border-gray-200 rounded-lg"
+                      />
+                      <p className="text-xs text-gray-500 mt-2">請在門禁設備前掃描此二維碼</p>
+                    </div>
+                  )}
+
+                  {selectedBooking.tempAuth?.password && (
+                    <div className="text-center bg-white rounded-lg border border-emerald-200 p-4">
+                      <p className="text-sm font-medium text-emerald-800 mb-2">進門密碼</p>
+                      <p className="text-2xl font-bold tracking-widest font-mono text-emerald-700">
+                        {selectedBooking.tempAuth.password}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-2">若二維碼無法使用，可於門禁設備輸入此密碼</p>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+                  <h4 className="font-semibold text-amber-900 flex items-center gap-2">
+                    <EnvelopeIcon className="w-5 h-5" />
+                    預約確認通知
+                  </h4>
+                  <p className="text-sm text-amber-900/90 mt-2">
+                    系統已發送預約確認電郵。
+                    {selectedStore?.enableHikAccess
+                      ? '此預約尚未產生門禁資料，如需重發請聯絡客服。'
+                      : '此店鋪暫不提供自動門禁密碼，請於預約時段準時到場。'}
+                  </p>
+                  {selectedStore?.phone && (
+                    <p className="text-sm text-amber-900 mt-2">
+                      場地電話：{selectedStore.phone}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
+                <h4 className="font-semibold text-yellow-900 text-sm mb-2">重要提醒</h4>
+                <ul className="text-sm text-yellow-900/90 space-y-1 list-disc list-inside">
+                  <li>請保持場地整潔，使用完畢後請清理現場</li>
+                  <li>請穿著合適運動鞋進場</li>
+                </ul>
+              </div>
+
+              <div className="rounded-xl border border-gray-200 bg-white p-4">
+                <h4 className="font-semibold text-gray-900 text-sm mb-2">取消及天氣政策</h4>
+                <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+                  {BOOKING_CANCELLATION_POLICY_LINES.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+
+            <div className="px-5 py-4 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setSelectedBooking(null)}
+                className="w-full px-4 py-2.5 rounded-lg bg-primary-600 text-white hover:bg-primary-700 transition-colors"
+              >
+                關閉
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

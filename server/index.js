@@ -172,8 +172,7 @@ app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
 app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/tuya', require('./routes/tuya'));
-app.use('/api/whatsapp', require('./routes/whatsapp')); // Added WhatsApp routes
-app.use('/api/bot', require('./routes/bot')); // n8n / WhatsApp bot API
+app.use('/api/bot', require('./routes/bot')); // n8n / OpenWA bot API
 app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes
 app.use('/api/maintenance', require('./routes/maintenance')); // Added maintenance routes
 app.use('/api/bulk-upgrade', require('./routes/bulk-upgrade')); // Added bulk upgrade routes
@@ -259,6 +258,9 @@ calendarScheduler.start();
 // Tuya 燈控自動排程（Phase 2）
 const tuyaScheduler = require('./scheduler/tuyaScheduler');
 tuyaScheduler.start();
+
+const overnightDutyScheduler = require('./scheduler/overnightDutyScheduler');
+overnightDutyScheduler.start();
 
 // 啟動智能Google Calendar同步
 const ScheduledSync = require('./scripts/scheduledSync');

@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { 
   PhoneIcon, 
   EnvelopeIcon, 
-  MapPinIcon,
   ClockIcon
 } from '@heroicons/react/24/outline';
 
@@ -129,15 +128,6 @@ const Footer: React.FC = () => {
                 <EnvelopeIcon className="w-5 h-5 text-primary-400 mt-1 flex-shrink-0" />
                 <div>
                   <p className="text-gray-300">info@picklevibes.hk</p>
-                </div>
-              </div>
-              
-              <div className="flex items-start space-x-3">
-                <MapPinIcon className="w-5 h-5 text-primary-400 mt-1 flex-shrink-0" />
-                <div>
-                  <p className="text-gray-300 text-sm">
-                    荔枝角永康街37至39號福源廣場8樓B-D室
-                  </p>
                 </div>
               </div>
               

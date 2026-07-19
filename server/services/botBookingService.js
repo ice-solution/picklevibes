@@ -3,11 +3,9 @@ const Court = require('../models/Court');
 const UserBalance = require('../models/UserBalance');
 const Store = require('../models/Store');
 const Config = require('../models/Config');
-const whatsappService = require('../services/whatsappService');
 const {
   sendBookingNotification,
   applyTempAuthToBooking,
-  sendWhatsAppBookingConfirmationStub,
 } = require('../services/bookingNotificationService');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
@@ -385,15 +383,6 @@ async function createBookingViaBot(params) {
   const storeDoc = await Store.findById(courtDoc.store).lean();
 
   try {
-    const phoneNumber = booking.players[0]?.phone || user.phone;
-    if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
-      await whatsappService.sendBookingConfirmation(booking, phoneNumber);
-    }
-  } catch (whatsappError) {
-    console.error('❌ Bot 預約 WhatsApp 通知失敗:', whatsappError);
-  }
-
-  try {
     const notifyResult = await sendBookingNotification({
       booking,
       courtDoc,
@@ -403,9 +392,15 @@ async function createBookingViaBot(params) {
     if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
       await applyTempAuthToBooking(booking, notifyResult.accessControlResult);
     }
-    await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
   } catch (notifyError) {
     console.error('❌ Bot 預約通知發送失敗:', notifyError);
+  }
+
+  try {
+    const { notifyOnBookingCreated } = require('./overnightDutyNotifyService');
+    await notifyOnBookingCreated(booking);
+  } catch (dutyErr) {
+    console.error('❌ Bot 夜間值班通知失敗（不影響預約）:', dutyErr);
   }
 
   const tuyaCourtIds = [booking.court._id || booking.court];

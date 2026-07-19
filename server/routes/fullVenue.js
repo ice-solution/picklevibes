@@ -89,6 +89,14 @@ router.post('/create', auth, async (req, res) => {
       console.error('❌ 包場預約通知發送失敗:', emailError);
     }
 
+    try {
+      const { notifyOnBookingCreated } = require('../services/overnightDutyNotifyService');
+      const first = result.bookings?.[0];
+      if (first) await notifyOnBookingCreated(first);
+    } catch (dutyErr) {
+      console.error('❌ 包場夜間值班通知失敗（不影響預約）:', dutyErr);
+    }
+
     const { scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
     scheduleTuyaCourtsSync(
       (result.bookings || []).map((b) => b.court),

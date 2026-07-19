@@ -77,6 +77,24 @@ const storeSchema = new mongoose.Schema({
   tuyaPostBufferMinutes: { type: Number, default: 15, min: 0, max: 120 },
   tuyaMergeGapMinutes: { type: Number, default: 0, min: 0, max: 60 },
   /**
+   * 夜間值班 OpenWA 通知（店鋪級，例：荔枝角）
+   * - notifyPeriodFrom/To：時段內有人新建預約 → 即時通知；到 From 整點亦會做當晚場次匯總
+   * - holidayNotifyEnabled：每日 08:00 若系統判定紅日，發送當日場地表
+   */
+  overnightDutyNotify: {
+    enabled: { type: Boolean, default: false },
+    notifyPhones: {
+      type: [String],
+      default: [],
+    },
+    /** 即時通知時段開始（HH:mm），例 20:00 */
+    notifyPeriodFrom: { type: String, default: '20:00', trim: true },
+    /** 即時通知時段結束（HH:mm），例 08:00；可跨日 */
+    notifyPeriodTo: { type: String, default: '08:00', trim: true },
+    /** 紅日通知：每日 08:00 檢查是否紅日，是則發送當日預約 */
+    holidayNotifyEnabled: { type: Boolean, default: false },
+  },
+  /**
    * Tuya 控制區：設備綁在控制區，場地指派到控制區。
    * 任一關聯場地有預約燈光時段 → 控制區內設備應開（OR 邏輯）。
    */

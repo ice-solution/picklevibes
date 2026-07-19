@@ -24,6 +24,13 @@ interface Store {
   tuyaPostBufferMinutes?: number;
   tuyaMergeGapMinutes?: number;
   fullVenueHourlyRate?: number;
+  overnightDutyNotify?: {
+    enabled?: boolean;
+    notifyPhones?: string[];
+    notifyPeriodFrom?: string;
+    notifyPeriodTo?: string;
+    holidayNotifyEnabled?: boolean;
+  };
   tuyaZones?: { _id?: string; name: string }[];
 }
 
@@ -46,6 +53,11 @@ const emptyForm = {
   tuyaPostBufferMinutes: 15,
   tuyaMergeGapMinutes: 0,
   fullVenueHourlyRate: 0,
+  overnightDutyEnabled: false,
+  overnightNotifyPhones: '',
+  overnightNotifyPeriodFrom: '20:00',
+  overnightNotifyPeriodTo: '08:00',
+  overnightHolidayNotifyEnabled: false,
 };
 
 const StoreManagement: React.FC = () => {
@@ -101,6 +113,11 @@ const StoreManagement: React.FC = () => {
       tuyaPostBufferMinutes: s.tuyaPostBufferMinutes ?? 15,
       tuyaMergeGapMinutes: s.tuyaMergeGapMinutes ?? 0,
       fullVenueHourlyRate: s.fullVenueHourlyRate ?? 0,
+      overnightDutyEnabled: Boolean(s.overnightDutyNotify?.enabled),
+      overnightNotifyPhones: (s.overnightDutyNotify?.notifyPhones || []).join(', '),
+      overnightNotifyPeriodFrom: s.overnightDutyNotify?.notifyPeriodFrom || '20:00',
+      overnightNotifyPeriodTo: s.overnightDutyNotify?.notifyPeriodTo || '08:00',
+      overnightHolidayNotifyEnabled: Boolean(s.overnightDutyNotify?.holidayNotifyEnabled),
     });
     setShowForm(true);
   };
@@ -109,6 +126,10 @@ const StoreManagement: React.FC = () => {
     e.preventDefault();
     try {
       setSaving(true);
+      const notifyPhones = form.overnightNotifyPhones
+        .split(/[,，\n]/)
+        .map((p) => p.trim())
+        .filter(Boolean);
       const payload = {
         ...form,
         hikKey: form.hikKey || null,
@@ -122,7 +143,20 @@ const StoreManagement: React.FC = () => {
         tuyaPostBufferMinutes: Number(form.tuyaPostBufferMinutes) || 15,
         tuyaMergeGapMinutes: Number(form.tuyaMergeGapMinutes) || 0,
         fullVenueHourlyRate: Math.max(0, Number(form.fullVenueHourlyRate) || 0),
+        overnightDutyNotify: {
+          enabled: form.overnightDutyEnabled,
+          notifyPhones,
+          notifyPeriodFrom: form.overnightNotifyPeriodFrom || '20:00',
+          notifyPeriodTo: form.overnightNotifyPeriodTo || '08:00',
+          holidayNotifyEnabled: form.overnightHolidayNotifyEnabled,
+        },
       };
+      // 勿把 UI-only 欄位送上 API
+      delete (payload as any).overnightDutyEnabled;
+      delete (payload as any).overnightNotifyPhones;
+      delete (payload as any).overnightNotifyPeriodFrom;
+      delete (payload as any).overnightNotifyPeriodTo;
+      delete (payload as any).overnightHolidayNotifyEnabled;
       if (editing) {
         await axios.put(`/stores/${editing._id}`, payload);
       } else {
@@ -171,6 +205,7 @@ const StoreManagement: React.FC = () => {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">包場時薪</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">門禁</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">夜間通知</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">智能設備</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
             </tr>
@@ -191,6 +226,11 @@ const StoreManagement: React.FC = () => {
                     : '—'}
                 </td>
                 <td className="px-4 py-3 text-sm">{s.enableHikAccess ? 'HIK' : '僅確認信'}</td>
+                <td className="px-4 py-3 text-sm text-gray-600">
+                  {s.overnightDutyNotify?.enabled
+                    ? `${s.overnightDutyNotify.notifyPeriodFrom || '20:00'}–${s.overnightDutyNotify.notifyPeriodTo || '08:00'}${s.overnightDutyNotify.holidayNotifyEnabled ? ' · 紅日' : ''}`
+                    : '—'}
+                </td>
                 <td className="px-4 py-3 text-sm">
                   {s.enableTuyaAutomation
                     ? `Tuya · ${s.tuyaZones?.length || 0} 控制區`
@@ -242,6 +282,61 @@ const StoreManagement: React.FC = () => {
                 />
                 <p className="mt-1 text-xs text-gray-500">手動包場時會以此 × 時數預填扣款，仍可臨時改價。</p>
               </div>
+              <hr className="border-gray-200" />
+              <p className="text-sm font-medium text-gray-800">夜間值班 OpenWA 通知</p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.overnightDutyEnabled}
+                  onChange={(e) => setForm({ ...form, overnightDutyEnabled: e.target.checked })}
+                />
+                啟用夜間／紅日值班通知（此店專用）
+              </label>
+              {form.overnightDutyEnabled && (
+                <>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">通知電話 notifyPhones（逗號分隔，例 91234567, 8529xxxxxxx）</label>
+                    <textarea
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      rows={2}
+                      placeholder="91234567, 85298765432"
+                      value={form.overnightNotifyPhones}
+                      onChange={(e) => setForm({ ...form, overnightNotifyPhones: e.target.value })}
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">通知時段 From</label>
+                      <input
+                        type="time"
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        value={form.overnightNotifyPeriodFrom}
+                        onChange={(e) => setForm({ ...form, overnightNotifyPeriodFrom: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-500 mb-1">通知時段 To</label>
+                      <input
+                        type="time"
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        value={form.overnightNotifyPeriodTo}
+                        onChange={(e) => setForm({ ...form, overnightNotifyPeriodTo: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    時段內有人新建預約會即時 OpenWA 通知；到 From 整點會發送「今晚 From 起」場次匯總（可跨日，例 20:00–08:00）。
+                  </p>
+                  <label className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.overnightHolidayNotifyEnabled}
+                      onChange={(e) => setForm({ ...form, overnightHolidayNotifyEnabled: e.target.checked })}
+                    />
+                    紅日通知（每日 08:00 檢查系統紅日，是則發送當日場次）
+                  </label>
+                </>
+              )}
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={form.enableHikAccess} onChange={(e) => setForm({ ...form, enableHikAccess: e.target.checked })} />
                 啟用 HIK 門禁

@@ -6,11 +6,9 @@ const Court = require('../models/Court');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
-const whatsappService = require('../services/whatsappService');
 const {
   sendBookingNotification,
   applyTempAuthToBooking,
-  sendWhatsAppBookingConfirmationStub,
   resendBookingNotification,
 } = require('../services/bookingNotificationService');
 const Store = require('../models/Store');
@@ -536,20 +534,6 @@ router.post('/', [
     // 填充場地信息
     await booking.populate('court', 'name number type amenities');
 
-    // 發送 WhatsApp 確認通知
-    try {
-      const phoneNumber = booking.players[0]?.phone || req.user.phone;
-      if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
-        await whatsappService.sendBookingConfirmation(booking, phoneNumber);
-        console.log('✅ WhatsApp 預約確認通知已發送');
-      } else {
-        console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
-      }
-    } catch (whatsappError) {
-      console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
-      // 不影響預約創建，只記錄錯誤
-    }
-
     const storeDoc = await Store.findById(courtDoc.store).lean();
 
     try {
@@ -565,9 +549,15 @@ router.post('/', [
       } else {
         console.log('✅ 預約確認郵件已發送（無門禁）');
       }
-      await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
     } catch (notifyError) {
       console.error('❌ 預約通知發送失敗:', notifyError);
+    }
+
+    try {
+      const { notifyOnBookingCreated } = require('../services/overnightDutyNotifyService');
+      await notifyOnBookingCreated(booking);
+    } catch (dutyErr) {
+      console.error('❌ 夜間值班通知失敗（不影響預約）:', dutyErr);
     }
 
     const tuyaCourtIds = [booking.court];
@@ -610,7 +600,12 @@ router.get('/', [auth], async (req, res) => {
     }
 
     const bookings = await Booking.find(query)
-      .populate('court', 'name number type')
+      .populate('store', 'name slug address phone enableHikAccess')
+      .populate({
+        path: 'court',
+        select: 'name number type store',
+        populate: { path: 'store', select: 'name slug address phone enableHikAccess' },
+      })
       .sort({ date: -1, startTime: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -1006,11 +1001,11 @@ router.post('/:id/settle', [
 router.get('/:id', [auth], async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.id)
-      .populate('store', 'name slug')
+      .populate('store', 'name slug address phone enableHikAccess')
       .populate({
         path: 'court',
         select: 'name number type amenities pricing store',
-        populate: { path: 'store', select: 'name slug' },
+        populate: { path: 'store', select: 'name slug address phone enableHikAccess' },
       })
       .populate('user', 'name email phone')
       .populate('adminNotes.createdBy', 'name email');
@@ -1157,20 +1152,6 @@ router.put('/:id/cancel', [
           }
         }
       );
-    }
-
-    // 發送 WhatsApp 取消通知
-    try {
-      const phoneNumber = booking.players[0]?.phone || req.user.phone;
-      if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
-        await whatsappService.sendBookingCancellation(booking, phoneNumber);
-        console.log('✅ WhatsApp 預約取消通知已發送');
-      } else {
-        console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
-      }
-    } catch (whatsappError) {
-      console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
-      // 不影響預約取消，只記錄錯誤
     }
 
     scheduleTuyaCourtsSync(
