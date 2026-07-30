@@ -6,6 +6,7 @@ const {
   getStoreBalanceSummary,
   getAvailableBalanceForStore,
   addStoreBalance,
+  addPlatformBalance,
   deductForStoreBooking,
   completeRechargePayment,
   reverseRechargePayment,
@@ -514,44 +515,102 @@ router.put('/:id/status', [
 });
 
 // @route   POST /api/users/:id/manual-recharge
-// @desc    管理員手動為用戶充值積分 (僅管理員)
+// @desc    管理員手動充值：可選店鋪錢包，或 PickCourt 平台共用積分
 // @access  Private (Admin)
 router.post('/:id/manual-recharge', [
   auth,
   adminAuth,
   body('points').isInt({ min: 1 }).withMessage('充值積分必須是正整數'),
   body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('充值原因必須在1-200個字符之間'),
-  body('storeId').notEmpty().withMessage('請選擇歸屬店鋪'),
+  body('storeId').optional({ nullable: true, checkFalsy: true }),
   body('courtId').optional({ nullable: true }),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         message: '輸入驗證失敗',
-        errors: errors.array()
+        errors: errors.array(),
       });
     }
-    
-    const { points, reason, storeId, courtId } = req.body;
+
+    const { points, reason, courtId } = req.body;
     const userId = req.params.id;
-    
-    const { store, court } = await resolveManualAdjustStoreCourt(storeId, courtId || null);
-    const storeAccess = checkDocumentStoreAccess(req.tenantAccess, store._id);
-    if (!storeAccess.ok) {
-      return res.status(storeAccess.status).json({ message: storeAccess.message });
-    }
+    const rawStoreId = req.body.storeId != null ? String(req.body.storeId).trim() : '';
+    const toPlatform = !rawStoreId || rawStoreId === 'platform' || rawStoreId === '__platform__';
 
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
     }
 
+    // PickCourt 平台共用積分：僅平台超級管理員可手動派發
+    if (toPlatform) {
+      if (!req.tenantAccess?.isPlatformAdmin) {
+        return res.status(403).json({ message: '僅平台管理員可充值 PickCourt 共用積分；店鋪員工請充值本店積分' });
+      }
+
+      const recharge = new Recharge({
+        user: userId,
+        points,
+        amount: points,
+        status: 'completed',
+        paymentIntentId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        description: `管理員手動充值（PickCourt 平台） - ${reason}`,
+        store: null,
+        court: null,
+        adjustedBy: req.user._id,
+        payment: {
+          status: 'paid',
+          method: 'manual',
+          paidAt: new Date(),
+          transactionId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+        },
+        pointsAdded: false,
+        pointsDeducted: false,
+      });
+      await recharge.save();
+
+      const platformBalance = await addPlatformBalance(
+        userId,
+        points,
+        `管理員手動充值（PickCourt 平台） - ${reason} (管理員: ${req.user.name})`
+      );
+      recharge.pointsAdded = true;
+      await recharge.save();
+
+      return res.json({
+        message: '手動充值成功（PickCourt 平台共用積分）',
+        scope: 'platform',
+        recharge: {
+          id: recharge._id,
+          points,
+          amount: points,
+          reason,
+          store: null,
+          court: null,
+          adminName: req.user.name,
+          completedAt: recharge.payment.paidAt,
+        },
+        userBalance: {
+          balance: platformBalance.balance,
+          totalRecharged: platformBalance.totalRecharged,
+          totalSpent: platformBalance.totalSpent,
+        },
+      });
+    }
+
+    const { store, court } = await resolveManualAdjustStoreCourt(rawStoreId, courtId || null);
+    const storeAccess = checkDocumentStoreAccess(req.tenantAccess, store._id);
+    if (!storeAccess.ok) {
+      return res.status(storeAccess.status).json({ message: storeAccess.message });
+    }
+
     await assertStaffCanViewUser(req, userId, String(store._id));
 
     const recharge = new Recharge({
       user: userId,
-      points: points,
+      points,
       amount: points,
       status: 'completed',
       paymentIntentId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -581,12 +640,13 @@ router.post('/:id/manual-recharge', [
     await recharge.save();
 
     res.json({
-      message: '手動充值成功',
+      message: '手動充值成功（店鋪積分）',
+      scope: 'store',
       recharge: {
         id: recharge._id,
-        points: points,
+        points,
         amount: points,
-        reason: reason,
+        reason,
         store: { id: store._id, name: store.name },
         court: court ? { id: court._id, name: court.name } : null,
         adminName: req.user.name,

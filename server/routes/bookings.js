@@ -559,18 +559,21 @@ router.post('/', [
     // 填充場地信息
     await booking.populate('court', 'name number type amenities');
 
-    // 發送 WhatsApp 確認通知
-    try {
-      const phoneNumber = booking.players[0]?.phone || req.user.phone;
-      if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
-        await whatsappService.sendBookingConfirmation(booking, phoneNumber);
-        console.log('✅ WhatsApp 預約確認通知已發送');
-      } else {
-        console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
+    // 發送 WhatsApp：已啟用 Meta Cloud API 時改由 sendBookingNotification 統一發送（避免雙重）
+    const metaWaOn =
+      process.env.META_WA_ENABLED === '1' || process.env.META_WA_ENABLED === 'true';
+    if (!metaWaOn) {
+      try {
+        const phoneNumber = booking.players[0]?.phone || req.user.phone;
+        if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+          await whatsappService.sendBookingConfirmation(booking, phoneNumber);
+          console.log('✅ WhatsApp 預約確認通知已發送');
+        } else {
+          console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
+        }
+      } catch (whatsappError) {
+        console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
       }
-    } catch (whatsappError) {
-      console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
-      // 不影響預約創建，只記錄錯誤
     }
 
     const storeDoc = await Store.findById(courtDoc.store).lean();
@@ -588,7 +591,10 @@ router.post('/', [
       } else {
         console.log('✅ 預約確認郵件已發送（無門禁）');
       }
-      await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
+      // Meta 已在 sendBookingNotification 內發送；未啟用時保留 stub 相容
+      if (!metaWaOn) {
+        await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
+      }
     } catch (notifyError) {
       console.error('❌ 預約通知發送失敗:', notifyError);
     }

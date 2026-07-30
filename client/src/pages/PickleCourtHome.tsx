@@ -12,6 +12,7 @@ import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
 import PickleCourtCourtSearch from '../components/PickleCourt/PickleCourtCourtSearch';
 import PickCourtAllianceActivities from '../components/PickleCourt/PickCourtAllianceActivities';
+import PickCourtAllianceTournaments from '../components/PickleCourt/PickCourtAllianceTournaments';
 import { resolveMediaUrl } from '../utils/storeBrandUtils';
 import {
   BuildingStorefrontIcon,
@@ -214,6 +215,8 @@ const PickleCourtHome: React.FC = () => {
     </section>
 
     <PickCourtAllianceActivities />
+
+    <PickCourtAllianceTournaments />
 
     {/* Platform intro */}
     <section id="platform" className="py-20 lg:py-28 bg-slate-50">

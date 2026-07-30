@@ -64,6 +64,7 @@ export function isPickCourtAdminPath(pathname: string): boolean {
 export function isPickCourtPublicPath(pathname: string): boolean {
   if (pathname === PICKCOURT_HOME || pathname === PICKCOURT_SEARCH) return true;
   if (pathname === '/pickcourt' || pathname.startsWith('/pickcourt/')) return true;
+  if (pathname === '/tournaments' || pathname.startsWith('/tournaments/')) return true;
   if (isStorePublicPath(pathname)) return true;
   if (isPickCourtBookingPath(pathname)) return true;
   if (isPickCourtMemberPath(pathname)) return true;

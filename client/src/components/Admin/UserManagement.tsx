@@ -323,21 +323,22 @@ const UserManagement: React.FC = () => {
 
   const handleSubmitRecharge = async () => {
     if (!selectedUser || !rechargePoints || !rechargeReason || !rechargeStoreId) return;
-    
+
+    const toPlatform = rechargeStoreId === '__platform__';
     try {
-      await axios.post(`/users/${selectedUser._id}/manual-recharge`, {
-        points: parseInt(rechargePoints),
+      const res = await axios.post(`/users/${selectedUser._id}/manual-recharge`, {
+        points: parseInt(rechargePoints, 10),
         reason: rechargeReason,
-        storeId: rechargeStoreId,
-        courtId: rechargeCourtId || undefined,
+        storeId: toPlatform ? null : rechargeStoreId,
+        courtId: toPlatform ? undefined : rechargeCourtId || undefined,
       });
-      
+
       setShowRechargeModal(false);
-      fetchUsers(); // 刷新用戶列表
-      alert('充值成功！');
-    } catch (error) {
+      fetchUsers();
+      alert(res.data?.message || (toPlatform ? '已充值到 PickCourt 平台共用積分' : '已充值到店鋪積分'));
+    } catch (error: any) {
       console.error('充值失敗:', error);
-      alert('充值失敗，請稍後再試');
+      alert(error.response?.data?.message || '充值失敗，請稍後再試');
     }
   };
 
@@ -1191,30 +1192,42 @@ const UserManagement: React.FC = () => {
                 <p className="text-sm text-gray-600 mb-2">
                   為 <span className="font-medium">{selectedUser.name}</span> 充值積分
                 </p>
-                <p className="text-xs text-gray-500">當前餘額: {selectedUser.balance || 0} 分</p>
+                <p className="text-xs text-gray-500">
+                  列表顯示為 PickCourt 平台共用餘額: {selectedUser.balance || 0} 分
+                </p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  歸屬店鋪 <span className="text-red-500">*</span>
+                  充值至 <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={rechargeStoreId}
                   onChange={(e) => {
                     setRechargeStoreId(e.target.value);
-                    fetchCourtsForStore(e.target.value);
+                    setRechargeCourtId('');
+                    if (e.target.value && e.target.value !== '__platform__') {
+                      fetchCourtsForStore(e.target.value);
+                    } else {
+                      setRechargeCourts([]);
+                    }
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                 >
-                  <option value="">請選擇店鋪</option>
+                  <option value="">請選擇</option>
+                  <option value="__platform__">PickCourt 平台積分（共用，可跨店使用）</option>
                   {stores.map((store) => (
-                    <option key={store._id} value={store._id}>{store.name}</option>
+                    <option key={store._id} value={store._id}>
+                      {store.name}（僅限該店）
+                    </option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-gray-500">用於損益報表歸屬追蹤（派送積分不計收入）</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  平台積分 = 共用；店鋪積分 = 只限該店。預約時先扣店鋪再扣平台。
+                </p>
               </div>
 
-              {rechargeCourts.length > 0 && (
+              {rechargeStoreId && rechargeStoreId !== '__platform__' && rechargeCourts.length > 0 && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     歸屬場地（可選）

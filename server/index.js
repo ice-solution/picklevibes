@@ -200,6 +200,7 @@ app.use('/api/edm', require('./routes/edm'));
 app.use('/api/open', require('./routes/openBooking'));
 app.use('/api/platform', require('./routes/platform'));
 app.use('/api/tenant-memberships', require('./routes/tenantMemberships'));
+app.use('/api/tournaments', require('./routes/tournaments'));
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

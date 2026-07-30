@@ -9,6 +9,8 @@ const { getRequestHost } = require('../utils/tenantResolver');
 const { searchAllianceCourtAvailability } = require('../utils/allianceCourtSearch');
 const Activity = require('../models/Activity');
 const ActivityRegistration = require('../models/ActivityRegistration');
+const Event = require('../models/Event');
+const Tournament = require('../models/Tournament');
 const {
   buildActivityListSortStages,
   withActivityPinFields,
@@ -337,6 +339,185 @@ router.get('/alliance/activities', async (req, res) => {
     });
   } catch (error) {
     console.error('聯盟活動列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+/** GET /api/platform/alliance/tournaments — 聯盟各店賽事（與活動分開） */
+router.get('/alliance/tournaments', async (req, res) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 12));
+    const skip = (page - 1) * limit;
+    const now = new Date();
+
+    const allianceStores = await Store.find({
+      isActive: true,
+      allianceEnabled: true,
+    })
+      .select('_id name slug district branding')
+      .lean();
+    const storeIds = allianceStores.map((s) => s._id);
+    if (storeIds.length === 0) {
+      return res.json({ tournaments: [], total: 0, totalPages: 0, currentPage: page });
+    }
+
+    const storeMap = new Map(
+      allianceStores.map((s) => [
+        String(s._id),
+        {
+          id: String(s._id),
+          name: s.branding?.displayName || s.name,
+          slug: s.slug,
+          logoUrl: s.branding?.logoUrl || null,
+          district: s.district || null,
+        },
+      ])
+    );
+
+    const query = { isActive: true, store: { $in: storeIds } };
+    const total = await Event.countDocuments(query);
+
+    // 未完結優先，再按開始日期
+    const events = await Event.aggregate([
+      { $match: query },
+      {
+        $addFields: {
+          _end: { $ifNull: ['$dateEnd', '$dateStart'] },
+        },
+      },
+      {
+        $addFields: {
+          _done: {
+            $cond: [
+              { $and: [{ $ne: ['$_end', null] }, { $lt: ['$_end', now] }] },
+              1,
+              0,
+            ],
+          },
+          _startSort: { $ifNull: ['$dateStart', new Date('9999-12-31')] },
+        },
+      },
+      { $sort: { _done: 1, _startSort: 1, createdAt: -1 } },
+      { $skip: skip },
+      { $limit: limit },
+      { $project: { _end: 0, _done: 0, _startSort: 0 } },
+    ]);
+
+    const eventIds = events.map((e) => e._id);
+    const phaseRows = eventIds.length
+      ? await Tournament.aggregate([
+          { $match: { eventId: { $in: eventIds } } },
+          {
+            $group: {
+              _id: { eventId: '$eventId', phase: '$phase' },
+              count: { $sum: 1 },
+            },
+          },
+        ])
+      : [];
+    const phaseMap = new Map();
+    for (const row of phaseRows) {
+      const eid = String(row._id.eventId);
+      if (!phaseMap.has(eid)) phaseMap.set(eid, { group: 0, knockout: 0, total: 0 });
+      const bucket = phaseMap.get(eid);
+      if (row._id.phase === 'group') bucket.group += row.count;
+      else if (row._id.phase === 'knockout') bucket.knockout += row.count;
+      bucket.total += row.count;
+    }
+
+    res.json({
+      tournaments: events.map((ev) => {
+        const storeInfo = storeMap.get(String(ev.store)) || null;
+        const phases = phaseMap.get(String(ev._id)) || { group: 0, knockout: 0, total: 0 };
+        const end = ev.dateEnd || ev.dateStart;
+        let status = 'upcoming';
+        if (end && new Date(end) < now) status = 'completed';
+        else if (ev.dateStart && new Date(ev.dateStart) <= now) status = 'ongoing';
+        return {
+          id: String(ev._id),
+          name: ev.name,
+          slug: ev.slug,
+          description: ev.description || '',
+          dateStart: ev.dateStart || null,
+          dateEnd: ev.dateEnd || null,
+          venues: ev.venues || [],
+          status,
+          tournamentCount: phases.total,
+          groupCount: phases.group,
+          knockoutCount: phases.knockout,
+          store: storeInfo,
+        };
+      }),
+      total,
+      totalPages: Math.ceil(total / limit),
+      currentPage: page,
+    });
+  } catch (error) {
+    console.error('聯盟賽事列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+/** GET /api/platform/alliance/tournaments/:eventId — 公開賽事詳情 */
+router.get('/alliance/tournaments/:eventId', async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.eventId).lean();
+    if (!event || !event.isActive) {
+      return res.status(404).json({ message: '賽事不存在' });
+    }
+
+    const store = await Store.findOne({
+      _id: event.store,
+      isActive: true,
+      allianceEnabled: true,
+    })
+      .select('name slug district branding address')
+      .lean();
+    if (!store) {
+      return res.status(404).json({ message: '賽事不存在' });
+    }
+
+    const tournaments = await Tournament.find({ eventId: event._id })
+      .sort({ order: 1, createdAt: 1 })
+      .select('name phase advancePerGroup competitionDate order')
+      .lean();
+
+    const now = new Date();
+    const end = event.dateEnd || event.dateStart;
+    let status = 'upcoming';
+    if (end && new Date(end) < now) status = 'completed';
+    else if (event.dateStart && new Date(event.dateStart) <= now) status = 'ongoing';
+
+    res.json({
+      tournament: {
+        id: String(event._id),
+        name: event.name,
+        slug: event.slug,
+        description: event.description || '',
+        dateStart: event.dateStart || null,
+        dateEnd: event.dateEnd || null,
+        venues: event.venues || [],
+        status,
+        store: {
+          id: String(store._id),
+          name: store.branding?.displayName || store.name,
+          slug: store.slug,
+          logoUrl: store.branding?.logoUrl || null,
+          district: store.district || null,
+          address: store.address || null,
+        },
+        phases: tournaments.map((t) => ({
+          id: String(t._id),
+          name: t.name,
+          phase: t.phase,
+          advancePerGroup: t.advancePerGroup,
+          competitionDate: t.competitionDate || '',
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('聯盟賽事詳情錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

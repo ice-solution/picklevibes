@@ -3,6 +3,7 @@ const emailService = require('./emailService');
 const { getStoreAccessControlConfig, isAccessControlEnabled } = require('../utils/storeAccessControlConfig');
 const { processAccessControl, createAccessPass } = require('./accessControlRouter');
 const accessControlService = require('./accessControlService');
+const metaWhatsAppService = require('./metaWhatsAppService');
 
 function buildVisitorData(booking, userFallback) {
   return {
@@ -35,32 +36,106 @@ async function resolveStore(booking, courtDoc) {
 }
 
 /**
- * 預約建立／重發：門禁店（HIK / 大華）發門禁郵件；非門禁店發純確認郵件
+ * PickCourt 共用 Meta WhatsApp 號發送（有門禁→QR+密碼；否則→預約內容）
+ */
+async function sendMetaWhatsAppForBooking({
+  phone,
+  store,
+  bookingData,
+  withAccess,
+  password,
+  qrCodeData,
+}) {
+  if (!metaWhatsAppService.isConfigured()) {
+    return { skipped: true, reason: 'not_configured' };
+  }
+  if (!phone) {
+    return { skipped: true, reason: 'no_phone' };
+  }
+
+  try {
+    const result = await metaWhatsAppService.notifyBooking({
+      phone,
+      withAccess: !!withAccess,
+      storeName: store?.branding?.displayName || store?.name || bookingData.storeName,
+      date: bookingData.date,
+      startTime: bookingData.startTime,
+      endTime: bookingData.endTime,
+      courtName: bookingData.courtName,
+      storeAddress: store?.address || bookingData.storeAddress,
+      password: password || null,
+      qrCodeData: qrCodeData || null,
+      qrPayload: password || null,
+    });
+    if (result.success) {
+      console.log('✅ Meta WhatsApp 已發送:', {
+        to: result.to,
+        messageId: result.messageId,
+        withAccess: !!withAccess,
+      });
+    } else if (result.skipped) {
+      console.log('⚠️ Meta WhatsApp 略過:', result.reason);
+    }
+    return result;
+  } catch (err) {
+    console.error('❌ Meta WhatsApp 發送失敗:', err.message, err.details || '');
+    return { success: false, error: err.message, details: err.details };
+  }
+}
+
+/**
+ * 預約建立／重發：門禁店發門禁郵件；非門禁店發確認郵件；並經 Meta WhatsApp 通知
  */
 async function sendBookingNotification({ booking, courtDoc, store: storeInput, userFallback, emailOverrides }) {
-  const store = storeInput || await resolveStore(booking, courtDoc);
+  const store = storeInput || (await resolveStore(booking, courtDoc));
   const visitorData = buildVisitorData(booking, userFallback);
   const bookingData = buildBookingEmailData(booking, courtDoc, store, emailOverrides);
 
   if (isAccessControlEnabled(store)) {
     const acConfig = getStoreAccessControlConfig(store);
     const accessControlResult = await processAccessControl(acConfig, visitorData, bookingData);
-    return { mode: acConfig.vendor, accessControlResult };
+
+    const wa = await sendMetaWhatsAppForBooking({
+      phone: visitorData.phone,
+      store,
+      bookingData,
+      withAccess: true,
+      password: accessControlResult?.password || accessControlResult?.tempAuth?.password,
+      qrCodeData: accessControlResult?.qrCodeData || accessControlResult?.tempAuth?.code,
+    });
+
+    return { mode: acConfig.vendor, accessControlResult, whatsapp: wa };
   }
 
   await emailService.sendBookingConfirmationEmail(visitorData, bookingData, store);
-  return { mode: 'confirmation' };
+  const wa = await sendMetaWhatsAppForBooking({
+    phone: visitorData.phone,
+    store,
+    bookingData,
+    withAccess: false,
+  });
+  return { mode: 'confirmation', whatsapp: wa };
 }
 
 /**
- * WhatsApp 預約確認（預留，尚未啟用）
+ * 相容舊呼叫：已有 tempAuth 時可再發 Meta WhatsApp
  */
 async function sendWhatsAppBookingConfirmationStub(booking, store) {
-  if (process.env.WHATSAPP_BOOKING_ENABLED !== '1') {
-    return { skipped: true, reason: 'not_enabled' };
+  if (!metaWhatsAppService.isConfigured()) {
+    return { skipped: true, reason: 'not_configured' };
   }
-  // TODO: 依 store 發送不同 WhatsApp 模板
-  return { skipped: true, reason: 'not_implemented', storeId: store?._id };
+  const phone = booking.players?.[0]?.phone || booking.user?.phone;
+  const bookingData = buildBookingEmailData(booking, booking.court, store);
+  const withAccess =
+    isAccessControlEnabled(store) && Boolean(booking.tempAuth?.code || booking.tempAuth?.password);
+  return sendMetaWhatsAppForBooking({
+    phone,
+    store,
+    bookingData,
+    withAccess,
+    password: booking.tempAuth?.password,
+    qrCodeData: booking.tempAuth?.code,
+  });
 }
 
 async function applyTempAuthToBooking(booking, accessControlResult) {
@@ -77,7 +152,7 @@ async function applyTempAuthToBooking(booking, accessControlResult) {
 }
 
 /**
- * 管理員重發：門禁店可重建 tempAuth；非門禁店重發確認信
+ * 管理員重發：郵件 + Meta WhatsApp
  */
 async function resendBookingNotification(booking) {
   const court = booking.court;
@@ -115,6 +190,14 @@ async function resendBookingNotification(booking) {
     }
 
     await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
+    const wa = await sendMetaWhatsAppForBooking({
+      phone: visitorData.phone,
+      store,
+      bookingData,
+      withAccess: true,
+      password,
+      qrCodeData,
+    });
 
     const vendorLabel = acConfig.vendor === 'dahua' ? '大華' : 'HIK';
     return {
@@ -123,20 +206,29 @@ async function resendBookingNotification(booking) {
         ? `${vendorLabel} 臨時授權已重新創建，開門通知郵件已發送`
         : '開門通知郵件已重新發送',
       tempAuthCreated,
+      whatsapp: wa,
     };
   }
 
   await emailService.sendBookingConfirmationEmail(visitorData, bookingData, store);
+  const wa = await sendMetaWhatsAppForBooking({
+    phone: visitorData.phone,
+    store,
+    bookingData,
+    withAccess: false,
+  });
   return {
     mode: 'confirmation',
     message: '預約確認郵件已重新發送',
     tempAuthCreated: false,
+    whatsapp: wa,
   };
 }
 
 module.exports = {
   sendBookingNotification,
   sendWhatsAppBookingConfirmationStub,
+  sendMetaWhatsAppForBooking,
   applyTempAuthToBooking,
   resendBookingNotification,
   buildVisitorData,

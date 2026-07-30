@@ -31,6 +31,8 @@ import Activities from './pages/Activities';
 import ActivityDetail from './pages/ActivityDetail';
 import ActivityRegister from './pages/ActivityRegister';
 import MyActivities from './pages/MyActivities';
+import Tournaments from './pages/Tournaments';
+import TournamentDetail from './pages/TournamentDetail';
 import CoachCourses from './pages/CoachCourses';
 import CoachCalendar from './pages/CoachCalendar';
 import CoachSchoolRequest from './pages/CoachSchoolRequest';
@@ -336,14 +338,16 @@ function AppShell() {
                 />
                 <Route path="/activities" element={<Activities />} />
                 <Route path="/activities/:id" element={<ActivityDetail />} />
-                <Route 
-                  path="/activities/:id/register" 
+                <Route
+                  path="/activities/:id/register"
                   element={
                     <ProtectedRoute>
                       <ActivityRegister />
                     </ProtectedRoute>
-                  } 
+                  }
                 />
+                <Route path="/tournaments" element={<Tournaments />} />
+                <Route path="/tournaments/:id" element={<TournamentDetail />} />
                 <Route 
                   path="/my-activities" 
                   element={
