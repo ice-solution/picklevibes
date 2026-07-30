@@ -42,6 +42,7 @@ import Checkout from './pages/Checkout';
 import OrderHistory from './pages/OrderHistory';
 import Vlog from './pages/Vlog';
 import GameJoin from './pages/GameJoin';
+import PublicApplicationForm from './pages/PublicApplicationForm';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
@@ -223,6 +224,8 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
+                {/* 申請表公開頁：/:slug（須放在固定路由之後、catch-all 之前） */}
+                <Route path="/:slug" element={<PublicApplicationForm />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </main>

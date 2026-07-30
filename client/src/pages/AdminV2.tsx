@@ -28,6 +28,7 @@ import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
 import AccountingManagement from '../components/Admin/AccountingManagement';
+import ApplicationFormManagement from '../components/Admin/ApplicationFormManagement';
 import EdmSend from '../components/Admin/EdmSend';
 
 import {
@@ -50,6 +51,7 @@ import {
   EnvelopeIcon,
   BuildingStorefrontIcon,
   CurrencyDollarIcon,
+  DocumentTextIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -89,6 +91,7 @@ const AdminV2: React.FC = () => {
     { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement /> },
     { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon, element: <OrderManagement /> },
     { id: 'activities', name: '活動管理', icon: CalendarIcon, element: <ActivityManagement /> },
+    { id: 'application-forms', name: '申請表', icon: DocumentTextIcon, element: <ApplicationFormManagement /> },
     { id: 'regular-activities', name: '恆常活動管理', icon: CalendarIcon, element: <RegularActivityManagement /> },
     { id: 'weekend', name: '假期管理', icon: ClockIcon, element: <HolidayManagement /> },
     { id: 'booking-config', name: '預約設定', icon: Cog6ToothIcon, element: <BookingConfig /> },
