@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
   PlusIcon,
@@ -7,6 +7,9 @@ import {
   DocumentTextIcon,
   EyeIcon,
   XMarkIcon,
+  ArrowDownTrayIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 
 type StoreOption = { _id: string; name: string; slug: string };
@@ -81,6 +84,15 @@ const ApplicationFormManagement: React.FC = () => {
   const [creating, setCreating] = useState(false);
   const [submissionsForm, setSubmissionsForm] = useState<ApplicationFormDoc | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [submissionsPage, setSubmissionsPage] = useState(1);
+  const [submissionsPagination, setSubmissionsPagination] = useState({
+    page: 1,
+    limit: 50,
+    total: 0,
+    pages: 1,
+  });
+  const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const [formState, setFormState] = useState({
@@ -293,13 +305,73 @@ const ApplicationFormManagement: React.FC = () => {
     }
   };
 
-  const openSubmissions = async (form: ApplicationFormDoc) => {
+  const loadSubmissions = async (form: ApplicationFormDoc, page = 1) => {
     try {
+      setSubmissionsLoading(true);
       setSubmissionsForm(form);
-      const res = await axios.get(`/application-forms/${form._id}/submissions?limit=50`);
+      setSubmissionsPage(page);
+      const res = await axios.get(
+        `/application-forms/${form._id}/submissions?page=${page}&limit=50`
+      );
       setSubmissions(res.data.submissions || []);
+      setSubmissionsPagination(
+        res.data.pagination || { page, limit: 50, total: 0, pages: 1 }
+      );
     } catch (e) {
       alert(errMsg(e));
+    } finally {
+      setSubmissionsLoading(false);
+    }
+  };
+
+  const openSubmissions = async (form: ApplicationFormDoc) => {
+    await loadSubmissions(form, 1);
+  };
+
+  const closeSubmissions = () => {
+    setSubmissionsForm(null);
+    setSubmissions([]);
+    setSubmissionsPage(1);
+    setSubmissionsPagination({ page: 1, limit: 50, total: 0, pages: 1 });
+  };
+
+  const submissionColumns = useMemo(() => {
+    if (!submissionsForm) return [];
+    return (submissionsForm.fields || [])
+      .slice()
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+      .map((f) => ({
+        fieldName: f.fieldName,
+        label: f.label || f.fieldName,
+      }));
+  }, [submissionsForm]);
+
+  const exportSubmissionsXlsx = async () => {
+    if (!submissionsForm) return;
+    try {
+      setExporting(true);
+      const res = await axios.get(
+        `/application-forms/${submissionsForm._id}/submissions/export`,
+        { responseType: 'blob' }
+      );
+      const disposition = res.headers['content-disposition'] as string | undefined;
+      let filename = `申請表_${submissionsForm.slug || 'export'}.xlsx`;
+      const match = disposition?.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+      if (match) {
+        filename = decodeURIComponent(match[1] || match[2]);
+      }
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      alert(errMsg(e) || '匯出失敗');
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -746,39 +818,103 @@ const ApplicationFormManagement: React.FC = () => {
 
       {submissionsForm && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-start justify-center overflow-y-auto p-4">
-          <div className="bg-white rounded-xl w-full max-w-3xl my-8 shadow-xl">
-            <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold">提交記錄 · {submissionsForm.title}</h3>
-              <button type="button" onClick={() => setSubmissionsForm(null)}>
-                <XMarkIcon className="w-6 h-6 text-gray-400" />
-              </button>
+          <div className="bg-white rounded-xl w-full max-w-6xl my-8 shadow-xl flex flex-col max-h-[calc(100vh-2rem)]">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 py-4 border-b shrink-0">
+              <div>
+                <h3 className="font-semibold">提交記錄 · {submissionsForm.title}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  共 {submissionsPagination.total} 筆
+                  {submissionsPagination.pages > 1
+                    ? ` · 第 ${submissionsPagination.page} / ${submissionsPagination.pages} 頁`
+                    : ''}
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={exporting || submissionsPagination.total === 0}
+                  onClick={() => void exportSubmissionsXlsx()}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-primary-600 text-primary-600 hover:bg-primary-50 disabled:opacity-50"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4" />
+                  {exporting ? '匯出中…' : '匯出 XLSX'}
+                </button>
+                <button type="button" onClick={closeSubmissions}>
+                  <XMarkIcon className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
             </div>
-            <div className="p-5 max-h-[70vh] overflow-y-auto">
-              {submissions.length === 0 ? (
+            <div className="p-5 overflow-auto flex-1 min-h-0">
+              {submissionsLoading ? (
+                <p className="text-center text-gray-500 py-10">載入中…</p>
+              ) : submissions.length === 0 ? (
                 <p className="text-center text-gray-500 py-10">尚無提交</p>
               ) : (
-                <ul className="space-y-3">
-                  {submissions.map((s) => (
-                    <li key={s._id} className="border rounded-lg p-3 text-sm">
-                      <div className="text-xs text-gray-500 mb-2">
-                        {new Date(s.createdAt).toLocaleString('zh-HK')}
-                        {s.contactName ? ` · ${s.contactName}` : ''}
-                        {s.contactPhone ? ` · ${s.contactPhone}` : ''}
-                        {s.contactEmail ? ` · ${s.contactEmail}` : ''}
-                      </div>
-                      <dl className="grid grid-cols-1 sm:grid-cols-2 gap-1">
-                        {Object.entries(s.data || {}).map(([k, v]) => (
-                          <div key={k}>
-                            <dt className="text-gray-500 inline">{k}：</dt>
-                            <dd className="inline text-gray-900">{String(v)}</dd>
-                          </div>
+                <div className="overflow-x-auto border rounded-lg">
+                  <table className="min-w-full text-sm divide-y divide-gray-200">
+                    <thead className="bg-gray-50 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 whitespace-nowrap">
+                          提交時間
+                        </th>
+                        {submissionColumns.map((col) => (
+                          <th
+                            key={col.fieldName}
+                            className="px-3 py-2 text-left text-xs font-medium text-gray-600 whitespace-nowrap"
+                          >
+                            {col.label}
+                          </th>
                         ))}
-                      </dl>
-                    </li>
-                  ))}
-                </ul>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 bg-white">
+                      {submissions.map((s) => (
+                        <tr key={s._id} className="hover:bg-gray-50">
+                          <td className="px-3 py-2 text-gray-600 whitespace-nowrap align-top">
+                            {new Date(s.createdAt).toLocaleString('zh-HK', { hour12: false })}
+                          </td>
+                          {submissionColumns.map((col) => (
+                            <td
+                              key={col.fieldName}
+                              className="px-3 py-2 text-gray-900 whitespace-pre-wrap max-w-xs align-top"
+                            >
+                              {s.data?.[col.fieldName] != null && s.data[col.fieldName] !== ''
+                                ? String(s.data[col.fieldName])
+                                : '—'}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
+            {submissionsPagination.pages > 1 && (
+              <div className="px-5 py-3 border-t flex items-center justify-between gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={submissionsLoading || submissionsPage <= 1}
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border disabled:opacity-40"
+                  onClick={() => void loadSubmissions(submissionsForm, submissionsPage - 1)}
+                >
+                  <ChevronLeftIcon className="w-4 h-4" /> 上一頁
+                </button>
+                <span className="text-sm text-gray-600">
+                  {submissionsPage} / {submissionsPagination.pages}
+                </span>
+                <button
+                  type="button"
+                  disabled={
+                    submissionsLoading || submissionsPage >= submissionsPagination.pages
+                  }
+                  className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border disabled:opacity-40"
+                  onClick={() => void loadSubmissions(submissionsForm, submissionsPage + 1)}
+                >
+                  下一頁 <ChevronRightIcon className="w-4 h-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,5 +1,6 @@
 const express = require('express');
 const mongoose = require('mongoose');
+const XLSX = require('xlsx');
 const { body, validationResult } = require('express-validator');
 const ApplicationForm = require('../models/ApplicationForm');
 const ApplicationSubmission = require('../models/ApplicationSubmission');
@@ -439,7 +440,7 @@ router.get('/:id/submissions', async (req, res) => {
     if (!form) return res.status(404).json({ message: '申請表不存在' });
 
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const limit = Math.min(500, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const skip = (page - 1) * limit;
 
     const [submissions, total] = await Promise.all([
@@ -453,11 +454,71 @@ router.get('/:id/submissions', async (req, res) => {
 
     res.json({
       submissions,
-      pagination: { page, limit, total, pages: Math.ceil(total / limit) },
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
     });
   } catch (error) {
     console.error('list submissions:', error);
     res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+/** 匯出全部提交為 XLSX（欄位用中文 label） */
+router.get('/:id/submissions/export', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ message: '無效 ID' });
+    }
+    const form = await ApplicationForm.findById(req.params.id).lean();
+    if (!form) return res.status(404).json({ message: '申請表不存在' });
+
+    const fields = (form.fields || [])
+      .slice()
+      .sort((a, b) => (a.order || 0) - (b.order || 0));
+    const submissions = await ApplicationSubmission.find({ form: form._id })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const headers = ['提交時間', ...fields.map((f) => f.label || f.fieldName)];
+    const rows = submissions.map((s) => {
+      const row = {
+        提交時間: s.createdAt
+          ? new Date(s.createdAt).toLocaleString('zh-HK', { hour12: false })
+          : '',
+      };
+      for (const f of fields) {
+        const key = f.label || f.fieldName;
+        row[key] = s.data?.[f.fieldName] != null ? String(s.data[f.fieldName]) : '';
+      }
+      return row;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(rows.length ? rows : [{}], {
+      header: headers,
+    });
+    if (!rows.length) {
+      XLSX.utils.sheet_add_aoa(worksheet, [headers], { origin: 'A1' });
+    }
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '提交記錄');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+    const safeTitle = String(form.title || 'application')
+      .replace(/[^\w\u4e00-\u9fff-]+/g, '_')
+      .slice(0, 40);
+    const filename = `申請表_${safeTitle}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    );
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`
+    );
+    res.send(buffer);
+  } catch (error) {
+    console.error('export submissions xlsx:', error);
+    res.status(500).json({ message: '匯出失敗' });
   }
 });
 
