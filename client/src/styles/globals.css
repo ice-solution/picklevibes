@@ -35,6 +35,11 @@
   --color-accent-700: #b45309;
   --color-accent-800: #92400e;
   --color-accent-900: #78350f;
+
+  /* PickCourt 平台品牌色（捲軸等） */
+  --platform-primary: #c9a227;
+  --platform-primary-hover: #9a7b1a;
+  --platform-primary-soft: #eef2f7;
 }
 
 /* 全局按鈕樣式 */
@@ -101,6 +106,58 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: var(--color-primary-500);
+}
+
+/* PickCourt 平台：海軍藍 + 金色捲軸（主站、會員中心、聯盟公開頁） */
+html.platform-branded {
+  scrollbar-width: thin;
+  scrollbar-color: var(--platform-primary) var(--platform-primary-soft);
+}
+
+html.platform-branded::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+html.platform-branded::-webkit-scrollbar-track {
+  background: var(--platform-primary-soft);
+}
+
+html.platform-branded::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--platform-primary) 72%, white);
+  border-radius: 4px;
+}
+
+html.platform-branded::-webkit-scrollbar-thumb:hover {
+  background: var(--platform-primary-hover);
+}
+
+.platform-branded,
+.platform-branded * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--platform-primary) var(--platform-primary-soft);
+}
+
+.platform-branded::-webkit-scrollbar,
+.platform-branded ::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.platform-branded::-webkit-scrollbar-track,
+.platform-branded ::-webkit-scrollbar-track {
+  background: var(--platform-primary-soft);
+}
+
+.platform-branded::-webkit-scrollbar-thumb,
+.platform-branded ::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--platform-primary) 72%, white);
+  border-radius: 4px;
+}
+
+.platform-branded::-webkit-scrollbar-thumb:hover,
+.platform-branded ::-webkit-scrollbar-thumb:hover {
+  background: var(--platform-primary-hover);
 }
 
 /* 店鋪後台／白標：跟隨品牌主色（含 html 層級捲軸） */

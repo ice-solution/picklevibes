@@ -47,6 +47,16 @@ function sanitizeRedeemPayload(body) {
   return data;
 }
 
+/** 店鋪後台兌換碼僅限場地預約使用 */
+function enforceStoreStaffBookingOnly(tenantAccess, body) {
+  if (!tenantAccess || tenantAccess.isPlatformAdmin) return body;
+  if (!(tenantAccess.managedStoreIds || []).length) return body;
+  return {
+    ...body,
+    applicableTypes: ['booking'],
+  };
+}
+
 function denyStoreAccess(res, check) {
   return res.status(check.status).json({ message: check.message });
 }
@@ -352,19 +362,21 @@ router.post('/admin/create', [
       for (let i = 0; i < quantity; i += 1) {
         const generatedCode = await generateUniqueIndependentRedeemCode();
 
-        const redeemCodeData = sanitizeRedeemPayload({
-          ...req.body,
-          code: generatedCode,
-          batchId,
-          isIndependentCode,
-          commissionRate,
-          store: storeResult.storeId,
-          // 獨立兌換碼：強制每個碼只用一次（全域）與每用戶一次
-          usageLimit: 1,
-          userUsageLimit: 1,
-          createdBy: req.user.id,
-          validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
-        });
+        const redeemCodeData = sanitizeRedeemPayload(
+          enforceStoreStaffBookingOnly(req.tenantAccess, {
+            ...req.body,
+            code: generatedCode,
+            batchId,
+            isIndependentCode,
+            commissionRate,
+            store: storeResult.storeId,
+            // 獨立兌換碼：強制每個碼只用一次（全域）與每用戶一次
+            usageLimit: 1,
+            userUsageLimit: 1,
+            createdBy: req.user.id,
+            validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
+          })
+        );
 
         const redeemCode = new RedeemCode(redeemCodeData);
         await redeemCode.save();
@@ -383,17 +395,19 @@ router.post('/admin/create', [
       return res.status(400).json({ message: '兌換碼不能為空' });
     }
 
-    const redeemCodeData = sanitizeRedeemPayload({
-      ...req.body,
-      code: finalCode,
-      isIndependentCode,
-      commissionRate,
-      store: storeResult.storeId,
-      usageLimit: req.body.usageLimit,
-      userUsageLimit: req.body.userUsageLimit,
-      createdBy: req.user.id,
-      validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
-    });
+    const redeemCodeData = sanitizeRedeemPayload(
+      enforceStoreStaffBookingOnly(req.tenantAccess, {
+        ...req.body,
+        code: finalCode,
+        isIndependentCode,
+        commissionRate,
+        store: storeResult.storeId,
+        usageLimit: req.body.usageLimit,
+        userUsageLimit: req.body.userUsageLimit,
+        createdBy: req.user.id,
+        validFrom: req.body.validFrom ? new Date(req.body.validFrom) : new Date(),
+      })
+    );
 
     const redeemCode = new RedeemCode(redeemCodeData);
     await redeemCode.save();
@@ -517,7 +531,7 @@ router.post('/admin/batch-jobs', [
     }
 
     const template = normalizeTemplate(
-      { ...req.body, store: storeResult.storeId },
+      enforceStoreStaffBookingOnly(req.tenantAccess, { ...req.body, store: storeResult.storeId }),
       req.user.id
     );
 
@@ -753,7 +767,9 @@ router.put('/admin/batch/:batchId', [
       return denyStoreAccess(res, batchAccess);
     }
 
-    const update = sanitizeRedeemPayload({ ...req.body });
+    const update = sanitizeRedeemPayload(
+      enforceStoreStaffBookingOnly(req.tenantAccess, { ...req.body })
+    );
 
     // 正規化 commissionRate
     if (update.commissionRate === '' || update.commissionRate == null) {
@@ -843,7 +859,9 @@ router.put('/admin/:id', [
       });
     }
 
-    const update = sanitizeRedeemPayload({ ...req.body });
+    const update = sanitizeRedeemPayload(
+      enforceStoreStaffBookingOnly(req.tenantAccess, { ...req.body })
+    );
     if (update.code) update.code = String(update.code).trim().toUpperCase();
     if (update.commissionRate === '' || update.commissionRate == null) {
       update.commissionRate = null;

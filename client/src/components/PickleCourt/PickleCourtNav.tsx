@@ -18,7 +18,8 @@ const navLinks: NavLink[] = [
   { href: pickcourtHomeHash('platform'), label: '平台介紹' },
   { href: pickcourtHomeHash('alliance'), label: 'PickCourt 聯盟' },
   { href: pickcourtHomeHash('activities'), label: '活動中心' },
-  { href: pickcourtHomeHash('tournaments'), label: '比賽賽事' },
+  // 比賽功能暫時收起
+  // { href: pickcourtHomeHash('tournaments'), label: '比賽賽事' },
 ];
 
 const linkClass =

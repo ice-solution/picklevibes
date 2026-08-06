@@ -5,6 +5,7 @@ import {
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import api, { ACCOUNTING_REPORT_TIMEOUT_MS } from '../../services/api';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 interface StoreOption {
   _id: string;
@@ -112,6 +113,7 @@ function PLRow({
 }
 
 const AccountingPLPanel: React.FC = () => {
+  const lockedStoreId = useLockedStoreId();
   const today = ymdToday();
 
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -122,8 +124,12 @@ const AccountingPLPanel: React.FC = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (lockedStoreId) {
+      setStoreId(lockedStoreId);
+      return;
+    }
     api.get('/stores/admin/all').then((r) => setStores(r.data.stores || [])).catch(() => {});
-  }, []);
+  }, [lockedStoreId]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -170,16 +176,22 @@ const AccountingPLPanel: React.FC = () => {
       <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-end gap-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">店鋪</label>
-          <select
-            value={storeId}
-            onChange={(e) => setStoreId(e.target.value)}
-            className="min-w-[220px] px-3 py-2 border rounded-lg bg-white"
-          >
-            <option value="">全部店鋪（含網店）</option>
-            {stores.map((s) => (
-              <option key={s._id} value={s._id}>{s.name}</option>
-            ))}
-          </select>
+          {lockedStoreId ? (
+            <p className="min-w-[220px] px-3 py-2 border rounded-lg bg-gray-50 text-gray-800">
+              {stores.find((s) => s._id === lockedStoreId)?.name || data?.selectedStore?.name || '本店'}
+            </p>
+          ) : (
+            <select
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              className="min-w-[220px] px-3 py-2 border rounded-lg bg-white"
+            >
+              <option value="">全部店鋪（含網店）</option>
+              {stores.map((s) => (
+                <option key={s._id} value={s._id}>{s.name}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">開始日期</label>

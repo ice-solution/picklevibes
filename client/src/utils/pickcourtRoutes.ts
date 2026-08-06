@@ -1,3 +1,5 @@
+import { isReservedStoreSlug } from './storeSlugRoutes';
+
 /** PickCourt 平台公開路由（首頁即聯盟站） */
 export const PICKCOURT_HOME = '/';
 export const PICKCOURT_SEARCH = '/search';
@@ -16,9 +18,12 @@ export function isPickCourtMemberPath(pathname: string): boolean {
   return pathname === PICKCOURT_ACCOUNT.root || pathname.startsWith(`${PICKCOURT_ACCOUNT.root}/`);
 }
 
-/** 店鋪公開頁（不含 /admin） */
+/** 店鋪公開頁（不含 /admin）：/store/:slug 或 /:slug */
 export function isStorePublicPath(pathname: string): boolean {
-  return /^\/store\/[^/]+$/.test(pathname);
+  if (/^\/store\/[^/]+$/.test(pathname)) return true;
+  const m = pathname.match(/^\/([^/]+)$/);
+  if (m && !isReservedStoreSlug(m[1])) return true;
+  return false;
 }
 
 /** 聯盟預約流程（隱藏 PickleVibes 主站 chrome） */

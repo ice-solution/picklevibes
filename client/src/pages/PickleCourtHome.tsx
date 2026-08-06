@@ -12,7 +12,6 @@ import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
 import PickleCourtCourtSearch from '../components/PickleCourt/PickleCourtCourtSearch';
 import PickCourtAllianceActivities from '../components/PickleCourt/PickCourtAllianceActivities';
-import PickCourtAllianceTournaments from '../components/PickleCourt/PickCourtAllianceTournaments';
 import { resolveMediaUrl } from '../utils/storeBrandUtils';
 import {
   BuildingStorefrontIcon,
@@ -191,7 +190,7 @@ const PickleCourtHome: React.FC = () => {
                 <p className="text-xs text-slate-400 mt-2">{s.courtCount} 個場地</p>
                 <div className="mt-4 flex flex-wrap gap-3 justify-center">
                   <Link
-                    to={`/store/${s.slug}`}
+                    to={`/${s.slug}`}
                     className="inline-flex items-center gap-1 text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold"
                   >
                     查看場地
@@ -216,7 +215,8 @@ const PickleCourtHome: React.FC = () => {
 
     <PickCourtAllianceActivities />
 
-    <PickCourtAllianceTournaments />
+    {/* 比賽功能暫時收起 */}
+    {/* <PickCourtAllianceTournaments /> */}
 
     {/* Platform intro */}
     <section id="platform" className="py-20 lg:py-28 bg-slate-50">

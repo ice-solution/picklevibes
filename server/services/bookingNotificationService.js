@@ -151,6 +151,58 @@ async function applyTempAuthToBooking(booking, accessControlResult) {
   return booking;
 }
 
+function shouldSendBookingInvoice(booking) {
+  const method = booking.payment?.method;
+  const status = booking.payment?.status;
+  if (method === 'admin_waived') return true;
+  if (status === 'paid') return true;
+  if (method === 'points' && Number(booking.payment?.pointsDeducted || 0) > 0) return true;
+  return false;
+}
+
+function buildBookingInvoiceData(booking, court, store) {
+  const invoiceNumber = `BKG-${booking._id.toString().slice(-8).toUpperCase()}`;
+  const courtName = court?.name || '場地預約';
+  const original = Number(booking.payment?.originalPrice) || 0;
+  const discount = Number(booking.payment?.discount) || 0;
+  const total = Math.max(0, original - discount);
+  const storeName = store?.branding?.displayName || store?.name || '';
+
+  return {
+    invoiceNumber,
+    items: [
+      {
+        description: `${storeName} ${courtName} · ${booking.date} ${booking.startTime}-${booking.endTime}`,
+        quantity: 1,
+        unitPrice: original,
+        amount: total,
+      },
+    ],
+    subtotal: total,
+    total: total,
+  };
+}
+
+async function sendBookingInvoiceEmail(booking, store) {
+  if (!shouldSendBookingInvoice(booking)) {
+    return { skipped: true, reason: 'not_paid' };
+  }
+  const visitorData = buildVisitorData(booking, booking.user);
+  if (!visitorData.email) {
+    return { skipped: true, reason: 'no_email' };
+  }
+  const invoiceData = buildBookingInvoiceData(booking, booking.court, store);
+  const paymentData = {
+    method: booking.payment?.method,
+    status: booking.payment?.status,
+    paidAt: booking.payment?.paidAt,
+    transactionId: booking.payment?.transactionId,
+    pointsDeducted: booking.payment?.pointsDeducted,
+  };
+  await emailService.sendInvoiceEmail(visitorData, invoiceData, paymentData);
+  return { sent: true, invoiceNumber: invoiceData.invoiceNumber };
+}
+
 /**
  * 管理員重發：郵件 + Meta WhatsApp
  */
@@ -199,14 +251,24 @@ async function resendBookingNotification(booking) {
       qrCodeData,
     });
 
+    let invoiceResult = { skipped: true };
+    try {
+      invoiceResult = await sendBookingInvoiceEmail(booking, store);
+    } catch (invoiceErr) {
+      console.error('❌ 重發預約發票郵件失敗:', invoiceErr.message);
+      invoiceResult = { sent: false, error: invoiceErr.message };
+    }
+
     const vendorLabel = acConfig.vendor === 'dahua' ? '大華' : 'HIK';
+    const invoiceNote = invoiceResult.sent ? '，發票郵件已發送' : '';
     return {
       mode: acConfig.vendor,
       message: tempAuthCreated
-        ? `${vendorLabel} 臨時授權已重新創建，開門通知郵件已發送`
-        : '開門通知郵件已重新發送',
+        ? `${vendorLabel} 臨時授權已重新創建，開門通知郵件已發送${invoiceNote}`
+        : `開門通知郵件已重新發送${invoiceNote}`,
       tempAuthCreated,
       whatsapp: wa,
+      invoice: invoiceResult,
     };
   }
 
@@ -217,11 +279,22 @@ async function resendBookingNotification(booking) {
     bookingData,
     withAccess: false,
   });
+
+  let invoiceResult = { skipped: true };
+  try {
+    invoiceResult = await sendBookingInvoiceEmail(booking, store);
+  } catch (invoiceErr) {
+    console.error('❌ 重發預約發票郵件失敗:', invoiceErr.message);
+    invoiceResult = { sent: false, error: invoiceErr.message };
+  }
+
+  const invoiceNote = invoiceResult.sent ? '，發票郵件已發送' : '';
   return {
     mode: 'confirmation',
-    message: '預約確認郵件已重新發送',
+    message: `預約確認郵件已重新發送${invoiceNote}`,
     tempAuthCreated: false,
     whatsapp: wa,
+    invoice: invoiceResult,
   };
 }
 
@@ -231,6 +304,7 @@ module.exports = {
   sendMetaWhatsAppForBooking,
   applyTempAuthToBooking,
   resendBookingNotification,
+  sendBookingInvoiceEmail,
   buildVisitorData,
   buildBookingEmailData,
 };

@@ -135,6 +135,7 @@ function ApplicablePricingSlotsPicker({
 const RedeemCodeManagement: React.FC = () => {
   const storeAdminCtx = useOptionalStoreAdmin();
   const lockedStoreId = useLockedStoreId();
+  const storeBookingOnly = Boolean(lockedStoreId);
   const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([]);
   const [redeemGroups, setRedeemGroups] = useState<RedeemCodeGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -205,6 +206,12 @@ const RedeemCodeManagement: React.FC = () => {
     applicablePricingSlots: [] as string[],
     restrictedCode: '' // 專用代碼限制
   });
+
+  useEffect(() => {
+    if (!lockedStoreId) return;
+    setFormData((prev) => ({ ...prev, applicableTypes: ['booking'] }));
+    setGroupFormData((prev) => ({ ...prev, applicableTypes: ['booking'] }));
+  }, [lockedStoreId]);
 
   useEffect(() => {
     if (storeAdminCtx && !lockedStoreId) return;
@@ -541,7 +548,7 @@ const RedeemCodeManagement: React.FC = () => {
         quantity: 1,
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
-        applicableTypes: ['all'],
+        applicableTypes: storeBookingOnly ? ['booking'] : ['all'],
         applicablePricingSlots: [],
         restrictedCode: ''
       });
@@ -590,6 +597,7 @@ const RedeemCodeManagement: React.FC = () => {
       const submitData = {
         ...formData,
         ...(lockedStoreId ? { store: lockedStoreId } : {}),
+        applicableTypes: storeBookingOnly ? ['booking'] : formData.applicableTypes,
         usageLimit: formData.usageLimit && formData.usageLimit.trim() !== '' ? parseInt(formData.usageLimit) : undefined,
         validFrom: new Date(formData.validFrom).toISOString(),
         validUntil: new Date(formData.validUntil).toISOString()
@@ -640,7 +648,7 @@ const RedeemCodeManagement: React.FC = () => {
         quantity: 1,
         validFrom: new Date().toISOString().split('T')[0],
         validUntil: '',
-        applicableTypes: ['all'],
+        applicableTypes: storeBookingOnly ? ['booking'] : ['all'],
         applicablePricingSlots: [],
         restrictedCode: ''
       });
@@ -1310,6 +1318,9 @@ const RedeemCodeManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">適用範圍 *</label>
+                {storeBookingOnly ? (
+                  <p className="text-sm text-gray-600">僅限場地預約使用</p>
+                ) : (
                 <div className="space-y-2">
                   <label className="flex items-center">
                     <input
@@ -1365,6 +1376,7 @@ const RedeemCodeManagement: React.FC = () => {
                     </>
                   )}
                 </div>
+                )}
                 <ApplicablePricingSlotsPicker
                   applicableTypes={groupFormData.applicableTypes}
                   value={groupFormData.applicablePricingSlots}
@@ -1615,6 +1627,9 @@ const RedeemCodeManagement: React.FC = () => {
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   適用範圍 *
                 </label>
+                {storeBookingOnly ? (
+                  <p className="text-sm text-gray-600">僅限場地預約使用</p>
+                ) : (
                 <div className="space-y-2">
                   <label className="flex items-center">
                     <input
@@ -1706,6 +1721,7 @@ const RedeemCodeManagement: React.FC = () => {
                     </>
                   )}
                 </div>
+                )}
                 <ApplicablePricingSlotsPicker
                   applicableTypes={formData.applicableTypes}
                   value={formData.applicablePricingSlots}

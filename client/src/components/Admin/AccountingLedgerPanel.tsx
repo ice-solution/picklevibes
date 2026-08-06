@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import apiConfig from '../../config/api';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 interface StoreOption {
   _id: string;
@@ -85,6 +86,7 @@ function receiptUrl(imagePath: string) {
 }
 
 const AccountingLedgerPanel: React.FC = () => {
+  const lockedStoreId = useLockedStoreId();
   const today = ymdToday();
 
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -158,8 +160,11 @@ const AccountingLedgerPanel: React.FC = () => {
   }, [listParams]);
 
   useEffect(() => {
+    if (lockedStoreId) {
+      setStoreId(lockedStoreId);
+    }
     loadMeta().catch(() => {});
-  }, [loadMeta]);
+  }, [loadMeta, lockedStoreId]);
 
   useEffect(() => {
     load();
@@ -174,7 +179,7 @@ const AccountingLedgerPanel: React.FC = () => {
     setForm({
       ...emptyForm,
       date: today,
-      store: storeId || stores[0]?._id || '',
+      store: lockedStoreId || storeId || stores[0]?._id || '',
       category: categories[0] || '',
     });
     setReceiptFile(null);
@@ -277,16 +282,22 @@ const AccountingLedgerPanel: React.FC = () => {
       <div className="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap items-end gap-3">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">店鋪</label>
-          <select
-            value={storeId}
-            onChange={(e) => setStoreId(e.target.value)}
-            className="min-w-[180px] px-3 py-2 border rounded-lg bg-white"
-          >
-            <option value="">全部店鋪</option>
-            {stores.map((s) => (
-              <option key={s._id} value={s._id}>{s.name}</option>
-            ))}
-          </select>
+          {lockedStoreId ? (
+            <p className="min-w-[180px] px-3 py-2 border rounded-lg bg-gray-50 text-gray-800">
+              {stores.find((s) => s._id === lockedStoreId)?.name || '本店'}
+            </p>
+          ) : (
+            <select
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              className="min-w-[180px] px-3 py-2 border rounded-lg bg-white"
+            >
+              <option value="">全部店鋪</option>
+              {stores.map((s) => (
+                <option key={s._id} value={s._id}>{s.name}</option>
+              ))}
+            </select>
+          )}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">類型</label>

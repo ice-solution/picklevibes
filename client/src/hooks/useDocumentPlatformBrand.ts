@@ -5,10 +5,15 @@ import {
   PLATFORM_NAME,
 } from '../constants/platformBrand';
 
-/** 非 React Helmet 路由：同步 document title / favicon 為 PickCourt */
+export const PLATFORM_BRAND_CLASS = 'platform-branded';
+
+/** 非 React Helmet 路由：同步 document title / favicon / 捲軸為 PickCourt */
 export function useDocumentPlatformBrand(active: boolean) {
   useEffect(() => {
     if (!active) return undefined;
+
+    const root = document.documentElement;
+    root.classList.add(PLATFORM_BRAND_CLASS);
 
     const prevTitle = document.title;
     const favicon =
@@ -26,6 +31,7 @@ export function useDocumentPlatformBrand(active: boolean) {
     }
 
     return () => {
+      root.classList.remove(PLATFORM_BRAND_CLASS);
       document.title = prevTitle;
       if (favicon && prevFavicon) {
         favicon.setAttribute('href', prevFavicon);

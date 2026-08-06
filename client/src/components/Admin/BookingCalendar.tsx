@@ -701,14 +701,19 @@ const BookingCalendar: React.FC = () => {
   const handleResendEmail = async () => {
     if (!selectedBooking) return;
     
-    if (!window.confirm('確認要重新發送開門通知郵件嗎？')) {
+    if (!window.confirm('確認要重新發送預約確認／開門通知與發票郵件嗎？')) {
       return;
     }
     
     try {
       setResendingEmail(true);
       const response = await axios.post(`/bookings/${selectedBooking._id}/resend-access-email`);
-      alert(`郵件已重新發送到：${response.data.email}`);
+      const invoiceSent = response.data?.invoice?.sent;
+      const invoiceSkipped = response.data?.invoice?.skipped;
+      let detail = `郵件已重新發送到：${response.data.email}`;
+      if (invoiceSent) detail += '\n發票郵件亦已發送。';
+      else if (!invoiceSkipped) detail += '\n發票郵件發送失敗，請查看伺服器日誌。';
+      alert(detail);
     } catch (error: any) {
       console.error('重發郵件失敗:', error);
       alert(error.response?.data?.message || '重發郵件失敗，請稍後再試');
@@ -1334,7 +1339,7 @@ const BookingCalendar: React.FC = () => {
                         發送中...
                       </>
                     ) : (
-                      '重發開門通知郵件'
+                      '重發確認／發票郵件'
                     )}
                   </button>
                   {selectedBooking.status !== 'cancelled' && (

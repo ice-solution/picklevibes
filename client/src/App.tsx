@@ -57,6 +57,7 @@ import { isPickCourtPublicPath, isPickCourtAdminPath } from './utils/pickcourtRo
 import { useDocumentPlatformBrand } from './hooks/useDocumentPlatformBrand';
 import StoreAdmin from './pages/StoreAdmin';
 import StorePublic from './pages/StorePublic';
+import StorePublicSlugRoute from './pages/StorePublicSlugRoute';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import TenantDomainRedirect from './components/TenantDomainRedirect';
 import { StoreTenantHostProvider, useStoreTenantHost } from './contexts/StoreTenantHostContext';
@@ -397,6 +398,8 @@ function AppShell() {
                     </ProtectedRoute>
                   }
                 />
+                {/* 店鋪公開頁 canonical：/:slug（須在靜態路由之後、catch-all 之前） */}
+                <Route path="/:storeSlug" element={<StorePublicSlugRoute />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

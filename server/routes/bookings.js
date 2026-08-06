@@ -1357,6 +1357,7 @@ router.post('/:id/resend-access-email', [auth, adminAuth], async (req, res) => {
       email: visitorEmail,
       tempAuthCreated: result.tempAuthCreated,
       mode: result.mode,
+      invoice: result.invoice,
     });
   } catch (error) {
     console.error('重發預約通知郵件錯誤:', error);

@@ -119,7 +119,7 @@ const StorePublic: React.FC = () => {
       <SEO
         title={`${store.name} | PickCourt 聯盟場地`}
         description={store.tagline || store.intro?.slice(0, 120) || `${store.name} — PickCourt 聯盟匹克球場地`}
-        url={`/store/${store.slug}`}
+        url={`/${store.slug}`}
       />
 
       {!isConsumerHost && <PickleCourtNav />}

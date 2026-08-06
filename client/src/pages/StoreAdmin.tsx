@@ -15,7 +15,6 @@ import CourtManagement from '../components/Admin/CourtManagement';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
 import StoreMemberManagement from '../components/Admin/StoreMemberManagement';
-import TournamentManagement from '../components/Admin/TournamentManagement';
 import ActivityManagement from '../components/Admin/ActivityManagement';
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
@@ -37,7 +36,6 @@ import {
   CurrencyDollarIcon,
   AcademicCapIcon,
   ChatBubbleLeftRightIcon,
-  TrophyIcon,
   BuildingStorefrontIcon,
   ArrowLeftIcon,
   UsersIcon,
@@ -67,7 +65,8 @@ function StoreAdminShell() {
       { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
       { id: 'activities', name: '活動中心', icon: CalendarIcon, element: <ActivityManagement /> },
       { id: 'members', name: '店鋪會員', icon: UsersIcon, element: <StoreMemberManagement /> },
-      { id: 'tournaments', name: '比賽', icon: TrophyIcon, element: <TournamentManagement /> },
+      // 比賽功能暫時收起
+      // { id: 'tournaments', name: '比賽', icon: TrophyIcon, element: <TournamentManagement /> },
       { id: 'redeem', name: '兌換券', icon: TicketIcon, element: <RedeemCodeManagement /> },
       { id: 'recharge-offers', name: '充值優惠', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
       { id: 'accounting', name: '會計／用量', icon: CurrencyDollarIcon, element: <AccountingManagement /> },

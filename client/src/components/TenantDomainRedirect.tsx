@@ -14,12 +14,19 @@ export default function TenantDomainRedirect() {
     if (loading || !resolved || !tenant?.slug) return;
 
     const slug = tenant.slug;
-    const storePrefix = `/store/${slug}`;
-    const adminPrefix = `${storePrefix}/admin`;
-    const storeLoginPath = `${storePrefix}/login`;
+    const publicPrefix = `/${slug}`;
+    const legacyStorePrefix = `/store/${slug}`;
+    const adminPrefix = `${legacyStorePrefix}/admin`;
+    const storeLoginPath = `${legacyStorePrefix}/login`;
     const path = location.pathname;
 
-    if (path.startsWith(storePrefix)) return;
+    // 舊路徑 /store/:slug → /:slug（店鋪介紹 canonical）
+    if (path === legacyStorePrefix || path === `${legacyStorePrefix}/`) {
+      navigate(`${publicPrefix}${location.search}`, { replace: true });
+      return;
+    }
+
+    if (path.startsWith(publicPrefix) || path.startsWith(legacyStorePrefix)) return;
 
     if (isAdminHost) {
       if (path === '/login') {
@@ -34,7 +41,7 @@ export default function TenantDomainRedirect() {
     }
 
     if (path === '/') {
-      navigate(`${storePrefix}${location.search}`, { replace: true });
+      navigate(`${publicPrefix}${location.search}`, { replace: true });
       return;
     }
 
