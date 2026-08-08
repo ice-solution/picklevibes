@@ -4,6 +4,7 @@ const { getStoreAccessControlConfig, isAccessControlEnabled } = require('../util
 const { processAccessControl, createAccessPass } = require('./accessControlRouter');
 const accessControlService = require('./accessControlService');
 const metaWhatsAppService = require('./metaWhatsAppService');
+const openWaService = require('./openWaService');
 
 function buildVisitorData(booking, userFallback) {
   return {
@@ -36,6 +37,106 @@ async function resolveStore(booking, courtDoc) {
 }
 
 /**
+ * BOOKING_WA_PROVIDER=openwa|meta（預設：有 OpenWA 就用 OpenWA，否則 Meta）
+ */
+function getBookingWaProvider() {
+  const p = String(process.env.BOOKING_WA_PROVIDER || '').trim().toLowerCase();
+  if (p === 'openwa' || p === 'open-wa') return 'openwa';
+  if (p === 'meta') return 'meta';
+  if (openWaService.isOpenWaConfigured()) return 'openwa';
+  if (metaWhatsAppService.isConfigured()) return 'meta';
+  return 'none';
+}
+
+/** 預約 WhatsApp 已由 notification service 統一發送（略過 Twilio 雙重發送） */
+function isUnifiedBookingWhatsAppEnabled() {
+  const provider = getBookingWaProvider();
+  return provider === 'openwa' || provider === 'meta';
+}
+
+function storeDisplayName(store, bookingData) {
+  return store?.branding?.displayName || store?.name || bookingData?.storeName || 'PickCourt';
+}
+
+function formatBookingDate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return String(date || '');
+  return d.toLocaleDateString('zh-HK', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'short',
+  });
+}
+
+function buildOpenWaBookingMessage({ store, bookingData, withAccess, password }) {
+  const storeName = storeDisplayName(store, bookingData);
+  const lines = [
+    withAccess ? '*PickCourt 預約確認／進場通知*' : '*PickCourt 預約確認*',
+    '',
+    `店鋪：${storeName}`,
+    `場地：${bookingData.courtName || '場地'}`,
+    `日期：${formatBookingDate(bookingData.date)}`,
+    `時間：${bookingData.startTime || ''} - ${bookingData.endTime || ''}`.trim(),
+  ];
+
+  const address = store?.address || bookingData.storeAddress;
+  if (address) lines.push(`地址：${address}`);
+
+  if (withAccess && password) {
+    lines.push('');
+    lines.push(`開門密碼：${password}`);
+    lines.push('QR 碼已發送至您的電郵，請查收。');
+  }
+
+  if (bookingData.bookingId) {
+    lines.push('');
+    lines.push(`預約編號：${bookingData.bookingId}`);
+  }
+
+  lines.push('');
+  lines.push('如有問題請聯絡場地。');
+  return lines.join('\n');
+}
+
+function buildOpenWaCancellationMessage(booking, store) {
+  const storeName = storeDisplayName(store, null);
+  const courtName = booking.court?.name || '場地';
+  return [
+    '*PickCourt 預約取消通知*',
+    '',
+    `店鋪：${storeName}`,
+    `場地：${courtName}`,
+    `日期：${formatBookingDate(booking.date)}`,
+    `時間：${booking.startTime || ''} - ${booking.endTime || ''}`.trim(),
+    '',
+    '如有任何問題，請聯絡場地。',
+  ].join('\n');
+}
+
+async function sendOpenWaForBooking({ phone, store, bookingData, withAccess, password }) {
+  if (!openWaService.isOpenWaConfigured()) {
+    return { skipped: true, reason: 'not_configured', provider: 'openwa' };
+  }
+  if (!phone) {
+    return { skipped: true, reason: 'no_phone', provider: 'openwa' };
+  }
+  if (!openWaService.isValidPhoneNumber(phone)) {
+    return { skipped: true, reason: 'invalid_phone', provider: 'openwa' };
+  }
+
+  try {
+    const message = buildOpenWaBookingMessage({ store, bookingData, withAccess, password });
+    const result = await openWaService.sendTextMessage(phone, message);
+    console.log('✅ OpenWA 預約通知已發送:', { to: result.to, withAccess: !!withAccess });
+    return { success: true, provider: 'openwa', ...result };
+  } catch (err) {
+    console.error('❌ OpenWA 預約通知發送失敗:', err.message, err.response?.data || '');
+    return { success: false, provider: 'openwa', error: err.message };
+  }
+}
+
+/**
  * PickCourt 共用 Meta WhatsApp 號發送（有門禁→QR+密碼；否則→預約內容）
  */
 async function sendMetaWhatsAppForBooking({
@@ -47,17 +148,17 @@ async function sendMetaWhatsAppForBooking({
   qrCodeData,
 }) {
   if (!metaWhatsAppService.isConfigured()) {
-    return { skipped: true, reason: 'not_configured' };
+    return { skipped: true, reason: 'not_configured', provider: 'meta' };
   }
   if (!phone) {
-    return { skipped: true, reason: 'no_phone' };
+    return { skipped: true, reason: 'no_phone', provider: 'meta' };
   }
 
   try {
     const result = await metaWhatsAppService.notifyBooking({
       phone,
       withAccess: !!withAccess,
-      storeName: store?.branding?.displayName || store?.name || bookingData.storeName,
+      storeName: storeDisplayName(store, bookingData),
       date: bookingData.date,
       startTime: bookingData.startTime,
       endTime: bookingData.endTime,
@@ -76,15 +177,27 @@ async function sendMetaWhatsAppForBooking({
     } else if (result.skipped) {
       console.log('⚠️ Meta WhatsApp 略過:', result.reason);
     }
-    return result;
+    return { provider: 'meta', ...result };
   } catch (err) {
     console.error('❌ Meta WhatsApp 發送失敗:', err.message, err.details || '');
-    return { success: false, error: err.message, details: err.details };
+    return { success: false, provider: 'meta', error: err.message, details: err.details };
   }
 }
 
+/** 依 BOOKING_WA_PROVIDER 選擇 OpenWA 或 Meta（唔會兩個一齊發） */
+async function sendWhatsAppForBooking(payload) {
+  const provider = getBookingWaProvider();
+  if (provider === 'openwa') {
+    return sendOpenWaForBooking(payload);
+  }
+  if (provider === 'meta') {
+    return sendMetaWhatsAppForBooking(payload);
+  }
+  return { skipped: true, reason: 'not_configured', provider: 'none' };
+}
+
 /**
- * 預約建立／重發：門禁店發門禁郵件；非門禁店發確認郵件；並經 Meta WhatsApp 通知
+ * 預約建立／重發：門禁店發門禁郵件；非門禁店發確認郵件；並經 OpenWA／Meta 通知
  */
 async function sendBookingNotification({ booking, courtDoc, store: storeInput, userFallback, emailOverrides }) {
   const store = storeInput || (await resolveStore(booking, courtDoc));
@@ -95,7 +208,7 @@ async function sendBookingNotification({ booking, courtDoc, store: storeInput, u
     const acConfig = getStoreAccessControlConfig(store);
     const accessControlResult = await processAccessControl(acConfig, visitorData, bookingData);
 
-    const wa = await sendMetaWhatsAppForBooking({
+    const wa = await sendWhatsAppForBooking({
       phone: visitorData.phone,
       store,
       bookingData,
@@ -108,7 +221,7 @@ async function sendBookingNotification({ booking, courtDoc, store: storeInput, u
   }
 
   await emailService.sendBookingConfirmationEmail(visitorData, bookingData, store);
-  const wa = await sendMetaWhatsAppForBooking({
+  const wa = await sendWhatsAppForBooking({
     phone: visitorData.phone,
     store,
     bookingData,
@@ -118,17 +231,14 @@ async function sendBookingNotification({ booking, courtDoc, store: storeInput, u
 }
 
 /**
- * 相容舊呼叫：已有 tempAuth 時可再發 Meta WhatsApp
+ * 相容舊呼叫：已有 tempAuth 時可再發 WhatsApp
  */
 async function sendWhatsAppBookingConfirmationStub(booking, store) {
-  if (!metaWhatsAppService.isConfigured()) {
-    return { skipped: true, reason: 'not_configured' };
-  }
   const phone = booking.players?.[0]?.phone || booking.user?.phone;
   const bookingData = buildBookingEmailData(booking, booking.court, store);
   const withAccess =
     isAccessControlEnabled(store) && Boolean(booking.tempAuth?.code || booking.tempAuth?.password);
-  return sendMetaWhatsAppForBooking({
+  return sendWhatsAppForBooking({
     phone,
     store,
     bookingData,
@@ -136,6 +246,34 @@ async function sendWhatsAppBookingConfirmationStub(booking, store) {
     password: booking.tempAuth?.password,
     qrCodeData: booking.tempAuth?.code,
   });
+}
+
+async function sendBookingCancellationWhatsApp(booking, phone, storeInput) {
+  if (!phone) return { skipped: true, reason: 'no_phone' };
+
+  const store = storeInput || (await resolveStore(booking, booking.court));
+  const provider = getBookingWaProvider();
+
+  if (provider === 'openwa') {
+    if (!openWaService.isOpenWaConfigured()) {
+      return { skipped: true, reason: 'openwa_not_configured' };
+    }
+    if (!openWaService.isValidPhoneNumber(phone)) {
+      return { skipped: true, reason: 'invalid_phone' };
+    }
+    try {
+      const message = buildOpenWaCancellationMessage(booking, store);
+      const result = await openWaService.sendTextMessage(phone, message);
+      console.log('✅ OpenWA 取消通知已發送:', result.to);
+      return { success: true, provider: 'openwa', ...result };
+    } catch (err) {
+      console.error('❌ OpenWA 取消通知發送失敗:', err.message);
+      return { success: false, provider: 'openwa', error: err.message };
+    }
+  }
+
+  // 非 OpenWA：交俾 routes 既有 Twilio 路徑處理
+  return { skipped: true, reason: 'use_legacy_provider', provider };
 }
 
 async function applyTempAuthToBooking(booking, accessControlResult) {
@@ -204,7 +342,7 @@ async function sendBookingInvoiceEmail(booking, store) {
 }
 
 /**
- * 管理員重發：郵件 + Meta WhatsApp
+ * 管理員重發：郵件 + OpenWA／Meta WhatsApp
  */
 async function resendBookingNotification(booking) {
   const court = booking.court;
@@ -242,7 +380,7 @@ async function resendBookingNotification(booking) {
     }
 
     await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
-    const wa = await sendMetaWhatsAppForBooking({
+    const wa = await sendWhatsAppForBooking({
       phone: visitorData.phone,
       store,
       bookingData,
@@ -273,7 +411,7 @@ async function resendBookingNotification(booking) {
   }
 
   await emailService.sendBookingConfirmationEmail(visitorData, bookingData, store);
-  const wa = await sendMetaWhatsAppForBooking({
+  const wa = await sendWhatsAppForBooking({
     phone: visitorData.phone,
     store,
     bookingData,
@@ -301,7 +439,12 @@ async function resendBookingNotification(booking) {
 module.exports = {
   sendBookingNotification,
   sendWhatsAppBookingConfirmationStub,
+  sendWhatsAppForBooking,
   sendMetaWhatsAppForBooking,
+  sendOpenWaForBooking,
+  sendBookingCancellationWhatsApp,
+  isUnifiedBookingWhatsAppEnabled,
+  getBookingWaProvider,
   applyTempAuthToBooking,
   resendBookingNotification,
   sendBookingInvoiceEmail,

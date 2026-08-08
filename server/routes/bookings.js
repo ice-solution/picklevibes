@@ -20,6 +20,8 @@ const {
   applyTempAuthToBooking,
   sendWhatsAppBookingConfirmationStub,
   resendBookingNotification,
+  isUnifiedBookingWhatsAppEnabled,
+  sendBookingCancellationWhatsApp,
 } = require('../services/bookingNotificationService');
 const Store = require('../models/Store');
 const Config = require('../models/Config');
@@ -559,10 +561,9 @@ router.post('/', [
     // 填充場地信息
     await booking.populate('court', 'name number type amenities');
 
-    // 發送 WhatsApp：已啟用 Meta Cloud API 時改由 sendBookingNotification 統一發送（避免雙重）
-    const metaWaOn =
-      process.env.META_WA_ENABLED === '1' || process.env.META_WA_ENABLED === 'true';
-    if (!metaWaOn) {
+    // OpenWA／Meta 由 sendBookingNotification 統一發送；否則才用 Twilio（避免雙重）
+    const unifiedWa = isUnifiedBookingWhatsAppEnabled();
+    if (!unifiedWa) {
       try {
         const phoneNumber = booking.players[0]?.phone || req.user.phone;
         if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
@@ -591,8 +592,8 @@ router.post('/', [
       } else {
         console.log('✅ 預約確認郵件已發送（無門禁）');
       }
-      // Meta 已在 sendBookingNotification 內發送；未啟用時保留 stub 相容
-      if (!metaWaOn) {
+      // 統一通道已在 sendBookingNotification 內發送；未啟用時保留 stub 相容
+      if (!unifiedWa) {
         await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
       }
     } catch (notifyError) {
@@ -1207,10 +1208,18 @@ router.put('/:id/cancel', [
       );
     }
 
-    // 發送 WhatsApp 取消通知
+    // 發送 WhatsApp 取消通知（OpenWA 優先；否則 Twilio）
     try {
       const phoneNumber = booking.players[0]?.phone || req.user.phone;
-      if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+      if (isUnifiedBookingWhatsAppEnabled()) {
+        const cancelWa = await sendBookingCancellationWhatsApp(booking, phoneNumber, booking.store);
+        if (cancelWa?.skipped && cancelWa.reason === 'use_legacy_provider') {
+          if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+            await whatsappService.sendBookingCancellation(booking, phoneNumber);
+            console.log('✅ WhatsApp 預約取消通知已發送');
+          }
+        }
+      } else if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
         await whatsappService.sendBookingCancellation(booking, phoneNumber);
         console.log('✅ WhatsApp 預約取消通知已發送');
       } else {
