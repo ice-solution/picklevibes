@@ -1,5 +1,7 @@
 const express = require('express');
 const { auth, adminAuth } = require('../middleware/auth');
+const { applyStoreScope } = require('../utils/tenantAccess');
+const { requireManagerOrPlatformAdmin } = require('../middleware/tenantAccess');
 const { formatHkYmd, defaultFinanceFromYmd } = require('../utils/financeRevenue');
 const { computeAccountingPL } = require('../utils/accountingPL');
 
@@ -14,7 +16,7 @@ function parseYmd(raw, fallback) {
 // @route   GET /api/accounting/pl
 // @desc    綜合損益（系統認列收入 + 手動收支）
 // @access  Private (Admin)
-router.get('/', [auth, adminAuth], async (req, res) => {
+router.get('/', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
   try {
     const today = formatHkYmd();
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));

@@ -2,13 +2,22 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import axios from 'axios';
 import apiConfig from '../config/api';
 
-interface User {
+export interface ManagedStore {
+  id: string;
+  name: string;
+  slug: string;
+  membershipRole?: string;
+}
+
+export interface User {
   id: string;
   name: string;
   email: string;
   phone: string;
   role: string;
   membershipLevel: string;
+  isPlatformAdmin?: boolean;
+  managedStores?: ManagedStore[];
   preferences?: {
     notifications: {
       email: boolean;
@@ -22,7 +31,7 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User>;
   register: (userData: RegisterData) => Promise<void>;
   logout: () => void;
   loading: boolean;
@@ -72,11 +81,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const login = async (email: string, password: string) => {
     try {
       const response = await axios.post('/auth/login', { email, password });
-      const { token, user } = response.data;
+      const { token, user: loggedInUser } = response.data;
       
       localStorage.setItem('token', token);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      setUser(user);
+      setUser(loggedInUser);
+      return loggedInUser as User;
     } catch (error: any) {
       throw new Error(error.response?.data?.message || '登錄失敗');
     }

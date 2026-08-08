@@ -23,7 +23,7 @@ const Login: React.FC = () => {
   // 已登入則直接回到原本要去的頁面（例如 game join）
   useEffect(() => {
     if (!authLoading && user) {
-      navigate(getPostAuthRedirectPath(redirectFrom), { replace: true });
+      navigate(getPostAuthRedirectPath(redirectFrom, user), { replace: true });
     }
   }, [authLoading, user, redirectFrom, navigate]);
 
@@ -78,7 +78,7 @@ const Login: React.FC = () => {
 
     setIsLoading(true);
     try {
-      await login(formData.email, formData.password);
+      const loggedIn = await login(formData.email, formData.password);
       
       // 根據「記住我」選項儲存或清除 email
       if (rememberMe) {
@@ -87,7 +87,7 @@ const Login: React.FC = () => {
         localStorage.removeItem('rememberedEmail');
       }
       
-      navigate(getPostAuthRedirectPath(redirectFrom), { replace: true });
+      navigate(getPostAuthRedirectPath(redirectFrom, loggedIn), { replace: true });
     } catch (error: any) {
       setErrors({ general: error.message });
     } finally {

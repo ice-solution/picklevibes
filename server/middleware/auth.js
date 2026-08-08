@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { loadTenantAccess } = require('../utils/tenantAccess');
 
 const auth = async (req, res, next) => {
   try {
@@ -35,13 +36,50 @@ const auth = async (req, res, next) => {
   }
 };
 
-// 管理員權限中間件
-const adminAuth = (req, res, next) => {
+// 可選認證：有 token 則載入 user／tenantAccess，無 token 不阻擋
+const optionalAuth = async (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.userId);
+    if (!user || !user.isActive) return next();
+
+    req.user = user;
+    req.tenantAccess = await loadTenantAccess(user);
+  } catch {
+    // 忽略無效 token，維持公開請求
+  }
+  next();
+};
+
+// 後台權限：平台 admin 或已指派店鋪的 staff
+const adminAuth = async (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
+  }
+
+  req.tenantAccess = await loadTenantAccess(req.user);
+
+  if (req.user.role === 'admin') {
+    return next();
+  }
+
+  if (req.user.role === 'staff' && (req.tenantAccess.managedStoreIds || []).length > 0) {
+    return next();
+  }
+
+  return res.status(403).json({ message: '訪問被拒絕，需要管理員權限' });
+};
+
+// 平台超級管理員（僅 role === admin）
+const platformAdminAuth = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
   }
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ message: '訪問被拒絕，需要管理員權限' });
+    return res.status(403).json({ message: '訪問被拒絕，需要平台管理員權限' });
   }
   next();
 };
@@ -57,6 +95,4 @@ const coachOrAdminAuth = (req, res, next) => {
   next();
 };
 
-module.exports = { auth, adminAuth, coachOrAdminAuth };
-
-
+module.exports = { auth, optionalAuth, adminAuth, platformAdminAuth, coachOrAdminAuth };

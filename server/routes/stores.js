@@ -26,10 +26,37 @@ router.get('/', async (req, res) => {
 // @access  Private (Admin)
 router.get('/admin/all', [auth, adminAuth], async (req, res) => {
   try {
-    const stores = await Store.find().sort({ sortOrder: 1, name: 1 });
+    let query = {};
+    // 店鋪員工：只回傳自己管理的店
+    if (req.tenantAccess && !req.tenantAccess.isPlatformAdmin) {
+      const ids = req.tenantAccess.managedStoreIds || [];
+      query = { _id: { $in: ids } };
+    }
+    const stores = await Store.find(query).sort({ sortOrder: 1, name: 1 });
     res.json({ stores });
   } catch (error) {
     console.error('獲取店鋪列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/stores/by-slug/:slug
+// @desc    以 slug 取得店鋪（店鋪後台用）
+// @access  Public
+router.get('/by-slug/:slug', async (req, res) => {
+  try {
+    const slug = String(req.params.slug).trim().toLowerCase();
+    const forLogin = req.query.forLogin === '1' || req.query.forLogin === 'true';
+    const filter = { slug };
+    if (!forLogin) filter.isActive = true;
+    const store = await Store.findOne(filter)
+      .select('name slug address phone operatingHours sortOrder enableHikAccess isActive');
+    if (!store) {
+      return res.status(404).json({ message: '店鋪不存在' });
+    }
+    res.json({ store });
+  } catch (error) {
+    console.error('獲取店鋪錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

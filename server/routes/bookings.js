@@ -6,6 +6,7 @@ const Court = require('../models/Court');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
+const { applyStoreScope } = require('../utils/tenantAccess');
 const {
   sendBookingNotification,
   applyTempAuthToBooking,
@@ -803,10 +804,11 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
     }
 
     const dateQuery = buildAdminBookingDateQuery({ dateFrom, dateTo });
-    const query = { ...dateQuery };
+    let query = { ...dateQuery };
     if (store && String(store).trim() !== '') {
       query.store = String(store).trim();
     }
+    query = applyStoreScope(query, req.tenantAccess, 'store');
 
     const bookings = await Booking.find(query)
       .select(
@@ -879,6 +881,7 @@ router.get('/admin/all', [
     if (dateQuery) {
       Object.assign(query, dateQuery);
     }
+    query = applyStoreScope(query, req.tenantAccess, 'store');
 
     const sortDir = sortParam === 'asc' ? 1 : -1;
     const limitNum = Math.min(10000, Math.max(1, parseInt(limit, 10) || 20));

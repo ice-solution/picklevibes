@@ -171,6 +171,7 @@ app.use('/api/users', require('./routes/users'));
 app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
 app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
 app.use('/api/stores', require('./routes/stores'));
+app.use('/api/tenant-memberships', require('./routes/tenantMemberships'));
 app.use('/api/tuya', require('./routes/tuya'));
 app.use('/api/bot', require('./routes/bot')); // n8n / OpenWA bot API
 app.use('/api/recharge-offers', require('./routes/rechargeOffers')); // Added recharge offers routes

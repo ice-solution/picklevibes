@@ -8,6 +8,7 @@ const rateLimit = require('express-rate-limit');
 const User = require('../models/User');
 const { VIP_PERIOD_MS } = require('../constants/vipMembership');
 const { auth } = require('../middleware/auth');
+const { loadTenantAccess, formatTenantAccessForClient } = require('../utils/tenantAccess');
 
 const router = express.Router();
 
@@ -166,6 +167,8 @@ router.post('/login', authLimiter, [
     user.lastLogin = new Date();
     await user.save();
 
+    const tenantAccess = await loadTenantAccess(user);
+
     // 生成JWT token
     const token = jwt.sign(
       { userId: user._id },
@@ -183,7 +186,8 @@ router.post('/login', authLimiter, [
         phone: user.phone,
         role: user.role,
         membershipLevel: user.membershipLevel,
-        preferences: user.preferences
+        preferences: user.preferences,
+        ...formatTenantAccessForClient(tenantAccess),
       }
     });
 
@@ -245,6 +249,7 @@ router.get('/me', auth, async (req, res) => {
   try {
     // req.user 是從 auth middleware 中設置的
     const user = req.user;
+    const tenantAccess = await loadTenantAccess(user);
 
     res.json({
       user: {
@@ -256,7 +261,8 @@ router.get('/me', auth, async (req, res) => {
         membershipLevel: user.membershipLevel,
         preferences: user.preferences,
         lastLogin: user.lastLogin,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        ...formatTenantAccessForClient(tenantAccess),
       }
     });
 

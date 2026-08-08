@@ -5,7 +5,8 @@ const path = require('path');
 const fs = require('fs').promises;
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
-const { auth, adminAuth } = require('../middleware/auth');
+const { auth, adminAuth, optionalAuth } = require('../middleware/auth');
+const { applyStoreScope, checkDocumentStoreAccess, resolveStoreForCreate } = require('../utils/tenantAccess');
 const {
   normalizeTimeSlots,
   syncLegacyPricingFromSlots,
@@ -68,7 +69,7 @@ function calculateDuration(startTime, endTime) {
 // @route   GET /api/courts
 // @desc    獲取所有場地
 // @access  Public
-router.get('/', async (req, res) => {
+router.get('/', optionalAuth, async (req, res) => {
   try {
     const { type, available, all, store: storeId } = req.query;
     
@@ -88,6 +89,11 @@ router.get('/', async (req, res) => {
 
     if (storeId && String(storeId).trim() !== '') {
       query.store = String(storeId).trim();
+    }
+
+    // 店鋪員工：限制只能看自己管理的店
+    if (req.tenantAccess && !req.tenantAccess.isPlatformAdmin) {
+      query = applyStoreScope(query, req.tenantAccess, 'store');
     }
     
     const courts = await Court.find(query)

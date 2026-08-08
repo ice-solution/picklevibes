@@ -22,6 +22,7 @@ import MyBookings from './pages/MyBookings';
 import Profile from './pages/Profile';
 import Admin from './pages/Admin';
 import AdminV2 from './pages/AdminV2';
+import StoreAdmin from './pages/StoreAdmin';
 import PaymentResult from './pages/PaymentResult';
 import Recharge from './pages/Recharge';
 import RechargeSuccess from './pages/RechargeSuccess';
@@ -130,6 +131,7 @@ function App() {
                     </ProtectedRoute>
                   }
                 />
+                <Route path="/store/:storeSlug/admin" element={<StoreAdmin />} />
                 <Route path="/payment-result" element={<PaymentResult />} />
                 <Route 
                   path="/recharge" 

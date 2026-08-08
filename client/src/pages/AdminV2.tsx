@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Navigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
+import { getDefaultHomeForUser } from '../utils/authRedirect';
 
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
@@ -30,6 +31,7 @@ import ReportManagement from '../components/Admin/ReportManagement';
 import AccountingManagement from '../components/Admin/AccountingManagement';
 import ApplicationFormManagement from '../components/Admin/ApplicationFormManagement';
 import EdmSend from '../components/Admin/EdmSend';
+import TenantStaffManagement from '../components/Admin/TenantStaffManagement';
 
 import {
   Bars3Icon,
@@ -52,6 +54,7 @@ import {
   BuildingStorefrontIcon,
   CurrencyDollarIcon,
   DocumentTextIcon,
+  UserPlusIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -77,6 +80,7 @@ const AdminV2: React.FC = () => {
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
     { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
     { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: <StoreManagement /> },
+    { id: 'tenant-staff', name: '店鋪員工', icon: UserPlusIcon, element: <TenantStaffManagement /> },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
     { id: 'users', name: '用戶管理', icon: UsersIcon, element: <UserManagement /> },
     { id: 'tiers', name: 'Tier 管理', icon: TagIcon, element: <TierManagement /> },
@@ -103,6 +107,11 @@ const AdminV2: React.FC = () => {
   ]), []);
 
   const current = useMemo(() => tabs.find((t) => t.id === activeTab) || tabs[0], [tabs, activeTab]);
+
+  // 店鋪員工請用店鋪後台
+  if (user?.role === 'staff') {
+    return <Navigate to={getDefaultHomeForUser(user)} replace />;
+  }
 
   if (user?.role !== 'admin') {
     return (

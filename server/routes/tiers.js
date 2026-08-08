@@ -1,6 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const { auth, adminAuth } = require('../middleware/auth');
+const { applyStoreScope } = require('../utils/tenantAccess');
+const { requireManagerOrPlatformAdmin } = require('../middleware/tenantAccess');
 const Tier = require('../models/Tier');
 const Config = require('../models/Config');
 const UserBalance = require('../models/UserBalance');
@@ -113,7 +115,7 @@ router.get('/progress', auth, async (req, res) => {
 // @route   GET /api/tiers/admin
 // @desc    管理員取得 tiers（含 inactive）
 // @access  Private(Admin)
-router.get('/admin', [auth, adminAuth], async (req, res) => {
+router.get('/admin', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
   try {
     const tiers = await Tier.find({}).sort({ sortOrder: 1, minAnnualSpent: 1, createdAt: 1 }).lean();
     const enabled = await Config.getTierEnabled();
@@ -203,7 +205,7 @@ router.put('/:id', [
 // @route   DELETE /api/tiers/:id
 // @desc    刪除 tier
 // @access  Private(Admin)
-router.delete('/:id', [auth, adminAuth], async (req, res) => {
+router.delete('/:id', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
   try {
     const tier = await Tier.findByIdAndDelete(req.params.id);
     if (!tier) return res.status(404).json({ message: 'Tier 不存在' });

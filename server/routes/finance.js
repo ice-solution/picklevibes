@@ -1,6 +1,8 @@
 const express = require('express');
 const XLSX = require('xlsx');
 const { auth, adminAuth } = require('../middleware/auth');
+const { applyStoreScope } = require('../utils/tenantAccess');
+const { requireManagerOrPlatformAdmin } = require('../middleware/tenantAccess');
 const {
   computeFinanceSummary,
   getIncomeLines,
@@ -16,10 +18,25 @@ function parseYmd(raw, fallback) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : fallback;
 }
 
+function resolveScopedStoreId(req) {
+  let storeId = req.query.store || req.query.storeId || null;
+  if (!req.tenantAccess || req.tenantAccess.isPlatformAdmin) {
+    return storeId || null;
+  }
+  const managerStores = (req.tenantAccess.managedStores || []).filter(
+    (s) => s.membershipRole === 'manager'
+  );
+  if (managerStores.length === 0) return null;
+  if (storeId && managerStores.some((s) => String(s.id) === String(storeId))) {
+    return String(storeId);
+  }
+  return String(managerStores[0].id);
+}
+
 // @route   GET /api/finance/summary
 // @desc    簡化損益：場地（出租日）+ 網店收入，積分派送折算
-// @access  Private (Admin)
-router.get('/summary', [auth, adminAuth], async (req, res) => {
+// @access  Private (Admin / 經理)
+router.get('/summary', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
   try {
     const today = formatHkYmd();
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
@@ -29,7 +46,7 @@ router.get('/summary', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const storeId = req.query.store || req.query.storeId || null;
+    const storeId = resolveScopedStoreId(req);
     const data = await computeFinanceSummary({ fromYmd, toYmd, storeId: storeId || undefined });
     res.json({ success: true, data });
   } catch (error) {
@@ -41,7 +58,7 @@ router.get('/summary', [auth, adminAuth], async (req, res) => {
 // @route   GET /api/finance/income-lines
 // @desc    收入明細列表（場地出租日 + 網店扣款日）
 // @access  Private (Admin)
-router.get('/income-lines', [auth, adminAuth], async (req, res) => {
+router.get('/income-lines', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
   try {
     const today = formatHkYmd();
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
@@ -51,7 +68,7 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const storeId = req.query.store || req.query.storeId || null;
+    const storeId = resolveScopedStoreId(req);
     const typeFilter = req.query.type; // recognized | excluded | venue | shop
     const search = String(req.query.search || '').trim().toLowerCase();
     const pageN = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -125,13 +142,13 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
 // @route   GET /api/finance/summary-xlsx
 // @desc    匯出簡化損益 XLSX
 // @access  Private (Admin)
-router.get('/summary-xlsx', [auth, adminAuth], async (req, res) => {
+router.get('/summary-xlsx', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
   try {
     const today = formatHkYmd();
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
     const toYmd = parseYmd(req.query.to, today);
 
-    const storeId = req.query.store || req.query.storeId || null;
+    const storeId = resolveScopedStoreId(req);
     const opts = { fromYmd, toYmd, storeId: storeId || undefined };
     const [data, { lines }] = await Promise.all([
       computeFinanceSummary(opts),

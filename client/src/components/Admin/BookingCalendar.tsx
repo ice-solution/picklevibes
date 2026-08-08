@@ -21,6 +21,7 @@ import {
   PencilIcon,
   TrashIcon
 } from '@heroicons/react/24/outline';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 interface StoreRef {
   _id: string;
@@ -193,6 +194,7 @@ function hkBookingEndToUtcMs(ymd: string, endTime: string, startMs: number): num
 }
 
 const BookingCalendar: React.FC = () => {
+  const lockedStoreId = useLockedStoreId();
   const calendarRef = useRef<FullCalendar>(null);
   const [bookings, setBookings] = useState<CalendarBooking[]>([]);
   const [eventsLoading, setEventsLoading] = useState(false);
@@ -243,8 +245,8 @@ const BookingCalendar: React.FC = () => {
           dateFrom: r.start,
           dateTo: r.end,
         });
-        if (storeFilterId) {
-          params.append('store', storeFilterId);
+        if (lockedStoreId || storeFilterId) {
+          params.append('store', lockedStoreId || storeFilterId);
         }
         const response = await axios.get(`/bookings/admin/calendar?${params.toString()}`);
         setBookings(response.data.bookings || []);
@@ -255,15 +257,19 @@ const BookingCalendar: React.FC = () => {
         setEventsLoading(false);
       }
     },
-    [storeFilterId]
+    [storeFilterId, lockedStoreId]
   );
 
   useEffect(() => {
+    if (lockedStoreId) {
+      setStoreFilterId(lockedStoreId);
+      return;
+    }
     axios
       .get('/stores/admin/all')
       .then((r) => setStores(r.data.stores || []))
       .catch(() => setStores([]));
-  }, []);
+  }, [lockedStoreId]);
 
   const refetchBookings = useCallback(
     () => fetchBookings(calendarRangeRef.current ?? undefined),
@@ -789,6 +795,11 @@ const BookingCalendar: React.FC = () => {
           <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
             <div className="flex items-center gap-2">
               <BuildingStorefrontIcon className="w-5 h-5 text-gray-500 flex-shrink-0" />
+              {lockedStoreId ? (
+                <p className="px-3 py-2 text-sm border border-gray-200 rounded-md bg-gray-50 min-w-[200px]">
+                  {stores.find((s) => s._id === lockedStoreId)?.name || '本店'}
+                </p>
+              ) : (
               <select
                 value={storeFilterId}
                 onChange={(e) => {
@@ -804,6 +815,7 @@ const BookingCalendar: React.FC = () => {
                   </option>
                 ))}
               </select>
+              )}
             </div>
           <div className="flex space-x-2">
             <button
