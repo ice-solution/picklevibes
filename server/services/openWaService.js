@@ -55,6 +55,10 @@ function normalizePhoneForOpenWa(phone) {
   return toChatId(phone).replace(/@c\.us$/i, '');
 }
 
+function isValidPhoneNumber(phone) {
+  return Boolean(normalizePhoneForOpenWa(phone));
+}
+
 function buildSendUrl() {
   const base = String(process.env.OPENWA_BASE_URL).replace(/\/$/, '');
   const session = encodeURIComponent(String(process.env.OPENWA_SESSION_ID).trim());
@@ -134,6 +138,7 @@ async function sendTextToMany(phones, message) {
 
 module.exports = {
   isOpenWaConfigured,
+  isValidPhoneNumber,
   normalizePhoneForOpenWa,
   toChatId,
   sendTextMessage,

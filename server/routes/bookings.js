@@ -10,6 +10,7 @@ const {
   sendBookingNotification,
   applyTempAuthToBooking,
   resendBookingNotification,
+  sendBookingCancellationWhatsApp,
 } = require('../services/bookingNotificationService');
 const Store = require('../models/Store');
 const Config = require('../models/Config');
@@ -548,6 +549,11 @@ router.post('/', [
         console.log('✅ 門禁／開門郵件流程完成');
       } else {
         console.log('✅ 預約確認郵件已發送（無門禁）');
+      }
+      if (notifyResult.whatsapp?.success) {
+        console.log(`✅ WhatsApp 預約通知已發送（${notifyResult.whatsapp.provider || 'openwa'}）`);
+      } else if (notifyResult.whatsapp?.skipped) {
+        console.log('⚠️ WhatsApp 預約通知略過:', notifyResult.whatsapp.reason);
       }
     } catch (notifyError) {
       console.error('❌ 預約通知發送失敗:', notifyError);
@@ -1152,6 +1158,21 @@ router.put('/:id/cancel', [
           }
         }
       );
+    }
+
+    // 發送 WhatsApp 取消通知（OpenWA）
+    try {
+      await booking.populate('court', 'name number store');
+      const phoneNumber = booking.players[0]?.phone || req.user.phone;
+      const cancelWa = await sendBookingCancellationWhatsApp(booking, phoneNumber);
+      if (cancelWa.success) {
+        console.log('✅ WhatsApp 取消通知已發送');
+      } else if (!cancelWa.skipped) {
+        console.log('⚠️ WhatsApp 取消通知失敗:', cancelWa.error || cancelWa.reason);
+      }
+    } catch (whatsappError) {
+      console.error('❌ WhatsApp 取消通知發送失敗:', whatsappError);
+      // 不影響預約取消，只記錄錯誤
     }
 
     scheduleTuyaCourtsSync(
