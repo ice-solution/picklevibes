@@ -146,9 +146,6 @@ const PublicApplicationForm: React.FC = () => {
               className="w-full rounded-2xl object-cover mb-6 max-h-56"
             />
           )}
-          {form?.store?.name && (
-            <p className="text-sm text-primary-700 font-medium mb-2">{form.store.name}</p>
-          )}
           <h1 className="text-2xl font-bold text-gray-900 mb-3">{form?.title}</h1>
           <p className="text-gray-600 whitespace-pre-wrap">{closedMessage}</p>
         </div>
@@ -191,9 +188,6 @@ const PublicApplicationForm: React.FC = () => {
             />
           )}
           <div className="text-center mb-8">
-            {form.store && (
-              <p className="text-sm text-primary-700 font-medium mb-2">{form.store.name}</p>
-            )}
             <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-2">{form.title}</h1>
             {form.description && (
               <p className="text-gray-600 whitespace-pre-wrap">{form.description}</p>
