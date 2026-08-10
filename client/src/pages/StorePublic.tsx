@@ -47,6 +47,7 @@ type StorePublicData = {
   tagline?: string | null;
   logoUrl?: string | null;
   primaryColor?: string | null;
+  enableRecharge?: boolean;
   courtCount?: number;
   courts?: StoreCourt[];
   gameHalls?: GameHall[];
@@ -193,13 +194,15 @@ const StorePublic: React.FC = () => {
               <CalendarDaysIcon className="w-5 h-5" />
               立即預約
             </Link>
-            <Link
-              to={`${PICKCOURT_ACCOUNT.recharge}?store=${encodeURIComponent(store.slug)}`}
-              className="inline-flex items-center gap-2 border border-white/40 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/10 transition-colors"
-            >
-              <CreditCardIcon className="w-5 h-5" />
-              充值此店積分
-            </Link>
+            {store.enableRecharge !== false && (
+              <Link
+                to={`${PICKCOURT_ACCOUNT.recharge}?store=${encodeURIComponent(store.slug)}`}
+                className="inline-flex items-center gap-2 border border-white/40 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/10 transition-colors"
+              >
+                <CreditCardIcon className="w-5 h-5" />
+                充值此店積分
+              </Link>
+            )}
             <Link
               to={pickcourtHomeHash('search')}
               className="inline-flex items-center gap-2 border border-white/40 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/10 transition-colors"

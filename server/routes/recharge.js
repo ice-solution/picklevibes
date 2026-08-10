@@ -155,6 +155,9 @@ router.post('/create-checkout-session', [
     if (storeInput && !storeDoc) {
       return res.status(404).json({ message: '店鋪不存在' });
     }
+    if (storeDoc && storeDoc.enableRecharge === false) {
+      return res.status(403).json({ message: '此店鋪暫未開放充值' });
+    }
 
     const provider = getPaymentProvider();
 

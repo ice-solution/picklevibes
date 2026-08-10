@@ -20,7 +20,7 @@ const { typeCountsForCourts, effectiveCourtSlug } = require('../utils/courtSlug'
 const router = express.Router();
 
 const allianceStoreSelect =
-  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding';
+  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding enableRecharge';
 
 function serializeAllianceStore(store) {
   const b = store.branding || {};
@@ -36,6 +36,7 @@ function serializeAllianceStore(store) {
     intro: b.intro || null,
     primaryColor: b.primaryColor || null,
     subscriptionPlan: store.subscriptionPlan || 'starter',
+    enableRecharge: store.enableRecharge !== false,
   };
 }
 

@@ -30,6 +30,13 @@ async function completeRechargePayment(rechargeId, transactionId) {
   await creditRechargeBalance(recharge, `充值 ${recharge.points} 分`);
 
   try {
+    const { recordFeeForStoreRecharge } = require('./platformFeeService');
+    await recordFeeForStoreRecharge(recharge);
+  } catch (feeErr) {
+    console.error('❌ 店充值抽成紀錄失敗:', feeErr.message);
+  }
+
+  try {
     const user = await User.findById(recharge.user);
     if (user) {
       await emailService.sendRechargeInvoiceEmail(user, recharge);

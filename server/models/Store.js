@@ -107,6 +107,29 @@ const storeSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  /** 是否開放會員自助充值到該店積分（平台充值／管理員手動充值不受影響） */
+  enableRecharge: {
+    type: Boolean,
+    default: true,
+  },
+  /**
+   * 連鎖店：店鋪 admin 用戶管理可看全部會員，
+   * 不受「必須曾在本店預約」限制
+   */
+  isChainStore: {
+    type: Boolean,
+    default: false,
+  },
+  /**
+   * 平台向該店收取的抽成％（店充值 + 積分預約場地）
+   * 0 = 不抽成
+   */
+  platformFeePercent: {
+    type: Number,
+    default: 0,
+    min: 0,
+    max: 100,
+  },
   /** 門禁廠商：hik（海康）| dahua（大華） */
   accessControlVendor: {
     type: String,

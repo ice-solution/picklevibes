@@ -291,6 +291,13 @@ async function settleBookingWithPoints({
     populate: { path: 'store', select: 'name slug' },
   });
 
+  try {
+    const { recordFeeForBookingPoints } = require('./platformFeeService');
+    await recordFeeForBookingPoints(booking, deductPoints);
+  } catch (feeErr) {
+    console.error('❌ 預約結算抽成紀錄失敗:', feeErr.message);
+  }
+
   const updatedAvailable = await getAvailableBalanceForStore(targetUserId, storeId);
 
   return {

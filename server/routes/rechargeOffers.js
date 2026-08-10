@@ -39,6 +39,19 @@ router.get('/', async (req, res) => {
     if (!store) {
       return res.status(404).json({ message: '店鋪不存在' });
     }
+    if (store.enableRecharge === false) {
+      return res.json({
+        scope: 'store',
+        offers: [],
+        store: {
+          id: store._id,
+          name: store.name,
+          slug: store.slug,
+          enableRecharge: false,
+        },
+        rechargeDisabled: true,
+      });
+    }
 
     const offers = await RechargeOffer.find({
       store: store._id,
@@ -51,7 +64,12 @@ router.get('/', async (req, res) => {
     res.json({
       scope: 'store',
       offers,
-      store: { id: store._id, name: store.name, slug: store.slug },
+      store: {
+        id: store._id,
+        name: store.name,
+        slug: store.slug,
+        enableRecharge: true,
+      },
     });
   } catch (error) {
     console.error('獲取充值優惠錯誤:', error);

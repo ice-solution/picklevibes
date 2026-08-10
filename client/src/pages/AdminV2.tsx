@@ -37,6 +37,8 @@ import BulkUpgrade from '../components/Admin/BulkUpgrade';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
 import AccountingManagement from '../components/Admin/AccountingManagement';
+import PlatformFeeManagement from '../components/Admin/PlatformFeeManagement';
+import StoreBookingStats from '../components/Admin/StoreBookingStats';
 import EdmSend from '../components/Admin/EdmSend';
 import TenantStaffManagement from '../components/Admin/TenantStaffManagement';
 
@@ -120,6 +122,8 @@ const AdminV2: React.FC = () => {
       { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon, element: <MaintenanceControl />, platformOnly: true },
       { id: 'analytics', name: '數據分析', icon: DocumentChartBarIcon, element: <AnalyticsDashboard />, platformOnly: true },
       { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement />, platformOnly: true },
+      { id: 'store-booking-stats', name: '各店預約統計', icon: DocumentChartBarIcon, element: <StoreBookingStats />, platformOnly: true },
+      { id: 'platform-fees', name: '店鋪抽成／找數', icon: CurrencyDollarIcon, element: <PlatformFeeManagement />, platformOnly: true },
       { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> },
     ],
     []

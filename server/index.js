@@ -192,6 +192,7 @@ app.use('/api/orders', require('./routes/orders'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/reports', require('./routes/reports')); // Added orders routes
 app.use('/api/finance', require('./routes/finance'));
+app.use('/api/platform-fees', require('./routes/platformFees'));
 app.use('/api/accounting/ledger', require('./routes/accountingLedger'));
 app.use('/api/accounting/pl', require('./routes/accountingPL'));
 app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'));

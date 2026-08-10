@@ -23,6 +23,9 @@ interface Store {
   sortOrder: number;
   isActive: boolean;
   enableHikAccess: boolean;
+  enableRecharge?: boolean;
+  isChainStore?: boolean;
+  platformFeePercent?: number;
   accessControlVendor?: AccessControlVendor;
   hikKey?: string;
   hikSecret?: string;
@@ -64,6 +67,9 @@ interface StoreForm {
   sortOrder: number;
   isActive: boolean;
   enableHikAccess: boolean;
+  enableRecharge: boolean;
+  isChainStore: boolean;
+  platformFeePercent: number;
   accessControlVendor: AccessControlVendor;
   hikKey: string;
   hikSecret: string;
@@ -100,6 +106,9 @@ const emptyForm: StoreForm = {
   sortOrder: 0,
   isActive: true,
   enableHikAccess: false,
+  enableRecharge: true,
+  isChainStore: false,
+  platformFeePercent: 0,
   accessControlVendor: 'hik',
   hikKey: '',
   hikSecret: '',
@@ -172,6 +181,9 @@ const StoreManagement: React.FC = () => {
       sortOrder: s.sortOrder ?? 0,
       isActive: s.isActive,
       enableHikAccess: s.enableHikAccess,
+      enableRecharge: s.enableRecharge !== false,
+      isChainStore: Boolean(s.isChainStore),
+      platformFeePercent: Number(s.platformFeePercent) || 0,
       accessControlVendor: (s.accessControlVendor || 'hik') as AccessControlVendor,
       hikKey: s.hikKey || '',
       hikSecret: s.hikSecret || '',
@@ -213,6 +225,9 @@ const StoreManagement: React.FC = () => {
         phone: form.phone,
         isActive: form.isActive,
         enableHikAccess: form.enableHikAccess,
+        enableRecharge: form.enableRecharge,
+        isChainStore: form.isChainStore,
+        platformFeePercent: Number(form.platformFeePercent) || 0,
         accessControlVendor: form.enableHikAccess ? form.accessControlVendor : 'hik',
         hikKey: form.hikKey || null,
         hikSecret: form.hikSecret || null,
@@ -288,6 +303,9 @@ const StoreManagement: React.FC = () => {
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">地區</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">地址</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">充值</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">連鎖</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">抽成%</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">門禁</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">聯盟</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">智能設備</th>
@@ -304,6 +322,21 @@ const StoreManagement: React.FC = () => {
                   <span className={s.isActive ? 'text-green-600' : 'text-gray-500'}>
                     {s.isActive ? '上線' : '停用'}
                   </span>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  <span className={s.enableRecharge !== false ? 'text-green-600' : 'text-gray-500'}>
+                    {s.enableRecharge !== false ? '開放' : '關閉'}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-sm">
+                  {s.isChainStore ? (
+                    <span className="text-indigo-600">連鎖</span>
+                  ) : (
+                    <span className="text-gray-400">—</span>
+                  )}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-700">
+                  {Number(s.platformFeePercent) > 0 ? `${s.platformFeePercent}%` : '—'}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {accessControlVendorLabel(s.enableHikAccess, s.accessControlVendor)}
@@ -370,6 +403,45 @@ const StoreManagement: React.FC = () => {
                 <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
                 上線（用戶可見）
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.enableRecharge}
+                  onChange={(e) => setForm({ ...form, enableRecharge: e.target.checked })}
+                />
+                開放會員充值（該店積分）
+              </label>
+              <p className="text-xs text-gray-500 -mt-1">
+                關閉後會員無法自助充值到此店；平台充值與管理員手動充值不受影響。
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.isChainStore}
+                  onChange={(e) => setForm({ ...form, isChainStore: e.target.checked })}
+                />
+                連鎖店（用戶管理可看全部會員）
+              </label>
+              <p className="text-xs text-gray-500 -mt-1">
+                一般店只能看到曾在本店預約過的用戶；連鎖店不受此限。
+              </p>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">平台收取費 %</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={0.1}
+                  className="w-full border rounded-md px-3 py-2"
+                  value={form.platformFeePercent}
+                  onChange={(e) =>
+                    setForm({ ...form, platformFeePercent: parseFloat(e.target.value) || 0 })
+                  }
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  套用於「店充值」與「積分預約場地」；入店金額為扣費後淨額。0 = 不抽成。
+                </p>
+              </div>
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={form.enableHikAccess} onChange={(e) => setForm({ ...form, enableHikAccess: e.target.checked })} />
                 啟用門禁（HIK / 大華）

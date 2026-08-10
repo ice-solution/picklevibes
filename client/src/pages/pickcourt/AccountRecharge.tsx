@@ -18,6 +18,7 @@ type AllianceStore = {
   name: string;
   slug: string;
   displayName?: string;
+  enableRecharge?: boolean;
 };
 
 const AccountRecharge: React.FC = () => {
@@ -29,12 +30,18 @@ const AccountRecharge: React.FC = () => {
   const [options, setOptions] = useState<RechargeOption[]>([]);
   const [balance, setBalance] = useState<number | null>(null);
   const [platformBalance, setPlatformBalance] = useState<number | null>(null);
-  const [storeInfo, setStoreInfo] = useState<{ name: string; slug: string } | null>(null);
+  const [storeInfo, setStoreInfo] = useState<{ name: string; slug: string; enableRecharge?: boolean } | null>(null);
   const [allianceStores, setAllianceStores] = useState<AllianceStore[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [showCustomForm, setShowCustomForm] = useState(false);
   const [customAmount, setCustomAmount] = useState('');
+  const [storeRechargeDisabled, setStoreRechargeDisabled] = useState(false);
+
+  const rechargeableStores = useMemo(
+    () => allianceStores.filter((s) => s.enableRecharge !== false),
+    [allianceStores]
+  );
 
   useEffect(() => {
     const loadStores = async () => {
@@ -78,11 +85,17 @@ const AccountRecharge: React.FC = () => {
           isStoreMode ? balanceRes.data?.platformBalance ?? null : balanceRes.data?.balance ?? null
         );
         setStoreInfo(offersRes.data.store || balanceRes.data.store || null);
+        const disabled = Boolean(offersRes.data.rechargeDisabled) || offersRes.data.store?.enableRecharge === false;
+        setStoreRechargeDisabled(isStoreMode && disabled);
+        if (isStoreMode && disabled) {
+          setOptions([]);
+        }
       } catch (e) {
         console.error(e);
         setOptions([]);
         setBalance(null);
         setPlatformBalance(null);
+        setStoreRechargeDisabled(false);
       } finally {
         setLoading(false);
       }
@@ -96,6 +109,10 @@ const AccountRecharge: React.FC = () => {
   );
 
   const checkout = async (option: RechargeOption) => {
+    if (isStoreMode && storeRechargeDisabled) {
+      alert('此店鋪暫未開放充值');
+      return;
+    }
     const scopeLabel = isStoreMode ? storeLabel : 'PickCourt 平台';
     const ok = window.confirm(
       `確認為 ${scopeLabel} 充值 ${option.points} 分（HK$${option.amount}）？\n\n${
@@ -131,6 +148,10 @@ const AccountRecharge: React.FC = () => {
   };
 
   const handleCustomRecharge = async () => {
+    if (isStoreMode && storeRechargeDisabled) {
+      alert('此店鋪暫未開放充值');
+      return;
+    }
     const amount = parseFloat(customAmount);
     const points = Math.floor(amount);
 
@@ -173,6 +194,22 @@ const AccountRecharge: React.FC = () => {
           {fromBooking && insufficientBalance && (
             <div className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
               預約積分不足。建議先充值 PickCourt 平台積分（全聯盟通用），或充值特定店鋪積分。
+            </div>
+          )}
+
+          {storeRechargeDisabled && (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-4 text-sm text-slate-700 space-y-3">
+              <p>
+                <span className="font-medium text-pickcourt-navy">{storeLabel}</span>{' '}
+                暫未開放會員充值。你仍可充值 PickCourt 平台積分（聯盟各店可用）。
+              </p>
+              <button
+                type="button"
+                onClick={() => setSearchParams({})}
+                className="inline-flex items-center rounded-lg bg-pickcourt-gold px-4 py-2 font-semibold text-pickcourt-navy-dark hover:bg-pickcourt-gold-light"
+              >
+                改充 PickCourt 平台積分
+              </button>
             </div>
           )}
 
@@ -219,6 +256,8 @@ const AccountRecharge: React.FC = () => {
             </div>
           )}
 
+          {!storeRechargeDisabled && (
+          <>
           <div className="grid sm:grid-cols-2 gap-4">
             {options.map((opt) => (
               <div key={opt._id || opt.name} className={card}>
@@ -323,13 +362,15 @@ const AccountRecharge: React.FC = () => {
               </div>
             )}
           </div>
+          </>
+          )}
 
-          {!isStoreMode && allianceStores.length > 0 && (
+          {!isStoreMode && rechargeableStores.length > 0 && (
             <div className="pt-4 border-t border-slate-100">
               <h3 className="text-sm font-semibold text-pickcourt-navy mb-3">或充值特定店鋪積分</h3>
               <p className="text-xs text-gray-500 mb-4">店鋪積分僅限該店使用，不可跨店或於 PickCourt 使用。</p>
               <div className="grid sm:grid-cols-2 gap-3">
-                {allianceStores.map((store) => (
+                {rechargeableStores.map((store) => (
                   <button
                     key={store.slug}
                     type="button"

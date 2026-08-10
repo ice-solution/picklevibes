@@ -48,13 +48,13 @@ async function resolveUserLookupScope(req) {
     throw err;
   }
 
-  const store = await Store.findById(storeId).select('slug name').lean();
+  const store = await Store.findById(storeId).select('slug name isChainStore').lean();
   if (!store) {
     const err = new Error('店鋪不存在');
     err.status = 404;
     throw err;
   }
-  if (isLegacyFullUserLookupStore(store)) {
+  if (store.isChainStore || isLegacyFullUserLookupStore(store)) {
     return { shouldFilter: false, storeId, store };
   }
 
@@ -96,13 +96,13 @@ async function assertStaffCanViewUser(req, userId, explicitStoreId) {
       err.status = 403;
       throw err;
     }
-    const store = await Store.findById(explicitStoreId).select('slug').lean();
+    const store = await Store.findById(explicitStoreId).select('slug isChainStore').lean();
     if (!store) {
       const err = new Error('店鋪不存在');
       err.status = 404;
       throw err;
     }
-    if (isLegacyFullUserLookupStore(store)) return;
+    if (store.isChainStore || isLegacyFullUserLookupStore(store)) return;
     scope = { shouldFilter: true, storeId: String(explicitStoreId) };
   } else {
     scope = await resolveUserLookupScope(req);

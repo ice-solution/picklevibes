@@ -603,7 +603,79 @@ async function computeFinanceSummary(opts) {
 
   const { lines } = await getIncomeLines({ fromYmd, toYmd, storeId });
   const agg = aggregateFromLines(lines);
+
+  const StorePlatformFee = require('../models/StorePlatformFee');
+  const feeMatch = {
+    voided: { $ne: true },
+    occurredAt: { $gte: start, $lte: end },
+    type: 'booking_points',
+  };
+  if (storeId) feeMatch.store = new (require('mongoose').Types.ObjectId)(storeId);
+
+  const feeRows = await StorePlatformFee.aggregate([
+    { $match: feeMatch },
+    {
+      $group: {
+        _id: '$store',
+        feeAmount: { $sum: '$feeAmount' },
+        netAmount: { $sum: '$netAmount' },
+        grossAmount: { $sum: '$grossAmount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const feeMap = Object.fromEntries(feeRows.map((r) => [String(r._id), r]));
+
+  const rechargeFeeMatch = {
+    voided: { $ne: true },
+    occurredAt: { $gte: start, $lte: end },
+    type: 'store_recharge',
+  };
+  if (storeId) rechargeFeeMatch.store = feeMatch.store;
+  const rechargeFeeAgg = await StorePlatformFee.aggregate([
+    { $match: rechargeFeeMatch },
+    {
+      $group: {
+        _id: null,
+        feeAmount: { $sum: '$feeAmount' },
+        netAmount: { $sum: '$netAmount' },
+        grossAmount: { $sum: '$grossAmount' },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const storeRechargeFees = rechargeFeeAgg[0] || {
+    feeAmount: 0,
+    netAmount: 0,
+    grossAmount: 0,
+    count: 0,
+  };
+
+  const enrichStoreRow = (row) => {
+    const fee = row.storeId ? feeMap[String(row.storeId)] : null;
+    const platformFee = fee ? round2(fee.feeAmount) : 0;
+    const storeNetAfterFee = round2((row.recognized || 0) - platformFee);
+    return {
+      ...row,
+      platformFee,
+      storeNetAfterFee,
+      platformFeeGross: fee ? round2(fee.grossAmount) : 0,
+      platformFeeCount: fee ? fee.count : 0,
+    };
+  };
+
+  agg.venue.byStore = (agg.venue.byStore || []).map(enrichStoreRow);
   const byStoreAll = storeId ? null : agg.venue.byStore;
+
+  if (storeId && selectedStore) {
+    const fee = feeMap[String(storeId)];
+    agg.venue.platformFee = fee ? round2(fee.feeAmount) : 0;
+    agg.venue.storeNetAfterFee = round2((agg.venue.recognizedTotal || 0) - (agg.venue.platformFee || 0));
+  } else {
+    const totalFee = feeRows.reduce((s, r) => s + (r.feeAmount || 0), 0);
+    agg.venue.platformFee = round2(totalFee);
+    agg.venue.storeNetAfterFee = round2((agg.venue.recognizedTotal || 0) - totalFee);
+  }
 
   const rechargeStats = await Recharge.aggregate([
     {
@@ -672,7 +744,11 @@ async function computeFinanceSummary(opts) {
     rechargeInPeriod: {
       paidCashInHKD: round2(periodPaidRechargeAmount),
       manualGiftPoints: round2(periodManualGiftPoints),
-      bonusGiftPointsFromOffers: round2(periodBonusGiftPoints)
+      bonusGiftPointsFromOffers: round2(periodBonusGiftPoints),
+      storeRechargePlatformFee: round2(storeRechargeFees.feeAmount),
+      storeRechargeNetToStore: round2(storeRechargeFees.netAmount),
+      storeRechargeGross: round2(storeRechargeFees.grossAmount),
+      storeRechargeFeeCount: storeRechargeFees.count || 0,
     },
     incomeLineCount: lines.length
   };

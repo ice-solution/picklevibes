@@ -206,10 +206,12 @@ async function resolveStoreIdFromInput(storeIdOrSlug) {
   if (!storeIdOrSlug) return null;
   const s = String(storeIdOrSlug).trim();
   if (/^[a-f0-9]{24}$/i.test(s)) {
-    const store = await Store.findById(s).select('_id name slug branding.displayName');
+    const store = await Store.findById(s).select('_id name slug branding.displayName enableRecharge');
     return store || null;
   }
-  const store = await Store.findOne({ slug: s.toLowerCase() }).select('_id name slug branding.displayName');
+  const store = await Store.findOne({ slug: s.toLowerCase() }).select(
+    '_id name slug branding.displayName enableRecharge'
+  );
   return store || null;
 }
 

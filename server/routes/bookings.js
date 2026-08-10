@@ -556,6 +556,15 @@ router.post('/', [
         deductionSplit,
         booking._id
       );
+      try {
+        const { recordFeeForBookingPoints } = require('../services/platformFeeService');
+        const pts =
+          Number(deductionSplit.storeUsed || 0) + Number(deductionSplit.platformUsed || 0) ||
+          (isCustomPoints ? customPoints : pointsToDeduct);
+        await recordFeeForBookingPoints(booking, pts);
+      } catch (feeErr) {
+        console.error('❌ 預約抽成紀錄失敗:', feeErr.message);
+      }
     }
 
     // 填充場地信息
@@ -1184,6 +1193,12 @@ router.put('/:id/cancel', [
           }
           booking.payment.status = 'refunded';
           booking.payment.refundedAt = new Date();
+          try {
+            const { voidFeeForSource } = require('../services/platformFeeService');
+            await voidFeeForSource('Booking', booking._id, '預約取消退款');
+          } catch (feeErr) {
+            console.error('❌ 作廢預約抽成失敗:', feeErr.message);
+          }
         }
       }
       }
