@@ -16,7 +16,6 @@ import HolidayManagement from '../components/Admin/WeekendManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import AccountingManagement from '../components/Admin/AccountingManagement';
 import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
-import CoachClassManagement from '../components/Admin/CoachClassManagement';
 
 import {
   Bars3Icon,
@@ -29,7 +28,6 @@ import {
   ClockIcon,
   Cog6ToothIcon,
   CurrencyDollarIcon,
-  AcademicCapIcon,
   ChatBubbleLeftRightIcon,
   ArrowLeftIcon,
 } from '@heroicons/react/24/outline';
@@ -62,7 +60,6 @@ function StoreAdminShell() {
       { id: 'recharge-offers', name: '充值優惠', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
       { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> },
       { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
-      { id: 'coach-classes', name: '教練課堂', icon: AcademicCapIcon, element: <CoachClassManagement /> },
       { id: 'weekend', name: '假期管理', icon: ClockIcon, element: <HolidayManagement /> },
       { id: 'booking-config', name: '預約設定', icon: Cog6ToothIcon, element: <BookingConfig /> },
     ],
