@@ -74,8 +74,13 @@ router.post('/', [
 
     let { user, court, date, startTime, endTime, players, totalPlayers, specialRequests, includeSoloCourt = false, redeemCodeId, customPoints, isCustomPoints = false } = req.body;
     
-    // 只有管理員才能 bypass 限制
-    const bypassRestrictions = req.user.role === 'admin' && req.body.bypassRestrictions === true;
+    // 只有管理員才能 bypass 限制（兼容 JSON／表單傳 "true"）
+    const bypassFlag =
+      req.body.bypassRestrictions === true ||
+      req.body.bypassRestrictions === 'true' ||
+      req.body.bypassRestrictions === 1 ||
+      req.body.bypassRestrictions === '1';
+    const bypassRestrictions = req.user.role === 'admin' && bypassFlag;
     /**
      * 後台建單且未勾選「管理員權限」時：僅放寬「可預約天數上限」與「營業時段 isOpenAt」，
      * 其餘與一般用戶相同（含場地啟用、1～2 小時時長）；照常扣積分。

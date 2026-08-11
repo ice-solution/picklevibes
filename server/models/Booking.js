@@ -65,8 +65,30 @@ const bookingSchema = new mongoose.Schema({
   duration: {
     type: Number,
     required: [true, '預約時長為必填項目'],
-    min: [60, '預約時長至少60分鐘'],
-    max: [120, '預約時長最多120分鐘（2小時）']
+    validate: {
+      validator(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0) return false;
+        // 管理員繞過／免扣款／包場：最長 24 小時
+        const adminOrBundle =
+          this.bypassRestrictions === true ||
+          this.noUserBalanceDebited === true ||
+          this.payment?.method === 'admin_waived' ||
+          this.venueBundleKind === 'full_venue' ||
+          this.isFullVenue === true;
+        if (adminOrBundle) {
+          return n <= 24 * 60;
+        }
+        // 一般用戶預約：1～2 小時
+        return n >= 60 && n <= 120;
+      },
+      message(props) {
+        const n = Number(props.value);
+        if (!Number.isFinite(n) || n <= 0) return '預約時長必須大於 0 分鐘';
+        if (n > 24 * 60) return '預約時長最多 24 小時';
+        return '預約時長最多120分鐘（2小時）';
+      },
+    },
   },
   players: [{
     name: { type: String, required: true },

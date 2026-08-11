@@ -53,6 +53,13 @@ router.post('/create', auth, async (req, res) => {
       });
     }
 
+    const bypassFlag =
+      bypassRestrictions === true ||
+      bypassRestrictions === 'true' ||
+      bypassRestrictions === 1 ||
+      bypassRestrictions === '1';
+    const allowBypass = req.user.role === 'admin' && bypassFlag;
+
     const result = await fullVenueService.createFullVenueBooking({
       date: normalizeBookingDateInput(date),
       startTime,
@@ -64,7 +71,7 @@ router.post('/create', auth, async (req, res) => {
       specialRequests: specialRequests || notes,
     }, user, {
       pointsDeduction: req.body.pointsDeduction || 0,
-      bypassRestrictions: bypassRestrictions,
+      bypassRestrictions: allowBypass,
       storeId: resolvedStoreId,
       // 後台預先包場：未上線／停用場地亦一併 hold
       includeInactive: true,
