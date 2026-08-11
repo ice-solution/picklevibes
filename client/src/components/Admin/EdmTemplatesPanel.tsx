@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
 
 const defaultBodyHtml = `<p style="margin:0 0 12px;">您好，</p>
-<p style="margin:0 0 12px;">感謝一直支持 <strong>PickleVibes</strong>！</p>
+<p style="margin:0 0 12px;">感謝一直支持 <strong>PickCourt</strong>！</p>
 <p style="margin:0;">祝運動愉快！</p>`;
 
 type TemplateRow = {
@@ -52,13 +52,13 @@ const EdmTemplatesPanel: React.FC<Props> = ({ onUseInSend }) => {
     setEditingId(null);
     setName('');
     setDescription('');
-    setSubject('PickleVibes 最新消息');
+    setSubject('PickCourt 最新消息');
     setHeadline('最新活動與場地資訊');
-    setPreheader('立即查看 PickleVibes 更新');
+    setPreheader('立即查看 PickCourt 更新');
     setBodyHtml(defaultBodyHtml);
     setCtaUrl('');
     setCtaLabel('前往官網');
-    setFooterNote('你收到此郵件是因為曾於 PickleVibes 註冊或預約。');
+    setFooterNote('你收到此郵件是因為曾於 PickCourt 註冊或預約。');
     setMsg(null);
   };
 

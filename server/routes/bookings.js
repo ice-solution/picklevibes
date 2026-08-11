@@ -12,7 +12,7 @@ const {
   attachRelatedBookingToSpend,
 } = require('../services/storeBalanceService');
 const { auth, adminAuth } = require('../middleware/auth');
-const { applyStoreScope } = require('../utils/tenantAccess');
+const { applyStoreScope, canAccessStore, loadTenantAccess } = require('../utils/tenantAccess');
 const { isUserVipActive, resolveMembership } = require('../utils/platformMembershipService');
 const whatsappService = require('../services/whatsappService');
 const {
@@ -28,6 +28,47 @@ const Config = require('../models/Config');
 const { collectBundledBookingIds } = require('../utils/bookingBundle');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
+
+function currentUserId(user) {
+  return String(user?._id || user?.id || '');
+}
+
+function bookingUserId(booking) {
+  if (!booking?.user) return '';
+  return String(booking.user._id || booking.user);
+}
+
+function bookingStoreId(booking) {
+  const direct = booking?.store?._id || booking?.store;
+  if (direct) return String(direct);
+  const viaCourt = booking?.court?.store?._id || booking?.court?.store;
+  return viaCourt ? String(viaCourt) : '';
+}
+
+/** 預約本人、平台 admin、或有該店權限的店鋪員工 */
+async function assertCanAccessBooking(req, booking) {
+  const uid = currentUserId(req.user);
+  const ownerId = bookingUserId(booking);
+  if (ownerId && ownerId === uid) {
+    return { asOwner: true, asBackoffice: false };
+  }
+
+  if (req.user.role === 'admin') {
+    return { asOwner: false, asBackoffice: true };
+  }
+
+  if (!req.tenantAccess) {
+    req.tenantAccess = await loadTenantAccess(req.user);
+  }
+  const storeId = bookingStoreId(booking);
+  if (storeId && canAccessStore(req.tenantAccess, storeId)) {
+    return { asOwner: false, asBackoffice: true };
+  }
+
+  const err = new Error('無權限查看此預約');
+  err.status = 403;
+  throw err;
+}
 const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 const { settleBookingWithPoints, getSettlePreview } = require('../services/bookingSettleService');
 
@@ -1067,13 +1108,15 @@ router.get('/:id', [auth], async (req, res) => {
       return res.status(404).json({ message: '預約不存在' });
     }
 
-    // 檢查權限（用戶只能查看自己的預約，管理員可以查看所有）
-    if (booking.user._id.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: '無權限查看此預約' });
+    let access;
+    try {
+      access = await assertCanAccessBooking(req, booking);
+    } catch (err) {
+      return res.status(err.status || 403).json({ message: err.message || '無權限查看此預約' });
     }
 
     const payload = { booking: booking.toObject ? booking.toObject() : booking };
-    if (req.user.role === 'admin') {
+    if (access.asBackoffice) {
       try {
         payload.settleInfo = await getSettlePreview(booking._id);
       } catch {
@@ -1098,14 +1141,21 @@ router.put('/:id/cancel', [
   try {
     const { reason } = req.body;
     
-    const booking = await Booking.findById(req.params.id);
+    const booking = await Booking.findById(req.params.id)
+      .populate({
+        path: 'court',
+        select: 'store',
+        populate: { path: 'store', select: '_id' },
+      });
     if (!booking) {
       return res.status(404).json({ message: '預約不存在' });
     }
 
-    // 檢查權限
-    if (booking.user.toString() !== req.user.id && req.user.role !== 'admin') {
-      return res.status(403).json({ message: '無權限取消此預約' });
+    let access;
+    try {
+      access = await assertCanAccessBooking(req, booking);
+    } catch (err) {
+      return res.status(err.status || 403).json({ message: err.message || '無權限取消此預約' });
     }
 
     const bundledIds = await collectBundledBookingIds(booking);
@@ -1114,15 +1164,16 @@ router.put('/:id/cancel', [
         ? await Booking.find({ _id: { $in: bundledIds } })
         : [booking];
 
-    if (req.user.role !== 'admin') {
-      const foreign = bundleBookings.find((b) => b.user.toString() !== req.user.id);
+    if (!access.asBackoffice) {
+      const uid = currentUserId(req.user);
+      const foreign = bundleBookings.find((b) => bookingUserId(b) !== uid);
       if (foreign) {
         return res.status(403).json({ message: '無權限取消此預約' });
       }
     }
 
-    // 檢查是否可以取消（管理員可繞過時間限制）；包場／活動佔用須整組可取消
-    if (req.user.role !== 'admin') {
+    // 檢查是否可以取消（後台可繞過時間限制）；包場／活動佔用須整組可取消
+    if (!access.asBackoffice) {
       const cannot = bundleBookings.find((b) => !b.canBeCancelled());
       if (cannot) {
         return res.status(400).json({
@@ -1133,7 +1184,7 @@ router.put('/:id/cancel', [
 
     const cancellation = {
       cancelledAt: new Date(),
-      cancelledBy: booking.user.toString() === req.user.id ? 'user' : 'admin',
+      cancelledBy: access.asOwner ? 'user' : 'admin',
       reason
     };
 

@@ -165,13 +165,16 @@ const AccountingManagement: React.FC = () => {
     api.get('/stores/admin/all').then((r) => setStores(r.data.stores || [])).catch(() => {});
   }, [lockedStoreId]);
 
+  /** 店鋪後台必須用 lockedStoreId，避免 state 尚未同步時打出「全部店鋪」 */
+  const effectiveStoreId = lockedStoreId || storeId;
+
   const storeParams = useMemo(
     () => ({
       from: fromYmd,
       to: toYmd,
-      ...(storeId ? { store: storeId } : {})
+      ...(effectiveStoreId ? { store: effectiveStoreId } : {})
     }),
-    [fromYmd, toYmd, storeId]
+    [fromYmd, toYmd, effectiveStoreId]
   );
 
   const reportOpts = useMemo(
@@ -297,7 +300,7 @@ const AccountingManagement: React.FC = () => {
     setLinesPage(1);
     setAppliedSearch('');
     setSearch('');
-  }, [fromYmd, toYmd, storeId]);
+  }, [fromYmd, toYmd, effectiveStoreId]);
 
   useEffect(() => {
     if (mainTab !== 'revenue') return;
@@ -306,6 +309,7 @@ const AccountingManagement: React.FC = () => {
 
   const storeBreakdown = summary?.byStoreBreakdown || summary?.venue?.byStore || [];
   const loading = summaryLoading || linesLoading;
+  const showMultiStoreBreakdown = !lockedStoreId && !effectiveStoreId && storeBreakdown.length > 0;
 
   const handleExport = async () => {
     setExporting(true);
@@ -322,7 +326,7 @@ const AccountingManagement: React.FC = () => {
       const a = document.createElement('a');
       a.href = url;
       const storeName =
-        stores.find((s) => s._id === storeId)?.name ||
+        stores.find((s) => s._id === effectiveStoreId)?.name ||
         summary?.selectedStore?.name ||
         '全部店鋪';
       a.download = `會計收入_${storeName}_${fromYmd}_${toYmd}.xlsx`;
@@ -340,8 +344,8 @@ const AccountingManagement: React.FC = () => {
 
   const selectedStoreName =
     summary?.selectedStore?.name ||
-    stores.find((s) => s._id === storeId)?.name ||
-    (storeId ? '—' : '全部店鋪（含網店）');
+    stores.find((s) => s._id === effectiveStoreId)?.name ||
+    (effectiveStoreId ? '—' : '全部店鋪（含網店）');
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -483,10 +487,10 @@ const AccountingManagement: React.FC = () => {
           </div>
           <div className="bg-white border rounded-lg p-4">
             <p className="text-xs text-gray-500">
-              網店（{summary.shop.orderCount} 筆）{storeId ? '—' : ''}
+              網店（{summary.shop.orderCount} 筆）{effectiveStoreId ? '—' : ''}
             </p>
             <p className="text-xl font-bold">
-              {storeId ? '—' : `HK$ ${fmt(summary.shop.recognizedTotal)}`}
+              {effectiveStoreId ? '—' : `HK$ ${fmt(summary.shop.recognizedTotal)}`}
             </p>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -498,7 +502,7 @@ const AccountingManagement: React.FC = () => {
         </div>
       )}
 
-      {!storeId && storeBreakdown.some((r) => r.store === '未指定店鋪' || !r.storeId) && (
+      {!effectiveStoreId && storeBreakdown.some((r) => r.store === '未指定店鋪' || !r.storeId) && (
         <div className="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 text-sm text-amber-900">
           <strong>出現「未指定店鋪」：</strong>多為多店功能上線前的舊預約，資料庫裡
           <code className="mx-1 bg-amber-100 px-1 rounded">booking.store</code>
@@ -508,7 +512,7 @@ const AccountingManagement: React.FC = () => {
         </div>
       )}
 
-      {!storeId && storeBreakdown.length > 0 && (
+      {showMultiStoreBreakdown && (
         <div className="bg-white rounded-xl border overflow-hidden">
           <div className="px-4 py-3 border-b font-semibold flex items-center justify-between">
             <span>各店鋪收入匯總（場地）</span>

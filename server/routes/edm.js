@@ -18,6 +18,7 @@ const {
 } = require('../utils/edmRecipients');
 const { mergeEdmContentFromTemplate, mailingListToResolveBody } = require('../utils/edmFromResources');
 const { syncUsersToSendGridMarketing, shouldUseSendGridEdm } = require('../services/sendgridService');
+const { getEmailBrand } = require('../utils/emailBrand');
 
 const router = express.Router();
 
@@ -587,7 +588,8 @@ router.post(
 
       let subject = String(content.subject || '').trim();
       if (!subject && useSendGridEdm) {
-        subject = String(process.env.SENDGRID_EDM_DEFAULT_SUBJECT || 'PickleVibes 消息').trim() || 'PickleVibes';
+        subject = String(process.env.SENDGRID_EDM_DEFAULT_SUBJECT || `${getEmailBrand().name} 消息`).trim()
+          || getEmailBrand().name;
       }
       if (!String(subject || '').trim()) {
         return res.status(400).json({ message: '請提供主旨，或選擇 EDM 範本' });

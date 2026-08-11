@@ -7,6 +7,7 @@ const {
   formatHkYmd,
   defaultFinanceFromYmd,
 } = require('../utils/financeRevenue');
+const { resolveFinanceStoreFilter } = require('../utils/resolveFinanceStoreFilter');
 
 const router = express.Router();
 
@@ -29,8 +30,15 @@ router.get('/summary', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const storeId = req.query.store || req.query.storeId || null;
-    const data = await computeFinanceSummary({ fromYmd, toYmd, storeId: storeId || undefined });
+    const storeFilter = resolveFinanceStoreFilter(req);
+    if (!storeFilter.ok) {
+      return res.status(storeFilter.status).json({ message: storeFilter.message });
+    }
+    const data = await computeFinanceSummary({
+      fromYmd,
+      toYmd,
+      storeId: storeFilter.storeId || undefined,
+    });
     res.json({ success: true, data });
   } catch (error) {
     console.error('財務摘要錯誤:', error);
@@ -51,7 +59,11 @@ router.get('/income-lines', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const storeId = req.query.store || req.query.storeId || null;
+    const storeFilter = resolveFinanceStoreFilter(req);
+    if (!storeFilter.ok) {
+      return res.status(storeFilter.status).json({ message: storeFilter.message });
+    }
+    const storeId = storeFilter.storeId;
     const typeFilter = req.query.type; // recognized | excluded | venue | shop
     const search = String(req.query.search || '').trim().toLowerCase();
     const pageN = Math.max(parseInt(req.query.page, 10) || 1, 1);
@@ -131,7 +143,11 @@ router.get('/summary-xlsx', [auth, adminAuth], async (req, res) => {
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
     const toYmd = parseYmd(req.query.to, today);
 
-    const storeId = req.query.store || req.query.storeId || null;
+    const storeFilter = resolveFinanceStoreFilter(req);
+    if (!storeFilter.ok) {
+      return res.status(storeFilter.status).json({ message: storeFilter.message });
+    }
+    const storeId = storeFilter.storeId;
     const opts = { fromYmd, toYmd, storeId: storeId || undefined };
     const [data, { lines }] = await Promise.all([
       computeFinanceSummary(opts),

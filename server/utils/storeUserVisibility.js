@@ -22,7 +22,26 @@ function isLegacyFullUserLookupStore(store) {
  */
 async function resolveUserLookupScope(req) {
   const access = req.tenantAccess;
-  if (!access || access.isPlatformAdmin) {
+  let storeId = req.query.store ? String(req.query.store).trim() : '';
+
+  // 平台 admin：未指定 store = 全站會員；店鋪後台帶 store = 仍按本店預約篩選
+  if (access?.isPlatformAdmin) {
+    if (!storeId) {
+      return { shouldFilter: false };
+    }
+    const store = await Store.findById(storeId).select('slug name isChainStore').lean();
+    if (!store) {
+      const err = new Error('店鋪不存在');
+      err.status = 404;
+      throw err;
+    }
+    if (store.isChainStore || isLegacyFullUserLookupStore(store)) {
+      return { shouldFilter: false, storeId, store };
+    }
+    return { shouldFilter: true, storeId, store };
+  }
+
+  if (!access) {
     return { shouldFilter: false };
   }
 
@@ -33,7 +52,6 @@ async function resolveUserLookupScope(req) {
     throw err;
   }
 
-  let storeId = req.query.store ? String(req.query.store).trim() : '';
   if (!storeId && managedIds.length === 1) {
     storeId = managedIds[0];
   }

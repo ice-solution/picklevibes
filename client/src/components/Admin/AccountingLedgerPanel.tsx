@@ -115,17 +115,20 @@ const AccountingLedgerPanel: React.FC = () => {
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
 
+  /** 店鋪後台必須用 lockedStoreId，避免 state 尚未同步時打出全部店鋪 */
+  const effectiveStoreId = lockedStoreId || storeId;
+
   const listParams = useMemo(
     () => ({
       from: fromYmd,
       to: toYmd,
       page,
       limit: LEDGER_PAGE_SIZE,
-      ...(storeId ? { store: storeId } : {}),
+      ...(effectiveStoreId ? { store: effectiveStoreId } : {}),
       ...(typeFilter ? { type: typeFilter } : {}),
       ...(categoryFilter ? { category: categoryFilter } : {}),
     }),
-    [fromYmd, toYmd, storeId, typeFilter, categoryFilter, page]
+    [fromYmd, toYmd, effectiveStoreId, typeFilter, categoryFilter, page]
   );
 
   const loadMeta = useCallback(async () => {
@@ -172,7 +175,7 @@ const AccountingLedgerPanel: React.FC = () => {
 
   useEffect(() => {
     setPage(1);
-  }, [fromYmd, toYmd, storeId, typeFilter, categoryFilter]);
+  }, [fromYmd, toYmd, effectiveStoreId, typeFilter, categoryFilter]);
 
   const openCreate = () => {
     setEditing(null);

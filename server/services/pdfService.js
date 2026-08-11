@@ -1,6 +1,7 @@
 const pug = require('pug');
 const puppeteer = require('puppeteer');
 const path = require('path');
+const { getEmailBrand } = require('../utils/emailBrand');
 
 class PDFService {
   constructor() {
@@ -17,12 +18,14 @@ class PDFService {
   async generateInvoicePDF(userData, invoiceData, paymentData) {
     try {
       console.log('📄 開始生成發票 PDF...');
+      const brand = getEmailBrand();
 
       // 準備模板數據
       const templateData = {
         userData,
         invoiceData,
         paymentData,
+        brand,
         issueDate: this.formatDate(new Date()),
         dueDate: this.formatDate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)),
         formatCurrency: this.formatCurrency,

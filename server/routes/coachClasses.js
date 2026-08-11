@@ -8,11 +8,12 @@ const { auth, adminAuth } = require('../middleware/auth');
 const { createAdminBypassBooking } = require('../services/adminBypassBooking');
 const { getCoachCalendarEvents, getCoachAssignments, coachClassLocationLabel } = require('../services/coachScheduleService');
 const emailService = require('../services/emailService');
+const { getEmailBrand } = require('../utils/emailBrand');
 
 const router = express.Router();
 
 function getClientBaseUrl() {
-  return (process.env.CLIENT_URL || process.env.PUBLIC_WEB_URL || 'https://picklevibes.hk').replace(/\/+$/, '');
+  return (process.env.CLIENT_URL || process.env.PUBLIC_WEB_URL || getEmailBrand().siteUrl).replace(/\/+$/, '');
 }
 
 function formatSessionDateLabel(dateInput) {

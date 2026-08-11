@@ -123,6 +123,9 @@ const AccountingPLPanel: React.FC = () => {
   const [data, setData] = useState<PLData | null>(null);
   const [loading, setLoading] = useState(false);
 
+  /** 店鋪後台必須用 lockedStoreId，避免 state 尚未同步時打出「全部店鋪」 */
+  const effectiveStoreId = lockedStoreId || storeId;
+
   useEffect(() => {
     if (lockedStoreId) {
       setStoreId(lockedStoreId);
@@ -138,7 +141,7 @@ const AccountingPLPanel: React.FC = () => {
         params: {
           from: fromYmd,
           to: toYmd,
-          ...(storeId ? { store: storeId } : {}),
+          ...(effectiveStoreId ? { store: effectiveStoreId } : {}),
         },
         timeout: ACCOUNTING_REPORT_TIMEOUT_MS,
       });
@@ -150,7 +153,7 @@ const AccountingPLPanel: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [fromYmd, toYmd, storeId]);
+  }, [fromYmd, toYmd, effectiveStoreId]);
 
   useEffect(() => {
     load();
@@ -158,8 +161,11 @@ const AccountingPLPanel: React.FC = () => {
 
   const selectedStoreName =
     data?.selectedStore?.name ||
-    stores.find((s) => s._id === storeId)?.name ||
-    (storeId ? '—' : '全部店鋪');
+    stores.find((s) => s._id === effectiveStoreId)?.name ||
+    (effectiveStoreId ? '—' : '全部店鋪');
+
+  const showStoreBreakdown =
+    !lockedStoreId && Boolean(data?.storeBreakdown && data.storeBreakdown.length > 0);
 
   return (
     <div className="space-y-6">
@@ -299,8 +305,8 @@ const AccountingPLPanel: React.FC = () => {
             </div>
           </div>
 
-          {/* 按店鋪 */}
-          {data.storeBreakdown && data.storeBreakdown.length > 0 && (
+          {/* 按店鋪（僅平台「全部店鋪」視圖；店鋪後台不顯示跨店表） */}
+          {showStoreBreakdown && (
             <div className="bg-white rounded-xl border overflow-hidden">
               <div className="px-6 py-4 border-b bg-gray-50">
                 <h3 className="font-semibold text-gray-900">按店鋪損益</h3>
@@ -321,7 +327,7 @@ const AccountingPLPanel: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {data.storeBreakdown.map((row) => (
+                    {data.storeBreakdown!.map((row) => (
                       <tr key={row.storeId || 'shop'} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium">{row.storeName}</td>
                         <td className="px-4 py-3 text-right text-green-700">

@@ -206,7 +206,7 @@ const StoreMemberManagement: React.FC = () => {
             店鋪會員
           </h2>
           <p className="text-sm text-gray-500 mt-1">
-            僅顯示曾在 {storeName} 預約的會員 · 共 {totalMembers} 人
+            僅顯示曾在 {storeName} 預約的球友／教練（不含管理員帳號）· 共 {totalMembers} 人
           </p>
         </div>
       </div>
@@ -245,7 +245,7 @@ const StoreMemberManagement: React.FC = () => {
         </div>
       ) : members.length === 0 ? (
         <div className="text-center py-16 text-gray-500 bg-white rounded-xl border">
-          暫無符合條件的會員（需曾於本店預約）
+          暫無符合條件的會員（需以球友帳號於本店預約；管理員預約不會列入）
         </div>
       ) : (
         <div className="bg-white rounded-xl border shadow-sm overflow-hidden">

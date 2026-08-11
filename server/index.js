@@ -211,7 +211,7 @@ app.set('batchLimiter', batchLimiter);
 
 // 健康檢查
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'OK', message: 'PickleVibes API 運行正常' });
+  res.json({ status: 'OK', message: 'PickCourt API 運行正常' });
 });
 
 // 錯誤處理中間件

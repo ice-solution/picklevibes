@@ -14,32 +14,38 @@ const {
   formatMembershipForClient,
 } = require('../utils/platformMembershipService');
 const { loadTenantAccess, formatTenantAccessForClient } = require('../utils/tenantAccess');
+const { getEmailBrand } = require('../utils/emailBrand');
 
 const router = express.Router();
 
-// 通用速率限制
+const AUTH_WINDOW_MS = Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000;
+const AUTH_MAX = Number(process.env.AUTH_RATE_LIMIT_MAX) || 10;
+const AUTH_WINDOW_MINUTES = Math.max(1, Math.round(AUTH_WINDOW_MS / 60000));
+
+// 通用速率限制（登入／註冊／改密碼）
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15分鐘
-  max: 10, // 最多10次請求
-  message: { message: '請求過於頻繁，請15分鐘後再試' },
+  windowMs: AUTH_WINDOW_MS,
+  max: AUTH_MAX,
+  message: { message: `請求過於頻繁，請${AUTH_WINDOW_MINUTES}分鐘後再試` },
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
 });
 
 // 限制忘記密碼請求頻率
 const forgotPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15分鐘
-  max: 3, // 最多3次請求
-  message: { message: '請求過於頻繁，請15分鐘後再試' },
+  windowMs: AUTH_WINDOW_MS,
+  max: Number(process.env.AUTH_FORGOT_PASSWORD_MAX) || 3,
+  message: { message: `請求過於頻繁，請${AUTH_WINDOW_MINUTES}分鐘後再試` },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
 // 限制重置密碼請求頻率
 const resetPasswordLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15分鐘
-  max: 5, // 最多5次請求
-  message: { message: '請求過於頻繁，請15分鐘後再試' },
+  windowMs: AUTH_WINDOW_MS,
+  max: Number(process.env.AUTH_RESET_PASSWORD_MAX) || 5,
+  message: { message: `請求過於頻繁，請${AUTH_WINDOW_MINUTES}分鐘後再試` },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -288,17 +294,19 @@ router.get('/me', auth, async (req, res) => {
 // 發送重置密碼郵件
 const sendResetEmail = async (email, resetToken) => {
   const transporter = createTransporter();
-  const resetUrl = `${process.env.CLIENT_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
-  
+  const brand = getEmailBrand();
+  const resetUrl = `${brand.siteUrl}/reset-password/${resetToken}`;
+  const year = new Date().getFullYear();
+
   const mailOptions = {
-    from: process.env.GMAIL_USER,
+    from: `"${brand.fromName}" <${process.env.GMAIL_USER}>`,
     to: email,
-    subject: 'Picklevibes - 重置密碼',
+    subject: `${brand.name} - 重置密碼`,
     html: `
       <div style="max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif;">
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center;">
-          <h1 style="color: white; margin: 0; font-size: 28px;">Picklevibes</h1>
-          <p style="color: white; margin: 10px 0 0 0; font-size: 16px;">匹克球場地預約系統</p>
+        <div style="background: #0f172a; padding: 40px 20px; text-align: center;">
+          <h1 style="color: #f5d76e; margin: 0; font-size: 28px;">${brand.name}</h1>
+          <p style="color: #e2e8f0; margin: 10px 0 0 0; font-size: 16px;">${brand.tagline}</p>
         </div>
         
         <div style="padding: 40px 20px; background: white;">
@@ -310,8 +318,8 @@ const sendResetEmail = async (email, resetToken) => {
           
           <div style="text-align: center; margin: 30px 0;">
             <a href="${resetUrl}" 
-               style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
-                      color: white; 
+               style="background: #0f172a; 
+                      color: #f5d76e; 
                       text-decoration: none; 
                       padding: 15px 30px; 
                       border-radius: 8px; 
@@ -324,7 +332,7 @@ const sendResetEmail = async (email, resetToken) => {
           
           <p style="color: #666; font-size: 14px; line-height: 1.6; margin: 30px 0 0 0;">
             如果按鈕無法點擊，請複製以下鏈接到瀏覽器中：<br>
-            <a href="${resetUrl}" style="color: #667eea; word-break: break-all;">${resetUrl}</a>
+            <a href="${resetUrl}" style="color: #0f172a; word-break: break-all;">${resetUrl}</a>
           </p>
           
           <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
@@ -336,7 +344,8 @@ const sendResetEmail = async (email, resetToken) => {
         
         <div style="background: #f8f9fa; padding: 20px; text-align: center;">
           <p style="color: #666; font-size: 12px; margin: 0;">
-            © 2024 Picklevibes. 所有權利保留。
+            © ${year} ${brand.name}. 所有權利保留。
+            ${brand.supportEmail ? `<br>支援：${brand.supportEmail}` : ''}
           </p>
         </div>
       </div>

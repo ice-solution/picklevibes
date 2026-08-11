@@ -3,11 +3,13 @@ const Court = require('../models/Court');
 const Booking = require('../models/Booking');
 const Config = require('../models/Config');
 
+const { getEmailBrand } = require('./emailBrand');
+
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const AUDIENCE_ROLES = new Set(['user', 'coach', 'admin']);
 
 function getPublicWebBase() {
-  const base = process.env.PUBLIC_WEB_URL || process.env.CLIENT_URL || 'https://picklevibes.hk';
+  const base = process.env.PUBLIC_WEB_URL || process.env.CLIENT_URL || getEmailBrand().siteUrl;
   return base.replace(/\/$/, '');
 }
 

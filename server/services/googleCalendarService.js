@@ -66,7 +66,7 @@ class GoogleCalendarService {
 
   async setupPrivateCalendar() {
     try {
-      const calendarName = 'PickleVibes 預約詳情';
+      const calendarName = 'PickCourt 預約詳情';
       
       // 檢查是否已存在私人日曆
       const calendarList = await this.calendar.calendarList.list();
@@ -82,7 +82,7 @@ class GoogleCalendarService {
         const newCalendar = await this.calendar.calendars.insert({
           requestBody: {
             summary: calendarName,
-            description: 'PickleVibes 預約詳細信息日曆（包含個人資料）',
+            description: 'PickCourt 預約詳細信息日曆（包含個人資料）',
             timeZone: 'Asia/Hong_Kong'
           }
         });

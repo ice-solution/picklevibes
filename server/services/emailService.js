@@ -7,6 +7,7 @@ const {
   BOOKING_CANCELLATION_POLICY_HTML,
   BOOKING_CANCELLATION_POLICY_TEXT,
 } = require('../constants/bookingCancellationPolicy');
+const { getEmailBrand } = require('../utils/emailBrand');
 
 function orderItemDisplayName(item) {
   if (!item || !item.name) return '';
@@ -207,7 +208,7 @@ class EmailService {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>活動報名確認 - PickleVibes</title>
+        <title>活動報名確認 - ${getEmailBrand().name}</title>
         <style>
           body {
             font-family: 'Microsoft JhengHei', Arial, sans-serif;
@@ -336,7 +337,7 @@ class EmailService {
       <body>
         <div class="container">
           <div class="header">
-            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes Logo" class="logo">` : '<div class="logo">🏓 PickleVibes</div>'}
+            ${this.logoBase64 ? `<img src="cid:logo" alt="${getEmailBrand().name} Logo" class="logo">` : `<div class="logo">🏓 ${getEmailBrand().name}</div>`}
             <h1>活動報名確認</h1>
           </div>
           
@@ -414,11 +415,11 @@ class EmailService {
           </div>
           
           <div class="footer">
-            <p><strong>PickleVibes 匹克球場</strong></p>
+            <p><strong>${getEmailBrand().venueLabel}</strong></p>
             <p>專業匹克球場地服務</p>
             <div class="contact-info">
               <p>如有任何疑問，請聯繫我們</p>
-              <p>電話：+852 6190 2761 | 電郵：info@picklevibes.hk</p>
+              <p>電話：+852 6190 2761 | 電郵：${getEmailBrand().supportEmail}</p>
             </div>
           </div>
         </div>
@@ -442,7 +443,7 @@ class EmailService {
     });
 
     return {
-      subject: `🏓 PickleVibes 場地預約確認 - ${courtName}`,
+      subject: `🏓 ${getEmailBrand().name} 場地預約確認 - ${courtName}`,
       html: `
         <!DOCTYPE html>
         <html lang="zh-TW">
@@ -525,7 +526,7 @@ class EmailService {
         <body>
           <div class="container">
             <div class="header">
-              ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes Logo" style="max-width: 100px; height: auto; display: block; margin: 0 auto 20px;">` : '<div class="logo">🏓 PickleVibes</div>'}
+              ${this.logoBase64 ? `<img src="cid:logo" alt="${getEmailBrand().name} Logo" style="max-width: 100px; height: auto; display: block; margin: 0 auto 20px;">` : `<div class="logo">🏓 ${getEmailBrand().name}</div>`}
               <h2>場地預約確認通知</h2>
             </div>
 
@@ -596,19 +597,19 @@ class EmailService {
 
             ${BOOKING_CANCELLATION_POLICY_HTML}
 
-            <p>感謝您選擇 PickleVibes，祝您運動愉快！</p>
+            <p>感謝您選擇 ${getEmailBrand().name}，祝您運動愉快！</p>
 
             <div class="footer">
               <p>此郵件由系統自動發送，請勿回覆</p>
-              <p>如有疑問，請聯繫客服：<a href="mailto:info@picklevibes.hk">info@picklevibes.hk</a></p>
-              <p>© 2025 PickleVibes. All rights reserved.</p>
+              <p>如有疑問，請聯繫客服：<a href="mailto:${getEmailBrand().supportEmail}">${getEmailBrand().supportEmail}</a></p>
+              <p>${getEmailBrand().copyright}</p>
             </div>
           </div>
         </body>
         </html>
       `,
       text: `
-        PickleVibes 場地預約確認
+        ${getEmailBrand().name} 場地預約確認
         
         親愛的 ${name}，
         
@@ -638,11 +639,11 @@ class EmailService {
         
         ${BOOKING_CANCELLATION_POLICY_TEXT}
         
-        感謝您選擇 PickleVibes，祝您運動愉快！
+        感謝您選擇 ${getEmailBrand().name}，祝您運動愉快！
         
         此郵件由系統自動發送，請勿回覆
-        info@picklevibes.hk
-        © 2025 PickleVibes. All rights reserved.
+        ${getEmailBrand().supportEmail}
+        ${getEmailBrand().copyright}
       `
     };
   }
@@ -682,7 +683,7 @@ class EmailService {
       }
       
       const mailOptions = {
-        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: visitorData.email,
         subject: emailTemplate.subject,
         html: emailTemplate.html,
@@ -731,14 +732,14 @@ class EmailService {
       : (storeAddress || '請見預約詳情');
 
     return {
-      subject: `🏓 PickleVibes 場地預約確認 - ${courtName}`,
+      subject: `🏓 ${getEmailBrand().name} 場地預約確認 - ${courtName}`,
       html: `
         <!DOCTYPE html>
         <html lang="zh-TW">
         <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
         <body style="font-family:'Microsoft JhengHei',Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background:#f5f5f5">
           <div style="background:#fff;padding:30px;border-radius:10px">
-            <h1 style="color:#4CAF50;text-align:center;margin:0 0 20px">PickleVibes 預約確認</h1>
+            <h1 style="color:#4CAF50;text-align:center;margin:0 0 20px">${getEmailBrand().name} 預約確認</h1>
             <p>親愛的 ${name}，</p>
             <p>您的場地預約已確認，詳情如下：</p>
             <table style="width:100%;border-collapse:collapse;margin:20px 0">
@@ -753,13 +754,13 @@ class EmailService {
             </p>
             ${BOOKING_CANCELLATION_POLICY_HTML}
             <p style="text-align:center;color:#666;font-size:14px;margin-top:30px">
-              感謝您選擇 PickleVibes<br>info@picklevibes.hk
+              感謝您選擇 ${getEmailBrand().name}<br>${getEmailBrand().supportEmail}
             </p>
           </div>
         </body>
         </html>
       `,
-      text: `PickleVibes 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。\n\n${BOOKING_CANCELLATION_POLICY_TEXT}`,
+      text: `${getEmailBrand().name} 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。\n\n${BOOKING_CANCELLATION_POLICY_TEXT}`,
     };
   }
 
@@ -783,7 +784,7 @@ class EmailService {
         });
       }
       const mailOptions = {
-        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: visitorData.email,
         subject: emailTemplate.subject,
         html: emailTemplate.html,
@@ -804,6 +805,7 @@ class EmailService {
    */
   async generateWelcomeEmailTemplate(userData) {
     const { name, email, password, role, membershipLevel, membershipExpiry } = userData;
+    const brand = getEmailBrand();
     
     // 格式化會員等級顯示
     const membershipDisplay = membershipLevel === 'vip' ? 'VIP會員' : '普通會員';
@@ -811,7 +813,7 @@ class EmailService {
       ? `，有效期至 ${new Date(membershipExpiry).toLocaleDateString('zh-TW')}`
       : '';
 
-    const subject = `🎉 歡迎加入 PickleVibes！您的帳戶已創建成功`;
+    const subject = `🎉 歡迎加入 ${brand.name}！您的帳戶已創建成功`;
 
     const html = `
     <!DOCTYPE html>
@@ -819,7 +821,7 @@ class EmailService {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>歡迎加入 PickleVibes</title>
+        <title>歡迎加入 ${brand.name}</title>
         <style>
             body {
                 font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -965,14 +967,14 @@ class EmailService {
                 <div class="logo">
                     <span class="logo-text">P</span>
                 </div>
-                <h1 class="title">歡迎加入 PickleVibes！</h1>
+                <h1 class="title">歡迎加入 ${brand.name}！</h1>
                 <p class="subtitle">您的帳戶已成功創建</p>
             </div>
 
             <div class="content">
                 <p class="welcome-text">
                     親愛的 <strong>${name}</strong>，<br>
-                    歡迎加入 PickleVibes 大家庭！我們很高興為您提供優質的場地預約服務。
+                    歡迎加入 ${brand.name} 大家庭！我們很高興為您提供優質的場地預約服務。
                 </p>
 
                 <div class="account-info">
@@ -1000,7 +1002,7 @@ class EmailService {
                     <p>您可以使用以下信息登入您的帳戶：</p>
                     <div class="info-item">
                         <span class="info-label">登入網址：</span>
-                        <span class="info-value">${process.env.CLIENT_URL || 'https://picklevibes.hk'}/login</span>
+                        <span class="info-value">${brand.siteUrl}/login</span>
                     </div>
                     <div class="info-item">
                         <span class="info-label">郵箱：</span>
@@ -1011,7 +1013,7 @@ class EmailService {
                         <span class="info-value">${password}</span>
                     </div>
                     <br>
-                    <a href="${process.env.CLIENT_URL || 'https://picklevibes.hk'}/login" class="login-button">
+                    <a href="${brand.siteUrl}/login" class="login-button">
                         🚀 立即登入
                     </a>
                 </div>
@@ -1054,7 +1056,7 @@ class EmailService {
             <div class="footer">
                 <p>
                     如有任何問題，請聯繫我們的客服團隊。<br>
-                    <strong>PickleVibes</strong> - 讓運動更精彩！
+                    <strong>${brand.name}</strong> - 讓運動更精彩！
                 </p>
                 <p style="margin-top: 15px; font-size: 12px; color: #a0aec0;">
                     此郵件由系統自動發送，請勿回覆。
@@ -1066,11 +1068,11 @@ class EmailService {
     `;
 
     const text = `
-歡迎加入 PickleVibes！
+歡迎加入 ${brand.name}！
 
 親愛的 ${name}，
 
-歡迎加入 PickleVibes 大家庭！我們很高興為您提供優質的場地預約服務。
+歡迎加入 ${brand.name} 大家庭！我們很高興為您提供優質的場地預約服務。
 
 您的帳戶信息：
 - 姓名：${name}
@@ -1079,7 +1081,7 @@ class EmailService {
 - 會員等級：${membershipDisplay}${membershipInfo}
 
 登入信息：
-- 登入網址：${process.env.CLIENT_URL || 'https://picklevibes.hk'}/login
+- 登入網址：${brand.siteUrl}/login
 - 郵箱：${email}
 - 密碼：${password}
 
@@ -1094,7 +1096,7 @@ ${membershipLevel === 'vip' ? '- ⭐ VIP 專享優惠' : ''}
 請妥善保管您的登入信息，不要與他人分享。
 
 如有任何問題，請聯繫我們的客服團隊。
-PickleVibes - 讓匹克球24小時隨時預約！
+${brand.name} - 聯盟場地隨時預約！
 
 此郵件由系統自動發送，請勿回覆。
     `;
@@ -1131,7 +1133,7 @@ PickleVibes - 讓匹克球24小時隨時預約！
       }
       
       const mailOptions = {
-        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        from: `"${getEmailBrand().fromName}" <${process.env.GMAIL_USER}>`,
         to: userData.email,
         subject: emailTemplate.subject,
         html: emailTemplate.html,
@@ -1185,7 +1187,7 @@ PickleVibes - 讓匹克球24小時隨時預約！
       }
       
       const mailOptions = {
-        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: userData.email,
         subject: emailTemplate.subject,
         html: emailTemplate.html,
@@ -1218,7 +1220,7 @@ PickleVibes - 讓匹克球24小時隨時預約！
       minute: '2-digit'
     });
 
-    const subject = `PickleVibes 充值發票 - ${invoiceNumber}`;
+    const subject = `${getEmailBrand().name} 充值發票 - ${invoiceNumber}`;
 
     const html = `
     <!DOCTYPE html>
@@ -1338,7 +1340,7 @@ PickleVibes - 讓匹克球24小時隨時預約！
     <body>
         <div class="container">
             <div class="header">
-                <img src="cid:logo" alt="PickleVibes Logo" class="logo">
+                <img src="cid:logo" alt="${getEmailBrand().name} Logo" class="logo">
                 <h1 class="invoice-title">充值發票</h1>
                 <p class="invoice-number">發票編號: ${invoiceNumber}</p>
             </div>
@@ -1378,9 +1380,9 @@ PickleVibes - 讓匹克球24小時隨時預約！
             </div>
 
             <div class="footer">
-                <p>此發票由 PickleVibes 系統自動生成</p>
+                <p>此發票由 ${getEmailBrand().name} 系統自動生成</p>
                 <p>如有疑問，請聯繫客服</p>
-                <p>© 2024 PickleVibes. All rights reserved.</p>
+                <p>${getEmailBrand().copyright}</p>
             </div>
         </div>
     </body>
@@ -1388,7 +1390,7 @@ PickleVibes - 讓匹克球24小時隨時預約！
     `;
 
     const text = `
-PickleVibes 充值發票
+${getEmailBrand().name} 充值發票
 
 發票編號: ${invoiceNumber}
 
@@ -1404,10 +1406,10 @@ PickleVibes 充值發票
 
 感謝您的充值，積分已成功添加到您的帳戶中。
 
-此發票由 PickleVibes 系統自動生成
+此發票由 ${getEmailBrand().name} 系統自動生成
 如有疑問，請聯繫客服
 
-© 2024 PickleVibes. All rights reserved.
+${getEmailBrand().copyright}
     `;
 
     return { subject, html, text };
@@ -1525,7 +1527,7 @@ PickleVibes 充值發票
         <body>
           <div class="container">
             <div class="header">
-              ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes Logo" />` : ''}
+              ${this.logoBase64 ? `<img src="cid:logo" alt="${getEmailBrand().name} Logo" />` : ''}
               <h1>活動提醒</h1>
               <p style="margin-top: 6px;">${activityData.title}</p>
             </div>
@@ -1540,7 +1542,7 @@ PickleVibes 充值發票
               ` : ''}
               <div class="highlight">
                 <p style="margin: 0; font-size: 16px;">
-                  這是一個友善提醒，PickleVibes 的活動 <strong>${activityData.title}</strong> 即將開始。<br />
+                  這是一個友善提醒，${getEmailBrand().name} 的活動 <strong>${activityData.title}</strong> 即將開始。<br />
                   請預留足夠時間到達場地辦理報到，期待與您見面！
                 </p>
               </div>
@@ -1552,7 +1554,7 @@ PickleVibes 充值發票
                 </div>
                 <div class="info-card">
                   <div class="info-title">活動地點</div>
-                  <div>${activityData.location || 'PickleVibes 匹克球場'}</div>
+                  <div>${activityData.location || getEmailBrand().venueLabel}</div>
                 </div>
                 <div class="info-card">
                   <div class="info-title">報名資訊</div>
@@ -1569,13 +1571,13 @@ PickleVibes 充值發票
               ` : ''}
               <p style="font-size: 15px; color: #334155; margin-bottom: 0;">
                 如需更改或取消參加，請盡早與我們聯絡，以便安排。<br />
-                感謝您的支持，PickleVibes 團隊期待與您在活動中見面！
+                感謝您的支持，${getEmailBrand().teamName}期待與您在活動中見面！
               </p>
             </div>
             <div class="footer">
               <p>如有任何疑問，請隨時聯繫我們</p>
-              <p>📧 info@picklevibes.hk | 📞 +852 6190 2761</p>
-              <p>© ${new Date().getFullYear()} PickleVibes. All rights reserved.</p>
+              <p>📧 ${getEmailBrand().supportEmail} | 📞 +852 6190 2761</p>
+              <p>${getEmailBrand().copyright}</p>
             </div>
           </div>
         </body>
@@ -1583,19 +1585,19 @@ PickleVibes 充值發票
     `;
 
     const text = `
-PickleVibes 活動提醒 - ${activityData.title}
+${getEmailBrand().name} 活動提醒 - ${activityData.title}
 
 親愛的 ${userData.name} 您好，
 
-這是一個提醒，PickleVibes 的活動「${activityData.title}」即將開始。請準時出席：
+這是一個提醒，${getEmailBrand().name} 的活動「${activityData.title}」即將開始。請準時出席：
 - 活動時間：${startDate}${activityData.endDate ? ` - ${endDate}` : ''}
-- 活動地點：${activityData.location || 'PickleVibes 匹克球場'}
+- 活動地點：${activityData.location || getEmailBrand().venueLabel}
 - 報名人數：${registrationData.participantCount} 人
 - 聯絡資訊：${registrationData.contactInfo?.email || userData.email}${registrationData.contactInfo?.phone ? ` / ${registrationData.contactInfo.phone}` : ''}
 
-${activityData.requirements ? `活動注意事項：${activityData.requirements}\n\n` : ''}如需協助，請聯絡我們：info@picklevibes.hk 或 +852 6190 2761。
+${activityData.requirements ? `活動注意事項：${activityData.requirements}\n\n` : ''}如需協助，請聯絡我們：${getEmailBrand().supportEmail} 或 +852 6190 2761。
 
-PickleVibes 團隊
+${getEmailBrand().teamName}
     `;
 
     return { html, text };
@@ -1642,7 +1644,7 @@ PickleVibes 團隊
       );
       
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: userData.email,
         subject: `🎾 活動報名確認 - ${activityData.title}`,
         html: emailTemplate,
@@ -1697,7 +1699,7 @@ PickleVibes 團隊
       );
 
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: userData.email,
         subject: `⏰ 活動提醒 - ${activityData.title}`,
         html,
@@ -1728,9 +1730,9 @@ PickleVibes 團隊
       const invoiceNumber = invoiceData.invoiceNumber || `INV-${Date.now()}`;
       
       return {
-        subject: `🧾 發票確認 - ${invoiceNumber} | PickleVibes`,
+        subject: `🧾 發票確認 - ${invoiceNumber} | ${getEmailBrand().name}`,
         html: html,
-        text: `發票確認 - ${invoiceNumber}\n\n感謝您選擇 PickleVibes！\n\n發票詳情：\n- 發票號碼: ${invoiceNumber}\n- 總金額: ${this.formatCurrency(invoiceData.total)}\n- 付款狀態: 已付款\n\n如有任何疑問，請聯繫我們。`
+        text: `發票確認 - ${invoiceNumber}\n\n感謝您選擇 ${getEmailBrand().name}！\n\n發票詳情：\n- 發票號碼: ${invoiceNumber}\n- 總金額: ${this.formatCurrency(invoiceData.total)}\n- 付款狀態: 已付款\n\n如有任何疑問，請聯繫我們。`
       };
     } catch (error) {
       console.error('❌ 生成發票模板失敗:', error.message);
@@ -1783,11 +1785,11 @@ PickleVibes 團隊
         weekday: 'long'
       });
       
-      const emailSubject = `🧾 發票確認 - ${invoiceNumber} | PickleVibes`;
+      const emailSubject = `🧾 發票確認 - ${invoiceNumber} | ${getEmailBrand().name}`;
       const emailText = `
 親愛的 ${userData.name || '客戶'}，
 
-感謝您選擇 PickleVibes！
+感謝您選擇 ${getEmailBrand().name}！
 
 您的發票已準備就緒，詳情如下：
 - 發票號碼：${invoiceNumber}
@@ -1800,14 +1802,14 @@ PickleVibes 團隊
 如有任何疑問，請隨時聯繫我們。
 
 此致
-PickleVibes 團隊
+${getEmailBrand().teamName}
       `;
       
       const emailHtml = `
         <div style="font-family: 'Microsoft JhengHei', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 30px;">
             <h2 style="color: #20B2AA; margin-bottom: 10px;">🧾 發票確認</h2>
-            <p style="color: #666; font-size: 16px;">感謝您選擇 PickleVibes！</p>
+            <p style="color: #666; font-size: 16px;">感謝您選擇 ${getEmailBrand().name}！</p>
           </div>
           
           <div style="background: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px;">
@@ -1827,18 +1829,18 @@ PickleVibes 團隊
           <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
             <p style="color: #666; font-size: 14px;">
               如有任何疑問，請隨時聯繫我們：<br>
-              📧 info@picklevibes.hk | 📞 +852 6190-2761
+              📧 ${getEmailBrand().supportEmail} | 📞 +852 6190-2761
             </p>
             <p style="color: #999; font-size: 12px; margin-top: 15px;">
               此致<br>
-              PickleVibes 團隊
+              ${getEmailBrand().teamName}
             </p>
           </div>
         </div>
       `;
       
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: userData.email,
         subject: emailSubject,
         text: emailText,
@@ -1888,7 +1890,7 @@ PickleVibes 團隊
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes" style="max-width: 200px; margin-bottom: 20px;">` : ''}
+            ${this.logoBase64 ? `<img src="cid:logo" alt="${getEmailBrand().name}" style="max-width: 200px; margin-bottom: 20px;">` : ''}
             
             <h2 style="color: #333; margin-bottom: 20px;">訂單確認</h2>
             
@@ -1959,11 +1961,11 @@ PickleVibes 團隊
             <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
               <p style="color: #666; font-size: 14px;">
                 如有任何疑問，請隨時聯繫我們：<br>
-                📧 info@picklevibes.hk | 📞 +852 6190-2761
+                📧 ${getEmailBrand().supportEmail} | 📞 +852 6190-2761
               </p>
               <p style="color: #999; font-size: 12px; margin-top: 15px;">
                 此致<br>
-                PickleVibes 團隊
+                ${getEmailBrand().teamName}
               </p>
             </div>
           </div>
@@ -1997,10 +1999,10 @@ ${orderData.shippingAddress.postalCode || ''}
 我們將盡快處理您的訂單，並在出貨時發送通知郵件給您。
 
 如有任何疑問，請隨時聯繫我們：
-📧 info@picklevibes.hk | 📞 +852 6190-2761
+📧 ${getEmailBrand().supportEmail} | 📞 +852 6190-2761
 
 此致
-PickleVibes 團隊
+${getEmailBrand().teamName}
       `;
 
       const attachments = [];
@@ -2014,7 +2016,7 @@ PickleVibes 團隊
       }
 
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: userData.email,
         subject: emailSubject,
         text: emailText,
@@ -2085,7 +2087,7 @@ ${orderData.shippingAddress?.address || ''}
       `;
 
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: adminEmail,
         subject: emailSubject,
         text: emailText,
@@ -2128,7 +2130,7 @@ ${orderData.shippingAddress?.address || ''}
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes" style="max-width: 200px; margin-bottom: 20px;">` : ''}
+            ${this.logoBase64 ? `<img src="cid:logo" alt="${getEmailBrand().name}" style="max-width: 200px; margin-bottom: 20px;">` : ''}
             
             <h2 style="color: #333; margin-bottom: 20px;">訂單已出貨 🚚</h2>
             
@@ -2175,11 +2177,11 @@ ${orderData.shippingAddress?.address || ''}
             <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
               <p style="color: #666; font-size: 14px;">
                 如有任何疑問，請隨時聯繫我們：<br>
-                📧 info@picklevibes.hk | 📞 +852 6190-2761
+                📧 ${getEmailBrand().supportEmail} | 📞 +852 6190-2761
               </p>
               <p style="color: #999; font-size: 12px; margin-top: 15px;">
                 此致<br>
-                PickleVibes 團隊
+                ${getEmailBrand().teamName}
               </p>
             </div>
           </div>
@@ -2210,10 +2212,10 @@ ${orderData.shippingAddress.postalCode || ''}
 請留意收件時間，提前準備收貨並注意查收您的包裹。如有任何問題，請隨時聯繫我們。
 
 如有任何疑問，請隨時聯繫我們：
-📧 info@picklevibes.hk | 📞 +852 6190-2761
+📧 ${getEmailBrand().supportEmail} | 📞 +852 6190-2761
 
 此致
-PickleVibes 團隊
+${getEmailBrand().teamName}
       `;
 
       const attachments = [];
@@ -2227,7 +2229,7 @@ PickleVibes 團隊
       }
 
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: userData.email,
         subject: emailSubject,
         text: emailText,
@@ -2280,7 +2282,7 @@ PickleVibes 團隊
       const emailHtml = `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f5f5f5;">
           <div style="background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-            ${this.logoBase64 ? `<img src="cid:logo" alt="PickleVibes" style="max-width: 200px; margin-bottom: 20px;">` : ''}
+            ${this.logoBase64 ? `<img src="cid:logo" alt="${getEmailBrand().name}" style="max-width: 200px; margin-bottom: 20px;">` : ''}
             <h2 style="color: #333; margin-bottom: 20px;">訂單已取消</h2>
             <p style="color: #666; line-height: 1.6;">
               親愛的 ${userData.name}，<br><br>
@@ -2303,8 +2305,8 @@ PickleVibes 團隊
             </table>
             ${refundNote}
             <div style="text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
-              <p style="color: #666; font-size: 14px;">如有任何疑問，請聯繫我們：<br>📧 info@picklevibes.hk | 📞 +852 6190-2761</p>
-              <p style="color: #999; font-size: 12px; margin-top: 15px;">此致<br>PickleVibes 團隊</p>
+              <p style="color: #666; font-size: 14px;">如有任何疑問，請聯繫我們：<br>📧 ${getEmailBrand().supportEmail} | 📞 +852 6190-2761</p>
+              <p style="color: #999; font-size: 12px; margin-top: 15px;">此致<br>${getEmailBrand().teamName}</p>
             </div>
           </div>
         </div>
@@ -2320,10 +2322,10 @@ PickleVibes 團隊
 原訂單總計：HK$${orderData.total.toFixed(2)}
 ${pointsRefunded > 0 ? `已退還 ${pointsRefunded} 分至您的帳戶餘額；兌換碼使用次數已退還。\n` : '若曾使用兌換碼，其使用次數已退還。\n'}
 
-如有任何疑問，請聯繫我們：📧 info@picklevibes.hk | 📞 +852 6190-2761
+如有任何疑問，請聯繫我們：📧 ${getEmailBrand().supportEmail} | 📞 +852 6190-2761
 
 此致
-PickleVibes 團隊
+${getEmailBrand().teamName}
       `;
 
       const attachments = [];
@@ -2337,7 +2339,7 @@ PickleVibes 團隊
       }
 
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to: userData.email,
         subject: emailSubject,
         text: emailText,
@@ -2475,7 +2477,7 @@ PickleVibes 團隊
         };
       }
 
-      const siteUrl = (process.env.CLIENT_URL || 'https://picklevibes.hk').replace(/\/+$/, '');
+      const siteUrl = (getEmailBrand().siteUrl).replace(/\/+$/, '');
       const html = buildEdmHtml({
         headline: headline || subject,
         preheader: preheader || headline || subject,
@@ -2484,7 +2486,7 @@ PickleVibes 團隊
         ctaLabel,
         footerNote,
         siteUrl,
-        siteName: 'picklevibes.hk'
+        siteName: getEmailBrand().siteHost
       });
       const text = bodyText && String(bodyText).trim()
         ? String(bodyText).trim()
@@ -2503,7 +2505,7 @@ PickleVibes 團隊
         const now = new Date();
         try {
           await this.transporter.sendMail({
-            from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+            from: getEmailBrand().fromHeader,
             to,
             subject: String(subject),
             text,
@@ -2619,7 +2621,7 @@ PickleVibes 團隊
         return { success: false, error: '教練電郵未設定' };
       }
 
-      const siteUrl = (process.env.CLIENT_URL || 'https://picklevibes.hk').replace(/\/+$/, '');
+      const siteUrl = (getEmailBrand().siteUrl).replace(/\/+$/, '');
       const classUrl = viewUrl || `${siteUrl}/coach-courses`;
       const calUrl = calendarUrl || `${siteUrl}/coach-calendar`;
       const subject = `[教練課堂] ${title || '新課堂'} · ${dateLabel}`;
@@ -2658,12 +2660,12 @@ PickleVibes 團隊
           <p style="font-size: 14px; color: #6b7280;">
             或於<a href="${escapeHtml(calUrl)}" style="color: #7c3aed;">教練課表</a>日曆檢視。
           </p>
-          <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">PickleVibes 匹克球場</p>
+          <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">${getEmailBrand().venueLabel}</p>
         </div>
       `;
 
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to,
         subject,
         text,
@@ -2719,7 +2721,7 @@ PickleVibes 團隊
       `;
 
       const mailOptions = {
-        from: `"PickleVibes 匹克球場" <${process.env.GMAIL_USER}>`,
+        from: getEmailBrand().fromHeader,
         to,
         subject,
         text,

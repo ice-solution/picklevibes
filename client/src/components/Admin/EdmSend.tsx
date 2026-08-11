@@ -7,7 +7,7 @@ import EdmMailingListsPanel from './EdmMailingListsPanel';
 const EDM_SEND_TIMEOUT_MS = 30 * 60 * 1000;
 
 const defaultBodyHtml = `<p style="margin:0 0 12px;">您好，</p>
-<p style="margin:0 0 12px;">感謝一直支持 <strong>PickleVibes</strong>！我們有新消息想與你分享。</p>
+<p style="margin:0 0 12px;">感謝一直支持 <strong>PickCourt</strong>！我們有新消息想與你分享。</p>
 <p style="margin:0;">祝運動愉快！</p>`;
 
 type RecipientMode = 'manual' | 'userIds' | 'roles';
@@ -97,13 +97,13 @@ const EdmSend: React.FC = () => {
     items: { email: string; name: string; role: string }[];
   } | null>(null);
 
-  const [subject, setSubject] = useState('PickleVibes 最新消息');
+  const [subject, setSubject] = useState('PickCourt 最新消息');
   const [headline, setHeadline] = useState('最新活動與場地資訊');
-  const [preheader, setPreheader] = useState('立即查看 PickleVibes 更新');
+  const [preheader, setPreheader] = useState('立即查看 PickCourt 更新');
   const [bodyHtml, setBodyHtml] = useState(defaultBodyHtml);
   const [ctaUrl, setCtaUrl] = useState('');
   const [ctaLabel, setCtaLabel] = useState('前往官網');
-  const [footerNote, setFooterNote] = useState('你收到此郵件是因為曾於 PickleVibes 註冊或預約。');
+  const [footerNote, setFooterNote] = useState('你收到此郵件是因為曾於 PickCourt 註冊或預約。');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [result, setResult] = useState<{
@@ -1067,7 +1067,7 @@ const EdmSend: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">按鈕連結（可選，須 http/https）</label>
-            <input className="input-field w-full" value={ctaUrl} onChange={(e) => setCtaUrl(e.target.value)} placeholder="https://picklevibes.hk/..." />
+            <input className="input-field w-full" value={ctaUrl} onChange={(e) => setCtaUrl(e.target.value)} placeholder="https://pickcourt.hk/..." />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">按鈕文字</label>

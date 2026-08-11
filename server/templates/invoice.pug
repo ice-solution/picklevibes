@@ -3,7 +3,7 @@ html(lang="zh-TW")
   head
     meta(charset="UTF-8")
     meta(name="viewport", content="width=device-width, initial-scale=1.0")
-    title PickleVibes 發票
+    title #{brand.name} 發票
     style.
       * {
         margin: 0;
@@ -409,8 +409,8 @@ html(lang="zh-TW")
       .header
         .banner-content
           .logo
-            img(src="cid:logo", alt="PickleVibes Logo")
-          .company-name PickleVibes
+            img(src="cid:logo", alt=brand.name + " Logo")
+          .company-name #{brand.name}
           .separator
           .invoice-title INVOICE
       
@@ -500,14 +500,14 @@ html(lang="zh-TW")
       
       // Footer Section
       .footer
-        .thank-you 感謝您選擇 PickleVibes！
+        .thank-you 感謝您選擇 #{brand.name}！
         .contact-info
           .contact-item
             .contact-icon 📞
-            span +852 6190-2761
+            span #{brand.supportPhone}
           .contact-item
             .contact-icon 📧
-            span info@picklevibes.hk
+            span #{brand.supportEmail}
           .contact-item
             .contact-icon 📍
             span 香港九龍旺角道123號

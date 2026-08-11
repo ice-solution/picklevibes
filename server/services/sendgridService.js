@@ -11,12 +11,13 @@
  *   SENDGRID_API_KEY           — 必填（Mail + Marketing API）
  *   SENDGRID_EDM_TEMPLATE_ID   — 必填（d-xxxx，Transactional 動態範本）
  *   SENDGRID_FROM_EMAIL        — 必填（已於 SendGrid 驗證的寄件人）
- *   SENDGRID_FROM_NAME         — 選填，預設 PickleVibes 匹克球場
+ *   SENDGRID_FROM_NAME         — 選填，預設 PickCourt
  *   SENDGRID_EDM_CHUNK         — 選填，每封 API 最多 personalizations（預設 1000，上限 1000）
  *   SENDGRID_MARKETING_LIST_IDS — 選填，同步聯絡人時附加的 list id（逗號分隔）
  */
 
 const sgMail = require('@sendgrid/mail');
+const { getEmailBrand } = require('../utils/emailBrand');
 
 const MAX_PERSONALIZATIONS = 1000;
 
@@ -51,7 +52,8 @@ function buildCommonDynamicData({
   ctaLabel,
   footerNote
 }) {
-  const siteUrl = (process.env.CLIENT_URL || 'https://picklevibes.hk').replace(/\/+$/, '');
+  const brand = getEmailBrand();
+  const siteUrl = brand.siteUrl;
   return {
     subject: String(subject || ''),
     headline: String(headline || subject || ''),
@@ -62,7 +64,7 @@ function buildCommonDynamicData({
     cta_label: String(ctaLabel || ''),
     footer_note: String(footerNote || ''),
     site_url: siteUrl,
-    site_name: 'picklevibes.hk'
+    site_name: brand.siteHost
   };
 }
 
@@ -114,7 +116,7 @@ async function sendEdmViaSendGridDynamicTemplate({
   const apiKey = String(process.env.SENDGRID_API_KEY || '').trim();
   const templateId = String(process.env.SENDGRID_EDM_TEMPLATE_ID || '').trim();
   const fromEmail = String(process.env.SENDGRID_FROM_EMAIL || '').trim();
-  const fromName = String(process.env.SENDGRID_FROM_NAME || 'PickleVibes 匹克球場').trim();
+  const fromName = String(process.env.SENDGRID_FROM_NAME || getEmailBrand().fromName).trim();
   const chunkSize = Math.min(
     MAX_PERSONALIZATIONS,
     Math.max(1, parseInt(process.env.SENDGRID_EDM_CHUNK || '1000', 10) || 1000)

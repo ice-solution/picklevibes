@@ -2,6 +2,7 @@ const express = require('express');
 const { auth, adminAuth } = require('../middleware/auth');
 const { formatHkYmd, defaultFinanceFromYmd } = require('../utils/financeRevenue');
 const { computeAccountingPL } = require('../utils/accountingPL');
+const { resolveFinanceStoreFilter } = require('../utils/resolveFinanceStoreFilter');
 
 const router = express.Router();
 
@@ -24,8 +25,16 @@ router.get('/', [auth, adminAuth], async (req, res) => {
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const storeId = req.query.store || req.query.storeId || null;
-    const data = await computeAccountingPL({ fromYmd, toYmd, storeId: storeId || undefined });
+    const storeFilter = resolveFinanceStoreFilter(req);
+    if (!storeFilter.ok) {
+      return res.status(storeFilter.status).json({ message: storeFilter.message });
+    }
+
+    const data = await computeAccountingPL({
+      fromYmd,
+      toYmd,
+      storeId: storeFilter.storeId || undefined,
+    });
 
     res.json({ success: true, data });
   } catch (error) {

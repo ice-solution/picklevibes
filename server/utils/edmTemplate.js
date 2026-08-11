@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
 
+const { getEmailBrand } = require('./emailBrand');
+
 function escapeHtml(s) {
   if (s == null) return '';
   return String(s)
@@ -82,17 +84,22 @@ function buildCtaSection(ctaUrl, ctaLabel) {
 function buildEdmHtml(opts = {}) {
   const templatePath = path.join(__dirname, '../templates/edm/default.html');
   let html = fs.readFileSync(templatePath, 'utf8');
+  const brand = getEmailBrand();
 
-  const headline = opts.headline || 'PickleVibes 通知';
+  const headline = opts.headline || `${brand.name} 通知`;
   const preheader = opts.preheader || headline;
   const bodyHtml = opts.bodyHtml != null ? String(opts.bodyHtml) : '';
-  const footerNote = opts.footerNote || '感謝你支持 PickleVibes。';
-  const siteUrl = isSafeHttpUrl(opts.siteUrl) ? opts.siteUrl.trim() : 'https://picklevibes.hk';
-  const siteUrlText = escapeHtml(opts.siteName || '前往網站');
-  const year = new Date().getFullYear();
+  const footerNote = opts.footerNote || `感謝你支持 ${brand.name}。`;
+  const siteUrl = isSafeHttpUrl(opts.siteUrl) ? opts.siteUrl.trim() : brand.siteUrl;
+  const siteUrlText = escapeHtml(opts.siteName || brand.siteHost);
+  const year = brand.year;
+  const brandName = escapeHtml(brand.name);
+  const brandTagline = escapeHtml(brand.tagline);
   const ctaSection = buildCtaSection(opts.ctaUrl, opts.ctaLabel);
 
   return html
+    .replace(/\{\{BRAND_NAME\}\}/g, brandName)
+    .replace(/\{\{BRAND_TAGLINE\}\}/g, brandTagline)
     .replace(/\{\{HEADLINE\}\}/g, escapeHtml(headline))
     .replace(/\{\{PREHEADER\}\}/g, escapeHtml(preheader))
     .replace(/\{\{BODY_HTML\}\}/g, bodyHtml)
