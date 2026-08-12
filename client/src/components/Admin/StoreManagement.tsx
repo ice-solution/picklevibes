@@ -30,9 +30,18 @@ interface Store {
   hikKey?: string;
   hikSecret?: string;
   hikAccessLevelId?: string;
-  dahuaClientId?: string;
-  dahuaClientSecret?: string;
   dahuaDeviceModel?: string;
+  dahuaDeviceHost?: string;
+  dahuaDeviceUser?: string;
+  dahuaDevicePassword?: string;
+  dahuaHttpPort?: number;
+  dahuaUseHttps?: boolean;
+  dahuaDoorChannel?: number;
+  dahuaDoorIndex?: number;
+  dahuaDeviceSerial?: string;
+  dahuaPreBufferMinutes?: number;
+  dahuaPostBufferMinutes?: number;
+  dahuaEnrollPassword?: boolean;
   openApiEnabled?: boolean;
   openApiKey?: string | null;
   allianceEnabled?: boolean;
@@ -74,9 +83,18 @@ interface StoreForm {
   hikKey: string;
   hikSecret: string;
   hikAccessLevelId: string;
-  dahuaClientId: string;
-  dahuaClientSecret: string;
   dahuaDeviceModel: string;
+  dahuaDeviceHost: string;
+  dahuaDeviceUser: string;
+  dahuaDevicePassword: string;
+  dahuaHttpPort: number;
+  dahuaUseHttps: boolean;
+  dahuaDoorChannel: number;
+  dahuaDoorIndex: number;
+  dahuaDeviceSerial: string;
+  dahuaPreBufferMinutes: number;
+  dahuaPostBufferMinutes: number;
+  dahuaEnrollPassword: boolean;
   openApiEnabled: boolean;
   openApiKey: string;
   allianceEnabled: boolean;
@@ -113,9 +131,18 @@ const emptyForm: StoreForm = {
   hikKey: '',
   hikSecret: '',
   hikAccessLevelId: '',
-  dahuaClientId: '',
-  dahuaClientSecret: '',
   dahuaDeviceModel: DAHUA_DEFAULT_DEVICE_MODEL,
+  dahuaDeviceHost: '',
+  dahuaDeviceUser: 'admin',
+  dahuaDevicePassword: '',
+  dahuaHttpPort: 80,
+  dahuaUseHttps: false,
+  dahuaDoorChannel: 1,
+  dahuaDoorIndex: 0,
+  dahuaDeviceSerial: '',
+  dahuaPreBufferMinutes: 15,
+  dahuaPostBufferMinutes: 15,
+  dahuaEnrollPassword: true,
   openApiEnabled: false,
   openApiKey: '',
   allianceEnabled: true,
@@ -188,9 +215,18 @@ const StoreManagement: React.FC = () => {
       hikKey: s.hikKey || '',
       hikSecret: s.hikSecret || '',
       hikAccessLevelId: s.hikAccessLevelId || '',
-      dahuaClientId: s.dahuaClientId || '',
-      dahuaClientSecret: s.dahuaClientSecret || '',
       dahuaDeviceModel: s.dahuaDeviceModel || DAHUA_DEFAULT_DEVICE_MODEL,
+      dahuaDeviceHost: s.dahuaDeviceHost || '',
+      dahuaDeviceUser: s.dahuaDeviceUser || 'admin',
+      dahuaDevicePassword: s.dahuaDevicePassword || '',
+      dahuaHttpPort: s.dahuaHttpPort ?? 80,
+      dahuaUseHttps: Boolean(s.dahuaUseHttps),
+      dahuaDoorChannel: s.dahuaDoorChannel ?? 1,
+      dahuaDoorIndex: s.dahuaDoorIndex ?? 0,
+      dahuaDeviceSerial: s.dahuaDeviceSerial || '',
+      dahuaPreBufferMinutes: s.dahuaPreBufferMinutes ?? 15,
+      dahuaPostBufferMinutes: s.dahuaPostBufferMinutes ?? 15,
+      dahuaEnrollPassword: s.dahuaEnrollPassword !== false,
       openApiEnabled: Boolean(s.openApiEnabled),
       openApiKey: s.openApiKey || '',
       allianceEnabled: Boolean(s.allianceEnabled),
@@ -232,9 +268,18 @@ const StoreManagement: React.FC = () => {
         hikKey: form.hikKey || null,
         hikSecret: form.hikSecret || null,
         hikAccessLevelId: form.hikAccessLevelId || null,
-        dahuaClientId: form.dahuaClientId || null,
-        dahuaClientSecret: form.dahuaClientSecret || null,
         dahuaDeviceModel: form.dahuaDeviceModel || DAHUA_DEFAULT_DEVICE_MODEL,
+        dahuaDeviceHost: form.dahuaDeviceHost.trim() || null,
+        dahuaDeviceUser: form.dahuaDeviceUser.trim() || 'admin',
+        dahuaDevicePassword: form.dahuaDevicePassword || null,
+        dahuaHttpPort: Number(form.dahuaHttpPort) || 80,
+        dahuaUseHttps: form.dahuaUseHttps,
+        dahuaDoorChannel: Number(form.dahuaDoorChannel) || 1,
+        dahuaDoorIndex: Number(form.dahuaDoorIndex) || 0,
+        dahuaDeviceSerial: form.dahuaDeviceSerial.trim() || null,
+        dahuaPreBufferMinutes: Number(form.dahuaPreBufferMinutes) || 15,
+        dahuaPostBufferMinutes: Number(form.dahuaPostBufferMinutes) || 15,
+        dahuaEnrollPassword: form.dahuaEnrollPassword,
         enableTuyaAutomation: form.enableTuyaAutomation,
         tuyaAccessKey: form.tuyaAccessKey || null,
         tuyaSecretKey: form.tuyaSecretKey || null,
@@ -478,21 +523,111 @@ const StoreManagement: React.FC = () => {
                         value={form.dahuaDeviceModel}
                         onChange={(e) => setForm({ ...form, dahuaDeviceModel: e.target.value })}
                       />
-                      <p className="text-xs text-gray-500">預設 DHI-ASI3213A-W（大華人臉門禁）</p>
+                      <p className="text-xs text-gray-500">
+                        本機 CGI + HTTP 自動上傳（無需 DSS）。Webhook：
+                        <code className="mx-1">/api/dahua/hook</code>
+                        或加 slug。PickCourt server 必須能連到設備 IP。
+                      </p>
                       <input
                         className="w-full border rounded-md px-3 py-2 text-sm"
-                        placeholder="Client ID（留空用全域 .env DAHUA_CLIENT_ID）"
-                        value={form.dahuaClientId}
-                        onChange={(e) => setForm({ ...form, dahuaClientId: e.target.value })}
+                        placeholder="設備 IP / Hostname（例 192.168.8.250）"
+                        value={form.dahuaDeviceHost}
+                        onChange={(e) => setForm({ ...form, dahuaDeviceHost: e.target.value })}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          className="w-full border rounded-md px-3 py-2 text-sm"
+                          placeholder="HTTP Port"
+                          type="number"
+                          value={form.dahuaHttpPort}
+                          onChange={(e) => setForm({ ...form, dahuaHttpPort: Number(e.target.value) || 80 })}
+                        />
+                        <label className="flex items-center gap-2 text-sm px-1">
+                          <input
+                            type="checkbox"
+                            checked={form.dahuaUseHttps}
+                            onChange={(e) => setForm({ ...form, dahuaUseHttps: e.target.checked })}
+                          />
+                          HTTPS
+                        </label>
+                      </div>
+                      <input
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        placeholder="設備帳號（預設 admin）"
+                        value={form.dahuaDeviceUser}
+                        onChange={(e) => setForm({ ...form, dahuaDeviceUser: e.target.value })}
                       />
                       <input
                         className="w-full border rounded-md px-3 py-2 text-sm"
-                        placeholder="Client Secret"
+                        placeholder="設備密碼"
                         type="password"
                         autoComplete="new-password"
-                        value={form.dahuaClientSecret}
-                        onChange={(e) => setForm({ ...form, dahuaClientSecret: e.target.value })}
+                        value={form.dahuaDevicePassword}
+                        onChange={(e) => setForm({ ...form, dahuaDevicePassword: e.target.value })}
                       />
+                      <input
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        placeholder="設備序號 SN（例 BK0EAD2PAJ61681）"
+                        value={form.dahuaDeviceSerial}
+                        onChange={(e) => setForm({ ...form, dahuaDeviceSerial: e.target.value })}
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          className="w-full border rounded-md px-3 py-2 text-sm"
+                          placeholder="openDoor channel"
+                          type="number"
+                          value={form.dahuaDoorChannel}
+                          onChange={(e) =>
+                            setForm({ ...form, dahuaDoorChannel: Number(e.target.value) || 1 })
+                          }
+                        />
+                        <input
+                          className="w-full border rounded-md px-3 py-2 text-sm"
+                          placeholder="Doors 索引"
+                          type="number"
+                          value={form.dahuaDoorIndex}
+                          onChange={(e) =>
+                            setForm({ ...form, dahuaDoorIndex: Number(e.target.value) || 0 })
+                          }
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        通常 channel=1、Doors 索引=0（此型號）。預熱／緩衝分鐘：
+                      </p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          className="w-full border rounded-md px-3 py-2 text-sm"
+                          placeholder="開場前分鐘"
+                          type="number"
+                          value={form.dahuaPreBufferMinutes}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              dahuaPreBufferMinutes: Number(e.target.value) || 15,
+                            })
+                          }
+                        />
+                        <input
+                          className="w-full border rounded-md px-3 py-2 text-sm"
+                          placeholder="完場後分鐘"
+                          type="number"
+                          value={form.dahuaPostBufferMinutes}
+                          onChange={(e) =>
+                            setForm({
+                              ...form,
+                              dahuaPostBufferMinutes: Number(e.target.value) || 15,
+                            })
+                          }
+                        />
+                      </div>
+                      <label className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={form.dahuaEnrollPassword}
+                          onChange={(e) => setForm({ ...form, dahuaEnrollPassword: e.target.checked })}
+                        />
+                        預約時寫入限時密碼（後備；主路徑為掃 QR）
+                      </label>
                     </>
                   )}
                 </>

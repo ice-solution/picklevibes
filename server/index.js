@@ -107,6 +107,9 @@ require('./sockets/gameSockets')(io);
 // Stripe Webhook 需要原始請求體，必須在 express.json() 之前
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
 
+// 大華 PictureHttpUpload：自行處理 raw／deflate，須在 express.json() 之前
+app.use('/api/dahua', require('./routes/dahua'));
+
 // 解析JSON（其他路由）
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));

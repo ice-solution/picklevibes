@@ -86,7 +86,7 @@ function buildOpenWaBookingMessage({ store, bookingData, withAccess, password })
   if (withAccess && password) {
     lines.push('');
     lines.push(`開門密碼：${password}`);
-    lines.push('QR 碼已發送至您的電郵，請查收。');
+    lines.push('請用電郵內 QR 碼對住門禁鏡頭掃碼進場（或輸入密碼）。');
   }
 
   if (bookingData.bookingId) {
@@ -146,6 +146,7 @@ async function sendMetaWhatsAppForBooking({
   withAccess,
   password,
   qrCodeData,
+  qrPayload,
 }) {
   if (!metaWhatsAppService.isConfigured()) {
     return { skipped: true, reason: 'not_configured', provider: 'meta' };
@@ -166,7 +167,7 @@ async function sendMetaWhatsAppForBooking({
       storeAddress: store?.address || bookingData.storeAddress,
       password: password || null,
       qrCodeData: qrCodeData || null,
-      qrPayload: password || null,
+      qrPayload: qrPayload || password || null,
     });
     if (result.success) {
       console.log('✅ Meta WhatsApp 已發送:', {
@@ -215,6 +216,11 @@ async function sendBookingNotification({ booking, courtDoc, store: storeInput, u
       withAccess: true,
       password: accessControlResult?.password || accessControlResult?.tempAuth?.password,
       qrCodeData: accessControlResult?.qrCodeData || accessControlResult?.tempAuth?.code,
+      qrPayload:
+        accessControlResult?.qrPayload ||
+        accessControlResult?.tempAuth?.accessToken ||
+        accessControlResult?.password ||
+        accessControlResult?.tempAuth?.password,
     });
 
     return { mode: acConfig.vendor, accessControlResult, whatsapp: wa };
@@ -281,6 +287,8 @@ async function applyTempAuthToBooking(booking, accessControlResult) {
   booking.tempAuth = {
     code: accessControlResult.tempAuth.code || null,
     password: accessControlResult.tempAuth.password || null,
+    accessToken: accessControlResult.tempAuth.accessToken || null,
+    deviceUserId: accessControlResult.tempAuth.deviceUserId || null,
     startTime: accessControlResult.tempAuth.startTime || null,
     endTime: accessControlResult.tempAuth.endTime || null,
     createdAt: new Date(),
@@ -365,6 +373,8 @@ async function resendBookingNotification(booking) {
         booking.tempAuth = {
           code: tempAuth.code || null,
           password: tempAuth.password || null,
+          accessToken: tempAuth.accessToken || null,
+          deviceUserId: tempAuth.deviceUserId || null,
           startTime: tempAuth.startTime || null,
           endTime: tempAuth.endTime || null,
           createdAt: new Date(),
@@ -387,6 +397,7 @@ async function resendBookingNotification(booking) {
       withAccess: true,
       password,
       qrCodeData,
+      qrPayload: booking.tempAuth?.accessToken || password,
     });
 
     let invoiceResult = { skipped: true };

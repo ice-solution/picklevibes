@@ -139,10 +139,28 @@ const storeSchema = new mongoose.Schema({
   hikKey: { type: String, default: null },
   hikSecret: { type: String, default: null },
   hikAccessLevelId: { type: String, default: null },
-  /** 大華門禁（DSS Pro / 訪客 QR，型號如 DHI-ASI3213A-W） */
+  /** 大華門禁（本機 CGI + HTTP 自動上傳，型號如 DHI-ASI3213A-W） */
+  dahuaDeviceModel: { type: String, default: 'DHI-ASI3213A-W' },
+  dahuaDeviceHost: { type: String, default: null },
+  dahuaDeviceUser: { type: String, default: 'admin' },
+  dahuaDevicePassword: { type: String, default: null },
+  dahuaHttpPort: { type: Number, default: 80 },
+  dahuaUseHttps: { type: Boolean, default: false },
+  /** openDoor CGI channel（通常 1） */
+  dahuaDoorChannel: { type: Number, default: 1 },
+  /** 用戶門權限 Doors[0] 索引（此型號通常 0） */
+  dahuaDoorIndex: { type: Number, default: 0 },
+  /** 設備序號，webhook 用 SN 對應店鋪 */
+  dahuaDeviceSerial: { type: String, default: null },
+  dahuaPreBufferMinutes: { type: Number, default: 15 },
+  dahuaPostBufferMinutes: { type: Number, default: 15 },
+  /** 預約時是否 CGI 寫入限時密碼（QR webhook 為主；密碼作後備） */
+  dahuaEnrollPassword: { type: Boolean, default: true },
+  /** 可選：覆寫 QR HMAC secret（預設 DAHUA_QR_SECRET / JWT_SECRET） */
+  dahuaQrSecret: { type: String, default: null },
+  /** @deprecated 舊 openapi 欄位，保留相容 */
   dahuaClientId: { type: String, default: null },
   dahuaClientSecret: { type: String, default: null },
-  dahuaDeviceModel: { type: String, default: 'DHI-ASI3213A-W' },
   /** Tuya 智能家居（店鋪級 API 憑證，設備綁在 Court） */
   enableTuyaAutomation: {
     type: Boolean,

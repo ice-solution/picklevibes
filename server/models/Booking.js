@@ -235,6 +235,16 @@ const bookingSchema = new mongoose.Schema({
       required: false,
       description: '臨時授權密碼'
     },
+    /** 大華：掃碼 QR 明文（PC1.<bookingId>.<sig>） */
+    accessToken: {
+      type: String,
+      required: false,
+    },
+    /** 大華：設備上的 UserID（限時密碼） */
+    deviceUserId: {
+      type: String,
+      required: false,
+    },
     startTime: {
       type: String,
       required: false,

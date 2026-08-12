@@ -20,10 +20,22 @@ function getStoreAccessControlConfig(store) {
     return {
       enabled: true,
       vendor: 'dahua',
-      clientId: store.dahuaClientId || process.env.DAHUA_CLIENT_ID || null,
-      clientSecret: store.dahuaClientSecret || process.env.DAHUA_CLIENT_SECRET || null,
       deviceModel: store.dahuaDeviceModel || 'DHI-ASI3213A-W',
-      platformUrl: (process.env.DAHUA_PLATFORM_URL || 'https://openapi.dahuatech.com').replace(/\/$/, ''),
+      deviceHost: store.dahuaDeviceHost || process.env.DAHUA_DEVICE_HOST || null,
+      deviceUser: store.dahuaDeviceUser || process.env.DAHUA_DEVICE_USER || 'admin',
+      devicePassword: store.dahuaDevicePassword || process.env.DAHUA_DEVICE_PASS || null,
+      httpPort: Number(store.dahuaHttpPort || process.env.DAHUA_HTTP_PORT || 80),
+      useHttps: Boolean(store.dahuaUseHttps),
+      doorChannel: Number(store.dahuaDoorChannel ?? 1),
+      doorIndex: Number(store.dahuaDoorIndex ?? 0),
+      deviceSerial: store.dahuaDeviceSerial || process.env.DAHUA_DEVICE_SERIAL || null,
+      preBufferMinutes: Number(store.dahuaPreBufferMinutes ?? 15),
+      postBufferMinutes: Number(store.dahuaPostBufferMinutes ?? 15),
+      enrollPassword: store.dahuaEnrollPassword !== false,
+      qrSecret: store.dahuaQrSecret || process.env.DAHUA_QR_SECRET || null,
+      // 舊欄位保留讀取（已棄用 openapi）
+      clientId: store.dahuaClientId || null,
+      clientSecret: store.dahuaClientSecret || null,
     };
   }
 

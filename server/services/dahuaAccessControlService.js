@@ -1,100 +1,143 @@
-const axios = require('axios');
-const QRCode = require('qrcode');
-const accessControlService = require('./accessControlService');
-const emailService = require('./emailService');
-
 /**
- * 大華門禁（DHI-ASI3213A-W 等，經 DSS Pro / Open API 訪客 QR）
- * clientId / clientSecret 對應平台 OAuth 憑證（店鋪級或 .env fallback）
+ * 大華門禁正式流程（無 DSS）：
+ * 1) 預約成功 → 產簽名 QR（客人掃機）+ 限時密碼（選填 CGI 寫入機）
+ * 2) 機 PictureHttpUpload → webhook → 驗時段 → CGI openDoor
  */
+const crypto = require('crypto');
+const QRCode = require('qrcode');
+const emailService = require('./emailService');
+const dahuaCgi = require('./dahuaCgiClient');
+const { resolveHKYmd, bookingRangeUtcMs } = require('../utils/bookingDateTime');
+
+const TOKEN_PREFIX = 'PC1';
+
+function qrSigningSecret(config) {
+  return (
+    config?.qrSecret ||
+    process.env.DAHUA_QR_SECRET ||
+    process.env.JWT_SECRET ||
+    'pickcourt-dahua-dev'
+  );
+}
+
+function signToken(bookingId, secret) {
+  return crypto.createHmac('sha256', secret).update(String(bookingId)).digest('hex').slice(0, 12);
+}
+
+/** 產生／驗證 QR 內容：PC1.<bookingId>.<hmac12> */
+function buildAccessToken(bookingId, config) {
+  const id = String(bookingId);
+  const sig = signToken(id, qrSigningSecret(config));
+  return `${TOKEN_PREFIX}.${id}.${sig}`;
+}
+
+function parseAccessToken(raw, config) {
+  const text = String(raw || '').trim();
+  const parts = text.split('.');
+  if (parts.length !== 3 || parts[0] !== TOKEN_PREFIX) return null;
+  const bookingId = parts[1];
+  const sig = parts[2];
+  if (!/^[a-f0-9]{24}$/i.test(bookingId)) return null;
+  const expected = signToken(bookingId, qrSigningSecret(config));
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  return { bookingId, token: text };
+}
+
+function deriveDeviceUserId(bookingId) {
+  const hex = String(bookingId).replace(/[^a-f0-9]/gi, '').slice(-8) || '1';
+  const n = parseInt(hex, 16) % 900000;
+  return String(100000 + n);
+}
+
+function buildTimeWindowMs(bookingData, preMin, postMin) {
+  const ymd = resolveHKYmd(bookingData.date);
+  const { startMs, endMs } = bookingRangeUtcMs(ymd, bookingData.startTime, bookingData.endTime);
+  const pre = Math.max(0, Number(preMin) || 15) * 60 * 1000;
+  const post = Math.max(0, Number(postMin) || 15) * 60 * 1000;
+  return {
+    windowStartMs: startMs - pre,
+    windowEndMs: endMs + post,
+    startMs,
+    endMs,
+  };
+}
+
+function buildTimeWindowIso(bookingData, preMin, postMin) {
+  const { windowStartMs, windowEndMs } = buildTimeWindowMs(bookingData, preMin, postMin);
+  return {
+    startISO: new Date(windowStartMs).toISOString(),
+    endISO: new Date(windowEndMs).toISOString(),
+    windowStartMs,
+    windowEndMs,
+  };
+}
+
 class DahuaAccessControlService {
-  constructor() {
-    this.tokenCache = new Map();
-  }
-
-  _cacheKey(config) {
-    return config?.clientId || process.env.DAHUA_CLIENT_ID || 'default';
-  }
-
-  async getToken(config) {
-    const clientId = config?.clientId || process.env.DAHUA_CLIENT_ID;
-    const clientSecret = config?.clientSecret || process.env.DAHUA_CLIENT_SECRET;
-    const platformUrl = config?.platformUrl || process.env.DAHUA_PLATFORM_URL || 'https://openapi.dahuatech.com';
-
-    if (!clientId || !clientSecret) {
-      throw new Error('大華門禁未設定 Client ID / Client Secret');
-    }
-
-    const cacheKey = this._cacheKey(config);
-    const cached = this.tokenCache.get(cacheKey);
-    if (cached?.token && cached.expiry && Date.now() < cached.expiry) {
-      return cached.token;
-    }
-
-    const tokenUrl = `${platformUrl.replace(/\/$/, '')}/oauth/token`;
-    let accessToken = null;
-
-    try {
-      const res = await axios.post(
-        tokenUrl,
-        new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: clientId,
-          client_secret: clientSecret,
-        }).toString(),
-        { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: 15000 }
-      );
-      accessToken = res.data?.access_token || res.data?.data?.accessToken;
-    } catch (err) {
-      console.warn('⚠️ 大華 OAuth 端點請求失敗，將使用本地訪客通行碼:', err.response?.data || err.message);
-    }
-
-    if (!accessToken) {
-      accessToken = `dahua-local-${Date.now()}`;
-    }
-
-    this.tokenCache.set(cacheKey, {
-      token: accessToken,
-      expiry: Date.now() + 90 * 60 * 1000,
-    });
-    return accessToken;
-  }
-
-  _buildTimeWindow(bookingData) {
-    const earlyStart = accessControlService.subtractMinutes(bookingData.startTime, 15);
-    const usePrev = accessControlService._timeToMinutes(earlyStart) > accessControlService._timeToMinutes(bookingData.startTime);
-    const startISO = accessControlService.convertToISOString(bookingData.date, earlyStart, null, null, usePrev);
-    const { endTimeStr, endDateParam } = accessControlService.getExtendedEndForHik(bookingData, 15);
-    const endISO = accessControlService.convertToISOString(bookingData.date, endTimeStr, endDateParam, earlyStart);
-    return { startISO, endISO, earlyStart, endTimeStr };
+  cgiConfigFromStoreConfig(config) {
+    return {
+      host: config.deviceHost,
+      port: config.httpPort || 80,
+      https: Boolean(config.useHttps),
+      user: config.deviceUser || 'admin',
+      password: config.devicePassword,
+      doorChannel: config.doorChannel ?? 1,
+      doorIndex: config.doorIndex ?? 0,
+    };
   }
 
   async createVisitorPass(visitorData, bookingData, config) {
-    await this.getToken(config);
+    if (!bookingData?.bookingId) {
+      throw new Error('大華門禁缺少 bookingId');
+    }
+    if (!config?.deviceHost || !config?.devicePassword) {
+      throw new Error('大華門禁未設定設備 IP／密碼（店鋪後台）');
+    }
+
+    const pre = config.preBufferMinutes ?? 15;
+    const post = config.postBufferMinutes ?? 15;
+    const { startISO, endISO, windowStartMs, windowEndMs } = buildTimeWindowIso(
+      bookingData,
+      pre,
+      post
+    );
+
+    const accessToken = buildAccessToken(bookingData.bookingId, config);
     const password = String(Math.floor(100000 + Math.random() * 900000));
-    const { startISO, endISO } = this._buildTimeWindow(bookingData);
+    const deviceUserId = deriveDeviceUserId(bookingData.bookingId);
 
-    // TODO: 對接大華 DSS Pro 訪客 QR API（deviceModel: config.deviceModel）
-    console.log('🟡 大華訪客通行（本地生成）', {
-      deviceModel: config.deviceModel || 'DHI-ASI3213A-W',
-      visitor: visitorData.name,
-      start: startISO,
-      end: endISO,
-    });
+    let enroll = null;
+    if (config.enrollPassword !== false) {
+      try {
+        enroll = await dahuaCgi.enrollPasswordUser(this.cgiConfigFromStoreConfig(config), {
+          userId: deviceUserId,
+          password,
+          cardName: `PC-${String(bookingData.bookingId).slice(-6)}`,
+          startMs: windowStartMs,
+          endMs: windowEndMs,
+        });
+        if (!enroll.ok) {
+          console.warn('⚠️ 大華 CGI 寫入限時密碼失敗（仍會發 QR）:', enroll.status, enroll.body);
+        } else {
+          console.log('✅ 大華限時密碼已寫入設備', { deviceUserId, startISO, endISO });
+        }
+      } catch (err) {
+        console.warn('⚠️ 大華 CGI 寫入限時密碼例外（仍會發 QR）:', err.message);
+        enroll = { ok: false, error: err.message };
+      }
+    }
 
-    const qrPayload = JSON.stringify({
-      vendor: 'dahua',
-      model: config.deviceModel || 'DHI-ASI3213A-W',
-      password,
-      start: startISO,
-      end: endISO,
-    });
-    const qrSvg = await QRCode.toString(qrPayload, { type: 'svg', width: 280, margin: 2 });
-    const qrBase64 = Buffer.from(qrSvg).toString('base64');
+    const qrPngDataUrl = await QRCode.toDataURL(accessToken, { width: 280, margin: 2 });
+    const qrBase64 = qrPngDataUrl.replace(/^data:image\/png;base64,/, '');
 
     return {
       password,
       code: qrBase64,
+      accessToken,
+      qrPayload: accessToken,
+      deviceUserId,
+      enrollOk: Boolean(enroll?.ok),
       startTime: startISO,
       endTime: endISO,
     };
@@ -102,27 +145,27 @@ class DahuaAccessControlService {
 
   async processAccessControl(visitorData, bookingData, config) {
     const tempAuth = await this.createVisitorPass(visitorData, bookingData, config);
-    let qrCodeData = tempAuth.code;
-    try {
-      qrCodeData = await QRCode.toDataURL(
-        JSON.stringify({ p: tempAuth.password, s: tempAuth.startTime, e: tempAuth.endTime }),
-        { width: 280, margin: 2 }
-      );
-      qrCodeData = qrCodeData.replace(/^data:image\/png;base64,/, '');
-    } catch {
-      /* keep svg base64 */
-    }
-
-    await emailService.sendAccessEmail(visitorData, bookingData, qrCodeData, tempAuth.password);
+    await emailService.sendAccessEmail(visitorData, bookingData, tempAuth.code, tempAuth.password);
 
     return {
       success: true,
       tempAuth,
       message: '大華門禁流程處理成功',
-      qrCodeData,
+      qrCodeData: tempAuth.code,
+      qrPayload: tempAuth.accessToken,
       password: tempAuth.password,
     };
   }
+
+  async openDoorForConfig(config) {
+    return dahuaCgi.openDoor(this.cgiConfigFromStoreConfig(config));
+  }
 }
 
-module.exports = new DahuaAccessControlService();
+const service = new DahuaAccessControlService();
+
+module.exports = service;
+module.exports.buildAccessToken = buildAccessToken;
+module.exports.parseAccessToken = parseAccessToken;
+module.exports.buildTimeWindowMs = buildTimeWindowMs;
+module.exports.TOKEN_PREFIX = TOKEN_PREFIX;
