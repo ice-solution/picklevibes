@@ -121,35 +121,63 @@ async function processHook(req, res) {
   }
 }
 
-router.post(['/hook', '/hook/:storeKey'], express.raw({ type: '*/*', limit: '2mb' }), (req, res) => {
-  try {
-    req.rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || '');
-    const parsed = tryParseBody(req.rawBody, req.headers['content-encoding']);
-    req.body = parsed || {};
-    if (!parsed) {
-      console.warn('⚠️ 大華 webhook：無法解析 body', {
-        encoding: req.headers['content-encoding'] || null,
-        len: req.rawBody.length,
-        head: req.rawBody.toString('utf8', 0, 80),
+function readRawBody(req, res, next) {
+  const chunks = [];
+  let size = 0;
+  const limit = 2 * 1024 * 1024;
+  req.on('data', (chunk) => {
+    size += chunk.length;
+    if (size > limit) {
+      res.status(200).json({
+        ok: true,
+        Result: true,
+        code: 0,
+        pickcourt: { handled: true, opened: false, reason: 'body_too_large' },
       });
-      rememberHook({
-        at: new Date().toISOString(),
-        storeKey: req.params.storeKey || null,
-        encoding: req.headers['content-encoding'] || null,
-        parseFailed: true,
-        head: req.rawBody.toString('utf8', 0, 120),
+      req.destroy();
+      return;
+    }
+    chunks.push(chunk);
+  });
+  req.on('end', () => {
+    try {
+      req.rawBody = Buffer.concat(chunks);
+      const parsed = tryParseBody(req.rawBody, req.headers['content-encoding']);
+      req.body = parsed || {};
+      if (!parsed) {
+        console.warn('⚠️ 大華 webhook：無法解析 body', {
+          encoding: req.headers['content-encoding'] || null,
+          len: req.rawBody.length,
+          head: req.rawBody.toString('utf8', 0, 80),
+        });
+        rememberHook({
+          at: new Date().toISOString(),
+          storeKey: req.params.storeKey || null,
+          encoding: req.headers['content-encoding'] || null,
+          parseFailed: true,
+          head: req.rawBody.toString('utf8', 0, 120),
+        });
+      }
+      next();
+    } catch (err) {
+      next(err);
+    }
+  });
+  req.on('error', next);
+}
+
+router.post(['/hook', '/hook/:storeKey'], readRawBody, (req, res) => {
+  processHook(req, res).catch((err) => {
+    console.error('❌ 大華 webhook processHook:', err);
+    if (!res.headersSent) {
+      res.status(200).json({
+        ok: true,
+        Result: true,
+        code: 0,
+        pickcourt: { handled: true, opened: false, reason: 'exception', error: err.message },
       });
     }
-    processHook(req, res);
-  } catch (err) {
-    console.error('❌ 大華 webhook 前置解析例外:', err);
-    res.status(200).json({
-      ok: true,
-      Result: true,
-      code: 0,
-      pickcourt: { handled: true, opened: false, reason: 'parse_exception', error: err.message },
-    });
-  }
+  });
 });
 
 module.exports = router;
