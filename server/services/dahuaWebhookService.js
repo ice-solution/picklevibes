@@ -24,16 +24,27 @@ function pruneDedup(now = Date.now()) {
 
 function extractQrEvent(body) {
   if (!body || typeof body !== 'object') return null;
-  if (body.Code !== 'AccessControl') return null;
-  const data = body.Data || {};
-  const method = Number(data.Method);
-  if (method !== 14) return null;
-  const qr = String(data.QRCode || data.QRCodeEx || '').trim();
+  const data = body.Data || body.data || {};
+  const qr = String(data.QRCode || data.QRCodeEx || data.qrCode || '').trim();
   if (!qr) return null;
+
+  const code = body.Code || body.code || '';
+  const method = Number(data.Method ?? data.method);
+  const looksPickCourt = qr.startsWith('PC1.');
+  const isAccessControl = !code || code === 'AccessControl';
+  const isQrScan = method === 14 || !Number.isFinite(method) || looksPickCourt;
+
+  // 標準：AccessControl + Method 14；兼容：已係 PC1 token 都當掃碼事件
+  if (!looksPickCourt && (!isAccessControl || method !== 14)) {
+    return null;
+  }
+  if (!isAccessControl && !looksPickCourt) return null;
+  if (!isQrScan && !looksPickCourt) return null;
+
   return {
     qr,
-    sn: String(data.SN || '').trim(),
-    uuid: String(data.TransmissionUuid || `${qr}-${data.RealUTC || Date.now()}`),
+    sn: String(data.SN || data.sn || '').trim(),
+    uuid: String(data.TransmissionUuid || data.UUID || `${qr}-${data.RealUTC || Date.now()}`),
     errorCode: data.ErrorCode,
     raw: data,
   };
