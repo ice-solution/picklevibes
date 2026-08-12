@@ -145,7 +145,9 @@ class DahuaAccessControlService {
 
   async processAccessControl(visitorData, bookingData, config) {
     const tempAuth = await this.createVisitorPass(visitorData, bookingData, config);
-    await emailService.sendAccessEmail(visitorData, bookingData, tempAuth.code, tempAuth.password);
+    await emailService.sendAccessEmail(visitorData, bookingData, tempAuth.code, tempAuth.password, {
+      deviceUserId: tempAuth.deviceUserId,
+    });
 
     return {
       success: true,

@@ -348,17 +348,24 @@ class AccessControlService {
   /**
    * 發送開門通知郵件
    */
-  async sendAccessEmail(visitorData, bookingData, qrCodeData = null, password = null) {
+  async sendAccessEmail(visitorData, bookingData, qrCodeData = null, password = null, options = {}) {
     try {
       console.log('📧 正在發送開門通知郵件...', {
         email: visitorData.email,
         bookingDate: bookingData.date,
         courtName: bookingData.courtName,
         hasQRCode: !!qrCodeData,
-        hasPassword: !!password
+        hasPassword: !!password,
+        deviceUserId: options.deviceUserId || null,
       });
 
-      const result = await emailService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
+      const result = await emailService.sendAccessEmail(
+        visitorData,
+        bookingData,
+        qrCodeData,
+        password,
+        options
+      );
       console.log('✅ 開門通知郵件發送成功');
       return result;
     } catch (error) {

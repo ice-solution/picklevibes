@@ -69,7 +69,7 @@ function formatBookingDate(date) {
   });
 }
 
-function buildOpenWaBookingMessage({ store, bookingData, withAccess, password }) {
+function buildOpenWaBookingMessage({ store, bookingData, withAccess, password, deviceUserId }) {
   const storeName = storeDisplayName(store, bookingData);
   const lines = [
     withAccess ? '*PickCourt 預約確認／進場通知*' : '*PickCourt 預約確認*',
@@ -85,8 +85,15 @@ function buildOpenWaBookingMessage({ store, bookingData, withAccess, password })
 
   if (withAccess && password) {
     lines.push('');
-    lines.push(`開門密碼：${password}`);
-    lines.push('請用電郵內 QR 碼對住門禁鏡頭掃碼進場（或輸入密碼）。');
+    if (deviceUserId) {
+      lines.push(`門禁用戶編號：${deviceUserId}`);
+      lines.push(`開門密碼：${password}`);
+      lines.push('面板：先輸入用戶編號，再輸入密碼。');
+      lines.push('亦可對住門禁鏡頭掃電郵內 QR 碼。');
+    } else {
+      lines.push(`開門密碼：${password}`);
+      lines.push('請用電郵內 QR 碼對住門禁鏡頭掃碼進場（或輸入密碼）。');
+    }
   }
 
   if (bookingData.bookingId) {
@@ -114,7 +121,7 @@ function buildOpenWaCancellationMessage(booking, store) {
   ].join('\n');
 }
 
-async function sendOpenWaForBooking({ phone, store, bookingData, withAccess, password }) {
+async function sendOpenWaForBooking({ phone, store, bookingData, withAccess, password, deviceUserId }) {
   if (!openWaService.isOpenWaConfigured()) {
     return { skipped: true, reason: 'not_configured', provider: 'openwa' };
   }
@@ -126,7 +133,13 @@ async function sendOpenWaForBooking({ phone, store, bookingData, withAccess, pas
   }
 
   try {
-    const message = buildOpenWaBookingMessage({ store, bookingData, withAccess, password });
+    const message = buildOpenWaBookingMessage({
+      store,
+      bookingData,
+      withAccess,
+      password,
+      deviceUserId,
+    });
     const result = await openWaService.sendTextMessage(phone, message);
     console.log('✅ OpenWA 預約通知已發送:', { to: result.to, withAccess: !!withAccess });
     return { success: true, provider: 'openwa', ...result };
@@ -147,6 +160,7 @@ async function sendMetaWhatsAppForBooking({
   password,
   qrCodeData,
   qrPayload,
+  deviceUserId,
 }) {
   if (!metaWhatsAppService.isConfigured()) {
     return { skipped: true, reason: 'not_configured', provider: 'meta' };
@@ -156,6 +170,9 @@ async function sendMetaWhatsAppForBooking({
   }
 
   try {
+    const passwordDisplay = deviceUserId
+      ? `用戶${deviceUserId}／密碼${password || ''}`
+      : password || null;
     const result = await metaWhatsAppService.notifyBooking({
       phone,
       withAccess: !!withAccess,
@@ -165,7 +182,7 @@ async function sendMetaWhatsAppForBooking({
       endTime: bookingData.endTime,
       courtName: bookingData.courtName,
       storeAddress: store?.address || bookingData.storeAddress,
-      password: password || null,
+      password: passwordDisplay,
       qrCodeData: qrCodeData || null,
       qrPayload: qrPayload || password || null,
     });
@@ -215,6 +232,7 @@ async function sendBookingNotification({ booking, courtDoc, store: storeInput, u
       bookingData,
       withAccess: true,
       password: accessControlResult?.password || accessControlResult?.tempAuth?.password,
+      deviceUserId: accessControlResult?.tempAuth?.deviceUserId || null,
       qrCodeData: accessControlResult?.qrCodeData || accessControlResult?.tempAuth?.code,
       qrPayload:
         accessControlResult?.qrPayload ||
@@ -250,6 +268,7 @@ async function sendWhatsAppBookingConfirmationStub(booking, store) {
     bookingData,
     withAccess,
     password: booking.tempAuth?.password,
+    deviceUserId: booking.tempAuth?.deviceUserId || null,
     qrCodeData: booking.tempAuth?.code,
   });
 }
@@ -389,13 +408,16 @@ async function resendBookingNotification(booking) {
       password = booking.tempAuth.password;
     }
 
-    await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password);
+    await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password, {
+      deviceUserId: booking.tempAuth?.deviceUserId || null,
+    });
     const wa = await sendWhatsAppForBooking({
       phone: visitorData.phone,
       store,
       bookingData,
       withAccess: true,
       password,
+      deviceUserId: booking.tempAuth?.deviceUserId || null,
       qrCodeData,
       qrPayload: booking.tempAuth?.accessToken || password,
     });

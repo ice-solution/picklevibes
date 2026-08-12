@@ -431,9 +431,10 @@ class EmailService {
   /**
    * 生成開門通知郵件模板
    */
-  async generateAccessEmailTemplate(visitorData, bookingData, qrCodeData = null, password = null) {
+  async generateAccessEmailTemplate(visitorData, bookingData, qrCodeData = null, password = null, options = {}) {
     const { name, email, phone } = visitorData;
     const { date, startTime, endTime, courtName, bookingId } = bookingData;
+    const deviceUserId = options.deviceUserId ? String(options.deviceUserId) : null;
     
     const bookingDate = new Date(date).toLocaleDateString('zh-TW', {
       year: 'numeric',
@@ -578,12 +579,25 @@ class EmailService {
               
               ${password ? `
               <div style="text-align: center; margin: 20px 0; padding: 20px; background-color: #e8f5e8; border: 2px solid #4CAF50;">
-                <h4 style="color: #2e7d32; margin: 0 0 15px 0;">🔑 開門密碼</h4>
-                <p style="color: #666; font-size: 14px; margin: 0 0 15px 0;">如果二維碼無法使用，您也可以使用以下密碼：</p>
+                <h4 style="color: #2e7d32; margin: 0 0 15px 0;">🔑 ${deviceUserId ? '門禁用戶編號／密碼' : '開門密碼'}</h4>
+                <p style="color: #666; font-size: 14px; margin: 0 0 15px 0;">
+                  ${deviceUserId
+                    ? '若無法掃碼，請在門禁面板先輸入用戶編號，再輸入密碼：'
+                    : '如果二維碼無法使用，您也可以使用以下密碼：'}
+                </p>
+                ${deviceUserId ? `
+                <div style="background-color: #fff; padding: 12px; border: 2px dashed #4CAF50; margin: 10px 0;">
+                  <div style="color:#666;font-size:12px;margin-bottom:4px;">用戶編號</div>
+                  <span style="font-size: 22px; font-weight: bold; color: #2e7d32; font-family: monospace; letter-spacing: 2px;">${deviceUserId}</span>
+                </div>
+                ` : ''}
                 <div style="background-color: #fff; padding: 15px; border: 2px dashed #4CAF50; margin: 10px 0;">
+                  ${deviceUserId ? '<div style="color:#666;font-size:12px;margin-bottom:4px;">密碼</div>' : ''}
                   <span style="font-size: 24px; font-weight: bold; color: #2e7d32; font-family: monospace; letter-spacing: 2px;">${password}</span>
                 </div>
-                <p style="color: #666; font-size: 12px; margin: 10px 0 0 0;">請在門禁設備上輸入此密碼</p>
+                <p style="color: #666; font-size: 12px; margin: 10px 0 0 0;">
+                  ${deviceUserId ? '面板操作：用戶編號 → 確認 → 密碼 → 確認' : '請在門禁設備上輸入此密碼'}
+                </p>
               </div>
               ` : ''}
             </div>
@@ -629,8 +643,10 @@ class EmailService {
         
         ${password ? `
         開門方式：
-        - 二維碼：請查看郵件中的二維碼圖片
-        - 密碼：${password}（如果二維碼無法使用）
+        - 二維碼：請查看郵件中的二維碼圖片（對住門禁鏡頭掃碼）
+        ${deviceUserId
+          ? `- 面板：先輸入用戶編號 ${deviceUserId}，再輸入密碼 ${password}`
+          : `- 密碼：${password}（如果二維碼無法使用）`}
         ` : ''}
         
         重要提醒：
@@ -651,13 +667,19 @@ class EmailService {
   /**
    * 發送開門通知郵件
    */
-  async sendAccessEmail(visitorData, bookingData, qrCodeData = null, password = null) {
+  async sendAccessEmail(visitorData, bookingData, qrCodeData = null, password = null, options = {}) {
     try {
       if (!this.transporter) {
         throw new Error('郵件服務未初始化');
       }
 
-      const emailTemplate = await this.generateAccessEmailTemplate(visitorData, bookingData, qrCodeData, password);
+      const emailTemplate = await this.generateAccessEmailTemplate(
+        visitorData,
+        bookingData,
+        qrCodeData,
+        password,
+        options
+      );
       
       // 準備附件
       const attachments = [];
