@@ -4,25 +4,27 @@
  * 設備請設定：
  *   Address = 你的 PickCourt API host（可達公網／場內）
  *   path    = /api/dahua/hook   或  /api/dahua/hook/<storeId或slug>
+ *   Port 443 + HTTPS（唔好用 80，會 redirect 掉 POST body）
  *
- * 亦可加第二條上傳，與 MyPickleWorld 並存。
- *
- * 注意：ASI 系列常帶 Content-Encoding: deflate，但 body 實際係明文 JSON。
- * 必須先試 raw JSON，失敗先再試解壓（唔好優先 inflateRaw）。
+ * 注意：ASI 常標 Content-Encoding: deflate 卻送明文；唔經 body-parser inflate，自行讀 raw。
  */
 const express = require('express');
 const zlib = require('zlib');
 const { handleDahuaUpload } = require('../services/dahuaWebhookService');
+const DahuaWebhookLog = require('../models/DahuaWebhookLog');
 
 const router = express.Router();
 
-/** 最近幾次推送（診斷用，唔含敏感 store 密碼） */
 const recentHooks = [];
 const RECENT_MAX = 30;
 
 function rememberHook(entry) {
   recentHooks.unshift(entry);
   if (recentHooks.length > RECENT_MAX) recentHooks.pop();
+  // 持久化，方便場測後查「機有冇打到」
+  DahuaWebhookLog.create(entry).catch((err) => {
+    console.warn('⚠️ DahuaWebhookLog 寫入失敗:', err.message);
+  });
 }
 
 function tryParseBody(rawBuf, contentEncoding) {
@@ -33,7 +35,6 @@ function tryParseBody(rawBuf, contentEncoding) {
   const enc = String(contentEncoding || '').toLowerCase();
   const getters = [() => buf0];
 
-  // 標示壓縮時先試解壓，但 raw 仍然保留作 fallback（韌體常標 deflate 卻送明文）
   if (enc.includes('gzip')) {
     getters.unshift(() => zlib.gunzipSync(buf0));
   }
@@ -42,7 +43,6 @@ function tryParseBody(rawBuf, contentEncoding) {
     getters.unshift(() => zlib.inflateRawSync(buf0));
   }
 
-  // 關鍵：若看起來已係 JSON，優先用原文（避免 inflateRaw 把明文「解」成垃圾卻唔 throw）
   const head = buf0.toString('utf8', 0, Math.min(buf0.length, 32)).trimStart();
   if (head.startsWith('{') || head.startsWith('[')) {
     getters.length = 0;
@@ -67,35 +67,58 @@ function tryParseBody(rawBuf, contentEncoding) {
   return null;
 }
 
-/** 大華 keepalive／連線測試 */
+function buildLogBase(req, extra = {}) {
+  return {
+    at: new Date(),
+    remote: req.headers['x-forwarded-for'] || req.socket?.remoteAddress || null,
+    encoding: req.headers['content-encoding'] || null,
+    contentType: req.headers['content-type'] || null,
+    storeKey: req.params.storeKey || null,
+    ...extra,
+  };
+}
+
 router.get(['/hook', '/hook/:storeKey', '/keepalive', '/keepalive/:storeKey'], (req, res) => {
   res.status(200).type('text').send('OK');
 });
 
-/** 診斷：最近 webhook（可選 ?secret=DAHUA_DEBUG_SECRET） */
-router.get('/debug/recent', (req, res) => {
+router.get('/debug/recent', async (req, res) => {
   const expected = process.env.DAHUA_DEBUG_SECRET || process.env.JWT_SECRET || '';
   const got = String(req.query.secret || req.headers['x-dahua-debug'] || '');
   if (!expected || got !== expected) {
     return res.status(401).json({ ok: false, message: 'unauthorized' });
   }
-  res.json({ ok: true, count: recentHooks.length, recent: recentHooks });
+  try {
+    const fromDb = await DahuaWebhookLog.find().sort({ at: -1 }).limit(30).lean();
+    res.json({ ok: true, memory: recentHooks, db: fromDb });
+  } catch (err) {
+    res.json({ ok: true, memory: recentHooks, dbError: err.message });
+  }
 });
 
 async function processHook(req, res) {
-  const storeKey = req.params.storeKey || null;
   const body = req.body && typeof req.body === 'object' ? req.body : {};
+  const data = body.Data || {};
 
   try {
-    const result = await handleDahuaUpload({ body, storeIdOrSlug: storeKey });
-    rememberHook({
-      at: new Date().toISOString(),
-      storeKey,
-      encoding: req.headers['content-encoding'] || null,
-      code: body.Code || null,
-      method: body.Data?.Method ?? null,
-      qr: body.Data?.QRCode || body.Data?.QRCodeEx || null,
-      sn: body.Data?.SN || null,
+    const result = await handleDahuaUpload({
+      body,
+      storeIdOrSlug: req.params.storeKey || null,
+    });
+    rememberHook(
+      buildLogBase(req, {
+        code: body.Code || null,
+        method: data.Method ?? null,
+        qr: data.QRCode || data.QRCodeEx || null,
+        sn: data.SN || null,
+        uuid: data.TransmissionUuid || null,
+        result,
+      })
+    );
+    console.log('📥 大華 webhook', {
+      code: body.Code,
+      method: data.Method,
+      qr: (data.QRCode || data.QRCodeEx || '').toString().slice(0, 48),
       result,
     });
     res.status(200).json({
@@ -106,12 +129,7 @@ async function processHook(req, res) {
     });
   } catch (err) {
     console.error('❌ 大華 webhook 處理例外:', err);
-    rememberHook({
-      at: new Date().toISOString(),
-      storeKey,
-      error: err.message,
-    });
-    // 仍回 200，避免設備狂重試；內容標明失敗
+    rememberHook(buildLogBase(req, { result: { reason: 'exception', error: err.message } }));
     res.status(200).json({
       ok: true,
       Result: true,
@@ -135,9 +153,9 @@ function readRawBody(req, res, next) {
         pickcourt: { handled: true, opened: false, reason: 'body_too_large' },
       });
       req.destroy();
-      return;
+    } else {
+      chunks.push(chunk);
     }
-    chunks.push(chunk);
   });
   req.on('end', () => {
     try {
@@ -150,13 +168,13 @@ function readRawBody(req, res, next) {
           len: req.rawBody.length,
           head: req.rawBody.toString('utf8', 0, 80),
         });
-        rememberHook({
-          at: new Date().toISOString(),
-          storeKey: req.params.storeKey || null,
-          encoding: req.headers['content-encoding'] || null,
-          parseFailed: true,
-          head: req.rawBody.toString('utf8', 0, 120),
-        });
+        rememberHook(
+          buildLogBase(req, {
+            parseFailed: true,
+            head: req.rawBody.toString('utf8', 0, 200),
+            result: { reason: 'parse_failed' },
+          })
+        );
       }
       next();
     } catch (err) {
