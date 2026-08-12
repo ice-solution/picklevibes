@@ -91,8 +91,12 @@ router.get('/', optionalAuth, async (req, res) => {
       query.store = String(storeId).trim();
     }
 
-    // 店鋪員工：限制只能看自己管理的店
-    if (req.tenantAccess && !req.tenantAccess.isPlatformAdmin) {
+    // 僅店鋪員工（staff）限制只能看自己管理的店；一般登入用戶／訪客不受此限
+    if (
+      req.user?.role === 'staff' &&
+      req.tenantAccess &&
+      !req.tenantAccess.isPlatformAdmin
+    ) {
       query = applyStoreScope(query, req.tenantAccess, 'store');
     }
     
