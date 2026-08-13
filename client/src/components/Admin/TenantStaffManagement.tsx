@@ -82,12 +82,15 @@ const TenantStaffManagement: React.FC = () => {
       alert('請填寫所有必填欄位');
       return;
     }
+    if (createForm.storeId === '__all__' && !window.confirm(`將指派至全部 ${stores.length} 間店鋪，確定？`)) {
+      return;
+    }
     try {
       setSaving(true);
-      await axios.post('/tenant-memberships/create-account', createForm);
+      const res = await axios.post('/tenant-memberships/create-account', createForm);
       setCreateForm(emptyCreateForm);
       fetchData();
-      alert('店鋪帳號已建立');
+      alert(res.data?.message || '店鋪帳號已建立');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       alert(msg || '建立失敗');
@@ -102,6 +105,9 @@ const TenantStaffManagement: React.FC = () => {
       alert('請填寫 email 並選擇店鋪');
       return;
     }
+    if (existingForm.storeId === '__all__' && !window.confirm(`將指派至全部 ${stores.length} 間店鋪，確定？`)) {
+      return;
+    }
     try {
       setSaving(true);
       const lookup = await axios.get('/tenant-memberships/lookup-user', {
@@ -111,14 +117,14 @@ const TenantStaffManagement: React.FC = () => {
         alert('找不到此 email 的球友帳號，請先請對方註冊或使用「建立店鋪帳號」');
         return;
       }
-      await axios.post('/tenant-memberships', {
+      const res = await axios.post('/tenant-memberships', {
         userId: lookup.data.user._id,
         storeId: existingForm.storeId,
         role: existingForm.role,
       });
       setExistingForm(emptyExistingForm);
       fetchData();
-      alert('已指派至店鋪');
+      alert(res.data?.message || '已指派至店鋪');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       alert(msg || '指派失敗');
@@ -151,8 +157,7 @@ const TenantStaffManagement: React.FC = () => {
       <div>
         <h2 className="text-2xl font-bold text-gray-900">店鋪員工指派</h2>
         <p className="text-gray-600 mt-1">
-          <strong>新店鋪 admin／staff 請在此建立或指派</strong>，與「用戶管理」的球友列表分開。
-          平台超級管理員（舊版）仍在用戶管理設定 <code className="text-sm">admin</code> 角色。
+          店長／店員／股東請在此建立或指派。平台超級管理員請到「用戶管理」設定 <code className="text-sm">admin</code>，無需指派店鋪。
         </p>
       </div>
 
@@ -209,6 +214,7 @@ const TenantStaffManagement: React.FC = () => {
             onChange={(e) => setCreateForm({ ...createForm, storeId: e.target.value })}
           >
             <option value="">選擇店鋪 *</option>
+            <option value="__all__">全部店鋪</option>
             {stores.map((s) => (
               <option key={s._id} value={s._id}>{s.name}</option>
             ))}
@@ -236,7 +242,10 @@ const TenantStaffManagement: React.FC = () => {
       ) : (
         <form onSubmit={handleAssignExisting} className="bg-white rounded-lg shadow p-6 space-y-4 max-w-xl">
           <h3 className="font-semibold text-gray-900">指派現有球友為店鋪員工</h3>
-          <p className="text-sm text-gray-500">僅限已註冊的一般球友（role=user）。教練與平台管理員不可指派。</p>
+          <p className="text-sm text-gray-500">
+            只適用於已註冊的一般球友（用同一個帳號打波兼管店）。
+            平台管理員已有全部後台權限，唔好指派；教練請改用「建立店鋪帳號」。
+          </p>
           <input
             className="w-full border rounded-md px-3 py-2 text-sm"
             placeholder="球友 email *"
@@ -249,6 +258,7 @@ const TenantStaffManagement: React.FC = () => {
             onChange={(e) => setExistingForm({ ...existingForm, storeId: e.target.value })}
           >
             <option value="">選擇店鋪 *</option>
+            <option value="__all__">全部店鋪</option>
             {stores.map((s) => (
               <option key={s._id} value={s._id}>{s.name}</option>
             ))}

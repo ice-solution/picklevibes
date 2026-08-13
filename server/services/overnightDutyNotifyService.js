@@ -35,6 +35,61 @@ function toMinutes(hm) {
   return h * 60 + min;
 }
 
+function toPlainBooking(booking) {
+  if (!booking) return null;
+  if (typeof booking.toObject === 'function') {
+    return booking.toObject({ depopulate: false });
+  }
+  return booking;
+}
+
+function addDaysToHkDateString(dateStr, days) {
+  const base = new Date(`${dateStr}T12:00:00+08:00`);
+  base.setDate(base.getDate() + days);
+  return hkDateString(base);
+}
+
+function daysBetweenHk(fromStr, toStr) {
+  const a = new Date(`${fromStr}T12:00:00+08:00`);
+  const b = new Date(`${toStr}T12:00:00+08:00`);
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
+}
+
+/** 相對「今日 00:00」的分鐘數，方便比較跨日窗口 */
+function minutesFromToday(todayStr, dateStr, hmMinutes) {
+  return daysBetweenHk(todayStr, dateStr) * 24 * 60 + hmMinutes;
+}
+
+/**
+ * 當前加冷氣窗口：[From, To)。From>To 視為跨日（例今晚 20:00 → 明早 08:00）。
+ * 只通知場次時間與這個窗口有重疊的預約，唔會發未來日子（例如 8/21）嘅場。
+ */
+function isBookingInCurrentNotifyWindow(booking, cfg, now = new Date()) {
+  if (!booking) return false;
+  const todayStr = hkDateString(now);
+  const bookingDateStr = hkDateString(booking.date);
+  const fromM = toMinutes(cfg.notifyPeriodFrom);
+  const toM = toMinutes(cfg.notifyPeriodTo);
+  const startM = toMinutes(booking.startTime);
+  let endM = toMinutes(booking.endTime);
+  if (fromM == null || toM == null || startM == null || endM == null) return false;
+  if (booking.endTime === '24:00') endM = 24 * 60;
+
+  const wrapsOvernight = fromM > toM;
+  const windowEndDate = wrapsOvernight ? addDaysToHkDateString(todayStr, 1) : todayStr;
+
+  const bStart = minutesFromToday(todayStr, bookingDateStr, startM);
+  let bEnd = minutesFromToday(todayStr, bookingDateStr, endM);
+  if (endM <= startM) {
+    bEnd = minutesFromToday(todayStr, addDaysToHkDateString(bookingDateStr, 1), endM);
+  }
+
+  const wStart = minutesFromToday(todayStr, todayStr, fromM);
+  const wEnd = minutesFromToday(todayStr, windowEndDate, toM);
+
+  return bStart < wEnd && bEnd > wStart;
+}
+
 /**
  * 判斷現在是否在 from–to 時段內（支援跨日，例 20:00–08:00）
  */
@@ -75,11 +130,13 @@ function formatBookingLine(b, { includeDate = false } = {}) {
 
 /** v2：僅時間 HH:mm-HH:mm（加冷氣用） */
 function formatAcTimeOnly(b) {
+  if (!b?.startTime || !b?.endTime) return null;
   return `${b.startTime}-${b.endTime}`;
 }
 
 /** v2：日期 + 時間（時段內新增預約） */
 function formatAcDateTime(b) {
+  if (!b?.startTime || !b?.endTime) return null;
   const dateStr = b._digestDate || (b.date ? hkDateString(b.date) : '');
   return dateStr ? `${dateStr} ${b.startTime}-${b.endTime}` : `${b.startTime}-${b.endTime}`;
 }
@@ -89,10 +146,12 @@ function uniqueAcTimeLines(bookings, lineFn) {
   const seen = new Set();
   const lines = [];
   for (const b of bookings) {
+    if (!b?.startTime || !b?.endTime) continue;
     const key = `${b._digestDate || hkDateString(b.date) || ''}|${b.startTime}|${b.endTime}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    lines.push(lineFn(b));
+    const line = lineFn(b);
+    if (line) lines.push(line);
   }
   return lines;
 }
@@ -101,16 +160,8 @@ function buildAcHeader(storeName) {
   return `${storeName || 'PickleVibes'}需要加冷氣時間：`;
 }
 
-function addDaysToHkDateString(dateStr, days) {
-  const base = new Date(`${dateStr}T12:00:00+08:00`);
-  base.setDate(base.getDate() + days);
-  return hkDateString(base);
-}
-
 /**
- * 匯總 notify period 內場次：
- * - 今日 startTime >= From
- * - 若 From>To（跨日）：再加明日 startTime < To（例 05:00 在 20:00–08:00 內）
+ * 匯總當前加冷氣窗口內的場次（與窗口有時間重疊先算）
  */
 async function loadBookingsInNotifyPeriod(storeId, cfg, now = new Date()) {
   const todayStr = hkDateString(now);
@@ -118,24 +169,16 @@ async function loadBookingsInNotifyPeriod(storeId, cfg, now = new Date()) {
   const toM = toMinutes(cfg.notifyPeriodTo);
   if (fromM == null || toM == null) return { todayStr, nextStr: null, bookings: [] };
 
-  const todayBookings = await loadStoreBookingsForDate(storeId, todayStr);
-  const inPeriod = todayBookings
-    .filter((b) => {
-      const sm = toMinutes(b.startTime);
-      return sm != null && sm >= fromM;
-    })
-    .map((b) => ({ ...b, _digestDate: todayStr }));
-
   const wrapsOvernight = fromM > toM;
-  let nextStr = null;
-  if (wrapsOvernight) {
-    nextStr = addDaysToHkDateString(todayStr, 1);
-    const nextBookings = await loadStoreBookingsForDate(storeId, nextStr);
-    for (const b of nextBookings) {
-      const sm = toMinutes(b.startTime);
-      if (sm != null && sm < toM) {
-        inPeriod.push({ ...b, _digestDate: nextStr });
-      }
+  const nextStr = wrapsOvernight ? addDaysToHkDateString(todayStr, 1) : null;
+  const dateStrs = wrapsOvernight ? [todayStr, nextStr] : [todayStr];
+
+  const inPeriod = [];
+  for (const dateStr of dateStrs) {
+    const dayBookings = await loadStoreBookingsForDate(storeId, dateStr);
+    for (const b of dayBookings) {
+      if (!isBookingInCurrentNotifyWindow(b, cfg, now)) continue;
+      inPeriod.push({ ...b, _digestDate: dateStr });
     }
   }
 
@@ -177,7 +220,7 @@ async function sendToStorePhones(store, message) {
 }
 
 /**
- * 新建預約：若當前時間落在店鋪 notifyPeriod 內 → 即時通知
+ * 新建預約：而家喺 notifyPeriod 內，而且呢場本身落喺當前加冷氣窗口，先即時通知
  */
 async function notifyOnBookingCreated(booking) {
   try {
@@ -193,20 +236,25 @@ async function notifyOnBookingCreated(booking) {
       return { skipped: true, reason: 'outside_period' };
     }
 
-    const populated =
-      booking.court?.name
-        ? booking
-        : await Booking.findById(booking._id)
-            .populate('court', 'name number')
-            .populate('user', 'name phone')
-            .lean();
+    let populated = toPlainBooking(booking);
+    if (!populated?.startTime || !populated?.endTime || !populated?.court?.name) {
+      populated = await Booking.findById(booking._id)
+        .populate('court', 'name number')
+        .populate('user', 'name phone')
+        .lean();
+    }
+    if (!populated) return { skipped: true, reason: 'booking_not_found' };
+    if (!isBookingInCurrentNotifyWindow(populated, cfg)) {
+      return { skipped: true, reason: 'booking_outside_window' };
+    }
 
-    const dateStr = hkDateString(populated.date);
-    const msg = [
-      buildAcHeader(store.name),
-      formatAcDateTime({ ...populated, _digestDate: dateStr }),
-    ].join('\n');
+    const line = formatAcDateTime({
+      ...populated,
+      _digestDate: hkDateString(populated.date),
+    });
+    if (!line) return { skipped: true, reason: 'missing_times' };
 
+    const msg = [buildAcHeader(store.name), line].join('\n');
     return sendToStorePhones(store, msg);
   } catch (error) {
     console.error('❌ 夜間值班即時通知失敗:', error);
@@ -222,12 +270,15 @@ async function runEveningDigestForStore(store, now = new Date()) {
   if (!cfg.enabled || !cfg.notifyPhones.length) return { skipped: true };
 
   const { bookings } = await loadBookingsInNotifyPeriod(store._id, cfg, now);
+  if (!bookings.length) {
+    return { skipped: true, reason: 'no_bookings_in_period' };
+  }
 
   const timeLines = uniqueAcTimeLines(bookings, formatAcTimeOnly);
-  const msg = [
-    buildAcHeader(store.name),
-    ...(timeLines.length ? timeLines : ['（暫無）']),
-  ].join('\n');
+  if (!timeLines.length) {
+    return { skipped: true, reason: 'no_valid_times' };
+  }
+  const msg = [buildAcHeader(store.name), ...timeLines].join('\n');
 
   return sendToStorePhones(store, msg);
 }
@@ -252,10 +303,10 @@ async function runHolidayMorningDigestForStore(store, now = new Date()) {
   const bookings = await loadStoreBookingsForDate(store._id, dateStr);
   const withDate = bookings.map((b) => ({ ...b, _digestDate: dateStr }));
   const timeLines = uniqueAcTimeLines(withDate, formatAcTimeOnly);
-  const msg = [
-    buildAcHeader(store.name),
-    ...(timeLines.length ? timeLines : ['（暫無）']),
-  ].join('\n');
+  if (!timeLines.length) {
+    return { skipped: true, reason: 'no_bookings' };
+  }
+  const msg = [buildAcHeader(store.name), ...timeLines].join('\n');
 
   return sendToStorePhones(store, msg);
 }
@@ -323,5 +374,6 @@ module.exports = {
   runEveningDigestForStore,
   runHolidayMorningDigestForStore,
   loadBookingsInNotifyPeriod,
+  isBookingInCurrentNotifyWindow,
   tickSchedulers,
 };

@@ -8,6 +8,31 @@ const { auth, platformAdminAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
+const ALL_STORES = '__all__';
+
+async function resolveStoreIds(storeId) {
+  const raw = String(storeId || '').trim();
+  if (raw === ALL_STORES || raw.toLowerCase() === 'all') {
+    const stores = await Store.find({}).select('_id');
+    return stores.map((s) => s._id);
+  }
+  return [raw];
+}
+
+async function assignUserToStores(user, storeId, role = 'staff') {
+  const ids = await resolveStoreIds(storeId);
+  if (!ids.length) {
+    const err = new Error('沒有可指派的店鋪');
+    err.status = 400;
+    throw err;
+  }
+  const memberships = [];
+  for (const id of ids) {
+    memberships.push(await assignUserToStore(user, id, role));
+  }
+  return memberships;
+}
+
 async function assignUserToStore(user, storeId, role = 'staff') {
   const store = await Store.findById(storeId);
   if (!store) {
@@ -17,7 +42,7 @@ async function assignUserToStore(user, storeId, role = 'staff') {
   }
 
   if (user.role === 'admin') {
-    const err = new Error('平台超級管理員無需指派店鋪');
+    const err = new Error('平台超級管理員已可使用全部後台，無需指派店鋪。若應改為店長／店員，請先到用戶管理把角色改為一般用戶');
     err.status = 400;
     throw err;
   }
@@ -69,7 +94,8 @@ router.get('/lookup-user', [auth, platformAdminAuth], async (req, res) => {
 
     if (user.role === 'admin') {
       return res.status(400).json({
-        message: '此為平台超級管理員（舊版），請於「用戶管理」維護，勿指派為店鋪員工',
+        message:
+          '此帳號是平台超級管理員，已可使用全部後台，無需指派為店鋪員工。若此人應改為店長／店員／股東，請先到「用戶管理」把角色改為一般用戶，再回來指派。',
       });
     }
     if (user.role === 'coach') {
@@ -134,11 +160,14 @@ router.post('/create-account', [
       totalSpent: 0,
     });
 
-    const membership = await assignUserToStore(user, storeId, role);
+    const memberships = await assignUserToStores(user, storeId, role);
 
     res.status(201).json({
-      message: '店鋪帳號已建立並完成指派',
-      membership,
+      message: storeId === ALL_STORES || String(storeId).toLowerCase() === 'all'
+        ? `店鋪帳號已建立，並指派至 ${memberships.length} 間店鋪`
+        : '店鋪帳號已建立並完成指派',
+      membership: memberships[0],
+      memberships,
     });
   } catch (error) {
     if (error.status) {
@@ -188,9 +217,15 @@ router.post('/', [
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: '用戶不存在' });
 
-    const membership = await assignUserToStore(user, storeId, role);
+    const memberships = await assignUserToStores(user, storeId, role);
 
-    res.status(201).json({ message: '店鋪員工已指派', membership });
+    res.status(201).json({
+      message: storeId === ALL_STORES || String(storeId).toLowerCase() === 'all'
+        ? `已指派至 ${memberships.length} 間店鋪`
+        : '店鋪員工已指派',
+      membership: memberships[0],
+      memberships,
+    });
   } catch (error) {
     if (error.status) {
       return res.status(error.status).json({ message: error.message, code: error.code });
