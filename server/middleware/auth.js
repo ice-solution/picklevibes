@@ -1,18 +1,19 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const { loadTenantAccess } = require('../utils/tenantAccess');
+const { assertNotShareholderWrite } = require('../utils/tenantPermissions');
 
 const auth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
-    
+
     if (!token) {
       return res.status(401).json({ message: '訪問被拒絕，請提供有效的令牌' });
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId);
-    
+
     if (!user) {
       return res.status(401).json({ message: '令牌無效，用戶不存在' });
     }
@@ -30,13 +31,12 @@ const auth = async (req, res, next) => {
     if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ message: '令牌已過期，請重新登錄' });
     }
-    
+
     console.error('認證中間件錯誤:', error);
     res.status(500).json({ message: '服務器錯誤' });
   }
 };
 
-// 可選認證：有 token 則載入 user／tenantAccess，無 token 不阻擋
 const optionalAuth = async (req, res, next) => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
@@ -49,12 +49,22 @@ const optionalAuth = async (req, res, next) => {
     req.user = user;
     req.tenantAccess = await loadTenantAccess(user);
   } catch {
-    // 忽略無效 token，維持公開請求
+    // 忽略無效 token
   }
   next();
 };
 
-// 後台權限：平台 admin 或已指派店鋪的 staff
+function extractStoreIdFromRequest(req) {
+  return (
+    req.body?.storeId ||
+    req.body?.store ||
+    req.query?.storeId ||
+    req.query?.store ||
+    req.params?.storeId ||
+    null
+  );
+}
+
 const adminAuth = async (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
@@ -67,13 +77,18 @@ const adminAuth = async (req, res, next) => {
   }
 
   if (req.user.role === 'staff' && (req.tenantAccess.managedStoreIds || []).length > 0) {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      const gate = assertNotShareholderWrite(req.tenantAccess, extractStoreIdFromRequest(req));
+      if (!gate.ok) {
+        return res.status(gate.status).json({ message: gate.message });
+      }
+    }
     return next();
   }
 
   return res.status(403).json({ message: '訪問被拒絕，需要管理員權限' });
 };
 
-// 平台超級管理員（僅 role === admin）
 const platformAdminAuth = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: '訪問被拒絕，請先登錄' });
@@ -84,7 +99,6 @@ const platformAdminAuth = (req, res, next) => {
   next();
 };
 
-// 教練或管理員權限中間件
 const coachOrAdminAuth = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ message: '訪問被拒絕，請先登錄' });

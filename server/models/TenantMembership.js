@@ -13,10 +13,10 @@ const tenantMembershipSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
-  /** manager：店鋪經理（本店全部）；staff：店員（場地＋預約） */
+  /** manager 店長；staff 店員；shareholder 股東（唯讀） */
   role: {
     type: String,
-    enum: ['manager', 'staff'],
+    enum: ['manager', 'staff', 'shareholder'],
     default: 'staff',
   },
   isActive: {

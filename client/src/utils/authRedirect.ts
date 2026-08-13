@@ -5,6 +5,8 @@ const AUTH_PATHS = new Set(['/login', '/register', '/forgot-password']);
 
 const STORE_ADMIN_PATH = /^\/store\/([^/]+)\/admin(?:\/|$)/;
 
+export type StoreMembershipRole = 'manager' | 'staff' | 'shareholder' | 'platform';
+
 export function parseStoreSlugFromAdminPath(pathname?: string | null): string | null {
   if (!pathname) return null;
   const m = pathname.match(STORE_ADMIN_PATH);
@@ -20,9 +22,6 @@ export function getDefaultHomeForUser(user?: User | null): string {
   return '/my-bookings';
 }
 
-/**
- * 登入／註冊成功後要回到的 path（含 query，例如 game join 的 sig、code）
- */
 export function getPostAuthRedirectPath(
   from?: Location | null,
   user?: User | null,
@@ -44,10 +43,21 @@ export function canAccessStoreAdmin(user: User | null | undefined, storeSlug: st
 export function getMembershipRoleForStore(
   user: User | null | undefined,
   storeSlug: string
-): 'manager' | 'staff' | 'platform' | null {
+): StoreMembershipRole | null {
   if (!user || !storeSlug) return null;
   if (user.isPlatformAdmin || user.role === 'admin') return 'platform';
   const match = (user.managedStores || []).find((s) => s.slug === storeSlug);
   if (!match) return null;
-  return match.membershipRole === 'manager' ? 'manager' : 'staff';
+  const r = String(match.membershipRole || 'staff').toLowerCase();
+  if (r === 'manager') return 'manager';
+  if (r === 'shareholder') return 'shareholder';
+  return 'staff';
+}
+
+export function storeRoleLabel(role: StoreMembershipRole | null | undefined): string {
+  if (role === 'platform') return '平台管理員';
+  if (role === 'manager') return '店長';
+  if (role === 'shareholder') return '股東';
+  if (role === 'staff') return '店員';
+  return '';
 }

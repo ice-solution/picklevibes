@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import axios from 'axios';
+import type { StoreMembershipRole } from '../utils/authRedirect';
+import { isStoreReadOnly } from '../utils/storeAdminPermissions';
 
 export type StoreProfile = {
   _id: string;
@@ -15,8 +17,9 @@ type StoreAdminContextValue = {
   loading: boolean;
   error: string;
   refresh: () => Promise<void>;
-  /** 當前用戶在此店的角色：manager | staff | platform */
-  membershipRole: 'manager' | 'staff' | 'platform' | null;
+  membershipRole: StoreMembershipRole | null;
+  /** 股東：後台唯讀 */
+  readOnly: boolean;
 };
 
 const StoreAdminContext = createContext<StoreAdminContextValue | undefined>(undefined);
@@ -27,7 +30,7 @@ export function StoreAdminProvider({
   children,
 }: {
   storeSlug: string;
-  membershipRole: 'manager' | 'staff' | 'platform' | null;
+  membershipRole: StoreMembershipRole | null;
   children: ReactNode;
 }) {
   const [store, setStore] = useState<StoreProfile | null>(null);
@@ -53,9 +56,11 @@ export function StoreAdminProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeSlug]);
 
+  const readOnly = isStoreReadOnly(membershipRole);
+
   return (
     <StoreAdminContext.Provider
-      value={{ storeSlug, store, loading, error, refresh, membershipRole }}
+      value={{ storeSlug, store, loading, error, refresh, membershipRole, readOnly }}
     >
       {children}
     </StoreAdminContext.Provider>
@@ -72,13 +77,16 @@ export function useOptionalStoreAdmin() {
   return useContext(StoreAdminContext);
 }
 
-/** 店鋪後台內鎖定當前店鋪 ID（平台後台為 undefined） */
 export function useLockedStoreId(): string | undefined {
   return useContext(StoreAdminContext)?.store?._id;
 }
 
-/** 店員（非經理、非平台） */
+/** 店員（非店長、非平台、非股東） */
 export function useIsStoreStaffOnly(): boolean {
   const ctx = useContext(StoreAdminContext);
   return ctx?.membershipRole === 'staff';
+}
+
+export function useStoreAdminReadOnly(): boolean {
+  return Boolean(useContext(StoreAdminContext)?.readOnly);
 }

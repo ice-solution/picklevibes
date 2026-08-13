@@ -4,7 +4,7 @@ import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 interface Membership {
   _id: string;
-  role: 'manager' | 'staff';
+  role: 'manager' | 'staff' | 'shareholder';
   isActive: boolean;
   user: { _id: string; name: string; email: string; phone: string; role: string };
   store: { _id: string; name: string; slug: string };
@@ -17,6 +17,19 @@ interface StoreOption {
 }
 
 type AssignMode = 'create' | 'existing';
+type StaffRole = 'manager' | 'staff' | 'shareholder';
+
+const ROLE_OPTIONS: { value: StaffRole; label: string }[] = [
+  { value: 'staff', label: '店員（日曆／商店／訂單／活動）' },
+  { value: 'manager', label: '店長（本店全部功能）' },
+  { value: 'shareholder', label: '股東（分析／報告／會計／日曆唯讀）' },
+];
+
+function roleLabel(role: string) {
+  if (role === 'manager') return '店長';
+  if (role === 'shareholder') return '股東';
+  return '店員';
+}
 
 const emptyCreateForm = {
   name: '',
@@ -24,13 +37,13 @@ const emptyCreateForm = {
   password: '',
   phone: '',
   storeId: '',
-  role: 'staff' as 'manager' | 'staff',
+  role: 'staff' as StaffRole,
 };
 
 const emptyExistingForm = {
   email: '',
   storeId: '',
-  role: 'staff' as 'manager' | 'staff',
+  role: 'staff' as StaffRole,
 };
 
 const TenantStaffManagement: React.FC = () => {
@@ -203,10 +216,13 @@ const TenantStaffManagement: React.FC = () => {
           <select
             className="w-full border rounded-md px-3 py-2 text-sm"
             value={createForm.role}
-            onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as 'manager' | 'staff' })}
+            onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as StaffRole })}
           >
-            <option value="staff">店員</option>
-            <option value="manager">經理</option>
+            {ROLE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
           <button
             type="submit"
@@ -240,10 +256,13 @@ const TenantStaffManagement: React.FC = () => {
           <select
             className="w-full border rounded-md px-3 py-2 text-sm"
             value={existingForm.role}
-            onChange={(e) => setExistingForm({ ...existingForm, role: e.target.value as 'manager' | 'staff' })}
+            onChange={(e) => setExistingForm({ ...existingForm, role: e.target.value as StaffRole })}
           >
-            <option value="staff">店員</option>
-            <option value="manager">經理</option>
+            {ROLE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
           </select>
           <button
             type="submit"
@@ -283,7 +302,7 @@ const TenantStaffManagement: React.FC = () => {
                   <td className="px-4 py-3 text-sm text-gray-700">{m.store?.name}</td>
                   <td className="px-4 py-3 text-sm">
                     <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">
-                      {m.role === 'manager' ? '經理' : '店員'}
+                      {roleLabel(m.role)}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right">

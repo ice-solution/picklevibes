@@ -100,7 +100,7 @@ router.post('/create-account', [
     .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼須包含字母與數字'),
   body('phone').matches(/^[0-9]+$/).withMessage('電話只能包含數字'),
   body('storeId').notEmpty().withMessage('storeId 為必填'),
-  body('role').optional().isIn(['manager', 'staff']).withMessage('role 無效'),
+  body('role').optional().isIn(['manager', 'staff', 'shareholder']).withMessage('role 無效'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -175,7 +175,7 @@ router.post('/', [
   platformAdminAuth,
   body('userId').notEmpty().withMessage('userId 為必填'),
   body('storeId').notEmpty().withMessage('storeId 為必填'),
-  body('role').optional().isIn(['manager', 'staff']).withMessage('role 無效'),
+  body('role').optional().isIn(['manager', 'staff', 'shareholder']).withMessage('role 無效'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
