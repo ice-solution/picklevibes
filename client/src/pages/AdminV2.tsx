@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
-import { getDefaultHomeForUser } from '../utils/authRedirect';
+import { canOpenAdminV2, getEffectiveStoreRole } from '../utils/authRedirect';
+import { canAccessAdminV2Tab, isStoreReadOnly } from '../utils/storeAdminPermissions';
 
-import BookingManagement from '../components/Admin/BookingManagement';
+import PendingSettleBookings from '../components/Admin/PendingSettleBookings';
 import BookingCalendar from '../components/Admin/BookingCalendar';
 import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
 import CourtManagement from '../components/Admin/CourtManagement';
@@ -67,16 +68,14 @@ type Tab = {
 const AdminV2: React.FC = () => {
   const { user } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState<string>('bookings');
+  const [activeTab, setActiveTab] = useState<string>('pending-settle');
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab) setActiveTab(tab);
-  }, [searchParams]);
+  const effectiveRole = getEffectiveStoreRole(user);
+  const readOnly = isStoreReadOnly(effectiveRole);
 
-  const tabs: Tab[] = useMemo(() => ([
-    { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon, element: <BookingManagement /> },
+  const allTabs: Tab[] = useMemo(() => ([
+    { id: 'pending-settle', name: '待結算', icon: CalendarDaysIcon, element: <PendingSettleBookings /> },
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
     { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
     { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: <StoreManagement /> },
@@ -106,19 +105,41 @@ const AdminV2: React.FC = () => {
     { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> }
   ]), []);
 
+  const tabs = useMemo(
+    () => allTabs.filter((t) => canAccessAdminV2Tab(effectiveRole, t.id)),
+    [allTabs, effectiveRole]
+  );
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tabs.some((t) => t.id === tab)) {
+      setActiveTab(tab);
+      return;
+    }
+    if (tabs.length && !tabs.some((t) => t.id === activeTab)) {
+      setActiveTab(tabs[0].id);
+    }
+  }, [searchParams, tabs, activeTab]);
+
   const current = useMemo(() => tabs.find((t) => t.id === activeTab) || tabs[0], [tabs, activeTab]);
 
-  // 店鋪員工請用店鋪後台
-  if (user?.role === 'staff') {
-    return <Navigate to={getDefaultHomeForUser(user)} replace />;
-  }
-
-  if (user?.role !== 'admin') {
+  if (!canOpenAdminV2(user)) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-gray-900 mb-4">權限不足</h1>
-          <p className="text-gray-600">您需要管理員權限才能訪問此頁面</p>
+          <p className="text-gray-600">您需要管理員或店鋪員工權限才能訪問此頁面</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!current) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">權限不足</h1>
+          <p className="text-gray-600">沒有可使用的後台功能</p>
         </div>
       </div>
     );
@@ -204,7 +225,23 @@ const AdminV2: React.FC = () => {
           </header>
 
           <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6">
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }}>
+            {effectiveRole === 'staff' && (
+              <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                店員權限：預約日曆、商店、訂單、活動與恆常活動。店鋪停用後仍可在此管理內容。
+              </p>
+            )}
+            {readOnly && (
+              <p className="mb-4 text-sm text-slate-800 bg-slate-100 border border-slate-200 rounded-lg px-3 py-2">
+                股東帳號為唯讀：可查看數據分析、報告、會計與預約日曆，無法新增或修改資料。
+              </p>
+            )}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+              className={readOnly ? 'pointer-events-none opacity-95 select-none' : undefined}
+              aria-disabled={readOnly || undefined}
+            >
               {current.element}
             </motion.div>
           </main>

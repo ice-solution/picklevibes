@@ -168,7 +168,11 @@ const ActivityManagement: React.FC = () => {
     if (!showCreateModal && !showEditModal) return;
     const loadCourts = async () => {
       try {
-        const res = await fetch(`${apiBaseUrl}/courts`);
+        const res = await fetch(`${apiBaseUrl}/courts?all=true`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
         const data = await res.json();
         const list = (data.courts || []) as VenueCourtOption[];
         const allowed = new Set(['competition', 'training', 'solo']);

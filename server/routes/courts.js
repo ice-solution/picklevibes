@@ -104,10 +104,16 @@ router.get('/', optionalAuth, async (req, res) => {
       .populate('store', 'name slug address enableHikAccess isActive')
       .sort({ number: 1 });
     
+    const isStoreStaffRequest =
+      req.user?.role === 'admin' ||
+      (req.user?.role === 'staff' && (req.tenantAccess?.managedStoreIds || []).length > 0);
+
     let result = courts;
     if (all !== 'true') {
       result = courts.filter((court) => {
         if (!court.isActive) return false;
+        // 店員／管理員後台：店鋪停用仍可管理場地；前台訪客不顯示未上線店鋪
+        if (isStoreStaffRequest) return true;
         const store = court.store;
         if (store && store.isActive === false) return false;
         return true;

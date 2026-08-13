@@ -17,6 +17,7 @@ const ROLE_LABELS = {
 /** 店鋪後台 tab id → 所需模組權限 */
 const TAB_MODULE = {
   bookings: 'bookings',
+  'pending-settle': 'bookings',
   calendar: 'calendar',
   courts: 'courts',
   activities: 'activities',

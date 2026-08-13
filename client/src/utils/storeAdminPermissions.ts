@@ -4,6 +4,7 @@ export type StoreMembershipRole = 'manager' | 'staff' | 'shareholder' | 'platfor
 
 const TAB_MODULE: Record<string, string> = {
   bookings: 'bookings',
+  'pending-settle': 'bookings',
   calendar: 'calendar',
   courts: 'courts',
   activities: 'activities',
@@ -19,6 +20,23 @@ const TAB_MODULE: Record<string, string> = {
   analytics: 'analytics',
   reports: 'reports',
 };
+
+/** admin-v2 僅平台管理員可見 */
+const PLATFORM_ONLY_TABS = new Set([
+  'stores',
+  'tenant-staff',
+  'users',
+  'tiers',
+  'vlogs',
+  'hotnews',
+  'game-halls',
+  'game-clients',
+  'game-leaderboard',
+  'edm',
+  'application-forms',
+  'bulk-upgrade',
+  'maintenance',
+]);
 
 const ROLE_MODULES: Record<string, Set<string> | null> = {
   staff: new Set(['calendar', 'shop', 'orders', 'activities', 'regularActivities']),
@@ -41,4 +59,14 @@ export function canAccessStoreTab(
 
 export function isStoreReadOnly(role: StoreMembershipRole | null | undefined): boolean {
   return role === 'shareholder';
+}
+
+export function canAccessAdminV2Tab(
+  role: StoreMembershipRole | null | undefined,
+  tabId: string
+): boolean {
+  if (role === 'platform') return true;
+  if (!role) return false;
+  if (PLATFORM_ONLY_TABS.has(tabId)) return false;
+  return canAccessStoreTab(role, tabId);
 }

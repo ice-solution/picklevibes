@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
 import { useShopConfig } from '../../contexts/ShopConfigContext';
 import { useMaintenance } from '../../hooks/useMaintenance';
+import { canOpenAdminV2 } from '../../utils/authRedirect';
 import LanguageSwitcher from '../Common/LanguageSwitcher';
 import { 
   Bars3Icon, 
@@ -96,6 +97,7 @@ const Navbar: React.FC = () => {
   // 維護模式檢查
   const isMaintenanceMode = maintenanceStatus?.maintenanceMode;
   const isAdmin = user?.role === 'admin';
+  const canManage = canOpenAdminV2(user);
   const isCoach = user?.role === 'coach';
   const isAdminV2 = useMemo(() => location.pathname.startsWith('/admin-v2'), [location.pathname]);
 
@@ -259,14 +261,14 @@ const Navbar: React.FC = () => {
                   </AnimatePresence>
                 </div>
 
-                {/* 管理入口（預設新版；新版可返舊版） */}
-                {isAdmin && (
+                {/* 管理入口（店員／店長用 admin-v2；平台管理員可切舊版） */}
+                {canManage && (
                   <Link
-                    to={isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
+                    to={isAdmin && isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
                     className="flex items-center space-x-1 text-gray-700 hover:text-primary-600 transition-colors duration-200"
                   >
                     <CogIcon className="w-5 h-5" />
-                    <span>{isAdminV2 ? '返回舊版' : '管理'}</span>
+                    <span>{isAdmin && isAdminV2 ? '返回舊版' : '管理'}</span>
                   </Link>
                 )}
 
@@ -482,16 +484,16 @@ const Navbar: React.FC = () => {
                     )}
 
                     {/* 管理員功能 */}
-                    {user.role === 'admin' && (
+                    {canManage && (
                       <>
                         <div className="text-sm font-medium text-gray-500 px-3 py-1 mt-4">管理功能</div>
                         <Link
-                          to={isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
+                          to={isAdmin && isAdminV2 ? '/admin?tab=bookings' : '/admin-v2'}
                           onClick={() => setIsOpen(false)}
                           className="flex items-center space-x-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:text-primary-600 hover:bg-gray-50 transition-colors duration-200"
                         >
                           <CogIcon className="w-5 h-5" />
-                          <span>{isAdminV2 ? '返回舊版' : '管理（新版）'}</span>
+                          <span>{isAdmin && isAdminV2 ? '返回舊版' : '管理（新版）'}</span>
                         </Link>
                       </>
                     )}

@@ -19,7 +19,12 @@ const { collectBundledBookingIds } = require('../utils/bookingBundle');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
-const { settleBookingWithPoints, getSettlePreview } = require('../services/bookingSettleService');
+const {
+  settleBookingWithPoints,
+  getSettlePreview,
+  isBookingEligibleForSettle,
+  suggestedSettlePoints,
+} = require('../services/bookingSettleService');
 
 const router = express.Router();
 
@@ -916,6 +921,82 @@ router.get('/admin/all', [
     });
   } catch (error) {
     console.error('獲取所有預約錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/bookings/admin/pending-settle
+// @desc    日期範圍內未結算的預先 hold 場地（admin_waived / 未扣積分）
+// @access  Private (Admin)
+router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
+  try {
+    const { store, dateFrom, dateTo } = req.query;
+    if (!dateFrom || !dateTo) {
+      return res.status(400).json({ message: '請提供 dateFrom 與 dateTo' });
+    }
+
+    const dateQuery = buildAdminBookingDateQuery({ dateFrom, dateTo });
+    let query = {
+      ...dateQuery,
+      status: { $nin: ['cancelled', 'no_show'] },
+      venueBundleKind: { $ne: 'activity_hold' },
+      relatedActivity: { $in: [null] },
+      $or: [
+        { noUserBalanceDebited: true },
+        { bypassRestrictions: true },
+        { 'payment.method': 'admin_waived' },
+      ],
+    };
+    if (store && String(store).trim() !== '') {
+      query.store = String(store).trim();
+    }
+    query = applyStoreScope(query, req.tenantAccess, 'store');
+
+    const bookings = await Booking.find(query)
+      .select(
+        'date startTime endTime status store court user specialRequests payment pricing noUserBalanceDebited bypassRestrictions venueBundleId venueBundleKind isFullVenue fullVenueBookings createdAt'
+      )
+      .populate('user', 'name email phone')
+      .populate('store', 'name slug')
+      .populate({
+        path: 'court',
+        select: 'name number type store',
+        populate: { path: 'store', select: 'name slug' },
+      })
+      .sort({ date: 1, startTime: 1 })
+      .lean();
+
+    const pending = bookings.filter((b) => isBookingEligibleForSettle(b));
+
+    const seenBundles = new Set();
+    const items = [];
+    for (const b of pending) {
+      const bundleKey = b.venueBundleId ? String(b.venueBundleId) : null;
+      if (bundleKey) {
+        if (seenBundles.has(bundleKey)) continue;
+        seenBundles.add(bundleKey);
+        const group = pending.filter((x) => String(x.venueBundleId) === bundleKey);
+        const leader = group.find((x) => x.isFullVenue) || group[0];
+        const suggestedPoints = group.reduce((sum, x) => sum + (suggestedSettlePoints(x) || 0), 0);
+        items.push({
+          ...leader,
+          suggestedPoints,
+          bundleCount: group.length,
+          courtNames: group.map((x) => x.court?.name || '場地').filter(Boolean),
+        });
+      } else {
+        items.push({
+          ...b,
+          suggestedPoints: suggestedSettlePoints(b) || 0,
+          bundleCount: 1,
+          courtNames: [b.court?.name].filter(Boolean),
+        });
+      }
+    }
+
+    res.json({ bookings: items, count: items.length });
+  } catch (error) {
+    console.error('獲取待結算預約錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

@@ -9,6 +9,7 @@ export type StoreProfile = {
   slug: string;
   address: string;
   phone?: string;
+  isActive?: boolean;
 };
 
 type StoreAdminContextValue = {

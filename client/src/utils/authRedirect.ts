@@ -13,12 +13,29 @@ export function parseStoreSlugFromAdminPath(pathname?: string | null): string | 
   return m ? decodeURIComponent(m[1]).toLowerCase() : null;
 }
 
+export function canOpenAdminV2(user?: User | null): boolean {
+  if (!user) return false;
+  if (user.isPlatformAdmin || user.role === 'admin') return true;
+  return user.role === 'staff' && (user.managedStores?.length ?? 0) > 0;
+}
+
+/** 跨店取最高權限：manager > staff > shareholder */
+export function getEffectiveStoreRole(user?: User | null): StoreMembershipRole | null {
+  if (!user) return null;
+  if (user.isPlatformAdmin || user.role === 'admin') return 'platform';
+  if (user.role !== 'staff') return null;
+  const roles = (user.managedStores || []).map((s) =>
+    String(s.membershipRole || 'staff').toLowerCase()
+  );
+  if (roles.some((r) => r === 'manager')) return 'manager';
+  if (roles.some((r) => r === 'staff')) return 'staff';
+  if (roles.some((r) => r === 'shareholder')) return 'shareholder';
+  return user.managedStores?.length ? 'staff' : null;
+}
+
 export function getDefaultHomeForUser(user?: User | null): string {
   if (!user) return '/my-bookings';
-  if (user.isPlatformAdmin || user.role === 'admin') return '/admin-v2';
-  if (user.role === 'staff' && user.managedStores?.length) {
-    return `/store/${user.managedStores[0].slug}/admin`;
-  }
+  if (canOpenAdminV2(user)) return '/admin-v2';
   return '/my-bookings';
 }
 

@@ -215,16 +215,21 @@ function StoreAdminShell() {
           <main className="p-4 sm:p-6 lg:p-8">
             <div className="mb-4 flex items-center justify-between gap-3">
               <h2 className="text-xl font-bold text-gray-900">{current?.name}</h2>
-              {user?.role === 'admin' && (
+              {canAccessStoreAdmin(user, storeSlug) && (
                 <Link
                   to="/admin-v2"
                   className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-primary-600"
                 >
                   <ArrowLeftIcon className="h-4 w-4" />
-                  平台後台
+                  管理後台
                 </Link>
               )}
             </div>
+            {store.isActive === false && (
+              <p className="mb-4 text-sm text-gray-800 bg-gray-100 border border-gray-200 rounded-lg px-3 py-2">
+                此店鋪目前停用（未上線），顧客無法預約；你仍可管理內容。
+              </p>
+            )}
             {membershipRole === 'staff' && (
               <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 店員權限：預約日曆、商店、訂單、活動與恆常活動。
