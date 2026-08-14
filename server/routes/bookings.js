@@ -49,6 +49,11 @@ function normalizeDateTime(date, time) {
   return { date: normalizedDate, time };
 }
 
+/** 平台管理員或店鋪員工後台建單（hold 場）：未上線店／停用場地仍可預約 */
+function isBackendOperator(user) {
+  return user?.role === 'admin' || user?.role === 'staff';
+}
+
 // @route   POST /api/bookings
 // @desc    創建新預約
 // @access  Private
@@ -87,11 +92,11 @@ router.post('/', [
       req.body.bypassRestrictions === '1';
     const bypassRestrictions = req.user.role === 'admin' && bypassFlag;
     /**
-     * 後台建單且未勾選「管理員權限」時：僅放寬「可預約天數上限」與「營業時段 isOpenAt」，
-     * 其餘與一般用戶相同（含場地啟用、1～2 小時時長）；照常扣積分。
-     * 勾選管理員權限時：仍會檢查時段衝突（不可與現有預約重疊），其餘可繞過（不扣分等）。
+     * 後台建單且未勾選「管理員權限」時：放寬可預約天數、營業時段，以及停用／未上線場地。
+     * 仍檢查維護中、時段衝突；時長 1～2 小時；照常扣積分。
+     * 勾選管理員權限時：仍會檢查時段衝突，其餘可繞過（不扣分等）。
      */
-    const adminRelaxRules = req.user.role === 'admin' && !bypassRestrictions;
+    const adminRelaxRules = isBackendOperator(req.user) && !bypassRestrictions;
 
     // 如果沒有指定用戶（普通用戶創建），使用當前登錄用戶
     // 如果指定了用戶（管理員創建），使用指定的用戶
@@ -123,7 +128,7 @@ router.post('/', [
       return res.status(404).json({ message: '場地不存在' });
     }
 
-    const isAdminBooking = req.user.role === 'admin';
+    const isAdminBooking = isBackendOperator(req.user);
 
     // 後台建單：停用場地仍可預約，僅擋維護中；一般用戶仍檢查 isActive
     if (!bypassRestrictions) {
