@@ -101,21 +101,30 @@ async function aggregateLedgerByStore(match) {
 /**
  * 綜合損益：系統認列收入 + 手動收支登記
  */
-async function computeAccountingPL({ fromYmd, toYmd, storeId } = {}) {
-  const finance = await computeFinanceSummary({ fromYmd, toYmd, storeId });
+async function computeAccountingPL({ fromYmd, toYmd, storeId, storeIds } = {}) {
+  const finance = await computeFinanceSummary({ fromYmd, toYmd, storeId, storeIds });
+  const scopedIds = storeId
+    ? [storeId]
+    : Array.isArray(storeIds) && storeIds.length
+      ? storeIds
+      : null;
+  const singleStoreId = scopedIds && scopedIds.length === 1 ? scopedIds[0] : null;
 
   const ledgerMatch = {};
-  if (storeId) {
-    ledgerMatch.store = new mongoose.Types.ObjectId(storeId);
+  if (scopedIds) {
+    const objectIds = scopedIds
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id));
+    ledgerMatch.store = objectIds.length === 1 ? objectIds[0] : { $in: objectIds };
   }
   const dateRange = buildDateRange(fromYmd, toYmd);
   if (dateRange) ledgerMatch.date = dateRange;
 
   const ledger = await aggregateLedgerByCategory(ledgerMatch);
-  const ledgerByStore = storeId ? null : await aggregateLedgerByStore(ledgerMatch);
+  const ledgerByStore = singleStoreId ? null : await aggregateLedgerByStore(ledgerMatch);
 
   const systemVenueRevenue = round2(finance.venue?.recognizedTotal || 0);
-  const systemShopRevenue = storeId ? 0 : round2(finance.shop?.recognizedTotal || 0);
+  const systemShopRevenue = scopedIds ? 0 : round2(finance.shop?.recognizedTotal || 0);
   const systemRevenueTotal = round2(systemVenueRevenue + systemShopRevenue);
   const manualIncomeTotal = ledger.incomeTotal;
   const manualExpenseTotal = ledger.expenseTotal;
@@ -125,7 +134,7 @@ async function computeAccountingPL({ fromYmd, toYmd, storeId } = {}) {
   const netProfit = round2(totalRevenue - totalExpenses);
 
   const storeRows = [];
-  if (!storeId && finance.byStoreBreakdown) {
+  if (!singleStoreId && finance.byStoreBreakdown) {
     const ledgerStoreMap = new Map(
       (ledgerByStore || []).map((r) => [r.storeId, r])
     );
@@ -147,7 +156,7 @@ async function computeAccountingPL({ fromYmd, toYmd, storeId } = {}) {
         bookingCount: vs.count,
       });
     }
-    if (!storeId && systemShopRevenue > 0) {
+    if (!scopedIds && systemShopRevenue > 0) {
       storeRows.push({
         storeId: null,
         storeName: '全公司（網店）',
@@ -161,9 +170,9 @@ async function computeAccountingPL({ fromYmd, toYmd, storeId } = {}) {
         orderCount: finance.shop?.orderCount || 0,
       });
     }
-  } else if (storeId) {
+  } else if (singleStoreId) {
     storeRows.push({
-      storeId,
+      storeId: singleStoreId,
       storeName: finance.selectedStore?.name || '—',
       systemVenueRevenue,
       manualIncome: manualIncomeTotal,
@@ -177,7 +186,7 @@ async function computeAccountingPL({ fromYmd, toYmd, storeId } = {}) {
 
   return {
     period: { fromYmd, toYmd },
-    storeId: storeId || null,
+    storeId: singleStoreId || null,
     selectedStore: finance.selectedStore,
     shopScopeNote: finance.shopScopeNote,
     revenue: {
@@ -204,7 +213,7 @@ async function computeAccountingPL({ fromYmd, toYmd, storeId } = {}) {
     notes: [
       '系統認列收入來自預約出租日及網店扣款日，已折算積分派送。',
       '手動收支來自「收支登記」；請避免與系統收入重複登記同一筆款項。',
-      storeId ? '選定單一店鋪時不計入網店認列收入。' : null,
+      singleStoreId ? '選定單一店鋪時不計入網店認列收入。' : scopedIds ? '僅顯示你有權限的店鋪；網店不計入。' : null,
     ].filter(Boolean),
   };
 }

@@ -11,6 +11,7 @@ import api, { ACCOUNTING_REPORT_TIMEOUT_MS } from '../../services/api';
 import AccountingLedgerPanel from './AccountingLedgerPanel';
 import AccountingPLPanel from './AccountingPLPanel';
 import { useLockedStoreId } from '../../contexts/StoreAdminContext';
+import { useAuth } from '../../contexts/AuthContext';
 
 type LineType = 'all' | 'recognized' | 'excluded' | 'venue' | 'shop';
 
@@ -128,7 +129,9 @@ interface LinesTotals {
 }
 
 const AccountingManagement: React.FC = () => {
+  const { user } = useAuth();
   const lockedStoreId = useLockedStoreId();
+  const isPlatformAdmin = Boolean(user?.isPlatformAdmin || user?.role === 'admin');
   const [mainTab, setMainTab] = useState<AccountingMainTab>('pl');
   const today = ymdToday();
   const [fromYmd, setFromYmd] = useState(monthStartYmd);
@@ -304,7 +307,16 @@ const AccountingManagement: React.FC = () => {
     loadSummary();
   }, [mainTab, loadSummary]);
 
-  const storeBreakdown = summary?.byStoreBreakdown || summary?.venue?.byStore || [];
+  const storeBreakdown = useMemo(() => {
+    const raw = summary?.byStoreBreakdown || summary?.venue?.byStore || [];
+    if (isPlatformAdmin) return raw;
+    const allowed = new Set([
+      ...stores.map((s) => String(s._id)),
+      ...(user?.managedStores || []).map((s) => String(s.id)),
+    ]);
+    if (!allowed.size) return [];
+    return raw.filter((row) => !row.storeId || allowed.has(String(row.storeId)));
+  }, [summary, isPlatformAdmin, stores, user?.managedStores]);
   const loading = summaryLoading || linesLoading;
 
   const handleExport = async () => {
@@ -323,8 +335,8 @@ const AccountingManagement: React.FC = () => {
       a.href = url;
       const storeName =
         stores.find((s) => s._id === storeId)?.name ||
-        summary?.selectedStore?.name ||
-        '全部店鋪';
+        (storeId ? summary?.selectedStore?.name : null) ||
+        (isPlatformAdmin ? '全部店鋪' : '可存取店鋪');
       a.download = `會計收入_${storeName}_${fromYmd}_${toYmd}.xlsx`;
       document.body.appendChild(a);
       a.click();
@@ -338,10 +350,10 @@ const AccountingManagement: React.FC = () => {
     }
   };
 
-  const selectedStoreName =
-    summary?.selectedStore?.name ||
-    stores.find((s) => s._id === storeId)?.name ||
-    (storeId ? '—' : '全部店鋪（含網店）');
+  const allStoresLabel = isPlatformAdmin ? '全部店鋪（含網店）' : '可存取店鋪';
+  const selectedStoreName = storeId
+    ? stores.find((s) => s._id === storeId)?.name || summary?.selectedStore?.name || '—'
+    : allStoresLabel;
 
   return (
     <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
@@ -397,7 +409,7 @@ const AccountingManagement: React.FC = () => {
               onChange={(e) => setStoreId(e.target.value)}
               className="min-w-[220px] px-3 py-2 border rounded-lg bg-white"
             >
-              <option value="">全部店鋪（含網店匯總）</option>
+              <option value="">{isPlatformAdmin ? '全部店鋪（含網店匯總）' : '全部可存取店鋪'}</option>
               {stores.map((s) => (
                 <option key={s._id} value={s._id}>
                   {s.name}
@@ -483,10 +495,10 @@ const AccountingManagement: React.FC = () => {
           </div>
           <div className="bg-white border rounded-lg p-4">
             <p className="text-xs text-gray-500">
-              網店（{summary.shop.orderCount} 筆）{storeId ? '—' : ''}
+              網店（{summary.shop.orderCount} 筆）{!isPlatformAdmin || storeId ? '—' : ''}
             </p>
             <p className="text-xl font-bold">
-              {storeId ? '—' : `HK$ ${fmt(summary.shop.recognizedTotal)}`}
+              {!isPlatformAdmin || storeId ? '—' : `HK$ ${fmt(summary.shop.recognizedTotal)}`}
             </p>
           </div>
           <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
@@ -558,7 +570,7 @@ const AccountingManagement: React.FC = () => {
                     {fmt(storeBreakdown.reduce((s, r) => s + r.recognized, 0))}
                   </td>
                 </tr>
-                {summary && (
+                {summary && isPlatformAdmin && (
                   <tr className="border-t">
                     <td className="px-4 py-2">＋ 全公司網店</td>
                     <td className="px-4 py-2 text-right">{summary.shop.orderCount}</td>
@@ -582,7 +594,7 @@ const AccountingManagement: React.FC = () => {
               setTypeTab(t.id);
               setLinesPage(1);
             }}
-            disabled={storeId !== '' && t.id === 'shop'}
+            disabled={t.id === 'shop' && (!isPlatformAdmin || storeId !== '')}
             className={`px-4 py-2 text-sm font-medium rounded-t-lg border-b-2 transition-colors disabled:opacity-40 ${
               typeTab === t.id
                 ? 'border-primary-600 text-primary-700 bg-primary-50'

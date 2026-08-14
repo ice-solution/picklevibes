@@ -9,6 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 import api from '../../services/api';
 import apiConfig from '../../config/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface StoreOption {
   _id: string;
@@ -85,6 +86,8 @@ function receiptUrl(imagePath: string) {
 }
 
 const AccountingLedgerPanel: React.FC = () => {
+  const { user } = useAuth();
+  const isPlatformAdmin = Boolean(user?.isPlatformAdmin || user?.role === 'admin');
   const today = ymdToday();
 
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -282,7 +285,7 @@ const AccountingLedgerPanel: React.FC = () => {
             onChange={(e) => setStoreId(e.target.value)}
             className="min-w-[180px] px-3 py-2 border rounded-lg bg-white"
           >
-            <option value="">全部店鋪</option>
+            <option value="">{isPlatformAdmin ? '全部店鋪' : '全部可存取店鋪'}</option>
             {stores.map((s) => (
               <option key={s._id} value={s._id}>{s.name}</option>
             ))}

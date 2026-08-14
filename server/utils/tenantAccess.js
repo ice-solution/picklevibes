@@ -139,8 +139,60 @@ function assertManagerAccess(tenantAccess) {
 }
 
 /**
- * 在查詢物件上套用店鋪範圍（非平台 admin）
+ * 會計／財務查詢店鋪範圍。
+ * 非平台帳號不得看未指派店鋪；未指定店鋪時只限自己管理的店（不是全公司、也不是預設第一間）。
  */
+function resolveAccountingStoreScope(tenantAccess, requestedStoreId) {
+  const requested = requestedStoreId ? String(requestedStoreId) : '';
+
+  if (!tenantAccess || tenantAccess.isPlatformAdmin) {
+    return {
+      ok: true,
+      storeId: requested || null,
+      storeIds: requested ? [requested] : null,
+      unrestricted: !requested,
+    };
+  }
+
+  const allowed = (tenantAccess.managedStoreIds || []).map((id) => String(id));
+  if (!allowed.length) {
+    return {
+      ok: false,
+      status: 403,
+      message: '無店鋪管理權限',
+      storeId: null,
+      storeIds: [],
+      unrestricted: false,
+    };
+  }
+
+  if (requested) {
+    if (!allowed.includes(requested)) {
+      return {
+        ok: false,
+        status: 403,
+        message: '無權限存取此店鋪',
+        storeId: null,
+        storeIds: [],
+        unrestricted: false,
+      };
+    }
+    return {
+      ok: true,
+      storeId: requested,
+      storeIds: [requested],
+      unrestricted: false,
+    };
+  }
+
+  return {
+    ok: true,
+    storeId: null,
+    storeIds: allowed,
+    unrestricted: false,
+  };
+}
+
 function applyStoreScope(query, tenantAccess, field = 'store') {
   if (!tenantAccess || tenantAccess.isPlatformAdmin) return query;
 
@@ -223,6 +275,7 @@ module.exports = {
   assertStoreFeatureAccess,
   assertInternalAdminAccess,
   assertManagerAccess,
+  resolveAccountingStoreScope,
   applyStoreScope,
   formatTenantAccessForClient,
   checkDocumentStoreAccess,

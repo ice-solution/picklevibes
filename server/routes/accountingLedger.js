@@ -5,7 +5,7 @@ const { body, validationResult } = require('express-validator');
 const AccountingTransaction = require('../models/AccountingTransaction');
 const Store = require('../models/Store');
 const { auth, adminAuth } = require('../middleware/auth');
-const { applyStoreScope } = require('../utils/tenantAccess');
+const { applyStoreScope, canAccessStore, resolveAccountingStoreScope } = require('../utils/tenantAccess');
 const { requireInternalAdminAccess } = require('../middleware/tenantAccess');
 const { receiptUpload, deleteFile } = require('../middleware/upload');
 const {
@@ -85,13 +85,21 @@ router.get('/categories', [auth, adminAuth, requireInternalAdminAccess], (_req, 
 router.get('/summary', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
   try {
     const { from, to, store } = req.query;
+    const scope = resolveAccountingStoreScope(req.tenantAccess, store);
+    if (!scope.ok) {
+      return res.status(scope.status).json({ message: scope.message });
+    }
     const match = {};
-    if (store) match.store = store;
+    if (scope.storeId) match.store = scope.storeId;
+    else if (scope.storeIds) match.store = { $in: scope.storeIds };
     const dateRange = buildDateRange(from, to);
     if (dateRange) match.date = dateRange;
 
     const period = await aggregateTotals(match);
-    const allTime = await aggregateTotals(store ? { store } : {});
+    const allTimeMatch = {};
+    if (scope.storeId) allTimeMatch.store = scope.storeId;
+    else if (scope.storeIds) allTimeMatch.store = { $in: scope.storeIds };
+    const allTime = await aggregateTotals(allTimeMatch);
 
     res.json({
       success: true,
@@ -123,19 +131,21 @@ router.get('/', [auth, adminAuth, requireInternalAdminAccess], async (req, res) 
     const dateRange = buildDateRange(from, to);
     if (dateRange) q.date = dateRange;
 
+    const scoped = applyStoreScope(q, req.tenantAccess);
+
     const limitN = Math.min(parseInt(limit, 10) || 50, 200);
     const pageN = Math.max(parseInt(page, 10) || 1, 1);
 
     const [items, total, totals] = await Promise.all([
-      AccountingTransaction.find(q)
+      AccountingTransaction.find(scoped)
         .sort({ date: -1, createdAt: -1 })
         .skip((pageN - 1) * limitN)
         .limit(limitN)
         .populate('createdBy', 'name email')
         .populate('store', 'name isActive')
         .lean(),
-      AccountingTransaction.countDocuments(q),
-      aggregateTotals(q),
+      AccountingTransaction.countDocuments(scoped),
+      aggregateTotals(scoped),
     ]);
 
     res.json({
@@ -177,6 +187,10 @@ router.post('/', [
     if (!storeDoc) {
       if (req.file) await deleteFile(req.file.path);
       return res.status(400).json({ message: '店鋪不存在' });
+    }
+    if (!canAccessStore(req.tenantAccess, storeDoc._id)) {
+      if (req.file) await deleteFile(req.file.path);
+      return res.status(403).json({ message: '無權限存取此店鋪' });
     }
 
     const amt = parseAmount(req.body.amount);
@@ -234,6 +248,10 @@ router.put('/:id', [
       if (req.file) await deleteFile(req.file.path);
       return res.status(404).json({ message: '紀錄不存在' });
     }
+    if (!canAccessStore(req.tenantAccess, tx.store)) {
+      if (req.file) await deleteFile(req.file.path);
+      return res.status(403).json({ message: '無權限存取此店鋪' });
+    }
     if (!canModifyTransaction(req, tx)) {
       if (req.file) await deleteFile(req.file.path);
       return res.status(403).json({ message: '無權限編輯此紀錄' });
@@ -243,6 +261,10 @@ router.put('/:id', [
     if (req.body.store && !storeDoc) {
       if (req.file) await deleteFile(req.file.path);
       return res.status(400).json({ message: '店鋪不存在' });
+    }
+    if (storeDoc && !canAccessStore(req.tenantAccess, storeDoc._id)) {
+      if (req.file) await deleteFile(req.file.path);
+      return res.status(403).json({ message: '無權限存取此店鋪' });
     }
 
     if (req.body.type && !['income', 'expense'].includes(req.body.type)) {
@@ -303,6 +325,9 @@ router.delete('/:id', [auth, adminAuth, requireInternalAdminAccess], async (req,
   try {
     const tx = await AccountingTransaction.findById(req.params.id);
     if (!tx) return res.status(404).json({ message: '紀錄不存在' });
+    if (!canAccessStore(req.tenantAccess, tx.store)) {
+      return res.status(403).json({ message: '無權限存取此店鋪' });
+    }
     if (!canModifyTransaction(req, tx)) {
       return res.status(403).json({ message: '無權限刪除此紀錄' });
     }

@@ -1,7 +1,7 @@
 const express = require('express');
 const XLSX = require('xlsx');
 const { auth, adminAuth } = require('../middleware/auth');
-const { applyStoreScope } = require('../utils/tenantAccess');
+const { resolveAccountingStoreScope } = require('../utils/tenantAccess');
 const { requireInternalAdminAccess } = require('../middleware/tenantAccess');
 const {
   computeFinanceSummary,
@@ -12,25 +12,29 @@ const {
 
 const router = express.Router();
 
+function financeOptsFromScope(scope, fromYmd, toYmd) {
+  return {
+    fromYmd,
+    toYmd,
+    ...(scope.unrestricted
+      ? {}
+      : scope.storeId
+        ? { storeId: scope.storeId }
+        : { storeIds: scope.storeIds }),
+  };
+}
+
 function parseYmd(raw, fallback) {
   if (!raw || typeof raw !== 'string') return fallback;
   const s = raw.slice(0, 10);
   return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : fallback;
 }
 
-function resolveScopedStoreId(req) {
-  let storeId = req.query.store || req.query.storeId || null;
-  if (!req.tenantAccess || req.tenantAccess.isPlatformAdmin) {
-    return storeId || null;
-  }
-  const managerStores = (req.tenantAccess.managedStores || []).filter(
-    (s) => s.membershipRole === 'manager'
+function resolveRequestStoreScope(req) {
+  return resolveAccountingStoreScope(
+    req.tenantAccess,
+    req.query.store || req.query.storeId || null
   );
-  if (managerStores.length === 0) return null;
-  if (storeId && managerStores.some((s) => String(s.id) === String(storeId))) {
-    return String(storeId);
-  }
-  return String(managerStores[0].id);
 }
 
 // @route   GET /api/finance/summary
@@ -46,8 +50,11 @@ router.get('/summary', [auth, adminAuth, requireInternalAdminAccess], async (req
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const storeId = resolveScopedStoreId(req);
-    const data = await computeFinanceSummary({ fromYmd, toYmd, storeId: storeId || undefined });
+    const scope = resolveRequestStoreScope(req);
+    if (!scope.ok) {
+      return res.status(scope.status).json({ message: scope.message });
+    }
+    const data = await computeFinanceSummary(financeOptsFromScope(scope, fromYmd, toYmd));
     res.json({ success: true, data });
   } catch (error) {
     console.error('財務摘要錯誤:', error);
@@ -68,17 +75,18 @@ router.get('/income-lines', [auth, adminAuth, requireInternalAdminAccess], async
       return res.status(400).json({ message: '開始日期不可晚於結束日期' });
     }
 
-    const storeId = resolveScopedStoreId(req);
+    const scope = resolveRequestStoreScope(req);
+    if (!scope.ok) {
+      return res.status(scope.status).json({ message: scope.message });
+    }
     const typeFilter = req.query.type; // recognized | excluded | venue | shop
     const search = String(req.query.search || '').trim().toLowerCase();
     const pageN = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const limitN = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 100);
 
-    const { lines, fromYmd: f, toYmd: t } = await getIncomeLines({
-      fromYmd,
-      toYmd,
-      storeId: storeId || undefined
-    });
+    const { lines, fromYmd: f, toYmd: t } = await getIncomeLines(
+      financeOptsFromScope(scope, fromYmd, toYmd)
+    );
 
     let filtered = lines;
     if (typeFilter === 'recognized') filtered = lines.filter((l) => l.lineType === 'recognized');
@@ -117,7 +125,7 @@ router.get('/income-lines', [auth, adminAuth, requireInternalAdminAccess], async
       success: true,
       data: {
         period: { fromYmd: f, toYmd: t },
-        storeId: storeId || null,
+        storeId: scope.storeId || null,
         lines: pagedLines,
         pagination: {
           page: safePage,
@@ -148,14 +156,17 @@ router.get('/summary-xlsx', [auth, adminAuth, requireInternalAdminAccess], async
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
     const toYmd = parseYmd(req.query.to, today);
 
-    const storeId = resolveScopedStoreId(req);
-    const opts = { fromYmd, toYmd, storeId: storeId || undefined };
+    const scope = resolveRequestStoreScope(req);
+    if (!scope.ok) {
+      return res.status(scope.status).json({ message: scope.message });
+    }
+    const opts = financeOptsFromScope(scope, fromYmd, toYmd);
     const [data, { lines }] = await Promise.all([
       computeFinanceSummary(opts),
       getIncomeLines(opts),
     ]);
 
-    const storeLabel = data.selectedStore?.name || '全部店鋪';
+    const storeLabel = data.selectedStore?.name || (scope.unrestricted ? '全部店鋪' : '可存取店鋪');
     const summaryRows = [
       { 項目: '期間', 數值: `${fromYmd} 至 ${toYmd}` },
       { 項目: '店鋪', 數值: storeLabel },
@@ -170,7 +181,7 @@ router.get('/summary-xlsx', [auth, adminAuth, requireInternalAdminAccess], async
 
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryRows), '損益摘要');
-    const storeSheetRows = (data.byStoreBreakdown || data.venue.byStore).map((r) => ({
+    const storeSheetRows = (data.byStoreBreakdown || data.venue.byStore || []).map((r) => ({
       店鋪: r.store,
       認列預約數: r.count,
       免扣款筆數: r.excludedCount ?? 0,

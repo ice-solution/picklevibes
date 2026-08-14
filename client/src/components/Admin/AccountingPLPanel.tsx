@@ -5,6 +5,7 @@ import {
   InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 import api, { ACCOUNTING_REPORT_TIMEOUT_MS } from '../../services/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 interface StoreOption {
   _id: string;
@@ -112,6 +113,8 @@ function PLRow({
 }
 
 const AccountingPLPanel: React.FC = () => {
+  const { user } = useAuth();
+  const isPlatformAdmin = Boolean(user?.isPlatformAdmin || user?.role === 'admin');
   const today = ymdToday();
 
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -150,10 +153,22 @@ const AccountingPLPanel: React.FC = () => {
     load();
   }, [load]);
 
-  const selectedStoreName =
-    data?.selectedStore?.name ||
-    stores.find((s) => s._id === storeId)?.name ||
-    (storeId ? '—' : '全部店鋪');
+  const selectedStoreName = storeId
+    ? data?.selectedStore?.name || stores.find((s) => s._id === storeId)?.name || '—'
+    : isPlatformAdmin
+      ? '全部店鋪'
+      : '可存取店鋪';
+
+  const storeBreakdown = !isPlatformAdmin && data?.storeBreakdown
+    ? data.storeBreakdown.filter((row) => {
+        const allowed = new Set([
+          ...stores.map((s) => String(s._id)),
+          ...(user?.managedStores || []).map((s) => String(s.id)),
+        ]);
+        if (!allowed.size) return false;
+        return !row.storeId || allowed.has(String(row.storeId));
+      })
+    : data?.storeBreakdown;
 
   return (
     <div className="space-y-6">
@@ -175,7 +190,7 @@ const AccountingPLPanel: React.FC = () => {
             onChange={(e) => setStoreId(e.target.value)}
             className="min-w-[220px] px-3 py-2 border rounded-lg bg-white"
           >
-            <option value="">全部店鋪（含網店）</option>
+            <option value="">{isPlatformAdmin ? '全部店鋪（含網店）' : '全部可存取店鋪'}</option>
             {stores.map((s) => (
               <option key={s._id} value={s._id}>{s.name}</option>
             ))}
@@ -288,7 +303,7 @@ const AccountingPLPanel: React.FC = () => {
           </div>
 
           {/* 按店鋪 */}
-          {data.storeBreakdown && data.storeBreakdown.length > 0 && (
+          {storeBreakdown && storeBreakdown.length > 0 && (
             <div className="bg-white rounded-xl border overflow-hidden">
               <div className="px-6 py-4 border-b bg-gray-50">
                 <h3 className="font-semibold text-gray-900">按店鋪損益</h3>
@@ -309,7 +324,7 @@ const AccountingPLPanel: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {data.storeBreakdown.map((row) => (
+                    {storeBreakdown.map((row) => (
                       <tr key={row.storeId || 'shop'} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-medium">{row.storeName}</td>
                         <td className="px-4 py-3 text-right text-green-700">

@@ -23,7 +23,21 @@ const INCOME_LINES_CACHE_MAX = 24;
 const incomeLinesCache = new Map();
 
 function incomeLinesCacheKey(opts) {
-  return `${opts.fromYmd}|${opts.toYmd}|${opts.storeId || ''}`;
+  const ids = resolveQueryStoreIds(opts);
+  return `${opts.fromYmd}|${opts.toYmd}|${ids ? ids.join(',') : '*'}`;
+}
+
+function resolveQueryStoreIds(opts) {
+  if (opts?.storeId) return [String(opts.storeId)];
+  if (Array.isArray(opts?.storeIds) && opts.storeIds.length > 0) {
+    return [...new Set(opts.storeIds.map((id) => String(id)))].sort();
+  }
+  return null;
+}
+
+function applyStoreIdFilter(query, field, storeIds) {
+  if (!storeIds || !storeIds.length) return;
+  query[field] = storeIds.length === 1 ? storeIds[0] : { $in: storeIds };
 }
 
 async function getIncomeLines(opts) {
@@ -216,10 +230,11 @@ function filterLinesForStore(lines, storeId) {
 
 /**
  * 收入明細列（認列 + 不計收入）
- * @param {{ fromYmd: string, toYmd: string, storeId?: string }} opts
+ * @param {{ fromYmd: string, toYmd: string, storeId?: string, storeIds?: string[] }} opts
  */
 async function computeIncomeLines(opts) {
-  const { fromYmd, toYmd, storeId } = opts;
+  const { fromYmd, toYmd } = opts;
+  const storeIds = resolveQueryStoreIds(opts);
   const start = hkStartOfDayInstant(fromYmd);
   const end = hkEndOfDayInstant(toYmd);
 
@@ -230,9 +245,7 @@ async function computeIncomeLines(opts) {
     status: { $in: ['confirmed', 'completed'] },
     date: { $gte: start, $lte: end }
   };
-  if (storeId) {
-    bookingQuery.store = storeId;
-  }
+  applyStoreIdFilter(bookingQuery, 'store', storeIds);
 
   const bookings = await Booking.find(bookingQuery)
     .select(
@@ -248,7 +261,7 @@ async function computeIncomeLines(opts) {
     .sort({ date: 1, startTime: 1 })
     .lean();
 
-  const orders = storeId
+  const orders = storeIds
     ? []
     : await Order.find({
         pointsChargedAt: { $gte: start, $lte: end },
@@ -266,8 +279,8 @@ async function computeIncomeLines(opts) {
     store: { $ne: null },
     'payment.paidAt': { $gte: start, $lte: end }
   };
-  if (storeId) {
-    manualAdjustQuery.store = storeId;
+  if (storeIds) {
+    applyStoreIdFilter(manualAdjustQuery, 'store', storeIds);
   }
 
   const manualAdjustments = await Recharge.find(manualAdjustQuery)
@@ -587,10 +600,13 @@ async function computePerStoreSummaries(opts) {
 }
 
 /**
- * @param {{ fromYmd: string, toYmd: string, storeId?: string }} opts
+ * @param {{ fromYmd: string, toYmd: string, storeId?: string, storeIds?: string[] }} opts
  */
 async function computeFinanceSummary(opts) {
-  const { fromYmd, toYmd, storeId } = opts;
+  const { fromYmd, toYmd } = opts;
+  const storeIds = resolveQueryStoreIds(opts);
+  const storeId = storeIds && storeIds.length === 1 ? storeIds[0] : null;
+  const unrestricted = !storeIds;
   const start = hkStartOfDayInstant(fromYmd);
   const end = hkEndOfDayInstant(toYmd);
 
@@ -600,7 +616,11 @@ async function computeFinanceSummary(opts) {
     selectedStore = await Store.findById(storeId).select('name slug').lean();
   }
 
-  const { lines } = await getIncomeLines({ fromYmd, toYmd, storeId });
+  const { lines } = await getIncomeLines({
+    fromYmd,
+    toYmd,
+    ...(storeId ? { storeId } : storeIds ? { storeIds } : {}),
+  });
   const agg = aggregateFromLines(lines);
   const byStoreAll = storeId ? null : agg.venue.byStore;
 
@@ -651,9 +671,11 @@ async function computeFinanceSummary(opts) {
       ? { id: String(selectedStore._id), name: selectedStore.name, slug: selectedStore.slug }
       : null,
     byStoreBreakdown: byStoreAll,
-    shopScopeNote: storeId
-      ? '網店收入為全公司共用，選定單一店鋪時不計入網店。'
-      : '網店收入不分店鋪，列於「全公司（網店）」。',
+    shopScopeNote: unrestricted
+      ? '網店收入不分店鋪，列於「全公司（網店）」。'
+      : storeId
+        ? '網店收入為全公司共用，選定單一店鋪時不計入網店。'
+        : '僅顯示你有權限的店鋪；網店為全公司共用，此檢視不計入。',
     methodology: {
       venueDateBasis: '預約出租日（香港時間）',
       venueStatuses: ['confirmed', 'completed'],
