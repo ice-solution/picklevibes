@@ -90,7 +90,7 @@ router.post('/', [
       req.body.bypassRestrictions === 'true' ||
       req.body.bypassRestrictions === 1 ||
       req.body.bypassRestrictions === '1';
-    const bypassRestrictions = req.user.role === 'admin' && bypassFlag;
+    const bypassRestrictions = isBackendOperator(req.user) && bypassFlag;
     /**
      * 後台建單且未勾選「管理員權限」時：放寬可預約天數、營業時段，以及停用／未上線場地。
      * 仍檢查維護中、時段衝突；時長 1～2 小時；照常扣積分。

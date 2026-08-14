@@ -58,7 +58,8 @@ router.post('/create', auth, async (req, res) => {
       bypassRestrictions === 'true' ||
       bypassRestrictions === 1 ||
       bypassRestrictions === '1';
-    const allowBypass = req.user.role === 'admin' && bypassFlag;
+    const allowBypass =
+      (req.user.role === 'admin' || req.user.role === 'staff') && bypassFlag;
 
     const result = await fullVenueService.createFullVenueBooking({
       date: normalizeBookingDateInput(date),

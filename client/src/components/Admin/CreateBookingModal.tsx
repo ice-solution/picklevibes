@@ -680,7 +680,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               />
               <label htmlFor="bypassRestrictions" className="ml-3 text-sm font-medium text-gray-900">
                 <span className="text-yellow-800 font-semibold">管理員權限：</span>
-                繞過所有限制（積分不足、時間限制、可用性檢查等）
+                免扣積分 hold 場（繞過餘額、時間與場地啟用限制）
               </label>
             </div>
             <p className="mt-2 text-xs text-yellow-700">
