@@ -1,4 +1,9 @@
-const { loadTenantAccess, canAccessStore, assertInternalAdminAccess } = require('../utils/tenantAccess');
+const {
+  loadTenantAccess,
+  canAccessStore,
+  assertInternalAdminAccess,
+  assertManagerAccess,
+} = require('../utils/tenantAccess');
 
 /** 附加 req.tenantAccess（須在 auth 之後） */
 async function attachTenantAccess(req, res, next) {
@@ -24,9 +29,18 @@ function platformAdminAuth(req, res, next) {
   next();
 }
 
-/** 店員不可存取會計／Tier 等；經理與平台 admin 可 */
-function requireManagerOrPlatformAdmin(req, res, next) {
+/** 會計／分析／報告：店長、股東與平台 admin 可讀；店員不可 */
+function requireInternalAdminAccess(req, res, next) {
   const check = assertInternalAdminAccess(req.tenantAccess);
+  if (!check.ok) {
+    return res.status(check.status).json({ message: check.message });
+  }
+  next();
+}
+
+/** Tier 等：僅店長與平台 admin（股東／店員不可） */
+function requireManagerOrPlatformAdmin(req, res, next) {
+  const check = assertManagerAccess(req.tenantAccess);
   if (!check.ok) {
     return res.status(check.status).json({ message: check.message });
   }
@@ -63,6 +77,7 @@ function requireStoreAccessFromRequest(getStoreId) {
 module.exports = {
   attachTenantAccess,
   platformAdminAuth,
+  requireInternalAdminAccess,
   requireManagerOrPlatformAdmin,
   requireStoreAccess,
   requireStoreAccessFromRequest,

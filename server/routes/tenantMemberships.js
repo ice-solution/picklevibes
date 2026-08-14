@@ -10,17 +10,43 @@ const router = express.Router();
 
 const ALL_STORES = '__all__';
 
-async function resolveStoreIds(storeId) {
-  const raw = String(storeId || '').trim();
-  if (raw === ALL_STORES || raw.toLowerCase() === 'all') {
+function collectStoreTokens(storeId, storeIds) {
+  const tokens = [];
+  const push = (value) => {
+    if (value == null || value === '') return;
+    if (Array.isArray(value)) {
+      value.forEach(push);
+      return;
+    }
+    tokens.push(String(value).trim());
+  };
+  push(storeId);
+  push(storeIds);
+  return [...new Set(tokens.filter(Boolean))];
+}
+
+async function resolveStoreIds(storeId, storeIds) {
+  const tokens = collectStoreTokens(storeId, storeIds);
+  if (!tokens.length) {
+    const err = new Error('請選擇至少一間店鋪');
+    err.status = 400;
+    throw err;
+  }
+  if (tokens.some((t) => t === ALL_STORES || t.toLowerCase() === 'all')) {
     const stores = await Store.find({}).select('_id');
     return stores.map((s) => s._id);
   }
-  return [raw];
+  return tokens;
 }
 
-async function assignUserToStores(user, storeId, role = 'staff') {
-  const ids = await resolveStoreIds(storeId);
+function assignedAllStores(storeId, storeIds) {
+  return collectStoreTokens(storeId, storeIds).some(
+    (t) => t === ALL_STORES || t.toLowerCase() === 'all'
+  );
+}
+
+async function assignUserToStores(user, storeId, role = 'staff', storeIds) {
+  const ids = await resolveStoreIds(storeId, storeIds);
   if (!ids.length) {
     const err = new Error('沒有可指派的店鋪');
     err.status = 400;
@@ -125,7 +151,8 @@ router.post('/create-account', [
     .isLength({ min: 8 }).withMessage('密碼至少 8 字')
     .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼須包含字母與數字'),
   body('phone').matches(/^[0-9]+$/).withMessage('電話只能包含數字'),
-  body('storeId').notEmpty().withMessage('storeId 為必填'),
+  body('storeId').optional(),
+  body('storeIds').optional(),
   body('role').optional().isIn(['manager', 'staff', 'shareholder']).withMessage('role 無效'),
 ], async (req, res) => {
   try {
@@ -134,7 +161,7 @@ router.post('/create-account', [
       return res.status(400).json({ message: errors.array()[0].msg });
     }
 
-    const { name, email, password, phone, storeId, role = 'staff' } = req.body;
+    const { name, email, password, phone, storeId, storeIds, role = 'staff' } = req.body;
     const normalizedEmail = String(email).trim().toLowerCase();
 
     const existing = await User.findOne({ email: normalizedEmail });
@@ -160,10 +187,10 @@ router.post('/create-account', [
       totalSpent: 0,
     });
 
-    const memberships = await assignUserToStores(user, storeId, role);
+    const memberships = await assignUserToStores(user, storeId, role, storeIds);
 
     res.status(201).json({
-      message: storeId === ALL_STORES || String(storeId).toLowerCase() === 'all'
+      message: assignedAllStores(storeId, storeIds) || memberships.length > 1
         ? `店鋪帳號已建立，並指派至 ${memberships.length} 間店鋪`
         : '店鋪帳號已建立並完成指派',
       membership: memberships[0],
@@ -203,7 +230,8 @@ router.post('/', [
   auth,
   platformAdminAuth,
   body('userId').notEmpty().withMessage('userId 為必填'),
-  body('storeId').notEmpty().withMessage('storeId 為必填'),
+  body('storeId').optional(),
+  body('storeIds').optional(),
   body('role').optional().isIn(['manager', 'staff', 'shareholder']).withMessage('role 無效'),
 ], async (req, res) => {
   try {
@@ -212,15 +240,15 @@ router.post('/', [
       return res.status(400).json({ message: errors.array()[0].msg });
     }
 
-    const { userId, storeId, role = 'staff' } = req.body;
+    const { userId, storeId, storeIds, role = 'staff' } = req.body;
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: '用戶不存在' });
 
-    const memberships = await assignUserToStores(user, storeId, role);
+    const memberships = await assignUserToStores(user, storeId, role, storeIds);
 
     res.status(201).json({
-      message: storeId === ALL_STORES || String(storeId).toLowerCase() === 'all'
+      message: assignedAllStores(storeId, storeIds) || memberships.length > 1
         ? `已指派至 ${memberships.length} 間店鋪`
         : '店鋪員工已指派',
       membership: memberships[0],

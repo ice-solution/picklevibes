@@ -239,8 +239,6 @@ const AdminV2: React.FC = () => {
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
-              className={readOnly ? 'pointer-events-none opacity-95 select-none' : undefined}
-              aria-disabled={readOnly || undefined}
             >
               {current.element}
             </motion.div>

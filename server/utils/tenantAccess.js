@@ -3,6 +3,14 @@ const TenantMembership = require('../models/TenantMembership');
 /** 店員可存取的店鋪後台功能（經理可存取全部本店功能） */
 const STAFF_STORE_FEATURES = new Set(['bookings', 'calendar', 'courts']);
 
+/** 股東可唯讀的內部功能 */
+const SHAREHOLDER_STORE_FEATURES = new Set(['analytics', 'reports', 'accounting', 'calendar']);
+
+function hasAnyMembershipRole(tenantAccess, roles) {
+  const wanted = new Set(roles);
+  return (tenantAccess?.managedStores || []).some((s) => wanted.has(s.membershipRole));
+}
+
 /**
  * 載入用戶的店鋪權限上下文
  * @param {import('../models/User')} user
@@ -103,23 +111,31 @@ function assertStoreFeatureAccess(tenantAccess, storeId, feature) {
   const role = getMembershipRoleForStore(tenantAccess, storeId);
   if (role === 'manager') return { ok: true };
   if (role === 'staff' && STAFF_STORE_FEATURES.has(feature)) return { ok: true };
+  if (role === 'shareholder' && SHAREHOLDER_STORE_FEATURES.has(feature)) return { ok: true };
 
   return { ok: false, status: 403, message: '店員無權限存取此功能' };
 }
 
-/** 店員不可存取會計／Tier 等內部 API */
+/** 會計／分析／報告：店長與股東可讀；店員不可 */
 function assertInternalAdminAccess(tenantAccess) {
   if (!tenantAccess) {
     return { ok: false, status: 500, message: '權限上下文未載入' };
   }
   if (tenantAccess.isPlatformAdmin) return { ok: true };
-
-  const hasManager = (tenantAccess.managedStores || []).some(
-    (s) => s.membershipRole === 'manager'
-  );
-  if (hasManager) return { ok: true };
+  if (hasAnyMembershipRole(tenantAccess, ['manager', 'shareholder'])) return { ok: true };
 
   return { ok: false, status: 403, message: '店員無權限存取內部管理功能' };
+}
+
+/** Tier 等僅店長／平台 admin（股東不可） */
+function assertManagerAccess(tenantAccess) {
+  if (!tenantAccess) {
+    return { ok: false, status: 500, message: '權限上下文未載入' };
+  }
+  if (tenantAccess.isPlatformAdmin) return { ok: true };
+  if (hasAnyMembershipRole(tenantAccess, ['manager'])) return { ok: true };
+
+  return { ok: false, status: 403, message: '需要店長或平台管理員權限' };
 }
 
 /**
@@ -198,6 +214,7 @@ function resolveStoreForCreate(tenantAccess, requestedStoreId) {
 
 module.exports = {
   STAFF_STORE_FEATURES,
+  SHAREHOLDER_STORE_FEATURES,
   loadTenantAccess,
   canAccessStore,
   getMembershipRoleForStore,
@@ -205,6 +222,7 @@ module.exports = {
   isStoreStaffOnly,
   assertStoreFeatureAccess,
   assertInternalAdminAccess,
+  assertManagerAccess,
   applyStoreScope,
   formatTenantAccessForClient,
   checkDocumentStoreAccess,

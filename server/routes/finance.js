@@ -2,7 +2,7 @@ const express = require('express');
 const XLSX = require('xlsx');
 const { auth, adminAuth } = require('../middleware/auth');
 const { applyStoreScope } = require('../utils/tenantAccess');
-const { requireManagerOrPlatformAdmin } = require('../middleware/tenantAccess');
+const { requireInternalAdminAccess } = require('../middleware/tenantAccess');
 const {
   computeFinanceSummary,
   getIncomeLines,
@@ -36,7 +36,7 @@ function resolveScopedStoreId(req) {
 // @route   GET /api/finance/summary
 // @desc    簡化損益：場地（出租日）+ 網店收入，積分派送折算
 // @access  Private (Admin / 經理)
-router.get('/summary', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
+router.get('/summary', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
   try {
     const today = formatHkYmd();
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
@@ -58,7 +58,7 @@ router.get('/summary', [auth, adminAuth, requireManagerOrPlatformAdmin], async (
 // @route   GET /api/finance/income-lines
 // @desc    收入明細列表（場地出租日 + 網店扣款日）
 // @access  Private (Admin)
-router.get('/income-lines', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
+router.get('/income-lines', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
   try {
     const today = formatHkYmd();
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));
@@ -142,7 +142,7 @@ router.get('/income-lines', [auth, adminAuth, requireManagerOrPlatformAdmin], as
 // @route   GET /api/finance/summary-xlsx
 // @desc    匯出簡化損益 XLSX
 // @access  Private (Admin)
-router.get('/summary-xlsx', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
+router.get('/summary-xlsx', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
   try {
     const today = formatHkYmd();
     const fromYmd = parseYmd(req.query.from, defaultFinanceFromYmd(today));

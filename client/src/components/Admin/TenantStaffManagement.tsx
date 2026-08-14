@@ -36,15 +36,71 @@ const emptyCreateForm = {
   email: '',
   password: '',
   phone: '',
-  storeId: '',
+  storeIds: [] as string[],
   role: 'staff' as StaffRole,
 };
 
 const emptyExistingForm = {
   email: '',
-  storeId: '',
+  storeIds: [] as string[],
   role: 'staff' as StaffRole,
 };
+
+function StoreMultiSelect({
+  stores,
+  selectedIds,
+  onChange,
+}: {
+  stores: StoreOption[];
+  selectedIds: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const allSelected = stores.length > 0 && selectedIds.length === stores.length;
+  const toggleAll = () => {
+    onChange(allSelected ? [] : stores.map((s) => s._id));
+  };
+  const toggle = (id: string) => {
+    onChange(
+      selectedIds.includes(id)
+        ? selectedIds.filter((x) => x !== id)
+        : [...selectedIds, id]
+    );
+  };
+
+  return (
+    <div className="border rounded-md p-3 space-y-2 bg-gray-50">
+      <div className="text-sm font-medium text-gray-800">指派店鋪 *</div>
+      <p className="text-xs text-gray-500">可同時勾選多間店鋪，或一次選全部。</p>
+      {stores.length === 0 ? (
+        <p className="text-sm text-red-600">沒有可指派的店鋪</p>
+      ) : (
+        <>
+          <label className="flex items-center gap-2 text-sm font-medium text-gray-900">
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} />
+            全部店鋪（{stores.length} 間）
+          </label>
+          <div className="border-t border-gray-200 pt-2 space-y-1 max-h-48 overflow-y-auto">
+            {stores.map((s) => (
+              <label key={s._id} className="flex items-center gap-2 text-sm text-gray-800">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.includes(s._id)}
+                  onChange={() => toggle(s._id)}
+                />
+                {s.name}
+              </label>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function storeAssignPayload(selectedIds: string[], storeCount: number) {
+  const all = storeCount > 0 && selectedIds.length === storeCount;
+  return all ? { storeId: '__all__' } : { storeIds: selectedIds };
+}
 
 const TenantStaffManagement: React.FC = () => {
   const [memberships, setMemberships] = useState<Membership[]>([]);
@@ -78,16 +134,28 @@ const TenantStaffManagement: React.FC = () => {
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.name.trim() || !createForm.email.trim() || !createForm.password || !createForm.phone || !createForm.storeId) {
+    if (!createForm.name.trim() || !createForm.email.trim() || !createForm.password || !createForm.phone) {
       alert('請填寫所有必填欄位');
       return;
     }
-    if (createForm.storeId === '__all__' && !window.confirm(`將指派至全部 ${stores.length} 間店鋪，確定？`)) {
+    if (createForm.storeIds.length === 0) {
+      alert('請選擇至少一間店鋪');
+      return;
+    }
+    const assigningAll = createForm.storeIds.length === stores.length;
+    if (assigningAll && !window.confirm(`將指派至全部 ${stores.length} 間店鋪，確定？`)) {
       return;
     }
     try {
       setSaving(true);
-      const res = await axios.post('/tenant-memberships/create-account', createForm);
+      const res = await axios.post('/tenant-memberships/create-account', {
+        name: createForm.name,
+        email: createForm.email,
+        password: createForm.password,
+        phone: createForm.phone,
+        role: createForm.role,
+        ...storeAssignPayload(createForm.storeIds, stores.length),
+      });
       setCreateForm(emptyCreateForm);
       fetchData();
       alert(res.data?.message || '店鋪帳號已建立');
@@ -101,11 +169,16 @@ const TenantStaffManagement: React.FC = () => {
 
   const handleAssignExisting = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!existingForm.email.trim() || !existingForm.storeId) {
-      alert('請填寫 email 並選擇店鋪');
+    if (!existingForm.email.trim()) {
+      alert('請填寫 email');
       return;
     }
-    if (existingForm.storeId === '__all__' && !window.confirm(`將指派至全部 ${stores.length} 間店鋪，確定？`)) {
+    if (existingForm.storeIds.length === 0) {
+      alert('請選擇至少一間店鋪');
+      return;
+    }
+    const assigningAll = existingForm.storeIds.length === stores.length;
+    if (assigningAll && !window.confirm(`將指派至全部 ${stores.length} 間店鋪，確定？`)) {
       return;
     }
     try {
@@ -119,8 +192,8 @@ const TenantStaffManagement: React.FC = () => {
       }
       const res = await axios.post('/tenant-memberships', {
         userId: lookup.data.user._id,
-        storeId: existingForm.storeId,
         role: existingForm.role,
+        ...storeAssignPayload(existingForm.storeIds, stores.length),
       });
       setExistingForm(emptyExistingForm);
       fetchData();
@@ -208,17 +281,11 @@ const TenantStaffManagement: React.FC = () => {
             value={createForm.phone}
             onChange={(e) => setCreateForm({ ...createForm, phone: e.target.value })}
           />
-          <select
-            className="w-full border rounded-md px-3 py-2 text-sm"
-            value={createForm.storeId}
-            onChange={(e) => setCreateForm({ ...createForm, storeId: e.target.value })}
-          >
-            <option value="">選擇店鋪 *</option>
-            <option value="__all__">全部店鋪</option>
-            {stores.map((s) => (
-              <option key={s._id} value={s._id}>{s.name}</option>
-            ))}
-          </select>
+          <StoreMultiSelect
+            stores={stores}
+            selectedIds={createForm.storeIds}
+            onChange={(storeIds) => setCreateForm({ ...createForm, storeIds })}
+          />
           <select
             className="w-full border rounded-md px-3 py-2 text-sm"
             value={createForm.role}
@@ -252,17 +319,11 @@ const TenantStaffManagement: React.FC = () => {
             value={existingForm.email}
             onChange={(e) => setExistingForm({ ...existingForm, email: e.target.value })}
           />
-          <select
-            className="w-full border rounded-md px-3 py-2 text-sm"
-            value={existingForm.storeId}
-            onChange={(e) => setExistingForm({ ...existingForm, storeId: e.target.value })}
-          >
-            <option value="">選擇店鋪 *</option>
-            <option value="__all__">全部店鋪</option>
-            {stores.map((s) => (
-              <option key={s._id} value={s._id}>{s.name}</option>
-            ))}
-          </select>
+          <StoreMultiSelect
+            stores={stores}
+            selectedIds={existingForm.storeIds}
+            onChange={(storeIds) => setExistingForm({ ...existingForm, storeIds })}
+          />
           <select
             className="w-full border rounded-md px-3 py-2 text-sm"
             value={existingForm.role}

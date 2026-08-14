@@ -6,7 +6,7 @@ const AccountingTransaction = require('../models/AccountingTransaction');
 const Store = require('../models/Store');
 const { auth, adminAuth } = require('../middleware/auth');
 const { applyStoreScope } = require('../utils/tenantAccess');
-const { requireManagerOrPlatformAdmin } = require('../middleware/tenantAccess');
+const { requireInternalAdminAccess } = require('../middleware/tenantAccess');
 const { receiptUpload, deleteFile } = require('../middleware/upload');
 const {
   ACCOUNTING_CATEGORIES,
@@ -77,12 +77,12 @@ async function aggregateTotals(match) {
 }
 
 // @route   GET /api/accounting/ledger/categories
-router.get('/categories', [auth, adminAuth, requireManagerOrPlatformAdmin], (_req, res) => {
+router.get('/categories', [auth, adminAuth, requireInternalAdminAccess], (_req, res) => {
   res.json({ categories: ACCOUNTING_CATEGORIES });
 });
 
 // @route   GET /api/accounting/ledger/summary
-router.get('/summary', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
+router.get('/summary', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
   try {
     const { from, to, store } = req.query;
     const match = {};
@@ -104,7 +104,7 @@ router.get('/summary', [auth, adminAuth, requireManagerOrPlatformAdmin], async (
 });
 
 // @route   GET /api/accounting/ledger
-router.get('/', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
+router.get('/', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
   try {
     const {
       page = 1,
@@ -299,7 +299,7 @@ router.put('/:id', [
 });
 
 // @route   DELETE /api/accounting/ledger/:id
-router.delete('/:id', [auth, adminAuth, requireManagerOrPlatformAdmin], async (req, res) => {
+router.delete('/:id', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
   try {
     const tx = await AccountingTransaction.findById(req.params.id);
     if (!tx) return res.status(404).json({ message: '紀錄不存在' });
