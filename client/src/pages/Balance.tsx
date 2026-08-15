@@ -10,6 +10,8 @@ import {
   ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { ArrowDownTrayIcon } from '@heroicons/react/24/outline';
+import { downloadRechargeInvoicePdf } from '../utils/downloadRechargeInvoice';
 
 interface UserBalance {
   balance: number;
@@ -63,6 +65,7 @@ const Balance: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'balance' | 'recharge'>('balance');
   const [currentPage, setCurrentPage] = useState(1);
   const [loadingTransactions, setLoadingTransactions] = useState(false);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -119,6 +122,18 @@ const Balance: React.FC = () => {
         return <span className="px-2 py-1 bg-red-100 text-red-600 rounded-full text-xs">失敗</span>;
       default:
         return <span className="px-2 py-1 bg-gray-100 text-gray-600 rounded-full text-xs">未知</span>;
+    }
+  };
+
+  const handleDownloadInvoice = async (rechargeId: string) => {
+    try {
+      setDownloadingInvoiceId(rechargeId);
+      await downloadRechargeInvoicePdf(rechargeId);
+    } catch (error: any) {
+      console.error('下載發票失敗:', error);
+      alert(error?.message || error?.response?.data?.message || '下載發票失敗，請稍後再試');
+    } finally {
+      setDownloadingInvoiceId(null);
     }
   };
 
@@ -379,6 +394,9 @@ const Balance: React.FC = () => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         時間
                       </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        發票
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
@@ -410,6 +428,21 @@ const Balance: React.FC = () => {
                           <div className="text-sm text-gray-500">
                             {new Date(record.createdAt).toLocaleTimeString()}
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {record.status === 'completed' ? (
+                            <button
+                              type="button"
+                              onClick={() => handleDownloadInvoice(record._id)}
+                              disabled={downloadingInvoiceId === record._id}
+                              className="inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-800 disabled:opacity-50"
+                            >
+                              <ArrowDownTrayIcon className="w-4 h-4" />
+                              {downloadingInvoiceId === record._id ? '產生中…' : '下載發票'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}

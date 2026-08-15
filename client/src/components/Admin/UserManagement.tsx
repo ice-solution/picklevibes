@@ -15,9 +15,11 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MagnifyingGlassIcon,
-  UserCircleIcon
+  UserCircleIcon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
+import { downloadRechargeInvoicePdf } from '../../utils/downloadRechargeInvoice';
 
 interface User {
   _id: string;
@@ -116,6 +118,7 @@ const UserManagement: React.FC = () => {
   const [balanceHistoryPage, setBalanceHistoryPage] = useState(1);
   const [showRechargeRecords, setShowRechargeRecords] = useState(false);
   const [rechargeRecords, setRechargeRecords] = useState<any[]>([]);
+  const [downloadingInvoiceId, setDownloadingInvoiceId] = useState<string | null>(null);
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [selectedRecharge, setSelectedRecharge] = useState<any>(null);
   const [newStatus, setNewStatus] = useState('');
@@ -495,6 +498,22 @@ const UserManagement: React.FC = () => {
     setNewStatus(recharge.status);
     setStatusReason('');
     setShowStatusModal(true);
+  };
+
+  const handleDownloadRechargeInvoice = async (recharge: any) => {
+    if (!recharge?._id || recharge.status !== 'completed') {
+      alert('僅已完成的充值可下載發票');
+      return;
+    }
+    try {
+      setDownloadingInvoiceId(recharge._id);
+      await downloadRechargeInvoicePdf(recharge._id);
+    } catch (error: any) {
+      console.error('下載發票失敗:', error);
+      alert(error?.message || error?.response?.data?.message || '下載發票失敗，請稍後再試');
+    } finally {
+      setDownloadingInvoiceId(null);
+    }
   };
 
   const handleSubmitStatusChange = async () => {
@@ -1665,13 +1684,25 @@ const UserManagement: React.FC = () => {
                         {new Date(record.createdAt).toLocaleString('zh-TW')}
                       </td>
                       <td className="px-4 py-2">
-                        <button
-                          onClick={() => handleChangeRechargeStatus(record)}
-                          className="text-blue-600 hover:text-blue-900 text-sm"
-                          title="修改狀態"
-                        >
-                          <PencilIcon className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {record.status === 'completed' && !record.pointsDeducted && (
+                            <button
+                              onClick={() => handleDownloadRechargeInvoice(record)}
+                              disabled={downloadingInvoiceId === record._id}
+                              className="text-teal-600 hover:text-teal-900 text-sm disabled:opacity-50"
+                              title="下載發票 PDF"
+                            >
+                              <ArrowDownTrayIcon className="w-4 h-4" />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleChangeRechargeStatus(record)}
+                            className="text-blue-600 hover:text-blue-900 text-sm"
+                            title="修改狀態"
+                          >
+                            <PencilIcon className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

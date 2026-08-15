@@ -4,6 +4,10 @@ const fs = require('fs').promises;
 const path = require('path');
 const pdfService = require('./pdfService');
 const {
+  buildRechargeInvoiceUrl,
+  buildBookingInvoiceUrl,
+} = require('../utils/invoiceLink');
+const {
   BOOKING_CANCELLATION_POLICY_HTML,
   BOOKING_CANCELLATION_POLICY_TEXT,
   BOOKING_SHOE_REMINDER_LINE,
@@ -1252,6 +1256,7 @@ PickleVibes - 讓匹克球24小時隨時預約！
    */
   async generateRechargeInvoiceTemplate(userData, rechargeData) {
     const invoiceNumber = `INV-${rechargeData._id.toString().slice(-8).toUpperCase()}`;
+    const invoiceUrl = buildRechargeInvoiceUrl(rechargeData._id);
     const transactionDate = new Date(rechargeData.payment.paidAt).toLocaleDateString('zh-TW', {
       year: 'numeric',
       month: '2-digit',
@@ -1375,6 +1380,25 @@ PickleVibes - 讓匹克球24小時隨時預約！
                 margin: 20px 0;
                 text-align: center;
             }
+            .invoice-cta {
+                text-align: center;
+                margin: 24px 0;
+            }
+            .invoice-cta a {
+                display: inline-block;
+                background: #0d9488;
+                color: #fff !important;
+                text-decoration: none;
+                padding: 12px 22px;
+                border-radius: 8px;
+                font-weight: 600;
+            }
+            .invoice-url {
+                word-break: break-all;
+                font-size: 12px;
+                color: #6c757d;
+                margin-top: 10px;
+            }
         </style>
     </head>
     <body>
@@ -1414,9 +1438,14 @@ PickleVibes - 讓匹克球24小時隨時預約！
                 <div class="points-value">${rechargeData.points} 分</div>
             </div>
 
+            <div class="invoice-cta">
+                <a href="${invoiceUrl}" target="_blank" rel="noopener noreferrer">查看／下載發票 PDF</a>
+                <p class="invoice-url">${invoiceUrl}</p>
+            </div>
+
             <div class="thank-you">
                 <h3 style="color: #0c5460; margin: 0 0 10px 0;">🎉 充值成功！</h3>
-                <p style="margin: 0; color: #0c5460;">感謝您的充值，積分已成功添加到您的帳戶中。</p>
+                <p style="margin: 0; color: #0c5460;">感謝您的充值，積分已成功添加到您的帳戶中。發票 PDF 亦已作為附件寄出。</p>
             </div>
 
             <div class="footer">
@@ -1444,7 +1473,9 @@ PickleVibes 充值發票
 - 充值金額: HK$${rechargeData.amount}
 - 獲得積分: ${rechargeData.points} 分
 
-感謝您的充值，積分已成功添加到您的帳戶中。
+查看／下載發票: ${invoiceUrl}
+
+感謝您的充值，積分已成功添加到您的帳戶中。發票 PDF 亦已作為附件寄出。
 
 此發票由 PickleVibes 系統自動生成
 如有疑問，請聯繫客服
@@ -1783,13 +1814,24 @@ PickleVibes 團隊
   /**
    * 發送發票電郵 (PDF 附件版本)
    */
-  async sendInvoiceEmail(userData, invoiceData, paymentData) {
+  async sendInvoiceEmail(userData, invoiceData, paymentData, options = {}) {
     try {
       if (!this.transporter) {
         throw new Error('郵件服務未初始化');
       }
 
       const invoiceNumber = invoiceData.invoiceNumber || `INV-${Date.now()}`;
+      const invoiceUrl =
+        options.invoiceUrl ||
+        (options.bookingId
+          ? buildBookingInvoiceUrl(options.bookingId)
+          : options.rechargeId
+            ? buildRechargeInvoiceUrl(options.rechargeId)
+            : invoiceData?.reference && String(invoiceData.reference).match(/^[a-f0-9]{24}$/i)
+              ? (String(invoiceNumber).includes('BK') || String(invoiceNumber).startsWith('BKG-')
+                  ? buildBookingInvoiceUrl(invoiceData.reference)
+                  : buildRechargeInvoiceUrl(invoiceData.reference))
+              : null);
       
       // 生成 PDF 發票
       console.log('📄 正在生成 PDF 發票...');
@@ -1836,7 +1878,7 @@ PickleVibes 團隊
 - 發票日期：${currentDate}
 - 總金額：${this.formatCurrency(invoiceData.total)}
 - 付款狀態：已付款
-
+${invoiceUrl ? `\n查看／下載發票：${invoiceUrl}\n` : ''}
 發票 PDF 已作為附件發送給您，請查收。
 
 如有任何疑問，請隨時聯繫我們。
@@ -1845,6 +1887,17 @@ PickleVibes 團隊
 PickleVibes 團隊
       `;
       
+      const invoiceCtaHtml = invoiceUrl
+        ? `
+          <div style="text-align: center; margin: 24px 0;">
+            <a href="${invoiceUrl}" target="_blank" rel="noopener noreferrer"
+               style="display:inline-block;background:#0d9488;color:#fff;text-decoration:none;padding:12px 22px;border-radius:8px;font-weight:600;">
+              查看／下載發票 PDF
+            </a>
+            <p style="word-break:break-all;font-size:12px;color:#6c757d;margin-top:10px;">${invoiceUrl}</p>
+          </div>`
+        : '';
+
       const emailHtml = `
         <div style="font-family: 'Microsoft JhengHei', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
           <div style="text-align: center; margin-bottom: 30px;">
@@ -1859,6 +1912,8 @@ PickleVibes 團隊
             <p><strong>總金額：</strong>${this.formatCurrency(invoiceData.total)}</p>
             <p><strong>付款狀態：</strong><span style="color: #28a745; font-weight: bold;">已付款</span></p>
           </div>
+
+          ${invoiceCtaHtml}
           
           <div style="background: #e8f5e8; padding: 20px; border-radius: 10px; border-left: 4px solid #28a745; margin-bottom: 20px;">
             <p style="margin: 0; color: #333;">
@@ -1890,7 +1945,7 @@ PickleVibes 團隊
 
       const result = await this.transporter.sendMail(mailOptions);
       console.log(`✅ PDF 發票電郵已發送給 ${userData.email}: ${result.messageId}`);
-      return { success: true, messageId: result.messageId };
+      return { success: true, messageId: result.messageId, invoiceUrl };
     } catch (error) {
       console.error('❌ 發送 PDF 發票電郵失敗:', error.message);
       return { success: false, error: error.message };

@@ -6,6 +6,7 @@ const { auth } = require('../middleware/auth');
 const { getPaymentProvider } = require('../config/paymentProvider');
 const wonderPaymentService = require('../services/wonderPaymentService');
 const { completeRechargePayment } = require('../services/rechargePaymentService');
+const { generateRechargeInvoicePdf } = require('../services/rechargeInvoiceService');
 
 const router = express.Router();
 
@@ -300,6 +301,38 @@ router.get('/balance', auth, async (req, res) => {
   } catch (error) {
     console.error('獲取用戶餘額錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+/**
+ * GET /api/recharge/:id/invoice.pdf
+ * 登入用戶（本人）或管理員：依充值資料即時 generate PDF 並下載（不存實體檔）
+ */
+router.get('/:id/invoice.pdf', auth, async (req, res) => {
+  try {
+    const id = String(req.params.id || '').replace(/\.pdf$/i, '');
+    const recharge = await Recharge.findById(id).select('user status');
+    if (!recharge) {
+      return res.status(404).json({ message: '找不到充值記錄' });
+    }
+
+    const uid = String(req.user._id || req.user.id);
+    const isOwner = String(recharge.user) === uid;
+    const isAdmin = req.user.role === 'admin';
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: '無權下載此發票' });
+    }
+
+    const { buffer, filename } = await generateRechargeInvoicePdf(id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    return res.send(buffer);
+  } catch (error) {
+    console.error('下載充值發票錯誤:', error);
+    return res.status(error.status || 500).json({
+      message: error.message || '無法產生發票',
+    });
   }
 });
 

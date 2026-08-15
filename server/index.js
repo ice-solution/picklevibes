@@ -169,6 +169,7 @@ app.use('/api/content', require('./routes/content'));
 app.use('/api/payments', require('./routes/payments'));
 app.use('/api/users', require('./routes/users'));
 app.use('/api/recharge', require('./routes/recharge')); // Added recharge routes
+app.use('/api/invoices', require('./routes/invoices')); // Signed invoice PDF links for emails
 app.use('/api/redeem', require('./routes/redeem')); // Added redeem routes
 app.use('/api/stores', require('./routes/stores'));
 app.use('/api/tenant-memberships', require('./routes/tenantMemberships'));
