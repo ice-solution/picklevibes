@@ -20,6 +20,7 @@ class PDFService {
     this.invoiceTemplatePath = path.join(__dirname, '..', 'templates', 'invoice.pug');
     this.bookingTemplatePath = path.join(__dirname, '..', 'templates', 'booking-confirmation.pug');
     this.logoSrc = null;
+    this.cjkFontCss = null;
   }
 
   async ensureLogoSrc() {
@@ -32,6 +33,57 @@ class PDFService {
       this.logoSrc = '';
     }
     return this.logoSrc;
+  }
+
+  /**
+   * 嵌入 Noto Sans TC，避免 Linux headless Chrome 缺中文字型（變方框／空白）
+   */
+  async ensureCjkFontCss() {
+    if (this.cjkFontCss !== null) return this.cjkFontCss;
+    const fontPath = path.join(__dirname, '..', 'assets', 'fonts', 'NotoSansTC-Variable.ttf');
+    try {
+      const buf = await fs.readFile(fontPath);
+      const b64 = buf.toString('base64');
+      this.cjkFontCss = `
+@font-face {
+  font-family: 'PickleVibes CJK';
+  src: url(data:font/ttf;base64,${b64}) format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+:root {
+  --display: 'PickleVibes CJK', 'Noto Sans TC', 'Noto Sans CJK TC', sans-serif !important;
+  --body: 'PickleVibes CJK', 'Noto Sans TC', 'Noto Sans CJK TC', sans-serif !important;
+  --mono: 'PickleVibes CJK', 'Noto Sans TC', ui-monospace, monospace !important;
+}
+html, body, .sheet, button, input, textarea, select {
+  font-family: 'PickleVibes CJK', 'Noto Sans TC', 'Noto Sans CJK TC', sans-serif !important;
+}
+`;
+      console.log(`✅ PDF 中文字型已載入 (${Math.round(buf.length / 1024)} KB)`);
+    } catch (err) {
+      console.warn('⚠️ 找不到 PDF 中文字型 server/assets/fonts/NotoSansTC-Variable.ttf:', err.message);
+      this.cjkFontCss = `
+:root {
+  --display: 'Noto Sans TC', 'Noto Sans CJK TC', 'WenQuanYi Zen Hei', 'PingFang TC', sans-serif !important;
+  --body: 'Noto Sans TC', 'Noto Sans CJK TC', 'WenQuanYi Zen Hei', 'PingFang TC', sans-serif !important;
+  --mono: 'Noto Sans TC', 'Noto Sans CJK TC', ui-monospace, monospace !important;
+}
+html, body, .sheet {
+  font-family: 'Noto Sans TC', 'Noto Sans CJK TC', 'WenQuanYi Zen Hei', 'PingFang TC', sans-serif !important;
+}
+`;
+    }
+    return this.cjkFontCss;
+  }
+
+  injectCjkFont(html, fontCss) {
+    const tag = `<style data-pdf-cjk="1">${fontCss}</style>`;
+    if (/<\/head>/i.test(html)) {
+      return html.replace(/<\/head>/i, `${tag}</head>`);
+    }
+    return `${tag}${html}`;
   }
 
   formatCurrency(amount) {
@@ -73,13 +125,20 @@ class PDFService {
   }
 
   async renderPdfFromHtml(html) {
+    const fontCss = await this.ensureCjkFontCss();
+    const htmlWithFont = this.injectCjkFont(html, fontCss);
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'],
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
     });
     try {
       const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: 'networkidle0' });
+      await page.setContent(htmlWithFont, { waitUntil: 'networkidle0' });
+      await page.evaluate(async () => {
+        if (document.fonts?.ready) {
+          await document.fonts.ready;
+        }
+      });
       const pdf = await page.pdf({
         format: 'A4',
         printBackground: true,
