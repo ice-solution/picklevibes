@@ -6,11 +6,13 @@ const { generateRechargeInvoicePdf } = require('../services/rechargeInvoiceServi
 
 const router = express.Router();
 
-function sendPdf(res, buffer, filename) {
+function sendPdf(res, buffer, filename, disposition = 'inline') {
+  const body = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
   res.setHeader('Content-Type', 'application/pdf');
-  res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(filename)}"`);
+  res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(filename)}"`);
   res.setHeader('Cache-Control', 'private, max-age=60');
-  return res.send(buffer);
+  res.setHeader('Content-Length', String(body.length));
+  return res.end(body);
 }
 
 /**

@@ -80,11 +80,13 @@ class PDFService {
     try {
       const page = await browser.newPage();
       await page.setContent(html, { waitUntil: 'networkidle0' });
-      return await page.pdf({
+      const pdf = await page.pdf({
         format: 'A4',
         printBackground: true,
         margin: { top: '16px', right: '16px', bottom: '16px', left: '16px' },
       });
+      // Puppeteer 回傳 Uint8Array；Express res.send(物件) 會 JSON 序列化，必須轉 Buffer
+      return Buffer.from(pdf);
     } finally {
       await browser.close();
     }

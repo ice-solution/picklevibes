@@ -324,10 +324,12 @@ router.get('/:id/invoice.pdf', auth, async (req, res) => {
     }
 
     const { buffer, filename } = await generateRechargeInvoicePdf(id);
+    const body = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
     res.setHeader('Cache-Control', 'private, no-store');
-    return res.send(buffer);
+    res.setHeader('Content-Length', String(body.length));
+    return res.end(body);
   } catch (error) {
     console.error('下載充值發票錯誤:', error);
     return res.status(error.status || 500).json({
