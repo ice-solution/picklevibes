@@ -1,7 +1,9 @@
 const pug = require('pug');
 const puppeteer = require('puppeteer');
 const path = require('path');
+const os = require('os');
 const fs = require('fs').promises;
+const { pathToFileURL } = require('url');
 
 const PAYMENT_METHOD_LABELS = {
   stripe: '信用卡 / Stripe',
@@ -15,12 +17,14 @@ const PAYMENT_METHOD_LABELS = {
   manual: '手動',
 };
 
+const CJK_FONT_FILE = path.join(__dirname, '..', 'assets', 'fonts', 'NotoSansTC-Variable.ttf');
+
 class PDFService {
   constructor() {
     this.invoiceTemplatePath = path.join(__dirname, '..', 'templates', 'invoice.pug');
     this.bookingTemplatePath = path.join(__dirname, '..', 'templates', 'booking-confirmation.pug');
     this.logoSrc = null;
-    this.cjkFontCss = null;
+    this.cjkFontReady = null; // Promise<boolean>
   }
 
   async ensureLogoSrc() {
@@ -35,19 +39,25 @@ class PDFService {
     return this.logoSrc;
   }
 
+  async hasCjkFontFile() {
+    if (this.cjkFontReady !== null) return this.cjkFontReady;
+    this.cjkFontReady = fs
+      .access(CJK_FONT_FILE)
+      .then(() => true)
+      .catch(() => false);
+    return this.cjkFontReady;
+  }
+
   /**
-   * 嵌入 Noto Sans TC，避免 Linux headless Chrome 缺中文字型（變方框／空白）
+   * 用相對路徑引用字型（寫入 tmp 目錄後 page.goto file://），
+   * 避免把 11MB font base64 塞進 HTML 導致 navigation timeout。
    */
-  async ensureCjkFontCss() {
-    if (this.cjkFontCss !== null) return this.cjkFontCss;
-    const fontPath = path.join(__dirname, '..', 'assets', 'fonts', 'NotoSansTC-Variable.ttf');
-    try {
-      const buf = await fs.readFile(fontPath);
-      const b64 = buf.toString('base64');
-      this.cjkFontCss = `
+  buildCjkFontCss(fontUrl) {
+    if (fontUrl) {
+      return `
 @font-face {
   font-family: 'PickleVibes CJK';
-  src: url(data:font/ttf;base64,${b64}) format('truetype');
+  src: url('${fontUrl}') format('truetype');
   font-weight: 100 900;
   font-style: normal;
   font-display: swap;
@@ -61,10 +71,8 @@ html, body, .sheet, button, input, textarea, select {
   font-family: 'PickleVibes CJK', 'Noto Sans TC', 'Noto Sans CJK TC', sans-serif !important;
 }
 `;
-      console.log(`✅ PDF 中文字型已載入 (${Math.round(buf.length / 1024)} KB)`);
-    } catch (err) {
-      console.warn('⚠️ 找不到 PDF 中文字型 server/assets/fonts/NotoSansTC-Variable.ttf:', err.message);
-      this.cjkFontCss = `
+    }
+    return `
 :root {
   --display: 'Noto Sans TC', 'Noto Sans CJK TC', 'WenQuanYi Zen Hei', 'PingFang TC', sans-serif !important;
   --body: 'Noto Sans TC', 'Noto Sans CJK TC', 'WenQuanYi Zen Hei', 'PingFang TC', sans-serif !important;
@@ -74,8 +82,6 @@ html, body, .sheet {
   font-family: 'Noto Sans TC', 'Noto Sans CJK TC', 'WenQuanYi Zen Hei', 'PingFang TC', sans-serif !important;
 }
 `;
-    }
-    return this.cjkFontCss;
   }
 
   injectCjkFont(html, fontCss) {
@@ -125,29 +131,54 @@ html, body, .sheet {
   }
 
   async renderPdfFromHtml(html) {
-    const fontCss = await this.ensureCjkFontCss();
-    const htmlWithFont = this.injectCjkFont(html, fontCss);
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'pv-pdf-'));
     const browser = await puppeteer.launch({
       headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--font-render-hinting=none'],
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--font-render-hinting=none',
+        '--allow-file-access-from-files',
+      ],
     });
+
     try {
+      let fontUrl = '';
+      if (await this.hasCjkFontFile()) {
+        const tmpFont = path.join(tmpDir, 'NotoSansTC-Variable.ttf');
+        await fs.copyFile(CJK_FONT_FILE, tmpFont);
+        fontUrl = './NotoSansTC-Variable.ttf';
+      } else {
+        console.warn('⚠️ 找不到 PDF 中文字型:', CJK_FONT_FILE);
+      }
+
+      const htmlWithFont = this.injectCjkFont(html, this.buildCjkFontCss(fontUrl));
+      const htmlPath = path.join(tmpDir, 'doc.html');
+      await fs.writeFile(htmlPath, htmlWithFont, 'utf8');
+
       const page = await browser.newPage();
-      await page.setContent(htmlWithFont, { waitUntil: 'networkidle0' });
+      page.setDefaultNavigationTimeout(60000);
+      // file:// + load：比 setContent(networkidle0)+11MB base64 快很多，避免 UAT 30s timeout
+      await page.goto(pathToFileURL(htmlPath).href, {
+        waitUntil: 'load',
+        timeout: 60000,
+      });
       await page.evaluate(async () => {
         if (document.fonts?.ready) {
           await document.fonts.ready;
         }
       });
+
       const pdf = await page.pdf({
         format: 'A4',
         printBackground: true,
         margin: { top: '16px', right: '16px', bottom: '16px', left: '16px' },
       });
-      // Puppeteer 回傳 Uint8Array；Express res.send(物件) 會 JSON 序列化，必須轉 Buffer
       return Buffer.from(pdf);
     } finally {
-      await browser.close();
+      await browser.close().catch(() => {});
+      await fs.rm(tmpDir, { recursive: true, force: true }).catch(() => {});
     }
   }
 
