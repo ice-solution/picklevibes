@@ -686,6 +686,18 @@ class EmailService {
           cid: 'qrcode' // Content ID for referencing in HTML
         });
       }
+
+      try {
+        const bookingPdf = await pdfService.generateBookingConfirmationPDF(visitorData, bookingData);
+        const shortId = String(bookingData?.bookingId || '').slice(-8).toUpperCase() || 'BOOKING';
+        attachments.push({
+          filename: `預約確認_${shortId}.pdf`,
+          content: bookingPdf,
+          contentType: 'application/pdf',
+        });
+      } catch (pdfErr) {
+        console.error('⚠️ 預約確認 PDF 生成失敗（仍發送電郵）:', pdfErr.message);
+      }
       
       const mailOptions = {
         from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
@@ -788,6 +800,17 @@ class EmailService {
           encoding: 'base64',
           cid: 'logo',
         });
+      }
+      try {
+        const bookingPdf = await pdfService.generateBookingConfirmationPDF(visitorData, bookingData);
+        const shortId = String(bookingData?.bookingId || '').slice(-8).toUpperCase() || 'BOOKING';
+        attachments.push({
+          filename: `預約確認_${shortId}.pdf`,
+          content: bookingPdf,
+          contentType: 'application/pdf',
+        });
+      } catch (pdfErr) {
+        console.error('⚠️ 預約確認 PDF 生成失敗（仍發送電郵）:', pdfErr.message);
       }
       const mailOptions = {
         from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
@@ -1185,6 +1208,22 @@ PickleVibes - 讓匹克球24小時隨時預約！
           encoding: 'base64',
           cid: 'logo' // Content ID for referencing in HTML
         });
+      }
+
+      try {
+        const payload = pdfService.buildRechargeInvoicePayload(userData, rechargeData);
+        const pdfBuffer = await pdfService.generateInvoicePDF(
+          payload.userData,
+          payload.invoiceData,
+          payload.paymentData
+        );
+        attachments.push({
+          filename: `發票_${payload.invoiceData.invoiceNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf',
+        });
+      } catch (pdfErr) {
+        console.error('⚠️ 充值發票 PDF 生成失敗（仍發送電郵）:', pdfErr.message);
       }
       
       const mailOptions = {

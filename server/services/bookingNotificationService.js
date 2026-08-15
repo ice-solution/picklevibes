@@ -13,6 +13,11 @@ function buildVisitorData(booking, userFallback) {
 }
 
 function buildBookingEmailData(booking, court, store, overrides = {}) {
+  const totalPrice =
+    Number(booking.pricing?.totalPrice) ||
+    Number(booking.payment?.pointsDeducted) ||
+    Number(booking.payment?.originalPrice) ||
+    null;
   return {
     bookingId: booking._id.toString(),
     date: booking.date,
@@ -24,6 +29,8 @@ function buildBookingEmailData(booking, court, store, overrides = {}) {
     storeName: store?.name || '',
     storeAddress: store?.address || '',
     storePhone: store?.phone || '',
+    totalPrice,
+    paymentMethod: booking.payment?.method || null,
     ...overrides,
   };
 }

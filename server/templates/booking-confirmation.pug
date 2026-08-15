@@ -1,0 +1,148 @@
+doctype html
+html(lang="zh-HK")
+  head
+    meta(charset="utf-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1")
+    title 預約確認 · PickleVibes · #{bookingData.bookingId}
+    style.
+      :root {
+        --bg: #f3f7f6;
+        --paper: #ffffff;
+        --ink: #10211d;
+        --muted: #5c6f6a;
+        --line: #d5e2de;
+        --accent: #0d9488;
+        --accent-soft: #e6f5f3;
+        --display: 'Iowan Old Style', 'Charter', Georgia, 'Noto Serif TC', serif;
+        --body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang TC', 'Microsoft JhengHei', sans-serif;
+        --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px; line-height: 1.55; }
+      .sheet { max-width: 820px; margin: 0 auto; background: var(--paper); padding: 48px 56px; border: 1px solid var(--line); }
+      header.brandbar { display: grid; grid-template-columns: 1fr auto; gap: 24px; align-items: flex-start; padding-bottom: 24px; border-bottom: 2px solid var(--ink); }
+      .brand { display: flex; align-items: center; gap: 14px; }
+      .brand-mark { width: 48px; height: 48px; border-radius: 50%; overflow: hidden; background: var(--accent); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-family: var(--display); font-size: 20px; font-weight: 700; }
+      .brand-mark img { width: 48px; height: 48px; object-fit: contain; }
+      .brand-name { font-family: var(--display); font-size: 22px; font-weight: 700; }
+      .brand-meta { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+      .doc-block { text-align: right; }
+      .doc-label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--muted); }
+      .doc-num { font-family: var(--display); font-size: 24px; font-weight: 700; margin: 6px 0 4px; word-break: break-all; }
+      .doc-dates { font-size: 13px; color: var(--muted); }
+      .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; padding: 24px 0; }
+      .party h4 { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); margin: 0 0 8px; font-weight: 500; }
+      .party .name { font-family: var(--display); font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+      .party .lines { font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+      .ref-strip { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 14px 18px; background: var(--accent-soft); border-radius: 6px; margin-bottom: 28px; }
+      .ref-strip .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 4px; font-weight: 500; }
+      .ref-strip .value { font-size: 14px; }
+      table { width: 100%; border-collapse: collapse; }
+      thead th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--ink); font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 500; }
+      tbody td { padding: 14px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      td.desc strong { display: block; font-weight: 600; margin-bottom: 4px; }
+      td.desc small { display: block; color: var(--muted); font-size: 12.5px; }
+      .notes { margin-top: 28px; font-size: 12.5px; color: var(--muted); padding: 16px 18px; background: var(--bg); border-radius: 6px; }
+      .notes h5 { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--ink); margin: 0 0 8px; font-weight: 500; }
+      .signoff { margin-top: 36px; font-family: var(--display); font-size: 16px; font-style: italic; color: var(--muted); }
+      .status { display: inline-block; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 12px; font-weight: 600; }
+      @media print {
+        body { background: white; }
+        .sheet { border: none; margin: 0; padding: 24px 28px; }
+      }
+  body
+    .sheet
+      header.brandbar
+        .brand
+          .brand-mark
+            if logoSrc
+              img(src=logoSrc, alt="PickleVibes")
+            else
+              | P
+          div
+            .brand-name PickleVibes
+            .brand-meta 預約確認書 · Booking Confirmation
+        .doc-block
+          .doc-label Confirmation
+          .doc-num= shortBookingId
+          .doc-dates= issueDate
+
+      section.parties
+        .party
+          h4 Venue / 場地
+          .name= bookingData.storeName || 'PickleVibes'
+          .lines
+            if bookingData.storeAddress
+              | #{bookingData.storeAddress}
+              br
+            if bookingData.storePhone
+              | #{bookingData.storePhone}
+              br
+            | picklevibes.hk
+        .party
+          h4 Guest / 客人
+          .name= visitorData.name || '客戶'
+          .lines
+            if visitorData.email
+              | #{visitorData.email}
+              br
+            if visitorData.phone
+              | #{visitorData.phone}
+
+      .ref-strip
+        div
+          .label 狀態
+          .value
+            span.status 已確認 / Confirmed
+        div
+          .label 場地
+          .value= bookingData.courtName || '—'
+        div
+          .label 時段
+          .value #{bookingData.startTime || ''}–#{bookingData.endTime || ''}
+
+      table
+        thead
+          tr
+            th 詳情 Details
+            th 內容
+        tbody
+          tr
+            td.desc
+              strong 預約編號
+              small Booking ID
+            td= bookingData.bookingId
+          tr
+            td.desc
+              strong 日期
+              small Date
+            td= bookingDateLabel
+          tr
+            td.desc
+              strong 時間
+              small Time
+            td #{bookingData.startTime || ''} – #{bookingData.endTime || ''}
+          tr
+            td.desc
+              strong 店鋪
+              small Store
+            td= bookingData.storeName || '—'
+          tr
+            td.desc
+              strong 場地
+              small Court
+            td= bookingData.courtName || '—'
+          if amountLabel
+            tr
+              td.desc
+                strong 金額
+                small Amount
+              td= amountLabel
+
+      .notes
+        h5 重要提示
+        | 請準時到場；室內場請穿室內鞋。取消政策以網站公布為準。
+        br
+        | Please arrive on time. Indoor shoes required. Cancellation policy as published on the website.
+
+      .signoff 感謝您選擇 PickleVibes！祝打球愉快。
