@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import axios from 'axios';
 import SEO from '../components/SEO/SEO';
+import apiConfig from '../config/api';
 import {
   BuildingStorefrontIcon,
   MapPinIcon,
@@ -42,11 +43,10 @@ const COURT_TYPE_LABEL: Record<Court['type'], string> = {
   full_venue: '包場',
 };
 
-function mediaUrl(path?: string) {
+function courtImageUrl(path?: string) {
   if (!path) return '';
   if (path.startsWith('http')) return path;
-  const apiBase = process.env.REACT_APP_API_URL || 'http://localhost:5001/api';
-  return `${apiBase.replace(/\/api\/?$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
+  return `${apiConfig.API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
 const Courts: React.FC = () => {
@@ -216,7 +216,7 @@ const Courts: React.FC = () => {
                     <div className="aspect-[16/9] bg-gradient-to-br from-secondary-100 to-primary-100 relative">
                       {image ? (
                         <img
-                          src={mediaUrl(image)}
+                          src={courtImageUrl(image)}
                           alt={court.name}
                           className="w-full h-full object-cover"
                         />
