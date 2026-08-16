@@ -44,6 +44,8 @@ import OrderHistory from './pages/OrderHistory';
 import Vlog from './pages/Vlog';
 import GameJoin from './pages/GameJoin';
 import PublicApplicationForm from './pages/PublicApplicationForm';
+import Courts from './pages/Courts';
+import Vips from './pages/Vips';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
@@ -63,6 +65,8 @@ function App() {
                 <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/about" element={<About />} />
+                <Route path="/courts" element={<Courts />} />
+                <Route path="/vips" element={<Vips />} />
                 <Route path="/vlog/:id" element={<Vlog />} />
                 <Route path="/faq" element={<FAQ />} />
                 <Route path="/privacy" element={<Privacy />} />

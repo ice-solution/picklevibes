@@ -25,6 +25,7 @@ const RESERVED_SLUGS = new Set([
   'cart',
   'checkout',
   'coach',
+  'courts',
   'dashboard',
   'faq',
   'forgot-password',
@@ -45,6 +46,7 @@ const RESERVED_SLUGS = new Set([
   'shop',
   'store',
   'terms',
+  'vips',
   'vlog',
   'uploads',
 ]);

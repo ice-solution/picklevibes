@@ -27,6 +27,8 @@ const Footer: React.FC = () => {
   const footerLinks = {
     company: [
       { name: '關於我們', href: '/about' },
+      { name: '場地一覽', href: '/courts' },
+      { name: 'VIP 會員', href: '/vips' },
       { name: '價格', href: '/pricing' },
       { name: '預約', href: '/booking' },
     ],
