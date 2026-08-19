@@ -51,7 +51,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
 
   const handleValidate = async () => {
     if (!code.trim()) {
-      setError('請輸入兌換碼');
+      setError(t('redeem.errors.codeRequired'));
       return;
     }
 
@@ -75,7 +75,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
         onRedeemApplied(response.data.redeemCode);
       }
     } catch (error: any) {
-      setError(error.response?.data?.message || '兌換碼驗證失敗');
+      setError(error.response?.data?.message || t('redeem.errors.validationFailed'));
     } finally {
       setLoading(false);
     }
@@ -98,7 +98,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
     <div className={`bg-gray-50 rounded-lg p-4 ${className}`}>
       <div className="flex items-center space-x-2 mb-3">
         <TicketIcon className="w-5 h-5 text-primary-600" />
-        <h3 className="text-lg font-semibold text-gray-900">兌換碼</h3>
+        <h3 className="text-lg font-semibold text-gray-900">{t('redeem.title')}</h3>
       </div>
 
       {!redeemData ? (
@@ -109,7 +109,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
               value={code}
               onChange={(e) => setCode(e.target.value.toUpperCase())}
               onKeyPress={handleKeyPress}
-              placeholder="輸入兌換碼"
+              placeholder={t('redeem.placeholder')}
               className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               disabled={loading}
             />
@@ -118,7 +118,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
               disabled={loading || !code.trim()}
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white rounded-md transition-colors duration-200"
             >
-              {loading ? '驗證中...' : '驗證'}
+              {loading ? t('redeem.validating') : t('redeem.validate')}
             </button>
           </div>
 
@@ -148,8 +148,8 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
                 </p>
                 <p className="text-xs text-green-600">
                   {redeemData.type === 'fixed' 
-                    ? `減 ${redeemData.value} 積分` 
-                    : `${redeemData.value}折`
+                    ? t('redeem.fixed', { value: redeemData.value })
+                    : t('redeem.percentage', { value: redeemData.value })
                   }
                 </p>
               </div>
@@ -158,21 +158,27 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
               onClick={handleRemove}
               className="text-green-600 hover:text-green-800 text-sm"
             >
-              移除
+              {t('redeem.remove')}
             </button>
           </div>
           
           <div className="mt-2 text-sm text-green-700">
-            <p>原價: {amount.toFixed(0)} 積分</p>
-            <p>折扣: -{redeemData.discountAmount.toFixed(0)} 積分</p>
-            <p className="font-semibold">實付: {redeemData.finalAmount.toFixed(0)} 積分</p>
+            <p>
+              {t('redeem.labels.original')}: {amount.toFixed(0)} {t('common.currency')}
+            </p>
+            <p>
+              {t('redeem.labels.discount')}: -{redeemData.discountAmount.toFixed(0)} {t('common.currency')}
+            </p>
+            <p className="font-semibold">
+              {t('redeem.labels.payable')}: {redeemData.finalAmount.toFixed(0)} {t('common.currency')}
+            </p>
           </div>
         </motion.div>
       )}
 
       <div className="mt-3 text-xs text-gray-500">
         <ExclamationTriangleIcon className="w-4 h-4 inline mr-1" />
-        每個兌換碼有使用次數和期限限制
+        {t('redeem.limitNote')}
       </div>
     </div>
   );

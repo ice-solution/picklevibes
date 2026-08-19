@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { BuildingStorefrontIcon, MapPinIcon, PhoneIcon } from '@heroicons/react/24/outline';
 import type { StoreSummary } from '../../contexts/BookingContext';
 
@@ -18,19 +19,20 @@ const StoreSelector: React.FC<StoreSelectorProps> = ({
   onSelect,
   loading,
 }) => {
+  const { t } = useTranslation();
   if (loading) {
     return (
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto" aria-hidden />
-        <p className="mt-4 text-gray-600">載入店鋪中...</p>
+        <p className="mt-4 text-gray-600">{t('bookingPage.storeSelector.loading')}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">選擇店鋪</h2>
-      <p className="text-gray-600 mb-8">請先選擇您要預約的店鋪，再選擇場地</p>
+      <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('bookingPage.storeSelector.title')}</h2>
+      <p className="text-gray-600 mb-8">{t('bookingPage.storeSelector.subtitle')}</p>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {stores.map((store, index) => (
@@ -68,7 +70,7 @@ const StoreSelector: React.FC<StoreSelectorProps> = ({
       </div>
 
       {stores.length === 0 && (
-        <p className="text-center text-gray-500 py-8">暫無可預約店鋪</p>
+        <p className="text-center text-gray-500 py-8">{t('bookingPage.storeSelector.empty')}</p>
       )}
     </div>
   );

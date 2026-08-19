@@ -52,6 +52,19 @@ function formatBookingDate(date) {
   });
 }
 
+function appendSupportNotes(lines) {
+  lines.push('');
+  lines.push('注意事項：');
+  lines.push('1) 球場會提供球拍及匹克球，用戶無需帶上打球用品');
+  lines.push(
+    '2) 敬請避免穿著黑底運動鞋，造成污漬將會收取每一條鞋痕 $100 清潔費'
+  );
+  lines.push('3) 場地內禁止吸煙和飲酒');
+  lines.push(
+    '4) 如在場地遇上其他問題，請聯絡客服 WhatsApp：https://wa.me/85261902761，本電話只提供系統訊息。'
+  );
+}
+
 function buildBookingConfirmMessage({ store, bookingData, withAccess, password }) {
   const storeName = store?.name || bookingData.storeName || 'PickleVibes';
   const lines = [
@@ -77,24 +90,23 @@ function buildBookingConfirmMessage({ store, bookingData, withAccess, password }
     lines.push(`預約編號：${bookingData.bookingId}`);
   }
 
-  lines.push('');
-  lines.push('如有問題請聯絡場地。');
+  appendSupportNotes(lines);
   return lines.join('\n');
 }
 
 function buildBookingCancellationMessage(booking, store) {
   const storeName = store?.name || 'PickleVibes';
   const courtName = booking.court?.name || '場地';
-  return [
+  const lines = [
     '*PickleVibes 預約取消通知*',
     '',
     `店鋪：${storeName}`,
     `場地：${courtName}`,
     `日期：${formatBookingDate(booking.date)}`,
     `時間：${booking.startTime || ''} - ${booking.endTime || ''}`.trim(),
-    '',
-    '如有任何問題，請聯絡場地。',
-  ].join('\n');
+  ];
+  appendSupportNotes(lines);
+  return lines.join('\n');
 }
 
 /**

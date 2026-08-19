@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import apiConfig from '../../config/api.js';
 import { XMarkIcon, EyeIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 
 // Instagram Icon Component
 const InstagramIcon: React.FC<{ className?: string }> = ({ className }) => (
@@ -34,6 +35,7 @@ const RegularActivities: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedActivity, setSelectedActivity] = useState<RegularActivity | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const { t } = useTranslation();
 
   useEffect(() => {
     fetchActivities();
@@ -85,7 +87,7 @@ const RegularActivities: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">載入恆常活動中...</p>
+          <p className="mt-4 text-gray-600">{t('regularActivities.loading')}</p>
         </div>
       </div>
     );
@@ -98,8 +100,8 @@ const RegularActivities: React.FC = () => {
           <div className="text-gray-400 mb-4">
             <InstagramIcon className="h-16 w-16 mx-auto" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">暫無恆常活動</h3>
-          <p className="text-gray-600">目前沒有恆常活動，請稍後再來查看</p>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{t('regularActivities.empty.title')}</h3>
+          <p className="text-gray-600">{t('regularActivities.empty.description')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -131,7 +133,7 @@ const RegularActivities: React.FC = () => {
                 )}
                 {activity.isEffectivelyPinned && (
                   <span className="absolute top-3 left-3 px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full shadow">
-                    置頂
+                    {t('regularActivities.pinned')}
                   </span>
                 )}
               </div>
@@ -159,7 +161,7 @@ const RegularActivities: React.FC = () => {
                 {/* Requirements */}
                 {activity.requirements && (
                   <div className="mb-4 p-3 bg-gray-50 rounded-lg">
-                    <p className="text-xs font-semibold text-gray-700 mb-1">活動要求</p>
+                    <p className="text-xs font-semibold text-gray-700 mb-1">{t('regularActivities.requirements')}</p>
                     <p className="text-xs text-gray-600 line-clamp-2">
                       {activity.requirements}
                     </p>
@@ -176,14 +178,14 @@ const RegularActivities: React.FC = () => {
                     className="flex-1 flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                   >
                     <EyeIcon className="h-4 w-4 mr-2" />
-                    查看詳情
+                    {t('regularActivities.actions.viewDetails')}
                   </button>
                   <button
                     onClick={(e) => handleIGClick(e)}
                     className="flex-1 flex items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors font-medium"
                   >
                     <InstagramIcon className="h-5 w-5 mr-2" />
-                    IG 查詢
+                    {t('regularActivities.actions.igQuery')}
                   </button>
                 </div>
               </div>
@@ -201,7 +203,7 @@ const RegularActivities: React.FC = () => {
               disabled={currentPage === 1}
               className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              上一頁
+              {t('regularActivities.pagination.prev')}
             </button>
             {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
               <button
@@ -221,7 +223,7 @@ const RegularActivities: React.FC = () => {
               disabled={currentPage === totalPages}
               className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              下一頁
+              {t('regularActivities.pagination.next')}
             </button>
           </div>
         </div>
@@ -243,7 +245,7 @@ const RegularActivities: React.FC = () => {
             >
               {/* Close Button */}
               <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex justify-between items-center z-10">
-                <h2 className="text-2xl font-bold text-gray-900">活動詳情</h2>
+                <h2 className="text-2xl font-bold text-gray-900">{t('regularActivities.modal.title')}</h2>
                 <button
                   onClick={handleCloseModal}
                   className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -276,7 +278,7 @@ const RegularActivities: React.FC = () => {
 
                 {/* Description */}
                 <div className="mb-6">
-                  <h4 className="text-lg font-semibold text-gray-900 mb-2">活動描述</h4>
+                  <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('regularActivities.modal.descriptionLabel')}</h4>
                   <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                     {selectedActivity.description}
                   </p>
@@ -285,7 +287,7 @@ const RegularActivities: React.FC = () => {
                 {/* Introduction */}
                 {selectedActivity.introduction && (
                   <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">活動介紹</h4>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('regularActivities.modal.introductionLabel')}</h4>
                     <div className="bg-gray-50 rounded-lg p-4">
                       <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                         {selectedActivity.introduction}
@@ -297,7 +299,7 @@ const RegularActivities: React.FC = () => {
                 {/* Requirements */}
                 {selectedActivity.requirements && (
                   <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">活動要求</h4>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('regularActivities.modal.requirementsLabel')}</h4>
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                       <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
                         {selectedActivity.requirements}
@@ -309,7 +311,7 @@ const RegularActivities: React.FC = () => {
                 {/* 收費 */}
                 {selectedActivity.fee != null && selectedActivity.fee > 0 && (
                   <div className="mb-6">
-                    <h4 className="text-lg font-semibold text-gray-900 mb-2">收費</h4>
+                    <h4 className="text-lg font-semibold text-gray-900 mb-2">{t('regularActivities.modal.feeLabel')}</h4>
                     <p className="text-gray-700 font-medium">HK$ {selectedActivity.fee}</p>
                   </div>
                 )}
@@ -324,7 +326,7 @@ const RegularActivities: React.FC = () => {
                     className="w-full flex items-center justify-center px-6 py-4 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors font-medium text-lg"
                   >
                     <InstagramIcon className="h-6 w-6 mr-2" />
-                    IG 了解詳情
+                    {t('regularActivities.modal.igDetails')}
                   </a>
                 </div>
               </div>

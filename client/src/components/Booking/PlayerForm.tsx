@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { UserGroupIcon, UserIcon, PhoneIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -18,6 +19,7 @@ interface PlayerFormProps {
 
 const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, maxPlayers }) => {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
 
   // 自動填入已登入用戶的資料
@@ -83,9 +85,9 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">預約信息</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('bookingPage.playerForm.title')}</h2>
       <p className="text-gray-600 mb-8">
-        請填寫參加人數和負責人聯絡信息
+        {t('bookingPage.playerForm.subtitle')}
       </p>
 
       <div className="space-y-6">
@@ -98,7 +100,7 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
         >
           <div className="flex items-center gap-3 mb-4">
             <UserGroupIcon className="w-6 h-6 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-900">參加人數</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('bookingPage.playerForm.participants')}</h3>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -112,7 +114,7 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
                     : 'border-gray-200 hover:border-primary-300 text-gray-700'
                 }`}
               >
-                {num} 人
+                {num} {t('common.people')}
               </button>
             ))}
           </div>
@@ -131,10 +133,10 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
         >
           <div className="flex items-center gap-3 mb-4">
             <UserIcon className="w-6 h-6 text-primary-600" />
-            <h3 className="text-lg font-semibold text-gray-900">負責人聯絡信息</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('bookingPage.playerForm.contactInfo')}</h3>
             {user && (
               <span className="text-sm text-primary-600 bg-primary-100 px-2 py-1 rounded">
-                已自動填入
+                {t('common.autoFilled')}
               </span>
             )}
           </div>
@@ -142,20 +144,20 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                負責人姓名 *
+                {t('bookingPage.playerForm.contactName')} *
               </label>
               <input
                 type="text"
                 value={formData.contactName}
                 readOnly
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
-                placeholder="請輸入負責人姓名"
+                placeholder={t('bookingPage.playerForm.contactName')}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                聯絡電子郵件 *
+                {t('bookingPage.playerForm.contactEmail')} *
               </label>
               <div className="relative">
                 <EnvelopeIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
@@ -164,14 +166,14 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
                   value={formData.contactEmail}
                   readOnly
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
-                  placeholder="請輸入聯絡電子郵件"
+                  placeholder={t('bookingPage.playerForm.contactEmail')}
                 />
               </div>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                聯絡電話號碼 *
+                {t('bookingPage.playerForm.contactPhone')} *
               </label>
               <div className="relative">
                 <PhoneIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
@@ -180,7 +182,7 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
                   value={formData.contactPhone}
                   readOnly
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
-                  placeholder="請輸入聯絡電話號碼"
+                  placeholder={t('bookingPage.playerForm.contactPhone')}
                 />
               </div>
             </div>
@@ -192,20 +194,20 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
       <div className="mt-6 p-4 bg-primary-50 rounded-lg">
         <div className="flex items-center justify-between">
           <span className="text-primary-800 font-medium">
-            預約人數: {formData.totalPlayers || 0} 人
+            {t('bookingPage.playerForm.summaryPlayers', { n: formData.totalPlayers || 0 })}
           </span>
           <span className="text-sm text-primary-600">
-            負責人: {formData.contactName || '未填寫'}
+            {t('bookingPage.playerForm.summaryContact', { name: formData.contactName || t('bookingPage.playerForm.notFilled') })}
           </span>
         </div>
       </div>
 
       {/* 說明文字 */}
       <div className="mt-6 text-sm text-gray-500">
-        <p>• 負責人聯絡信息已從您的帳戶自動填入，無法修改</p>
-        <p>• 如需修改聯絡信息，請前往個人資料頁面更新</p>
-        <p>• 我們會發送預約確認到您的電子郵件</p>
-        <p>• 如有任何變更，我們會通過電話聯繫您</p>
+        <p>• {t('bookingPage.playerForm.info1')}</p>
+        <p>• {t('bookingPage.playerForm.info2')}</p>
+        <p>• {t('bookingPage.playerForm.info3')}</p>
+        <p>• {t('bookingPage.playerForm.info4')}</p>
       </div>
     </div>
   );

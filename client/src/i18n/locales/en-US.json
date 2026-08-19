@@ -2,124 +2,34 @@
   "nav": {
     "home": "Home",
     "about": "About",
+    "courts": "Courts",
+    "vips": "VIP",
+    "courtsVip": "Courts",
     "facilities": "Facilities",
-    "pricing": "Facilities & Pricing",
+    "pricing": "Pricing",
     "booking": "Booking",
+    "activities": "Activities",
     "dashboard": "Dashboard",
     "admin": "Admin",
     "login": "Login",
     "register": "Register",
     "logout": "Logout",
-    "profile": "Profile"
+    "profile": "Profile",
+    "myBookings": "My Bookings",
+    "balance": "My Points",
+    "recharge": "Top Up",
+    "shop": "Shop",
+    "cart": "Cart",
+    "myAccount": "Account",
+    "editProfile": "Edit profile",
+    "myActivities": "My activities",
+    "orders": "Orders",
+    "adminLegacy": "Classic admin"
   },
   "language": {
     "chinese": "中文",
     "english": "English",
     "switch": "Switch Language"
-  },
-  "home": {
-    "hero": {
-      "title": "Welcome to PickleVibes",
-      "subtitle": "Professional Pickleball Court Booking Platform",
-      "description": "Providing quality pickleball courts, professional coaching, for the best pickleball experience",
-      "bookNow": "Book Now",
-      "learnMore": "Learn More"
-    },
-    "features": {
-      "title": "Why Choose Us?",
-      "professional": {
-        "title": "Professional Courts",
-        "description": "Standard pickleball courts with professional surface materials"
-      },
-      "equipment": {
-        "title": "Quality Equipment",
-        "description": "Professional paddles and ball equipment provided"
-      },
-      "coaching": {
-        "title": "Expert Coaching",
-        "description": "Experienced coaching team guidance"
-      },
-      "booking": {
-        "title": "Easy Booking",
-        "description": "24/7 online booking system"
-      }
-    }
-  },
-  "dashboard": {
-    "welcome": "Welcome back, {{name}}!",
-    "subtitle": "Manage your bookings and view your pickleball activities",
-    "stats": {
-      "totalBookings": "Total Bookings",
-      "upcoming": "Upcoming",
-      "membershipLevel": "Membership Level",
-      "skillLevel": "Skill Level"
-    },
-    "upcomingBookings": "Upcoming Bookings",
-    "newBooking": "New Booking",
-    "noBookings": "No Bookings",
-    "noBookingsDesc": "You don't have any bookings yet",
-    "bookNow": "Book Now",
-    "quickActions": "Quick Actions",
-    "bookCourt": "Book Court",
-    "editProfile": "Edit Profile",
-    "viewPricing": "View Pricing",
-    "recentActivity": "Recent Activity",
-    "noActivity": "No activity records"
-  },
-  "booking": {
-    "title": "Book Court",
-    "selectCourt": "Select Court",
-    "selectDate": "Select Date",
-    "selectTime": "Select Time",
-    "playerInfo": "Player Information",
-    "summary": "Booking Summary",
-    "confirm": "Confirm Booking",
-    "status": {
-      "confirmed": "Confirmed",
-      "pending": "Pending",
-      "cancelled": "Cancelled",
-      "completed": "Completed",
-      "noShow": "No Show"
-    },
-    "payment": {
-      "paid": "Paid",
-      "pending": "Pending",
-      "failed": "Failed"
-    }
-  },
-  "admin": {
-    "title": "Admin Console",
-    "subtitle": "Manage bookings, courts and view system statistics",
-    "stats": {
-      "totalBookings": "Total Bookings",
-      "confirmed": "Confirmed",
-      "pending": "Pending",
-      "totalRevenue": "Total Revenue"
-    },
-    "tabs": {
-      "bookings": "Booking Management",
-      "courts": "Court Management",
-      "revenue": "Revenue Statistics",
-      "analytics": "Data Analytics"
-    },
-    "allBookings": "All Bookings",
-    "courtManagement": "Court Management",
-    "revenueStats": "Revenue Statistics",
-    "dataAnalytics": "Data Analytics"
-  },
-  "auth": {
-    "login": "Login",
-    "register": "Register",
-    "email": "Email",
-    "password": "Password",
-    "confirmPassword": "Confirm Password",
-    "name": "Name",
-    "phone": "Phone",
-    "forgotPassword": "Forgot Password?",
-    "noAccount": "Don't have an account?",
-    "hasAccount": "Already have an account?",
-    "signUp": "Sign Up Now",
-    "signIn": "Sign In Now"
   },
   "common": {
     "loading": "Loading...",
@@ -144,11 +54,622 @@
     "total": "Total",
     "subtotal": "Subtotal",
     "discount": "Discount",
-    "currency": "Points"
+    "currency": "Points",
+    "learnMore": "Learn More",
+    "bookNow": "Book Now",
+    "selectStore": "Select store",
+    "noData": "No data",
+    "people": "people",
+    "seeBookingPage": "See booking page",
+    "selected": "Selected",
+    "notSelected": "Not selected",
+    "hours": "{{n}} hr",
+    "minutes": "{{n}} min",
+    "perHourPoints": "{{n}} pts/hour",
+    "currentTime": "Current time",
+    "processing": "Processing...",
+    "autoFilled": "Auto-filled",
+    "store": "Store",
+    "court": "Court",
+    "duration": "Duration"
+  },
+  "footer": {
+    "company": "Company",
+    "support": "Support",
+    "legal": "Legal",
+    "about": "About Us",
+    "courts": "Courts",
+    "vips": "VIP Membership",
+    "pricing": "Pricing",
+    "booking": "Booking",
+    "faq": "FAQ",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "hours": "Hours",
+    "hoursValue": "24/7 (booking required)",
+    "contact": "Contact Us",
+    "tagline": "Your ultimate pickleball destination in Hong Kong. More than courts — a community united by an active lifestyle and shared experiences.",
+    "rights": "All rights reserved."
+  },
+  "home": {
+    "hero": {
+      "brand": "Picklevibes",
+      "title": "Hong Kong Smart Unmanned Pickleball Courts",
+      "description": "More than courts — a community brought together by an active lifestyle and shared experiences.",
+      "learnMore": "Learn More",
+      "stat1Title": "3 Indoor Courts",
+      "stat1Desc": "Modern air-conditioned venues",
+      "stat2Title": "Social Play",
+      "stat2Desc": "Meet friends and enjoy the game",
+      "stat3Title": "Pro Coaches",
+      "stat3Desc": "Level up your skills"
+    },
+    "features": {
+      "title": "Pickle Vibes is a pickleball lifestyle",
+      "subtitle": "What makes us different? Of all the places to play, why this one?",
+      "registerNow": "Sign Up Now",
+      "social": {
+        "title": "Social Sessions",
+        "description": "Stack your paddles, meet new friends, and mix it up on court. One rule — don’t be a “dink”."
+      },
+      "coaching": {
+        "title": "Coaching",
+        "description": "Whether you want to learn the dink or the bang, our coaches are here to help."
+      },
+      "friends": {
+        "title": "Play with Friends",
+        "description": "Sometimes you just want a private session with friends. Book it — we won’t tell."
+      },
+      "indoor": {
+        "title": "All-weather Play",
+        "description": "Prefer indoors? Our air-conditioned courts have you covered."
+      },
+      "shop": {
+        "title": "Unmanned Shop",
+        "description": "Vending and payment machines for gear and rentals — fully self-service."
+      },
+      "modern": {
+        "title": "Modern Amenities",
+        "description": "Wi‑Fi, changing rooms, showers, and refreshments. We provide the court — you bring the vibe."
+      },
+      "pillarsTitle": "The three pillars of Pickle Vibes",
+      "sport": {
+        "title": "// Sport",
+        "description": "We welcome every skill level — weekly social mixers, competitive leagues, private events, and more."
+      },
+      "socialPillar": {
+        "title": "// Social",
+        "description": "More than pickleball — a place to hang out, unwind, and meet like-minded people. We provide the space; you bring the vibe."
+      },
+      "corporate": {
+        "title": "// Corporate Events",
+        "description": "Host team-building events with our courts, facilities, and coaches so every colleague has a great time."
+      }
+    },
+    "aboutTeaser": {
+      "eyebrow": "About Us",
+      "title": "The PickleVibes story",
+      "body": "City life moves fast, and demand for healthy social sports keeps rising. Fixed hours and clunky booking at traditional venues often clash with flexible schedules.",
+      "statHours": "Hours of smart service",
+      "statMembers": "Happy members",
+      "statCourts": "Professional courts",
+      "statSatisfaction": "Customer satisfaction",
+      "learnMore": "Learn more",
+      "cardTitle": "Smart pickleball experience",
+      "cardBody": "24/7 smart self-service — play anytime",
+      "open24": "Open 24 hours",
+      "proGear": "Pro equipment",
+      "community": "Community events",
+      "healthy": "Healthy living"
+    },
+    "courtsSection": {
+      "title": "Where you play",
+      "subtitle": "Pickleball can be played many places — we like to think we’re more than that: a community united by an active lifestyle.",
+      "loading": "Loading courts…",
+      "defaultDesc": "Professional pickleball courts with modern amenities",
+      "maxPeople": "Up to {{n}} people",
+      "hours24": "24/7 (booking required)",
+      "viewAll": "View all courts",
+      "bookThis": "Book this court",
+      "peakHour": "Peak hours",
+      "pointsPerHour": "{{n}} pts/hr",
+      "emptyTitle": "Loading court info",
+      "emptyDesc": "We’re preparing the best pickleball experience for you",
+      "viewBooking": "View booking",
+      "readyTitle": "Ready to start your pickleball journey?",
+      "readySubtitle": "Join our community for great courts and a friendly vibe",
+      "bookCourtNow": "Book a court now"
+    },
+    "cta": {
+      "title": "Ready to start your pickleball journey?",
+      "subtitle": "Join our community for great courts and a friendly vibe — beginners and pros welcome.",
+      "bookNow": "Book a court",
+      "viewPricing": "View pricing",
+      "findUs": "Find us",
+      "mapTitle": "PickleVibes location map",
+      "addressLabel": "Address:",
+      "address": "8/F, Units B–D, Fortune Plaza, 37–39 Wing Hong Street, Lai Chi Kok",
+      "addressHint": "Lai Chi Kok MTR Exit C",
+      "hoursLabel": "Hours",
+      "hoursLine1": "Open 24 hours (by booking)",
+      "hoursLine2": "Open year-round",
+      "contactLabel": "Contact us",
+      "phoneLabel": "Phone:",
+      "emailLabel": "Email:",
+      "followUs": "Follow us",
+      "finalTitle": "Let’s go!",
+      "finalSubtitle": "Rain, typhoon, or humidity — we have air-con. Come rain or shine, you’ve got 99 problems, but the court isn’t one.",
+      "finalCta": "Book now"
+    },
+    "testimonials": {
+      "title": "Member reviews",
+      "subtitle": "Hear what our members say about PickleVibes",
+      "statActive": "Active members",
+      "statBookings": "Successful bookings",
+      "statRating": "Average rating",
+      "statSatisfaction": "Satisfaction",
+      "items": [
+        {
+          "name": "Ming Cheung",
+          "role": "Pickleball enthusiast",
+          "content": "PickleVibes is my favourite court in Hong Kong! Modern facilities, pro coaches, and a friendly vibe. I learn something every visit.",
+          "avatar": "👨‍💼"
+        },
+        {
+          "name": "Mei Lee",
+          "role": "Beginner",
+          "content": "As a beginner, the coaching was excellent — patient and clear. I picked up the basics quickly and now practice every week!",
+          "avatar": "👩‍🎓"
+        },
+        {
+          "name": "David Wong",
+          "role": "Experienced player",
+          "content": "Top courts and A/C make summer play comfortable. Membership service and booking are excellent.",
+          "avatar": "👨‍🏫"
+        },
+        {
+          "name": "Fanny Chan",
+          "role": "Social player",
+          "content": "The social sessions are great — I’ve met so many friends through mixers. Always a blast!",
+          "avatar": "👩‍💻"
+        },
+        {
+          "name": "Chi-Keung Lau",
+          "role": "Corporate client",
+          "content": "We host team-building here often. Spacious courts, professional service — highly recommended!",
+          "avatar": "👨‍💼"
+        },
+        {
+          "name": "Yating Wong",
+          "role": "Family user",
+          "content": "Coaches are patient with kids. The whole family has fallen in love with pickleball!",
+          "avatar": "👩‍👧‍👦"
+        }
+      ]
+    }
+  },
+  "courtsPage": {
+    "seoTitle": "Courts | PickleVibes",
+    "seoDescription": "Choose a store and browse PickleVibes courts and amenities.",
+    "eyebrow": "Courts",
+    "title": "Our Courts",
+    "subtitle": "Select a store to see available courts, amenities, and reference peak pricing.",
+    "selectStore": "Select store",
+    "loadingStores": "Loading stores…",
+    "loadingCourts": "Loading courts…",
+    "noStores": "No stores available",
+    "pickStore": "Please select a store first",
+    "noCourts": "No public courts for this store",
+    "loadStoresError": "Failed to load stores",
+    "loadCourtsError": "Failed to load courts",
+    "courtNumber": "Court #{{number}}",
+    "peakLabel": "Peak",
+    "points": "{{n}} pts",
+    "goBook": "Book now",
+    "types": {
+      "competition": "Competition",
+      "training": "Training",
+      "solo": "Solo",
+      "dink": "Practice",
+      "full_venue": "Full venue"
+    }
+  },
+  "vipsPage": {
+    "seoTitle": "VIP Membership Rewards | PickleVibes",
+    "seoDescription": "PickleVibes VIP membership: bonus credits, court discounts, and priority booking.",
+    "brand": "VIBES",
+    "banner": "GRAND OPENING EXCLUSIVE",
+    "title": "VIP Membership Rewards",
+    "subtitle": "Top up for bonus credits, court discounts, and priority booking perks",
+    "exclusiveTitle": "EXCLUSIVE PERKS",
+    "ctaRecharge": "Top up / Join",
+    "ctaBook": "Book a court",
+    "tiers": {
+      "silver": {
+        "name": "SILVER",
+        "tag": "VIBE STARTER",
+        "join": "JOIN AT $15,000",
+        "credits": "RECEIVE $18,000 CREDITS",
+        "bonus": "+$3,000 BONUS · 20%",
+        "perks": "12 MONTHS · 5% OFF COURTS · BOOK 21 DAYS AHEAD"
+      },
+      "gold": {
+        "name": "GOLD",
+        "tag": "VIBE PRO",
+        "join": "JOIN AT $30,000",
+        "credits": "RECEIVE $38,000 CREDITS",
+        "bonus": "+$8,000 BONUS · 27%",
+        "perks": "18 MONTHS · 10% OFF COURTS · BOOK 28 DAYS AHEAD · 1 FRIEND LINK"
+      },
+      "platinum": {
+        "name": "PLATINUM",
+        "tag": "VIBE ELITE",
+        "join": "JOIN AT $50,000",
+        "credits": "RECEIVE $66,666 CREDITS",
+        "bonus": "+$16,666 BONUS · 33%",
+        "perks": "36 MONTHS · 15% OFF COURTS · BOOK 60 DAYS AHEAD · 3 FRIEND LINKS"
+      }
+    },
+    "perks": {
+      "gifts": {
+        "title": "WELCOME GIFTS",
+        "desc": "Welcome gifts"
+      },
+      "room": {
+        "title": "VIP ROOM",
+        "desc": "VIP room offers"
+      },
+      "coach": {
+        "title": "COACHING",
+        "desc": "Coaching offers"
+      },
+      "tournament": {
+        "title": "TOURNAMENT PRIORITY",
+        "desc": "Priority tournament entry"
+      }
+    }
+  },
+  "faqPage": {
+    "seoTitle": "FAQ | Picklevibes",
+    "seoDescription": "Answers about membership, booking, credits, cancellations, and policies.",
+    "title": "Frequently Asked Questions",
+    "subtitle": "Everything you need to know about booking and membership",
+    "stillNeedHelp": "Still have questions?",
+    "stillNeedHelpDesc": "Our support team is happy to help",
+    "callUs": "Call us",
+    "emailUs": "Email us",
+    "categories": {
+      "membership": "Membership & Booking",
+      "credits": "Credits & Pricing",
+      "cancel": "Cancellations, Refunds & Offers",
+      "service": "Services & Policies"
+    },
+    "items": {
+      "q1": {
+        "q": "How do I book a court at Picklevibes?",
+        "a": "Register as a member on our official platform first. Only registered members can log in and book courts with membership credits."
+      },
+      "q2": {
+        "q": "What are the opening hours?",
+        "a": "Picklevibes is a 24-hour smart pickleball venue. Members can book any available slot through the booking system."
+      },
+      "q3": {
+        "q": "How do I enter after booking?",
+        "a": "After confirmation, you will receive an access code or QR code. Use it at the smart door during your booked time."
+      },
+      "q4": {
+        "q": "How does pricing work?",
+        "a": "We use a credit system. Top up credits first; the system deducts credits based on the time slot you book."
+      },
+      "q5": {
+        "q": "How do I top up credits?",
+        "a": "Log in and go to Top Up to choose a package. Multiple payment methods are available."
+      },
+      "q6": {
+        "q": "Do credits expire?",
+        "a": "Credits currently have no expiry, but we may adjust this policy and will notify members if so."
+      },
+      "q7": {
+        "q": "Can I cash out unused credits?",
+        "a": "No. Credits are for Picklevibes courts and services only. They cannot be refunded as cash or transferred."
+      },
+      "q8": {
+        "q": "If I cancel a booking, do I get credits back?",
+        "a": "If you cancel within the allowed window (e.g. 24 hours before start), credits are returned in full. Late cancellations may not be refundable — see the Terms."
+      },
+      "q9": {
+        "q": "How do I get or use promo codes?",
+        "a": "We occasionally send promo codes via website, social media, or email. Enter them at checkout when booking."
+      },
+      "q10": {
+        "q": "Do you offer training facilities?",
+        "a": "Yes. Besides standard courts, we have ball-machine practice courts for focused solo training."
+      },
+      "q11": {
+        "q": "Will membership policies change?",
+        "a": "We periodically review membership and terms to improve the experience. Major changes will be announced in advance."
+      }
+    }
+  },
+  "aboutPage": {
+    "seoTitle": "About Us | Picklevibes",
+    "seoDescription": "Our story, mission, and vision as a leading smart pickleball brand in Hong Kong.",
+    "title": "About PickleVibes",
+    "subtitle": "A leading smart pickleball brand in Hong Kong, making the sport accessible for everyone",
+    "storyTitle": "Our Story",
+    "story": [
+      "City life moves fast, and demand for healthy social sports keeps rising. Fixed opening hours and clunky booking at traditional venues often clash with flexible schedules.",
+      "Inspired by global trends, we built Picklevibes — a local chain of 24-hour smart pickleball venues. Members can book anytime on their phones and play on their own schedule.",
+      "From booking and payment to smart door access, the journey is unmanned and automated for maximum convenience.",
+      "For players who want efficient training, we provide professional ball-machine courts for high-repetition, targeted practice.",
+      "We also offer coaching courses and social events so you can improve skills and expand your circle in a relaxed setting.",
+      "Pay by the slot with no long-term contracts — clear pricing, fair rates, and a comfortable, time-flexible way to play."
+    ],
+    "missionTitle": "Our Mission",
+    "mission": [
+      "With 24/7 smart self-service, we serve pickleball fans of every level and promote the sport for everyone.",
+      "Professional ball-machine courts plus all-day access let you focus on efficient, personalised training anytime.",
+      "Fully automated online booking and smart access replace traditional handovers for maximum convenience."
+    ],
+    "visionTitle": "Our Goals",
+    "vision": [
+      "As a market leader in Hong Kong smart pickleball venues, we aim to expand quickly so players can always find a nearby Picklevibes.",
+      "We strive to become Hong Kong’s most loved professional pickleball community hub, with continuous investment in training tech and venue systems.",
+      "Our vision is to bring this smart, convenient, high-quality experience across Asia Pacific and beyond."
+    ],
+    "featuresTitle": "What we offer",
+    "featuresSubtitle": "A premium pickleball experience",
+    "feature24Title": "24-hour service",
+    "feature24Desc": "Smart self-service around the clock",
+    "featureGearTitle": "Pro equipment",
+    "featureGearDesc": "Advanced ball machines for efficient training",
+    "featureCommunityTitle": "Community events",
+    "featureCommunityDesc": "Coaching and socials to grow your circle",
+    "featureHealthTitle": "Healthy living",
+    "featureHealthDesc": "Promoting pickleball for everyone",
+    "contactTitle": "Contact Us",
+    "address": "Address",
+    "phone": "Phone",
+    "email": "Email"
+  },
+  "pricingPage": {
+    "seoTitle": "Pricing | Picklevibes",
+    "seoDescription": "Membership plans and court pricing at Picklevibes.",
+    "title": "Pricing Plans",
+    "subtitle": "Transparent pricing with no hidden fees. Choose the plan that fits you",
+    "membershipTitle": "Membership plans",
+    "membershipSubtitle": "Pick the level that matches how often you play",
+    "basicName": "Basic Member",
+    "basicPeriod": "Free",
+    "basicDesc": "For occasional players",
+    "vipName": "VIP Member",
+    "vipPeriod": "Free during launch",
+    "vipDesc": "For frequent players",
+    "popular": "Popular",
+    "launchFree": "🎉 Free during launch!",
+    "free": "Free",
+    "originalPrice": "Was $800 / 6 months",
+    "features": "Included",
+    "limitations": "Limitations",
+    "basicFeatures": [
+      "Court booking",
+      "Basic facilities",
+      "Online booking",
+      "Basic support"
+    ],
+    "basicLimits": [
+      "No member discount",
+      "No priority booking",
+      "No exclusive slots"
+    ],
+    "vipFeatures": [
+      "Court booking",
+      "All facilities",
+      "20% member discount",
+      "Priority booking",
+      "Free paddle rental",
+      "Member events",
+      "Priority support"
+    ],
+    "ctaBasic": "Register free",
+    "ctaVip": "🎉 Become VIP free!",
+    "ctaSelect": "Choose plan",
+    "peakHour": "Peak Hours",
+    "offPeak": "Off-Peak Hours",
+    "memberDiscount": "Member Discount",
+    "cta": "Start Booking",
+    "amenitiesTitle": "Other amenities",
+    "amenitiesSubtitle": "Beyond professional courts, we also offer convenient facilities",
+    "amenityCourtsTitle": "3 professional courts",
+    "amenityCourtsDesc": "Competition, training, and solo courts — modern indoor venues with air-conditioning",
+    "amenityCourtsFeatures": [
+      "Climate control",
+      "Pro lighting",
+      "Non-slip flooring",
+      "Standard dimensions"
+    ],
+    "amenityShowerTitle": "Shower facilities",
+    "amenityShowerDesc": "Modern showers so you can freshen up after play",
+    "amenityShowerFeatures": [
+      "Hot water",
+      "Private stalls",
+      "Clean environment",
+      "Easy to use"
+    ],
+    "discountTitle": "Member discounts",
+    "discountSubtitle": "Members enjoy discounted court fees",
+    "discountBasicRate": "No discount",
+    "discountVipRate": "All court fees",
+    "faqTitle": "Frequently asked questions",
+    "faqSubtitle": "Common questions about pricing and membership plans",
+    "faq": [
+      {
+        "q": "How do I cancel a membership subscription?",
+        "a": "You can cancel anytime on your profile page. Benefits continue until the end of the current billing period."
+      },
+      {
+        "q": "When does the member discount apply?",
+        "a": "The discount takes effect immediately after you register and pay any applicable membership fee."
+      },
+      {
+        "q": "Can I change my membership plan?",
+        "a": "Yes. You can upgrade or downgrade anytime. Upgrades apply immediately; downgrades take effect after the current billing period."
+      },
+      {
+        "q": "How far in advance can I book?",
+        "a": "Basic members can book 24 hours ahead; VIP members can book 48 hours ahead."
+      }
+    ],
+    "bottomCtaTitle": "Ready to get started?",
+    "bottomCtaSubtitle": "Choose a plan and begin your pickleball journey",
+    "bottomCtaRegister": "Register now",
+    "bottomCtaBook": "Book a court",
+    "intro": {
+      "feeModeLabel": "Pricing model introduction",
+      "heading": "Find the best pickleball plan for you",
+      "description1": "We offer flexible and transparent pricing based on how often players use our courts and what they need.",
+      "description2": "You can start with a Basic membership to try it out, or upgrade directly to VIP for more perks.",
+      "badgeText": "New launch special: Enjoy free VIP upgrade",
+      "highlights": {
+        "simpleTitle": "Simple & clear",
+        "simpleDesc": "We use a points-based system for court fees, so it’s easy to use—no complicated calculations.",
+        "transparentTitle": "Transparent pricing",
+        "transparentPrefix": "Our top-ups use ",
+        "transparentBadge": "HKD 1 = 1 Point",
+        "transparentSuffix": ", with zero extra charges.",
+        "rewardsTitle": "Points rewards",
+        "rewardsDesc": "We regularly offer special top-up promotions—more you add, more you get back."
+      },
+      "courtsDetailsTitle": "Court Details",
+      "courtsDetailsSubtitle": "Each court is carefully designed to ensure you get the best pickleball experience.",
+      "loadingCourts": "Loading court information...",
+      "vipBannerTitle": "VIP Member 20% Off!!",
+      "vipBannerSub": "Become a VIP member to enjoy 20% off all courts.",
+      "amenitiesLabel": "Amenities",
+      "operatingHoursTitle": "Operating hours",
+      "soloHours": "Daily 08:00–23:00",
+      "fullHours": "24-hour service (requires booking to enter)",
+      "offPeakLabel": "Off-peak hours",
+      "peakLabel": "Peak hours",
+      "amenities": {
+        "air_conditioning": "Air conditioning",
+        "lighting": "Lighting",
+        "net": "Net",
+        "paddles": "Paddle rental",
+        "balls": "Balls provided",
+        "water": "Water dispenser",
+        "shower": "Shower facilities",
+        "vending_machine": "Vending machine"
+      }
+    }
+  },
+  "auth": {
+    "login": "Login",
+    "register": "Register",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm Password",
+    "name": "Name",
+    "phone": "Phone",
+    "forgotPassword": "Forgot Password?",
+    "noAccount": "Don't have an account?",
+    "hasAccount": "Already have an account?",
+    "signUp": "Sign Up Now",
+    "signIn": "Sign In Now",
+    "loginTitle": "Welcome back",
+    "loginHeading": "Sign in to your account",
+    "orCreate": "Or",
+    "createAccount": "create a new account",
+    "signInExisting": "sign in to an existing account",
+    "registerHeading": "Create your account",
+    "emailPlaceholder": "Enter your email",
+    "passwordPlaceholder": "Enter your password",
+    "registerTitle": "Create your account",
+    "resetPassword": "Reset Password",
+    "sendResetLink": "Send reset link",
+    "rememberMe": "Remember me",
+    "loggingIn": "Signing in…",
+    "registering": "Creating account…",
+    "errors": {
+      "emailRequired": "Email is required",
+      "emailInvalid": "Please enter a valid email",
+      "passwordRequired": "Password is required",
+      "nameRequired": "Name is required",
+      "nameMin": "Name must be at least 2 characters",
+      "passwordMin": "Password must be at least 8 characters",
+      "passwordPattern": "Password must include at least one letter and one number",
+      "confirmRequired": "Please confirm your password",
+      "passwordMismatch": "Passwords do not match",
+      "phoneRequired": "Phone is required",
+      "phoneInvalid": "Phone may only contain digits"
+    }
+  },
+  "booking": {
+    "title": "Book Court",
+    "selectCourt": "Select Court",
+    "selectDate": "Select Date",
+    "selectTime": "Select Time",
+    "playerInfo": "Player Information",
+    "summary": "Booking Summary",
+    "confirm": "Confirm Booking",
+    "selectStore": "Select store",
+    "status": {
+      "confirmed": "Confirmed",
+      "pending": "Pending",
+      "cancelled": "Cancelled",
+      "completed": "Completed",
+      "noShow": "No Show"
+    },
+    "payment": {
+      "paid": "Paid",
+      "pending": "Pending",
+      "failed": "Failed"
+    }
+  },
+  "dashboard": {
+    "welcome": "Welcome back, {{name}}!",
+    "subtitle": "Manage your bookings and pickleball activities",
+    "stats": {
+      "totalBookings": "Total Bookings",
+      "upcoming": "Upcoming",
+      "membershipLevel": "Membership Level",
+      "skillLevel": "Skill Level"
+    },
+    "upcomingBookings": "Upcoming Bookings",
+    "newBooking": "New Booking",
+    "noBookings": "No Bookings",
+    "noBookingsDesc": "You don't have any bookings yet",
+    "bookNow": "Book Now",
+    "quickActions": "Quick Actions",
+    "bookCourt": "Book Court",
+    "editProfile": "Edit Profile",
+    "viewPricing": "View Pricing",
+    "recentActivity": "Recent Activity",
+    "noActivity": "No activity records"
+  },
+  "admin": {
+    "title": "Admin Console",
+    "subtitle": "Manage bookings, courts and view statistics",
+    "stats": {
+      "totalBookings": "Total Bookings",
+      "confirmed": "Confirmed",
+      "pending": "Pending",
+      "totalRevenue": "Total Revenue"
+    },
+    "tabs": {
+      "bookings": "Booking Management",
+      "courts": "Court Management",
+      "revenue": "Revenue Statistics",
+      "analytics": "Data Analytics"
+    },
+    "allBookings": "All Bookings",
+    "courtManagement": "Court Management",
+    "revenueStats": "Revenue Statistics",
+    "dataAnalytics": "Data Analytics"
   },
   "facilities": {
     "title": "Facilities",
-    "subtitle": "Professional pickleball facilities for the best sports experience",
+    "subtitle": "Professional pickleball facilities for the best experience",
     "courts": "Court Facilities",
     "amenities": "Amenities",
     "features": "Featured Services"
@@ -159,5 +680,631 @@
     "peakHour": "Peak Hours",
     "offPeak": "Off-Peak Hours",
     "memberDiscount": "Member Discount"
+  },
+  "termsPage": {
+    "seoTitle": "Terms of Service | Picklevibes",
+    "seoDescription": "Picklevibes smart pickleball venue terms of service. Please read carefully; using our services means you agree to these terms.",
+    "title": "Terms of Service",
+    "subtitle": "Please read these terms carefully. Using our services means you agree to follow them.",
+    "lastUpdated": "Last updated: October 2025",
+    "sections": [
+      {
+        "title": "Acceptance of Terms",
+        "items": [
+          {
+            "title": "1.1 Scope of agreement",
+            "paragraphs": [
+              "These Terms of Service (“Terms”) form a legally binding agreement between you (“Member” or “User”) and Picklevibes smart pickleball venues (“Company”). They apply to all services we provide, including without limitation court rental, ball-machine facilities, online booking, the membership credit system, and related facilities (“Services”)."
+            ]
+          },
+          {
+            "title": "1.2 Acceptance",
+            "paragraphs": [
+              "By registering as a member, topping up credits, or using the Services, you confirm that you have read, understood, and agree to these Terms in full. If you disagree with any part, do not use the Services."
+            ]
+          },
+          {
+            "title": "1.3 Amendments",
+            "paragraphs": [
+              "We may revise, change, or update these Terms at any time. Amendments take effect when posted on our website or app. Continued use after publication means you accept the revised Terms."
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Membership & Account Security",
+        "items": [
+          {
+            "title": "2.1 Registration",
+            "paragraphs": [
+              "You must register as a member to use the Services and provide true, accurate, complete, and up-to-date personal information."
+            ]
+          },
+          {
+            "title": "2.2 Account responsibility",
+            "paragraphs": [
+              "You are fully responsible for keeping your account and password confidential and for all activity under your account. Notify us immediately of any unauthorised use."
+            ]
+          },
+          {
+            "title": "2.3 Age restriction",
+            "paragraphs": [
+              "Persons under 18 may register and use the Services only under parental or legal guardian supervision and consent."
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Booking, Credits & Fees",
+        "items": [
+          {
+            "title": "3.1 Credit system",
+            "paragraphs": [
+              "We charge using a credit system. Members must top up credits before booking courts or ball-machine facilities."
+            ]
+          },
+          {
+            "title": "3.2 Top-ups",
+            "paragraphs": [
+              "Once a top-up is completed, the transaction is final. Credits purchased or topped up cannot be refunded as cash under any circumstances."
+            ]
+          },
+          {
+            "title": "3.3 Booking & deduction",
+            "paragraphs": [
+              "When you book a court or facility, credits are deducted immediately from your account. Credit requirements may vary by time slot and facility (e.g. standard court vs ball-machine area); the booking system display prevails."
+            ]
+          },
+          {
+            "title": "3.4 Promo codes",
+            "paragraphs": [
+              "We may issue promo codes from time to time. Use is subject to their specific terms and conditions, and they cannot be redeemed for cash."
+            ]
+          },
+          {
+            "title": "3.5 Cancellation policy",
+            "paragraphs": [
+              "a. You must cancel within the required window before the slot starts (e.g. 24 hours) for deducted credits to be returned to your account.",
+              "b. Late cancellation or no-show: credits for that booking will not be refunded.",
+              "c. We may cancel bookings due to force majeure (e.g. severe weather, equipment failure). In such cases, credits are fully refunded."
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Venue Use & Conduct",
+        "items": [
+          {
+            "title": "4.1 Self-service",
+            "paragraphs": [
+              "We provide 24-hour smart self-service. Members are responsible for entry, facility use, and exit procedures."
+            ]
+          },
+          {
+            "title": "4.2 Entry & exit",
+            "paragraphs": [
+              "You may enter via smart access only after your booked slot starts, and must leave before it ends. Overtime may incur extra charges or suspension of membership."
+            ]
+          },
+          {
+            "title": "4.3 Facility care",
+            "paragraphs": [
+              "Members must care for courts and facilities, including nets, ball machines, and rest areas. We may recover full repair or replacement costs for damage caused by a member."
+            ]
+          },
+          {
+            "title": "4.4 Ball machines",
+            "paragraphs": [
+              "Before using a ball machine, read and follow all operating instructions and safety rules. You are responsible for injury or equipment damage caused by improper use."
+            ]
+          },
+          {
+            "title": "4.5 Code of conduct",
+            "paragraphs": [
+              "a. Be polite and respect other users.",
+              "b. No smoking, drinking alcohol, illegal drugs, or unlawful activity on site.",
+              "c. No pets (except guide dogs) or dangerous items.",
+              "d. Keep the venue clean; dispose of rubbish in designated bins or take it with you."
+            ]
+          },
+          {
+            "title": "4.6 Monitoring",
+            "paragraphs": [
+              "For safety and management, venues have CCTV. You agree that we may collect and use related footage in accordance with our Privacy Policy."
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Disclaimers & Liability Limits",
+        "items": [
+          {
+            "title": "5.1 Sporting risk",
+            "paragraphs": [
+              "Pickleball involves inherent risks. You acknowledge and accept all risks arising from use of the Services, including injury, property loss, or death."
+            ]
+          },
+          {
+            "title": "5.2 Personal belongings",
+            "paragraphs": [
+              "We are not liable for personal belongings lost, stolen, or damaged on site."
+            ]
+          },
+          {
+            "title": "5.3 Equipment failure",
+            "paragraphs": [
+              "Despite regular maintenance, temporary faults (including ball machines, A/C, lighting) may occur. We will address them promptly but are not liable for time lost, cancelled bookings, or consequential loss."
+            ]
+          },
+          {
+            "title": "5.4 Limitation of liability",
+            "paragraphs": [
+              "To the fullest extent permitted by law, we are not liable for any direct, indirect, incidental, special, or punitive damages arising from use of or inability to use the Services, even if advised of the possibility of such damages."
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Termination of Membership",
+        "items": [
+          {
+            "title": "6.1 Our rights",
+            "paragraphs": [
+              "We may immediately suspend or terminate membership and access without refunding topped-up credits if you:",
+              "a. Breach any provision of these Terms.",
+              "b. Engage in illegal, fraudulent, or abusive use of the Services.",
+              "c. Seriously damage facilities or disrupt other members’ normal use."
+            ]
+          },
+          {
+            "title": "6.2 Member cancellation",
+            "paragraphs": [
+              "You may request account closure through our designated process at any time. After closure, remaining credits are forfeited and cannot be refunded as cash."
+            ]
+          }
+        ]
+      },
+      {
+        "title": "Governing Law & Disputes",
+        "items": [
+          {
+            "title": "7.1 Governing law",
+            "paragraphs": [
+              "These Terms are governed by and construed in accordance with the laws of the Hong Kong Special Administrative Region."
+            ]
+          },
+          {
+            "title": "7.2 Dispute resolution",
+            "paragraphs": [
+              "Disputes arising from or relating to these Terms should first be resolved amicably. If not, the parties agree to the exclusive jurisdiction of the Hong Kong courts."
+            ]
+          }
+        ]
+      },
+      {
+        "title": "General",
+        "items": [
+          {
+            "title": "8.1 Entire agreement",
+            "paragraphs": [
+              "These Terms (together with the Privacy Policy and any related service rules or guidelines) constitute the entire agreement between you and the Company regarding use of the Services."
+            ]
+          }
+        ]
+      }
+    ],
+    "contactTitle": "Contact us",
+    "contactIntro": "If you have questions about these Terms, please contact us:",
+    "email": "Email: info@picklevibes.hk",
+    "phone": "Phone: +852 6190 2761",
+    "address": "Address: 8/F, Units B–D, Fortune Plaza, 37–39 Wing Hong Street, Lai Chi Kok",
+    "importantTitle": "Important notice",
+    "importantBody": "Please read the Terms carefully. Using our services means you understand and agree to all terms and conditions. Contact us before registering if you have any questions."
+  },
+  "privacyPage": {
+    "seoTitle": "Privacy Policy | Picklevibes",
+    "seoDescription": "Picklevibes personal data collection statement and privacy policy. Learn how we collect, use, and protect your personal data.",
+    "title": "Privacy Policy",
+    "subtitle": "Picklevibes smart pickleball venues — personal data collection statement",
+    "intro": "Picklevibes smart pickleball venues (“Company”) is committed to complying with the Personal Data (Privacy) Ordinance (Cap. 486) of the Hong Kong Special Administrative Region (“Ordinance”) to protect the privacy, confidentiality, and security of personal data we hold. We also require all employees, officers, and agents to observe these obligations. This Personal Data Collection Statement (“Statement”) informs you how we collect, use, store, transfer, and disclose your personal data.",
+    "s1Title": "1. Purpose and collection of personal data",
+    "s1P1": "We collect your personal data when you register as a member. You are not obliged to provide personal data; however, we may then be unable to process your registration or provide services.",
+    "s1P2": "We may collect your full name, gender, birth month*, mobile number, email address and/or residential address for one or more of the following purposes:",
+    "s1Items": [
+      "To provide pickleball courts, ball-machine training courts, smart access systems and/or related services;",
+      "For communications, marketing, customer relationship management and/or public relations;",
+      "For applications, creation, operation, and management of customer, member, or user accounts and records;",
+      "To handle feedback, enquiries, and complaints;",
+      "To process or request billing and payment for credit top-ups, determine outstanding amounts, and collect unpaid sums where necessary;",
+      "To identify and verify your identity, especially when entering or leaving facilities via smart access; and/or",
+      "For purposes directly related to any of the above."
+    ],
+    "s1Note": "*Providing your birth month is voluntary. We only use it for special birthday promotions and offers.",
+    "s2Title": "2. Use of your personal data in direct marketing",
+    "s2P1": "We expressly reserve the right for ourselves, our agents¹, franchisees² and/or affiliates, including subsidiaries² and associated companies³ (“Affiliates”), to use your full name, phone number, email address, and residential address (“Personal Data”) to send you direct marketing communications about goods and services that we, our agents, franchisees and/or Affiliates may offer, including pickleball, sports training, sports equipment, healthy living, and related services (“Direct Marketing Purposes”).",
+    "s2P2": "Unless we have obtained your written consent (including an indication of no objection) before such use, we, our agents, franchisees and/or Affiliates must not use your Personal Data for Direct Marketing Purposes. If you previously consented, you may opt out in writing to info@picklevibes.com. We will not charge you for requests to stop using your Personal Data for direct marketing.",
+    "s2NotesTitle": "Notes:",
+    "s2Notes": [
+      "¹ Agents means any agent engaged by Picklevibes for communications, marketing, CRM and/or public relations services.",
+      "² Franchisees and subsidiaries means Picklevibes-branded pickleball centres.",
+      "³ Associated companies means other sports or wellness-related brands under Picklevibes."
+    ],
+    "s3Title": "3. Disclosure",
+    "s3P1": "We will take all practicable steps to keep your personal data confidential. Subject to applicable law, your personal data may be provided to the following parties for the following purposes:",
+    "s3Items": [
+      "Any agent we engage for communications, marketing, CRM and/or public relations, and any franchisees and Affiliates that send direct marketing (including promoting activities and services we believe may interest members);",
+      "Any contractor or service provider that supplies services or technology related to our business and operations, including administration, telecoms, data processing, smart booking systems, payment services or technology, dispute handling and investigation, and other operational services;",
+      "Any agent, contractor or service provider that provides administrative (including member account and credit record management), technical (including IT and cloud services) or other services (including professional advisers such as lawyers and auditors) under confidentiality obligations to us;",
+      "Any person to whom we must disclose information under any law binding on or applying to us, or to comply with guidelines or codes issued by regulators or other bodies (including industry and self-regulatory bodies); and",
+      "Any actual or proposed assignee, transferee, participant or sub-participant of our rights or business."
+    ],
+    "s4Title": "4. Security",
+    "s4P1": "We take appropriate security measures to protect members’ personal data (including biometric data) against accidental, unlawful or unauthorised destruction, loss, alteration, access, disclosure or use.",
+    "s4P2": "All employees, agents, franchisees, Affiliates and suppliers are bound by confidentiality. Only authorised persons may process your personal data (including biometric data) on a need-to-know basis under the Ordinance and this Statement.",
+    "s4AccountTitle": "Account deletion by the data subject",
+    "s4AccountP1": "You may delete a previously registered account at any time via Settings → Account security → Delete account, or by contacting online support or calling customer service.",
+    "s4AccountP2": "After account deletion (completed within three business days), we will stop providing products or services and, upon your request, delete your personal information except where laws and regulations require otherwise.",
+    "s5Title": "5. General",
+    "s5P1": "You may at any time request (i) access to or correction of your personal data; and/or (ii) to opt out of direct marketing. To exercise your rights and avoid miscommunication, please send a written request to info@picklevibes.hk. We will fulfil your request as soon as reasonably practicable.",
+    "s5P2": "We retain your personal data only as long as needed for the purposes of collection. If you terminate membership, we will delete your personal data as soon as practicable.",
+    "s5P3": "If there is any inconsistency between the Chinese and English versions, the English version shall prevail.",
+    "s6Title": "6. Disclaimer",
+    "s6P1": "All information on this page is for reference only and may change. Picklevibes does not warrant that the information here is accurate, complete or up to date, and disclaims liability for any loss or damage arising from or in reliance on the content of this page."
+  },
+  "activitiesPage": {
+    "seoTitle": "Activities | Picklevibes Pickleball Events & Classes",
+    "seoDescription": "Explore Picklevibes pickleball events, coaching sessions, and social activities. Meet other players and enjoy the sport.",
+    "loading": "Loading activities…",
+    "headerTitle": "Activities",
+    "headerSubtitle": "Explore exciting pickleball events and enjoy the sport with other players.",
+    "tabs": {
+      "activities": "Upcoming Events",
+      "regular": "Regular Activities"
+    },
+    "filters": {
+      "all": "All Activities",
+      "upcoming": "Upcoming",
+      "ongoing": "Ongoing",
+      "completed": "Completed"
+    },
+    "empty": {
+      "title": "No activities",
+      "description": "No activities match your filters yet. Please check back later."
+    },
+    "pinned": "Pinned",
+    "status": {
+      "upcoming": "Upcoming",
+      "ongoing": "Ongoing",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "deadline": "{{date}} Deadline",
+    "progress": {
+      "label": "Registration progress",
+      "spots": "{{n}} spots available"
+    },
+    "actions": {
+      "viewDetail": "View details",
+      "registerNow": "Register now"
+    },
+    "registration": {
+      "yourRegistered": "You are registered",
+      "completed": "Completed",
+      "ongoing": "Ongoing",
+      "registrationClosed": "Registration closed",
+      "full": "Full",
+      "maxReached": "No more spots"
+    },
+    "pagination": {
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "people": "{{n}} people",
+    "deadlineShort": "Deadline"
+  },
+  "regularActivities": {
+    "loading": "Loading regular activities…",
+    "empty": {
+      "title": "No regular activities",
+      "description": "There are currently no regular activities. Please check back later."
+    },
+    "pinned": "Pinned",
+    "requirements": "Requirements",
+    "actions": {
+      "viewDetails": "View details",
+      "igQuery": "IG search"
+    },
+    "pagination": {
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "modal": {
+      "title": "Activity details",
+      "descriptionLabel": "Description",
+      "introductionLabel": "Introduction",
+      "requirementsLabel": "Requirements",
+      "feeLabel": "Fee",
+      "igDetails": "IG: Learn more"
+    }
+  },
+  "activityDetail": {
+    "loading": "Loading activity details…",
+    "errors": {
+      "notFoundTitle": "Activity not found",
+      "notFoundDesc": "The requested activity was not found."
+    },
+    "backToList": "Back to activities",
+    "status": {
+      "upcoming": "Upcoming",
+      "ongoing": "Ongoing",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "registration": {
+      "yourRegistered": "You are registered",
+      "completed": "Completed",
+      "ongoing": "Ongoing",
+      "registrationClosed": "Registration closed",
+      "full": "Full",
+      "maxReached": "No more spots",
+      "registerNow": "Register now",
+      "loginToRegister": "Login to register",
+      "cannotRegister.deadline": "Registration closed — cannot register for this activity",
+      "cannotRegister.full": "This activity is full — cannot register"
+    },
+    "labels": {
+      "time": "Time",
+      "location": "Location",
+      "limit": "Participant limit",
+      "fee": "Fee",
+      "deadline": "Registration deadline",
+      "organizer": "Organizer",
+      "coach": "Coach",
+      "requirements": "Requirements",
+      "progress": "Registration progress",
+      "spots": "{{n}} spots available"
+    },
+    "actions": {
+      "registerNow": "Register now",
+      "igQuery": "IG search"
+    },
+    "imagePreview": {
+      "openAriaLabel": "View activity image",
+      "openTitle": "Click to zoom",
+      "closeAriaLabel": "Close preview"
+    }
+  },
+  "activityRegister": {
+    "errors": {
+      "activityNotFound": "Activity does not exist",
+      "cannotRegister.expired": "Registration closed",
+      "cannotRegister.full": "This activity is full",
+      "cannotRegister.general": "This activity cannot be registered",
+      "participantsMin": "Participant count must be at least 1",
+      "participantsLimit": "Participant count exceeds the limit. Remaining spots: {{n}}",
+      "contactMissing": "Please provide complete contact information",
+      "submitFailed": "Registration failed"
+    },
+    "loading": "Loading activity details…",
+    "invalid": {
+      "title": "Unable to register",
+      "backToList": "Back to activities"
+    },
+    "success": {
+      "title": "Registration successful!",
+      "message": "You have successfully registered for \"{{title}}\".",
+      "redirect": "The system will redirect you in 3 seconds to your My Activities page.",
+      "cta": "View my activities"
+    },
+    "header": {
+      "title": "Activity registration",
+      "backToDetail": "Back to activity details"
+    },
+    "sidebar": {
+      "time": "Time",
+      "location": "Location",
+      "participants": "Participants",
+      "remaining": "Remaining spots",
+      "pointsPerPerson": "{{n}} pts/person"
+    },
+    "form": {
+      "fillInfo": "Fill in registration information",
+      "participantCount": "Participants",
+      "participantRequired": "Participants",
+      "maxSelectable": "Max {{n}} participants",
+      "email": "Email",
+      "phone": "Phone",
+      "notes": "Notes",
+      "notesPlaceholder": "Any special needs or notes… (optional)",
+      "charCount": "{{n}}/200 characters"
+    },
+    "cost": {
+      "title": "Cost breakdown",
+      "unitPrice": "Unit price",
+      "peopleCount": "Number of participants",
+      "original": "Original",
+      "discount": "Discount",
+      "total": "Total"
+    },
+    "buttons": {
+      "cancel": "Cancel",
+      "submit": "Confirm registration ({{totalPts}} pts)",
+      "submitting": "Submitting…"
+    }
+  },
+  "redeem": {
+    "title": "Redeem code",
+    "placeholder": "Enter redeem code",
+    "validate": "Validate",
+    "validating": "Validating…",
+    "errors": {
+      "codeRequired": "Please enter a redeem code",
+      "validationFailed": "Redeem code validation failed"
+    },
+    "remove": "Remove",
+    "fixed": "Reduce {{value}} pts",
+    "percentage": "{{value}}% off",
+    "labels": {
+      "original": "Original price",
+      "discount": "Discount",
+      "payable": "Amount due"
+    },
+    "limitNote": "Each redeem code has usage limits and expiry rules."
+  },
+  "bookingPage": {
+    "title": "Book a Court",
+    "subtitle": "Choose your preferred venue and time to start your pickleball journey.",
+    "loading": "Loading...",
+    "steps": {
+      "store": "Choose Store",
+      "court": "Choose Court",
+      "date": "Choose Date",
+      "time": "Choose Time",
+      "info": "Fill Info",
+      "confirm": "Confirm Booking"
+    },
+    "nav": {
+      "prev": "Previous",
+      "next": "Next"
+    },
+    "sidebar": {
+      "title": "Booking Summary",
+      "court": "Court",
+      "date": "Date",
+      "time": "Time",
+      "players": "Players",
+      "total": "Total",
+      "loginNotice": "Please log in to complete your booking."
+    },
+    "storeSelector": {
+      "loading": "Loading stores...",
+      "title": "Choose Store",
+      "subtitle": "Please choose the store first, then pick a court.",
+      "empty": "No bookable stores available."
+    },
+    "courtSelector": {
+      "loading": "Loading courts...",
+      "title": "Choose Court",
+      "subtitle": "Please choose the court you want to book.",
+      "vipBanner": "VIP 20% Off!!",
+      "vipBannerSub": "Become a VIP member to enjoy 20% off all courts.",
+      "defaultDescription": "Professional pickleball courts with modern facilities.",
+      "capacity": "Up to {{n}} people",
+      "courtNumber": "Court {{n}}",
+      "moreAmenities": "+{{n}} more",
+      "priceError": "Price missing for {{start}} - {{end}}. Please contact admin or choose another slot.",
+      "offPeak": "Off-peak",
+      "peak": "Peak",
+      "emptyTitle": "No courts available",
+      "emptySubtitle": "Please try again later or contact us for more details.",
+      "types": {
+        "competition": "Competition Court",
+        "training": "Training Court",
+        "solo": "Solo Court",
+        "dink": "Practice Court",
+        "full_venue": "Full Venue",
+        "default": "Court"
+      }
+    },
+    "dateSelector": {
+      "title": "Choose Date",
+      "subtitle": "Please choose the date you want to book.",
+      "selected": "Selected: {{date}}",
+      "maxAdvance": "You can book up to {{n}} days in advance.",
+      "disabledDates": "Grey dates are unavailable.",
+      "todayHint": "Pink dates indicate today.",
+      "weekdays": [
+        "Sun",
+        "Mon",
+        "Tue",
+        "Wed",
+        "Thu",
+        "Fri",
+        "Sat"
+      ]
+    },
+    "timeSlotSelector": {
+      "needCourtAndDate": "Please choose a court and date first.",
+      "title": "Choose Time",
+      "ampmNotice": "Times below use the 12-hour AM/PM format. Please double-check.",
+      "subtitle": "Please choose your preferred time slot.",
+      "duration": "Booking duration",
+      "refreshTime": "Refresh time check",
+      "checking": "Checking availability...",
+      "priceErrorShort": "Price error",
+      "expired": "Expired",
+      "booked": "Booked",
+      "selected": "Selected: {{start}} - {{end}}",
+      "expiredHint": "Dark grey slots are expired and cannot be booked.",
+      "bookedHint": "Light grey slots are already booked.",
+      "priceHint": "Pricing may vary during peak hours.",
+      "owlHint": "🦉 indicates owl-hour late-night pricing.",
+      "durations": {
+        "1h": "1 hour",
+        "2h": "2 hours"
+      }
+    },
+    "playerForm": {
+      "title": "Booking Information",
+      "subtitle": "Fill in participant count and the contact person details.",
+      "participants": "Participants",
+      "contactInfo": "Contact Person",
+      "contactName": "Contact name",
+      "contactEmail": "Contact email",
+      "contactPhone": "Contact phone",
+      "summaryPlayers": "Participants: {{n}}",
+      "summaryContact": "Contact: {{name}}",
+      "notFilled": "Not filled",
+      "info1": "Contact info is auto-filled from your account and cannot be edited here.",
+      "info2": "If you need to update it, please edit your profile first.",
+      "info3": "We will send the booking confirmation to your email.",
+      "info4": "If anything changes, we will contact you by phone."
+    },
+    "bookingSummary": {
+      "incomplete": "Please complete the previous steps.",
+      "title": "Confirm Booking",
+      "subtitle": "Please review your booking details carefully.",
+      "details": "Booking Details",
+      "date": "Date",
+      "time": "Time",
+      "players": "Players",
+      "contactInfo": "Contact Person",
+      "role": "Contact person",
+      "contactNote": "* Contact details are auto-filled from your account. Please update your profile if changes are needed.",
+      "specialRequests": "Special Requests (Optional)",
+      "specialRequestsPlaceholder": "Enter any special requests or notes...",
+      "extraService": "Extra Services",
+      "includeSoloCourt": "Book a solo court at the same time",
+      "extraFee": "Extra fee",
+      "soloCourtNote": "* The solo court runs in the same time slot as the main court, suitable for individual practice.",
+      "redeemTitle": "Redeem Code",
+      "pricingTitle": "Pricing Details",
+      "courtFee": "Court fee",
+      "soloCourtFee": "Solo court add-on",
+      "vipDiscount": "Member discount (20% off)",
+      "redeemDiscount": "Redeem code discount",
+      "total": "Total",
+      "vipApplied": "VIP member 20% discount applied",
+      "plusRedeem": "+ redeem code discount",
+      "policyTitle": "Cancellation & Severe Weather Policy",
+      "importantNotice": "Important Notes",
+      "notice1": "Please arrive 15 minutes early.",
+      "notice2Before": "Avoid black-soled sports shoes. Each black mark left on court will incur a",
+      "notice2After": "cleaning fee.",
+      "notice3": "Smoking and drinking are prohibited inside the venue.",
+      "save": "Save changes",
+      "cancelEdit": "Cancel edit",
+      "confirm": "Confirm Booking",
+      "submitting": "Submitting...",
+      "loginFirst": "Please log in first.",
+      "fillRequired": "Please complete all required information.",
+      "success": "Booking successful! Points have been deducted. Please check your email for the booking code.",
+      "failed": "Booking failed. Please try again later.",
+      "insufficient": "Insufficient points balance. Please top up before completing your booking.",
+      "soleTitle": "Venue Usage Notice",
+      "soleAcknowledge": "I have read and agree to the notice above and confirm that I wish to continue the booking and points deduction process.",
+      "soleCancel": "Cancel",
+      "soleConfirm": "Confirm and deduct points"
+    }
   }
 }

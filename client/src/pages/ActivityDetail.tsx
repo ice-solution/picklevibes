@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 import SEO from '../components/SEO/SEO';
 import { 
   CalendarIcon, 
@@ -64,6 +65,7 @@ const ActivityDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [activity, setActivity] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +97,7 @@ const ActivityDetail: React.FC = () => {
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/activities/${id}`);
       
       if (!response.ok) {
-        throw new Error('活動不存在');
+        throw new Error(t('activityDetail.errors.notFoundTitle'));
       }
       
       const data = await response.json();
@@ -108,7 +110,8 @@ const ActivityDetail: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-TW', {
+    const locale = i18n.language?.toLowerCase().startsWith('en') ? 'en-US' : 'zh-TW';
+    return new Date(dateString).toLocaleDateString(locale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -144,13 +147,13 @@ const ActivityDetail: React.FC = () => {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'upcoming':
-        return '即將開始';
+        return t('activityDetail.status.upcoming');
       case 'ongoing':
-        return '進行中';
+        return t('activityDetail.status.ongoing');
       case 'completed':
-        return '已完結';
+        return t('activityDetail.status.completed');
       case 'cancelled':
-        return '已取消';
+        return t('activityDetail.status.cancelled');
       default:
         return status;
     }
@@ -183,14 +186,14 @@ const ActivityDetail: React.FC = () => {
 
   const getRegisterButtonText = () => {
     if (!activity) return '';
-    if (activity.userRegistration) return '你已報名';
+    if (activity.userRegistration) return t('activityDetail.registration.yourRegistered');
     const derived = getDerivedStatus(activity);
-    if (derived === 'completed') return '已完結';
-    if (derived === 'ongoing') return '進行中';
-    if (activity.isExpired) return '報名已截止';
-    if (activity.isFull) return '人數已滿';
-    if (activity.availableSpots <= 0) return '人數已到上限';
-    return '立即報名';
+    if (derived === 'completed') return t('activityDetail.registration.completed');
+    if (derived === 'ongoing') return t('activityDetail.registration.ongoing');
+    if (activity.isExpired) return t('activityDetail.registration.registrationClosed');
+    if (activity.isFull) return t('activityDetail.registration.full');
+    if (activity.availableSpots <= 0) return t('activityDetail.registration.maxReached');
+    return t('activityDetail.registration.registerNow');
   };
 
   if (loading) {
@@ -198,7 +201,7 @@ const ActivityDetail: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">載入活動詳情中...</p>
+          <p className="mt-4 text-gray-600">{t('activityDetail.loading')}</p>
         </div>
       </div>
     );
@@ -209,14 +212,14 @@ const ActivityDetail: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">活動不存在</h2>
-          <p className="text-gray-600 mb-6">{error || '找不到指定的活動'}</p>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('activityDetail.errors.notFoundTitle')}</h2>
+          <p className="text-gray-600 mb-6">{error || t('activityDetail.errors.notFoundDesc')}</p>
           <Link
             to="/activities"
             className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             <ArrowLeftIcon className="h-4 w-4 mr-2" />
-            返回活動列表
+            {t('activityDetail.backToList')}
           </Link>
         </div>
       </div>
@@ -229,9 +232,18 @@ const ActivityDetail: React.FC = () => {
   return (
     <>
       <SEO
-        title={`${activity.title} | Picklevibes 活動詳情`}
-        description={`${activity.description.substring(0, 150)}... 活動時間：${formatDate(activity.startDate)}，地點：${activity.location}，費用：${activity.price} 積分/人。立即報名參加！`}
-        keywords={`${activity.title},匹克球活動,活動報名,${activity.location},Picklevibes活動`}
+        title={`${activity.title} | Picklevibes ${i18n.language?.toLowerCase().startsWith('en') ? 'Activity Details' : '活動詳情'}`}
+        description={
+          `${activity.description.substring(0, 150)}... ` +
+          (i18n.language?.toLowerCase().startsWith('en')
+            ? `Time: ${formatDate(activity.startDate)} - ${formatDate(activity.endDate)}, Location: ${activity.location}, Fee: ${activity.price} ${t('common.currency')} per person. Register now!`
+            : `活動時間：${formatDate(activity.startDate)}，地點：${activity.location}，費用：${activity.price} 積分/人。立即報名參加！`)
+        }
+        keywords={
+          i18n.language?.toLowerCase().startsWith('en')
+            ? `${activity.title}, Pickleball, activity registration, ${activity.location}, Picklevibes`
+            : `${activity.title},匹克球活動,活動報名,${activity.location},Picklevibes活動`
+        }
         url={`/activities/${activity._id}`}
         image={activityImageUrl}
         structuredData={{
@@ -276,7 +288,7 @@ const ActivityDetail: React.FC = () => {
               className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeftIcon className="h-5 w-5 mr-2" />
-              返回活動列表
+              {t('activityDetail.backToList')}
             </Link>
             <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(getDerivedStatus(activity))}`}>
               {getStatusText(getDerivedStatus(activity))}
@@ -298,8 +310,8 @@ const ActivityDetail: React.FC = () => {
                 type="button"
                 className="block w-full h-64 md:h-80 overflow-hidden focus:outline-none focus:ring-2 focus:ring-primary-600 rounded"
                 onClick={() => setShowImagePreview(true)}
-                aria-label="放大檢視活動圖片"
-                title="點擊放大"
+                aria-label={t('activityDetail.imagePreview.openAriaLabel')}
+                title={t('activityDetail.imagePreview.openTitle')}
               >
                 <img
                   src={getImageUrl(((activity as any).posterThumb || activity.poster || '') as string)}
@@ -322,12 +334,12 @@ const ActivityDetail: React.FC = () => {
                     />
                     <button
                       type="button"
-                      aria-label="關閉預覽"
                       onClick={(e) => {
                         e.stopPropagation();
                         setShowImagePreview(false);
                       }}
                       className="absolute top-3 right-3 inline-flex items-center justify-center rounded-full bg-white/90 hover:bg-white text-gray-700 w-9 h-9 shadow"
+                      aria-label={t('activityDetail.imagePreview.closeAriaLabel')}
                     >
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
@@ -365,7 +377,7 @@ const ActivityDetail: React.FC = () => {
                 <div className="flex items-start">
                   <CalendarIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
                   <div>
-                    <h3 className="font-semibold text-gray-900">活動時間</h3>
+                    <h3 className="font-semibold text-gray-900">{t('activityDetail.labels.time')}</h3>
                     <p className="text-gray-600">
                       {formatDate(activity.startDate)} - {formatDate(activity.endDate)}
                     </p>
@@ -375,7 +387,7 @@ const ActivityDetail: React.FC = () => {
                 <div className="flex items-start">
                   <MapPinIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
                   <div>
-                    <h3 className="font-semibold text-gray-900">活動地點</h3>
+                    <h3 className="font-semibold text-gray-900">{t('activityDetail.labels.location')}</h3>
                     <p className="text-gray-600">{activity.location}</p>
                   </div>
                 </div>
@@ -383,12 +395,12 @@ const ActivityDetail: React.FC = () => {
                 <div className="flex items-start">
                   <UsersIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
                   <div>
-                    <h3 className="font-semibold text-gray-900">人數限制</h3>
+                    <h3 className="font-semibold text-gray-900">{t('activityDetail.labels.limit')}</h3>
                     <p className="text-gray-600">
-                      {activity.totalRegistered}/{activity.maxParticipants} 人
+                      {activity.totalRegistered}/{activity.maxParticipants} {t('common.people')}
                     </p>
                     <p className="text-sm text-gray-500">
-                      剩餘 {activity.availableSpots} 個名額
+                      {t('activityDetail.labels.spots', { n: activity.availableSpots })}
                     </p>
                   </div>
                 </div>
@@ -398,15 +410,15 @@ const ActivityDetail: React.FC = () => {
                 <div className="flex items-start">
                   <CurrencyDollarIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
                   <div>
-                    <h3 className="font-semibold text-gray-900">費用</h3>
-                    <p className="text-gray-600">{activity.price} 積分/人</p>
+                    <h3 className="font-semibold text-gray-900">{t('activityDetail.labels.fee')}</h3>
+                    <p className="text-gray-600">{t('activityRegister.sidebar.pointsPerPerson', { n: activity.price })}</p>
                   </div>
                 </div>
 
                 <div className="flex items-start">
                   <ClockIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
                   <div>
-                    <h3 className="font-semibold text-gray-900">報名截止</h3>
+                    <h3 className="font-semibold text-gray-900">{t('activityDetail.labels.deadline')}</h3>
                     <p className="text-gray-600">{formatDate(activity.registrationDeadline)}</p>
                   </div>
                 </div>
@@ -414,7 +426,7 @@ const ActivityDetail: React.FC = () => {
                 <div className="flex items-start">
                   <UsersIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
                   <div>
-                    <h3 className="font-semibold text-gray-900">主辦方</h3>
+                    <h3 className="font-semibold text-gray-900">{t('activityDetail.labels.organizer')}</h3>
                     <p className="text-gray-600">{activity.organizer.name}</p>
                   </div>
                 </div>
@@ -423,7 +435,7 @@ const ActivityDetail: React.FC = () => {
                   <div className="flex items-start">
                     <UsersIcon className="h-6 w-6 text-primary-600 mr-3 mt-1" />
                     <div>
-                      <h3 className="font-semibold text-gray-900">負責教練</h3>
+                      <h3 className="font-semibold text-gray-900">{t('activityDetail.labels.coach')}</h3>
                       <div className="text-gray-600">
                         {activity.coaches.map((coach, index) => (
                           <span key={coach._id}>
@@ -441,8 +453,8 @@ const ActivityDetail: React.FC = () => {
             {/* Progress Bar */}
             <div className="mb-8">
               <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>報名進度</span>
-                <span>{activity.availableSpots} 個名額</span>
+                <span>{t('activityDetail.labels.progress')}</span>
+                <span>{t('activityDetail.labels.spots', { n: activity.availableSpots })}</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-3">
                 <div
@@ -457,7 +469,7 @@ const ActivityDetail: React.FC = () => {
             {/* Requirements */}
             {activity.requirements && (
               <div className="mb-8">
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">活動要求</h3>
+                <h3 className="text-lg font-semibold text-gray-900 mb-3">{t('activityDetail.labels.requirements')}</h3>
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                   <p className="text-yellow-800 whitespace-pre-line">
                     {activity.requirements}
@@ -475,7 +487,7 @@ const ActivityDetail: React.FC = () => {
                     className="flex-1 flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors font-medium"
                   >
                     <UserPlusIcon className="h-5 w-5 mr-2" />
-                    立即報名
+                    {t('activityDetail.actions.registerNow')}
                   </Link>
                 ) : activity.userRegistration ? (
                   <button
@@ -503,7 +515,7 @@ const ActivityDetail: React.FC = () => {
                   className="flex-1 flex items-center justify-center px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg hover:from-purple-600 hover:to-pink-600 transition-colors font-medium"
                 >
                   <InstagramIcon className="h-5 w-5 mr-2" />
-                  IG 查詢
+                  {t('activityDetail.actions.igQuery')}
                 </a>
               </div>
               
@@ -512,7 +524,7 @@ const ActivityDetail: React.FC = () => {
                   to="/login"
                   className="flex-1 flex items-center justify-center px-6 py-3 border border-primary-600 text-primary-600 rounded-lg hover:bg-primary-50 transition-colors font-medium"
                 >
-                  登入後報名
+                  {t('activityDetail.registration.loginToRegister')}
                 </Link>
               )}
             </div>
@@ -523,7 +535,7 @@ const ActivityDetail: React.FC = () => {
                 <div className="flex">
                   <ExclamationTriangleIcon className="h-5 w-5 text-red-400 mr-2 mt-0.5" />
                   <p className="text-red-800 text-sm">
-                    報名已截止，無法再報名此活動
+                    {t('activityDetail.registration.cannotRegister.deadline')}
                   </p>
                 </div>
               </div>
@@ -534,7 +546,7 @@ const ActivityDetail: React.FC = () => {
                 <div className="flex">
                   <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400 mr-2 mt-0.5" />
                   <p className="text-yellow-800 text-sm">
-                    活動人數已滿，無法再報名
+                    {t('activityDetail.registration.cannotRegister.full')}
                   </p>
                 </div>
               </div>

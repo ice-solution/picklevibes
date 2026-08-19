@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import SEO from '../components/SEO/SEO';
 import apiConfig from '../config/api';
@@ -35,14 +36,6 @@ type Court = {
   isActive: boolean;
 };
 
-const COURT_TYPE_LABEL: Record<Court['type'], string> = {
-  competition: '比賽場',
-  training: '訓練場',
-  solo: '單人場',
-  dink: '練習場',
-  full_venue: '包場',
-};
-
 function courtImageUrl(path?: string) {
   if (!path) return '';
   if (path.startsWith('http')) return path;
@@ -50,6 +43,7 @@ function courtImageUrl(path?: string) {
 }
 
 const Courts: React.FC = () => {
+  const { t } = useTranslation();
   const [stores, setStores] = useState<StoreSummary[]>([]);
   const [selectedStoreId, setSelectedStoreId] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
@@ -70,7 +64,7 @@ const Courts: React.FC = () => {
         const initial = (saved && list.find((s) => s._id === saved)?._id) || list[0]?._id || '';
         setSelectedStoreId(initial);
       } catch (err: any) {
-        if (!cancelled) setError(err.response?.data?.message || '無法載入店鋪');
+        if (!cancelled) setError(err.response?.data?.message || t('courtsPage.loadStoresError'));
       } finally {
         if (!cancelled) setLoadingStores(false);
       }
@@ -78,7 +72,7 @@ const Courts: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (!selectedStoreId) {
@@ -97,7 +91,7 @@ const Courts: React.FC = () => {
       } catch (err: any) {
         if (!cancelled) {
           setCourts([]);
-          setError(err.response?.data?.message || '無法載入場地');
+          setError(err.response?.data?.message || t('courtsPage.loadCourtsError'));
         }
       } finally {
         if (!cancelled) setLoadingCourts(false);
@@ -106,16 +100,16 @@ const Courts: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [selectedStoreId]);
+  }, [selectedStoreId, t]);
 
   const selectedStore = stores.find((s) => s._id === selectedStoreId) || null;
 
   return (
     <>
       <SEO
-        title="場地一覽 | PickleVibes"
-        description="選擇店鋪，瀏覽 PickleVibes 場地資訊與設施。"
-        keywords="匹克球場地,場地一覽,PickleVibes"
+        title={t('courtsPage.seoTitle')}
+        description={t('courtsPage.seoDescription')}
+        keywords="pickleball courts,PickleVibes"
       />
       <div className="min-h-screen bg-gradient-to-b from-secondary-50 via-white to-primary-50">
         <section className="relative overflow-hidden border-b border-secondary-100">
@@ -132,7 +126,7 @@ const Courts: React.FC = () => {
               animate={{ opacity: 1, y: 0 }}
               className="text-sm font-semibold tracking-[0.2em] uppercase text-secondary-600 mb-3"
             >
-              Courts
+              {t('courtsPage.eyebrow')}
             </motion.p>
             <motion.h1
               initial={{ opacity: 0, y: 12 }}
@@ -140,7 +134,7 @@ const Courts: React.FC = () => {
               transition={{ delay: 0.05 }}
               className="text-4xl sm:text-5xl font-bold text-gray-900 tracking-tight"
             >
-              場地一覽
+              {t('courtsPage.title')}
             </motion.h1>
             <motion.p
               initial={{ opacity: 0, y: 12 }}
@@ -148,7 +142,7 @@ const Courts: React.FC = () => {
               transition={{ delay: 0.1 }}
               className="mt-4 max-w-2xl text-lg text-gray-600"
             >
-              先選擇店鋪，即可查看該店可用場地、設施與參考收費。
+              {t('courtsPage.subtitle')}
             </motion.p>
           </div>
         </section>
@@ -156,10 +150,10 @@ const Courts: React.FC = () => {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
           <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-2xl p-5 sm:p-6 shadow-sm mb-8">
             <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="store-select">
-              選擇店鋪
+              {t('courtsPage.selectStore')}
             </label>
             {loadingStores ? (
-              <p className="text-gray-500 text-sm">載入店鋪中…</p>
+              <p className="text-gray-500 text-sm">{t('courtsPage.loadingStores')}</p>
             ) : (
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
                 <div className="relative flex-1">
@@ -170,7 +164,7 @@ const Courts: React.FC = () => {
                     onChange={(e) => setSelectedStoreId(e.target.value)}
                     className="w-full appearance-none pl-10 pr-10 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-secondary-500 focus:border-secondary-500"
                   >
-                    {stores.length === 0 && <option value="">暫無可用店鋪</option>}
+                    {stores.length === 0 && <option value="">{t('courtsPage.noStores')}</option>}
                     {stores.map((store) => (
                       <option key={store._id} value={store._id}>
                         {store.name}
@@ -195,11 +189,11 @@ const Courts: React.FC = () => {
           )}
 
           {loadingCourts ? (
-            <div className="text-center py-16 text-gray-500">載入場地中…</div>
+            <div className="text-center py-16 text-gray-500">{t('courtsPage.loadingCourts')}</div>
           ) : !selectedStoreId ? (
-            <div className="text-center py-16 text-gray-500">請先選擇店鋪</div>
+            <div className="text-center py-16 text-gray-500">{t('courtsPage.pickStore')}</div>
           ) : courts.length === 0 ? (
-            <div className="text-center py-16 text-gray-500">此店鋪暫無公開場地</div>
+            <div className="text-center py-16 text-gray-500">{t('courtsPage.noCourts')}</div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {courts.map((court, index) => {
@@ -226,18 +220,20 @@ const Courts: React.FC = () => {
                         </div>
                       )}
                       <span className="absolute top-3 left-3 px-2.5 py-1 rounded-full text-xs font-semibold bg-black/60 text-white">
-                        {COURT_TYPE_LABEL[court.type] || court.type}
+                        {t(`courtsPage.types.${court.type}`, { defaultValue: court.type })}
                       </span>
                     </div>
                     <div className="p-5 space-y-3">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h2 className="text-xl font-bold text-gray-900">{court.name}</h2>
-                          <p className="text-sm text-gray-500">場地 #{court.number}</p>
+                          <p className="text-sm text-gray-500">
+                            {t('courtsPage.courtNumber', { number: court.number })}
+                          </p>
                         </div>
                         <div className="flex items-center gap-1 text-sm text-gray-600">
                           <UsersIcon className="w-4 h-4" />
-                          {court.capacity} 人
+                          {court.capacity} {t('common.people')}
                         </div>
                       </div>
                       {court.description && (
@@ -259,20 +255,20 @@ const Courts: React.FC = () => {
                         <div className="text-sm text-gray-600">
                           {court.pricing?.peakHour != null ? (
                             <>
-                              繁忙時段{' '}
+                              {t('courtsPage.peakLabel')}{' '}
                               <span className="font-semibold text-gray-900">
-                                {court.pricing.peakHour} 分
+                                {t('courtsPage.points', { n: court.pricing.peakHour })}
                               </span>
                             </>
                           ) : (
-                            '詳見預約頁'
+                            t('common.seeBookingPage')
                           )}
                         </div>
                         <Link
                           to="/booking"
                           className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 transition-colors"
                         >
-                          前往預約
+                          {t('courtsPage.goBook')}
                         </Link>
                       </div>
                     </div>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 import { 
   CalendarIcon, 
   MapPinIcon, 
@@ -52,6 +53,7 @@ const ActivityRegister: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [activity, setActivity] = useState<Activity | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -84,7 +86,7 @@ const ActivityRegister: React.FC = () => {
       const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:5001/api'}/activities/${id}`);
       
       if (!response.ok) {
-        throw new Error('活動不存在');
+        throw new Error(t('activityRegister.errors.activityNotFound'));
       }
       
       const data = await response.json();
@@ -93,11 +95,11 @@ const ActivityRegister: React.FC = () => {
       // 檢查是否可以報名
       if (!data.canRegister) {
         if (data.isExpired) {
-          setError('活動報名已截止');
+          setError(t('activityRegister.errors.cannotRegister.expired'));
         } else if (data.isFull) {
-          setError('活動人數已滿');
+          setError(t('activityRegister.errors.cannotRegister.full'));
         } else {
-          setError('活動不可報名');
+          setError(t('activityRegister.errors.cannotRegister.general'));
         }
       }
     } catch (error: any) {
@@ -132,17 +134,17 @@ const ActivityRegister: React.FC = () => {
 
     // 驗證表單
     if (registrationData.participantCount < 1) {
-      setError('參加人數至少為1人');
+      setError(t('activityRegister.errors.participantsMin'));
       return;
     }
 
     if (registrationData.participantCount > activity.availableSpots) {
-      setError(`人數已到上限，剩餘名額：${activity.availableSpots}人`);
+      setError(t('activityRegister.errors.participantsLimit', { n: activity.availableSpots }));
       return;
     }
 
     if (!registrationData.contactInfo.email || !registrationData.contactInfo.phone) {
-      setError('請填寫完整的聯繫信息');
+      setError(t('activityRegister.errors.contactMissing'));
       return;
     }
 
@@ -165,7 +167,7 @@ const ActivityRegister: React.FC = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.message || '報名失敗');
+        throw new Error(data.message || t('activityRegister.errors.submitFailed'));
       }
 
       setSuccess(true);
@@ -183,7 +185,8 @@ const ActivityRegister: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-TW', {
+    const locale = i18n.language?.toLowerCase().startsWith('en') ? 'en-US' : 'zh-TW';
+    return new Date(dateString).toLocaleDateString(locale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -200,7 +203,7 @@ const ActivityRegister: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">載入活動詳情中...</p>
+          <p className="mt-4 text-gray-600">{t('activityRegister.loading')}</p>
         </div>
       </div>
     );
@@ -211,14 +214,14 @@ const ActivityRegister: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">無法報名</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('activityRegister.invalid.title')}</h2>
           <p className="text-gray-600 mb-6">{error}</p>
           <Link
             to="/activities"
             className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
             <ArrowLeftIcon className="h-4 w-4 mr-2" />
-            返回活動列表
+            {t('activityRegister.invalid.backToList')}
           </Link>
         </div>
       </div>
@@ -230,16 +233,17 @@ const ActivityRegister: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <CheckCircleIcon className="h-16 w-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">報名成功！</h2>
+          <h2 className="text-2xl font-bold text-gray-900 mb-2">{t('activityRegister.success.title')}</h2>
           <p className="text-gray-600 mb-6">
-            您已成功報名活動「{activity?.title}」<br />
-            系統將在3秒後跳轉到我的活動頁面
+            {t('activityRegister.success.message', { title: activity?.title })}
+            <br />
+            {t('activityRegister.success.redirect')}
           </p>
           <Link
             to="/my-activities"
             className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
           >
-            立即查看我的活動
+            {t('activityRegister.success.cta')}
           </Link>
         </div>
       </div>
@@ -257,9 +261,9 @@ const ActivityRegister: React.FC = () => {
               className="inline-flex items-center text-gray-600 hover:text-gray-900 transition-colors"
             >
               <ArrowLeftIcon className="h-5 w-5 mr-2" />
-              返回活動詳情
+              {t('activityRegister.header.backToDetail')}
             </Link>
-            <h1 className="text-xl font-semibold text-gray-900">活動報名</h1>
+            <h1 className="text-xl font-semibold text-gray-900">{t('activityRegister.header.title')}</h1>
           </div>
         </div>
       </div>
@@ -286,18 +290,22 @@ const ActivityRegister: React.FC = () => {
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <UsersIcon className="h-4 w-4 mr-2" />
-                  <span>{activity?.totalRegistered}/{activity?.maxParticipants} 人</span>
+                  <span>
+                    {activity?.totalRegistered}/{activity?.maxParticipants} {t('common.people')}
+                  </span>
                 </div>
                 <div className="flex items-center text-sm text-gray-600">
                   <CurrencyDollarIcon className="h-4 w-4 mr-2" />
-                  <span>{activity?.price} 積分/人</span>
+                  <span>{t('activityRegister.sidebar.pointsPerPerson', { n: activity?.price })}</span>
                 </div>
               </div>
 
               <div className="mt-4 pt-4 border-t border-gray-200">
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">剩餘名額：</span>
-                  <span className="font-semibold text-gray-900">{activity?.availableSpots} 人</span>
+                  <span className="text-gray-600">{t('activityRegister.sidebar.remaining')}:</span>
+                  <span className="font-semibold text-gray-900">
+                    {activity?.availableSpots} {t('common.people')}
+                  </span>
                 </div>
               </div>
             </motion.div>
@@ -310,7 +318,7 @@ const ActivityRegister: React.FC = () => {
               animate={{ opacity: 1, x: 0 }}
               className="bg-white rounded-xl shadow-lg p-6"
             >
-              <h2 className="text-xl font-bold text-gray-900 mb-6">填寫報名信息</h2>
+              <h2 className="text-xl font-bold text-gray-900 mb-6">{t('activityRegister.form.fillInfo')}</h2>
 
               {error && (
                 <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
@@ -325,7 +333,7 @@ const ActivityRegister: React.FC = () => {
                 {/* Participant Count */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    參加人數 <span className="text-red-500">*</span>
+                    {t('activityRegister.form.participantCount')} <span className="text-red-500">*</span>
                   </label>
                   <select
                     value={registrationData.participantCount}
@@ -333,11 +341,13 @@ const ActivityRegister: React.FC = () => {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   >
                     {Array.from({ length: Math.min(10, activity?.availableSpots || 1) }, (_, i) => i + 1).map(num => (
-                      <option key={num} value={num}>{num} 人</option>
+                      <option key={num} value={num}>
+                        {num} {t('common.people')}
+                      </option>
                     ))}
                   </select>
                   <p className="text-xs text-gray-500 mt-1">
-                    最多可選擇 {Math.min(10, activity?.availableSpots || 1)} 人
+                    {t('activityRegister.form.maxSelectable', { n: Math.min(10, activity?.availableSpots || 1) })}
                   </p>
                 </div>
 
@@ -345,27 +355,27 @@ const ActivityRegister: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      聯繫郵箱 <span className="text-red-500">*</span>
+                      {t('activityRegister.form.email')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="email"
                       value={registrationData.contactInfo.email}
                       onChange={(e) => handleInputChange('contactInfo.email', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="請輸入郵箱地址"
+                      placeholder={t('activityRegister.form.email')}
                       required
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      聯繫電話 <span className="text-red-500">*</span>
+                      {t('activityRegister.form.phone')} <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="tel"
                       value={registrationData.contactInfo.phone}
                       onChange={(e) => handleInputChange('contactInfo.phone', e.target.value)}
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      placeholder="請輸入電話號碼"
+                      placeholder={t('activityRegister.form.phone')}
                       required
                     />
                   </div>
@@ -374,18 +384,18 @@ const ActivityRegister: React.FC = () => {
                 {/* Notes */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    備註
+                    {t('activityRegister.form.notes')}
                   </label>
                   <textarea
                     value={registrationData.notes}
                     onChange={(e) => handleInputChange('notes', e.target.value)}
                     rows={3}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                    placeholder="如有特殊需求或備註，請在此填寫"
+                    placeholder={t('activityRegister.form.notesPlaceholder')}
                     maxLength={200}
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    {registrationData.notes.length}/200 字符
+                    {t('activityRegister.form.charCount', { n: registrationData.notes.length })}
                   </p>
                 </div>
 
@@ -400,32 +410,40 @@ const ActivityRegister: React.FC = () => {
 
                 {/* Cost Summary */}
                 <div className="bg-gray-50 rounded-lg p-4">
-                  <h3 className="font-semibold text-gray-900 mb-3">費用明細</h3>
+                  <h3 className="font-semibold text-gray-900 mb-3">{t('activityRegister.cost.title')}</h3>
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">單價：</span>
-                      <span className="text-gray-900">{activity?.price} 積分/人</span>
+                      <span className="text-gray-600">{t('activityRegister.cost.unitPrice')}:</span>
+                      <span className="text-gray-900">{t('activityRegister.sidebar.pointsPerPerson', { n: activity?.price })}</span>
                     </div>
                     <div className="flex justify-between text-sm">
-                      <span className="text-gray-600">人數：</span>
-                      <span className="text-gray-900">{registrationData.participantCount} 人</span>
+                      <span className="text-gray-600">{t('activityRegister.cost.peopleCount')}:</span>
+                      <span className="text-gray-900">
+                        {registrationData.participantCount} {t('common.people')}
+                      </span>
                     </div>
                     {redeemData && (
                       <>
                         <div className="flex justify-between text-sm">
-                          <span className="text-gray-600">原價：</span>
-                          <span className="text-gray-900">{baseCost} 積分</span>
+                          <span className="text-gray-600">{t('activityRegister.cost.original')}:</span>
+                          <span className="text-gray-900">
+                            {baseCost} {t('common.currency')}
+                          </span>
                         </div>
                         <div className="flex justify-between text-sm text-green-600">
-                          <span>折扣：</span>
-                          <span>-{redeemData.discountAmount.toFixed(0)} 積分</span>
+                          <span>{t('activityRegister.cost.discount')}:</span>
+                          <span>
+                            -{redeemData.discountAmount.toFixed(0)} {t('common.currency')}
+                          </span>
                         </div>
                       </>
                     )}
                     <div className="border-t border-gray-200 pt-2">
                       <div className="flex justify-between font-semibold">
-                        <span className="text-gray-900">總計：</span>
-                        <span className="text-primary-600">{totalCost} 積分</span>
+                        <span className="text-gray-900">{t('activityRegister.cost.total')}:</span>
+                        <span className="text-primary-600">
+                          {totalCost} {t('common.currency')}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -437,14 +455,16 @@ const ActivityRegister: React.FC = () => {
                     to={`/activities/${id}`}
                     className="flex-1 flex items-center justify-center px-6 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                   >
-                    取消
+                    {t('activityRegister.buttons.cancel')}
                   </Link>
                   <button
                     type="submit"
                     disabled={submitting || !activity?.canRegister}
                     className="flex-1 flex items-center justify-center px-6 py-3 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:bg-gray-300 disabled:cursor-not-allowed transition-colors"
                   >
-                    {submitting ? '提交中...' : `確認報名 (${totalCost} 積分)`}
+                    {submitting
+                      ? t('activityRegister.buttons.submitting')
+                      : t('activityRegister.buttons.submit', { totalPts: totalCost })}
                   </button>
                 </div>
               </form>

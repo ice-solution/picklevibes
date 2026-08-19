@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useBooking } from '../../contexts/BookingContext';
 import apiConfig from '../../config/api';
 import { 
@@ -12,15 +13,12 @@ import {
 
 const Courts: React.FC = () => {
   const { courts, loading } = useBooking();
+  const { t } = useTranslation();
 
   const getCourtTypeText = (type: string) => {
-    switch (type) {
-      case 'competition': return '比賽場';
-      case 'training': return '訓練場';
-      case 'solo': return '單人場';
-      case 'dink': return '練習場';
-      default: return '場地';
-    }
+    const key = `courtsPage.types.${type}`;
+    const translated = t(key);
+    return translated === key ? t('nav.courts') : translated;
   };
 
   const getCourtTypeColor = (type: string) => {
@@ -39,7 +37,7 @@ const Courts: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">載入場地信息中...</p>
+            <p className="mt-4 text-gray-600">{t('home.courtsSection.loading')}</p>
           </div>
         </div>
       </section>
@@ -57,10 +55,10 @@ const Courts: React.FC = () => {
           className="text-center mb-16"
         >
           <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-            您來玩的地方
+            {t('home.courtsSection.title')}
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            讓我們誠實地說，匹克球可以在很多地方玩，但我們喜歡認為我們不僅僅是這樣。我們是一個通過積極生活方式和共同體驗團結人們的社區。
+            {t('home.courtsSection.subtitle')}
           </p>
         </motion.div>
 
@@ -101,19 +99,19 @@ const Courts: React.FC = () => {
                 </h3>
                 
                 <p className="text-gray-600 mb-4 line-clamp-2">
-                  {court.description || '專業的匹克球場地，配備現代化設施'}
+                  {court.description || t('home.courtsSection.defaultDesc')}
                 </p>
 
                 {/* 場地特色 */}
                 <div className="flex items-center gap-4 mb-4 text-sm text-gray-500">
                   <div className="flex items-center gap-1">
                     <UsersIcon className="w-4 h-4" />
-                    <span>最多 {court.capacity} 人</span>
+                    <span>{t('home.courtsSection.maxPeople', { n: court.capacity })}</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <ClockIcon className="w-4 h-4" />
                     <span>
-                      {court.type === 'solo' ? '8am-11pm' : '24小時營業(需預約方可進場)'}
+                      {court.type === 'solo' ? '8am-11pm' : t('home.courtsSection.hours24')}
                     </span>
                   </div>
                 </div>
@@ -159,9 +157,9 @@ const Courts: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-500">繁忙時間</span>
+                        <span className="text-sm text-gray-500">{t('home.courtsSection.peakHour')}</span>
                         <span className="text-lg font-bold text-primary-600">
-                          {court.pricing.peakHour} 積分/小時
+                          {t('home.courtsSection.pointsPerHour', { n: court.pricing.peakHour })}
                         </span>
                       </div>
                     </>
@@ -173,7 +171,7 @@ const Courts: React.FC = () => {
                   to="/booking"
                   className="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 group"
                 >
-                  立即預約
+                  {t('common.bookNow')}
                   <ArrowRightIcon className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
               </div>
@@ -194,16 +192,16 @@ const Courts: React.FC = () => {
               <span className="text-4xl">🏓</span>
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-4">
-              場地信息載入中
+              {t('home.courtsSection.emptyTitle')}
             </h3>
             <p className="text-gray-600 mb-8">
-              我們正在為您準備最佳的匹克球體驗
+              {t('home.courtsSection.emptyDesc')}
             </p>
             <Link
               to="/booking"
               className="btn-primary inline-flex items-center gap-2"
             >
-              查看預約
+              {t('home.courtsSection.viewBooking')}
               <ArrowRightIcon className="w-4 h-4" />
             </Link>
           </motion.div>
@@ -219,16 +217,16 @@ const Courts: React.FC = () => {
         >
           <div className="bg-gradient-to-r from-primary-600 to-primary-700 rounded-2xl p-8 md:p-12 text-white">
             <h3 className="text-3xl md:text-4xl font-bold mb-4">
-              準備好開始您的匹克球之旅了嗎？
+              {t('home.courtsSection.readyTitle')}
             </h3>
             <p className="text-xl text-primary-100 mb-8 max-w-2xl mx-auto">
-              加入我們的社區，體驗最棒的匹克球設施和友善的環境
+              {t('home.courtsSection.readySubtitle')}
             </p>
             <Link
               to="/booking"
               className="bg-white text-primary-600 hover:bg-gray-100 font-bold py-4 px-8 rounded-full text-lg transition-colors duration-200 inline-flex items-center gap-2"
             >
-              立即預約場地
+              {t('home.courtsSection.bookCourtNow')}
               <ArrowRightIcon className="w-5 h-5" />
             </Link>
           </div>

@@ -2,52 +2,42 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { CheckIcon, XMarkIcon, MapPinIcon, BeakerIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import SEO from '../components/SEO/SEO';
 import PricingIntro from '../components/Pricing/PricingIntro';
 import { useAuth } from '../contexts/AuthContext';
 
 const Pricing: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
+
+  const basicFeatures = t('pricingPage.basicFeatures', { returnObjects: true }) as string[];
+  const basicLimits = t('pricingPage.basicLimits', { returnObjects: true }) as string[];
+  const vipFeatures = t('pricingPage.vipFeatures', { returnObjects: true }) as string[];
 
   const membershipPlans = [
     {
-      name: '基本會員',
+      name: t('pricingPage.basicName'),
       price: 0,
-      period: '免費',
-      description: '適合偶爾打球的玩家',
-      features: [
-        '場地預約',
-        '基本設施使用',
-        '在線預約系統',
-        '基本客戶支持'
-      ],
-      limitations: [
-        '無會員折扣',
-        '無優先預約',
-        '無專屬時段'
-      ],
+      period: t('pricingPage.basicPeriod'),
+      description: t('pricingPage.basicDesc'),
+      features: Array.isArray(basicFeatures) ? basicFeatures : [],
+      limitations: Array.isArray(basicLimits) ? basicLimits : [],
       popular: false,
-      color: 'gray'
+      color: 'gray',
+      isSpecial: false,
     },
     {
-      name: 'VIP會員',
+      name: t('pricingPage.vipName'),
       price: 0,
-      period: '新張期內免費',
-      description: '適合經常打球的玩家',
-      features: [
-        '場地預約',
-        '所有設施使用',
-        '20% 會員折扣',
-        '優先預約權',
-        '免費球拍租借',
-        '專屬會員活動',
-        '優先客戶支持'
-      ],
-      limitations: [],
+      period: t('pricingPage.vipPeriod'),
+      description: t('pricingPage.vipDesc'),
+      features: Array.isArray(vipFeatures) ? vipFeatures : [],
+      limitations: [] as string[],
       popular: true,
       color: 'primary',
-      isSpecial: true
-    }
+      isSpecial: true,
+    },
   ];
 
 
@@ -83,9 +73,9 @@ const Pricing: React.FC = () => {
   return (
     <>
       <SEO
-        title="價格方案 | Picklevibes 會員計劃與場地收費"
-        description="了解 Picklevibes 的會員方案和場地收費。透明價格，無隱藏費用。基本會員免費，VIP會員享20%折扣及優先預約權。"
-        keywords="匹克球價格,匹克球收費,會員方案,VIP會員,場地租用價格,匹克球場地費用,荔枝角匹克球價格"
+        title={t('pricingPage.seoTitle')}
+        description={t('pricingPage.seoDescription')}
+        keywords="pickleball pricing,membership,VIP,Picklevibes"
         url="/pricing"
       />
       <div className="min-h-screen bg-white">
@@ -99,10 +89,10 @@ const Pricing: React.FC = () => {
             className="text-center"
           >
             <h1 className="text-4xl md:text-6xl font-bold mb-6">
-              價格方案
+              {t('pricingPage.title')}
             </h1>
             <p className="text-xl md:text-2xl text-primary-100 max-w-3xl mx-auto">
-              透明的價格，無隱藏費用。選擇最適合您的方案
+              {t('pricingPage.subtitle')}
             </p>
           </motion.div>
         </div>
@@ -120,9 +110,9 @@ const Pricing: React.FC = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">會員方案</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">{t('pricingPage.membershipTitle')}</h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              選擇最適合您的會員等級，享受相應的優惠和服務
+              {t('pricingPage.membershipSubtitle')}
             </p>
           </motion.div>
 
@@ -147,7 +137,7 @@ const Pricing: React.FC = () => {
                 >
                   {plan.popular && (
                     <div className="absolute top-0 left-0 right-0 bg-gradient-to-r from-red-500 to-pink-500 text-white text-center py-2 text-sm font-medium animate-pulse">
-                      {plan.isSpecial ? '🎉 新張期內免費！' : '最受歡迎'}
+                      {plan.isSpecial ? t('pricingPage.launchFree') : t('pricingPage.popular')}
                     </div>
                   )}
 
@@ -164,11 +154,11 @@ const Pricing: React.FC = () => {
                           <div className="text-center">
                             <div className="flex items-baseline justify-center mb-2">
                               <span className="text-4xl font-bold text-red-500 animate-bounce">
-                                免費
+                                {t('pricingPage.free')}
                               </span>
                             </div>
                             <div className="text-sm text-gray-500 line-through">
-                              原價 $800/半年
+                              {t('pricingPage.originalPrice')}
                             </div>
                             <div className="text-lg font-semibold text-green-600 mt-1">
                               {plan.period}
@@ -188,7 +178,7 @@ const Pricing: React.FC = () => {
                     </div>
 
                     <div className="space-y-4 mb-8">
-                      <h4 className="font-semibold text-gray-900">包含功能</h4>
+                      <h4 className="font-semibold text-gray-900">{t('pricingPage.features')}</h4>
                       {plan.features.map((feature, idx) => (
                         <div key={idx} className="flex items-center gap-3">
                           <CheckIcon className="w-5 h-5 text-green-500 flex-shrink-0" />
@@ -198,7 +188,7 @@ const Pricing: React.FC = () => {
                       
                       {plan.limitations.length > 0 && (
                         <>
-                          <h4 className="font-semibold text-gray-900 mt-6">限制</h4>
+                          <h4 className="font-semibold text-gray-900 mt-6">{t('pricingPage.limitations')}</h4>
                           {plan.limitations.map((limitation, idx) => (
                             <div key={idx} className="flex items-center gap-3">
                               <XMarkIcon className="w-5 h-5 text-red-500 flex-shrink-0" />
@@ -218,7 +208,11 @@ const Pricing: React.FC = () => {
                           : `border-2 ${colors.border} ${colors.text} hover:${colors.bg} hover:text-white`
                       }`}
                     >
-                      {plan.isSpecial ? '🎉 立即免費成為VIP！' : plan.price === 0 ? '免費註冊' : '選擇方案'}
+                      {plan.isSpecial
+                        ? t('pricingPage.ctaVip')
+                        : plan.price === 0
+                          ? t('pricingPage.ctaBasic')
+                          : t('pricingPage.ctaSelect')}
                     </button>
                   </div>
                 </motion.div>
@@ -239,26 +233,26 @@ const Pricing: React.FC = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">其他設施</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">{t('pricingPage.amenitiesTitle')}</h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              除了專業的匹克球場地，我們還提供各種便利設施
+              {t('pricingPage.amenitiesSubtitle')}
             </p>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             {[
               {
-                title: '3個專業場地',
-                description: '比賽場、訓練場、單人場，配備空調的現代化室內場地',
+                title: t('pricingPage.amenityCourtsTitle'),
+                description: t('pricingPage.amenityCourtsDesc'),
                 icon: MapPinIcon,
-                features: ['空調控制', '專業照明', '防滑地面', '標準尺寸']
+                features: t('pricingPage.amenityCourtsFeatures', { returnObjects: true }) as string[],
               },
               {
-                title: '淋浴設施',
-                description: '現代化淋浴設施，讓您運動後保持清爽',
+                title: t('pricingPage.amenityShowerTitle'),
+                description: t('pricingPage.amenityShowerDesc'),
                 icon: BeakerIcon,
-                features: ['熱水淋浴', '私人空間', '清潔環境', '便利使用']
-              }
+                features: t('pricingPage.amenityShowerFeatures', { returnObjects: true }) as string[],
+              },
             ].map((facility, index) => (
               <motion.div
                 key={index}
@@ -280,7 +274,7 @@ const Pricing: React.FC = () => {
                       {facility.description}
                     </p>
                     <div className="grid grid-cols-2 gap-2">
-                      {facility.features.map((feature, idx) => (
+                      {(Array.isArray(facility.features) ? facility.features : []).map((feature, idx) => (
                         <div key={idx} className="flex items-center gap-2 text-sm text-gray-600">
                           <CheckCircleIcon className="w-4 h-4 text-green-500" />
                           <span>{feature}</span>
@@ -305,9 +299,9 @@ const Pricing: React.FC = () => {
             viewport={{ once: true }}
             className="text-center mb-12"
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">會員折扣</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">{t('pricingPage.discountTitle')}</h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              會員可享受場地費用的折扣優惠
+              {t('pricingPage.discountSubtitle')}
             </p>
           </motion.div>
 
@@ -316,16 +310,16 @@ const Pricing: React.FC = () => {
               <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-gray-600">0%</span>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">基本會員</h3>
-              <p className="text-gray-600">無折扣</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('pricingPage.basicName')}</h3>
+              <p className="text-gray-600">{t('pricingPage.discountBasicRate')}</p>
             </div>
 
             <div className="bg-white rounded-xl p-6 text-center">
               <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
                 <span className="text-2xl font-bold text-primary-600">20%</span>
               </div>
-              <h3 className="text-xl font-bold text-gray-900 mb-2">VIP會員</h3>
-              <p className="text-gray-600">所有場地費用</p>
+              <h3 className="text-xl font-bold text-gray-900 mb-2">{t('pricingPage.vipName')}</h3>
+              <p className="text-gray-600">{t('pricingPage.discountVipRate')}</p>
             </div>
           </div>
         </div>
@@ -341,31 +335,14 @@ const Pricing: React.FC = () => {
             viewport={{ once: true }}
             className="text-center mb-16"
           >
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">常見問題</h2>
+            <h2 className="text-4xl font-bold text-gray-900 mb-6">{t('pricingPage.faqTitle')}</h2>
             <p className="text-xl text-gray-600">
-              關於價格和會員方案的常見問題
+              {t('pricingPage.faqSubtitle')}
             </p>
           </motion.div>
 
           <div className="space-y-8">
-            {[
-              {
-                question: '如何取消會員訂閱？',
-                answer: '您可以隨時在個人資料頁面取消會員訂閱。取消後，您將在當前計費週期結束前繼續享受會員優惠。'
-              },
-              {
-                question: '會員折扣何時生效？',
-                answer: '會員折扣在您完成註冊並支付會員費用後立即生效。'
-              },
-              {
-                question: '可以更改會員方案嗎？',
-                answer: '是的，您可以隨時升級或降級您的會員方案。升級立即生效，降級在當前計費週期結束後生效。'
-              },
-              {
-                question: '場地預約需要提前多久？',
-                answer: '基本會員需要提前24小時預約，VIP會員可以提前48小時預約。'
-              }
-            ].map((faq, index) => (
+            {(t('pricingPage.faq', { returnObjects: true }) as Array<{ q: string; a: string }>).map((faq, index) => (
               <motion.div
                 key={index}
                 initial={{ opacity: 0, y: 20 }}
@@ -375,10 +352,10 @@ const Pricing: React.FC = () => {
                 className="bg-gray-50 rounded-xl p-6"
               >
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">
-                  {faq.question}
+                  {faq.q}
                 </h3>
                 <p className="text-gray-600">
-                  {faq.answer}
+                  {faq.a}
                 </p>
               </motion.div>
             ))}
@@ -395,22 +372,22 @@ const Pricing: React.FC = () => {
             transition={{ duration: 0.6 }}
             viewport={{ once: true }}
           >
-            <h2 className="text-4xl font-bold mb-6">準備開始了嗎？</h2>
+            <h2 className="text-4xl font-bold mb-6">{t('pricingPage.bottomCtaTitle')}</h2>
             <p className="text-xl text-primary-100 mb-8 max-w-2xl mx-auto">
-              選擇適合您的方案，開始您的匹克球之旅
+              {t('pricingPage.bottomCtaSubtitle')}
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 to={user ? '/profile' : '/register'}
                 className="bg-white text-primary-600 hover:bg-gray-100 font-bold py-4 px-8 rounded-full text-lg transition-colors duration-200"
               >
-                立即註冊
+                {t('pricingPage.bottomCtaRegister')}
               </Link>
               <Link
                 to="/booking"
                 className="border-2 border-white text-white hover:bg-white hover:text-primary-600 font-bold py-4 px-8 rounded-full text-lg transition-colors duration-200"
               >
-                預約場地
+                {t('pricingPage.bottomCtaBook')}
               </Link>
             </div>
           </motion.div>

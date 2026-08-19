@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 import SEO from '../components/SEO/SEO';
 import RegularActivities from '../components/Activities/RegularActivities';
 import { 
@@ -56,6 +57,7 @@ const Activities: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'activities' | 'regular'>('activities');
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
 
   useEffect(() => {
     fetchActivities();
@@ -86,7 +88,8 @@ const Activities: React.FC = () => {
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('zh-TW', {
+    const locale = i18n.language?.toLowerCase().startsWith('en') ? 'en-US' : 'zh-TW';
+    return new Date(dateString).toLocaleDateString(locale, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -113,13 +116,13 @@ const Activities: React.FC = () => {
   const getStatusText = (status: string) => {
     switch (status) {
       case 'upcoming':
-        return '即將開始';
+        return t('activitiesPage.status.upcoming');
       case 'ongoing':
-        return '進行中';
+        return t('activitiesPage.status.ongoing');
       case 'completed':
-        return '已完結';
+        return t('activitiesPage.status.completed');
       case 'cancelled':
-        return '已取消';
+        return t('activitiesPage.status.cancelled');
       default:
         return status;
     }
@@ -156,14 +159,14 @@ const Activities: React.FC = () => {
   };
 
   const getRegisterButtonText = (activity: Activity) => {
-    if (activity.userRegistration) return '你已報名';
+    if (activity.userRegistration) return t('activitiesPage.registration.yourRegistered');
     const derived = getDerivedStatus(activity);
-    if (derived === 'completed') return '已完結';
-    if (derived === 'ongoing') return '進行中';
-    if (activity.isExpired) return '報名已截止';
-    if (activity.isFull) return '人數已滿';
-    if (activity.availableSpots <= 0) return '人數已到上限';
-    return '立即報名';
+    if (derived === 'completed') return t('activitiesPage.registration.completed');
+    if (derived === 'ongoing') return t('activitiesPage.registration.ongoing');
+    if (activity.isExpired) return t('activitiesPage.registration.registrationClosed');
+    if (activity.isFull) return t('activitiesPage.registration.full');
+    if (activity.availableSpots <= 0) return t('activitiesPage.registration.maxReached');
+    return t('activitiesPage.actions.registerNow');
   };
 
   if (loading) {
@@ -171,7 +174,7 @@ const Activities: React.FC = () => {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">載入活動中...</p>
+          <p className="mt-4 text-gray-600">{t('activitiesPage.loading')}</p>
         </div>
       </div>
     );
@@ -180,9 +183,9 @@ const Activities: React.FC = () => {
   return (
     <>
       <SEO
-        title="活動中心 | Picklevibes 匹克球活動與課程"
-        description="探索 Picklevibes 精彩的匹克球活動、教練課程及聯誼活動。與其他玩家一起享受運動樂趣，提升球技並擴展社交圈子。"
-        keywords="匹克球活動,教練課程,匹克球聯誼,活動報名,匹克球訓練,社群活動"
+        title={t('activitiesPage.seoTitle')}
+        description={t('activitiesPage.seoDescription')}
+        keywords="pickleball events,coaching,social,event registration,Picklevibes"
         url="/activities"
       />
       <div className="min-h-screen bg-gray-50">
@@ -190,8 +193,8 @@ const Activities: React.FC = () => {
       <div className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="text-center">
-            <h1 className="text-3xl font-bold text-gray-900">活動中心</h1>
-            <p className="mt-2 text-gray-600">探索精彩的匹克球活動，與其他玩家一起享受運動樂趣</p>
+            <h1 className="text-3xl font-bold text-gray-900">{t('activitiesPage.headerTitle')}</h1>
+            <p className="mt-2 text-gray-600">{t('activitiesPage.headerSubtitle')}</p>
           </div>
         </div>
       </div>
@@ -208,7 +211,7 @@ const Activities: React.FC = () => {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              現在活動
+              {t('activitiesPage.tabs.activities')}
             </button>
             <button
               onClick={() => setActiveTab('regular')}
@@ -218,7 +221,7 @@ const Activities: React.FC = () => {
                   : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
             >
-              恆常活動
+              {t('activitiesPage.tabs.regular')}
             </button>
           </nav>
         </div>
@@ -240,7 +243,7 @@ const Activities: React.FC = () => {
                     : 'bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                全部活動
+                {t('activitiesPage.filters.all')}
               </button>
               <button
                 onClick={() => setStatusFilter('upcoming')}
@@ -250,7 +253,7 @@ const Activities: React.FC = () => {
                     : 'bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                即將開始
+                {t('activitiesPage.filters.upcoming')}
               </button>
               <button
                 onClick={() => setStatusFilter('ongoing')}
@@ -260,7 +263,7 @@ const Activities: React.FC = () => {
                     : 'bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                進行中
+                {t('activitiesPage.filters.ongoing')}
               </button>
               <button
                 onClick={() => setStatusFilter('completed')}
@@ -270,7 +273,7 @@ const Activities: React.FC = () => {
                     : 'bg-white text-gray-700 hover:bg-gray-50'
                 }`}
               >
-                已完結
+                {t('activitiesPage.filters.completed')}
               </button>
             </div>
 
@@ -280,8 +283,8 @@ const Activities: React.FC = () => {
             <div className="text-gray-400 mb-4">
               <CalendarIcon className="h-16 w-16 mx-auto" />
             </div>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">暫無活動</h3>
-            <p className="text-gray-600">目前沒有符合條件的活動，請稍後再來查看</p>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">{t('activitiesPage.empty.title')}</h3>
+            <p className="text-gray-600">{t('activitiesPage.empty.description')}</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -305,14 +308,14 @@ const Activities: React.FC = () => {
                     />
                     {activity.isEffectivelyPinned && (
                       <span className="absolute top-3 left-3 px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full shadow">
-                        置頂
+                        {t('activitiesPage.pinned')}
                       </span>
                     )}
                   </div>
                 ) : activity.isEffectivelyPinned ? (
                   <div className="h-10 bg-amber-50 border-b border-amber-200 flex items-center px-4">
                     <span className="px-2.5 py-1 bg-amber-500 text-white text-xs font-semibold rounded-full">
-                      置頂
+                      {t('activitiesPage.pinned')}
                     </span>
                   </div>
                 ) : null}
@@ -324,7 +327,7 @@ const Activities: React.FC = () => {
                       {getStatusText(getDerivedStatus(activity))}
                     </span>
                     <span className="text-sm text-gray-500">
-                      {formatDate(activity.registrationDeadline)} 截止
+                      {t('activitiesPage.deadline', { date: formatDate(activity.registrationDeadline) })}
                     </span>
                   </div>
 
@@ -350,19 +353,21 @@ const Activities: React.FC = () => {
                     </div>
                     <div className="flex items-center text-sm text-gray-600">
                       <UsersIcon className="h-4 w-4 mr-2" />
-                      <span>{activity.totalRegistered}/{activity.maxParticipants} 人</span>
+                      <span>
+                        {activity.totalRegistered}/{activity.maxParticipants} {t('common.people')}
+                      </span>
                     </div>
                     <div className="flex items-center text-sm text-gray-600">
                       <CurrencyDollarIcon className="h-4 w-4 mr-2" />
-                      <span>{activity.price} 積分/人</span>
+                      <span>{t('activityRegister.sidebar.pointsPerPerson', { n: activity.price })}</span>
                     </div>
                   </div>
 
                   {/* Progress Bar */}
                   <div className="mb-4">
                     <div className="flex justify-between text-sm text-gray-600 mb-1">
-                      <span>報名進度</span>
-                      <span>{activity.availableSpots} 個名額</span>
+                      <span>{t('activitiesPage.progress.label')}</span>
+                      <span>{t('activitiesPage.progress.spots', { n: activity.availableSpots })}</span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2">
                       <div
@@ -381,7 +386,7 @@ const Activities: React.FC = () => {
                       className="flex-1 flex items-center justify-center px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 transition-colors"
                     >
                       <EyeIcon className="h-4 w-4 mr-2" />
-                      查看詳情
+                      {t('activitiesPage.actions.viewDetail')}
                     </Link>
                     {canRegister(activity) ? (
                       <Link
@@ -389,7 +394,7 @@ const Activities: React.FC = () => {
                         className="flex-1 flex items-center justify-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                       >
                         <UserPlusIcon className="h-4 w-4 mr-2" />
-                        立即報名
+                        {t('activitiesPage.actions.registerNow')}
                       </Link>
                     ) : activity.userRegistration ? (
                       <button
@@ -424,7 +429,7 @@ const Activities: React.FC = () => {
                     disabled={currentPage === 1}
                     className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    上一頁
+                    {t('activitiesPage.pagination.prev')}
                   </button>
                   {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
                     <button
@@ -444,7 +449,7 @@ const Activities: React.FC = () => {
                     disabled={currentPage === totalPages}
                     className="px-3 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    下一頁
+                    {t('activitiesPage.pagination.next')}
                   </button>
                 </div>
               </div>

@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation, useNavigate, type Location } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { getPostAuthRedirectPath } from '../utils/authRedirect';
 
 const Register: React.FC = () => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -49,35 +51,35 @@ const Register: React.FC = () => {
     const newErrors: { [key: string]: string } = {};
 
     if (!formData.name.trim()) {
-      newErrors.name = '姓名為必填項目';
+      newErrors.name = t('auth.errors.nameRequired');
     } else if (formData.name.trim().length < 2) {
-      newErrors.name = '姓名至少需要2個字符';
+      newErrors.name = t('auth.errors.nameMin');
     }
 
     if (!formData.email.trim()) {
-      newErrors.email = '電子郵件為必填項目';
+      newErrors.email = t('auth.errors.emailRequired');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = '請輸入有效的電子郵件地址';
+      newErrors.email = t('auth.errors.emailInvalid');
     }
 
     if (!formData.password.trim()) {
-      newErrors.password = '密碼為必填項目';
+      newErrors.password = t('auth.errors.passwordRequired');
     } else if (formData.password.length < 8) {
-      newErrors.password = '密碼至少需要8個字符';
+      newErrors.password = t('auth.errors.passwordMin');
     } else if (!/^(?=.*[A-Za-z])(?=.*\d)[A-Za-z\d@$!%*#?&]/.test(formData.password)) {
-      newErrors.password = '密碼必須包含至少一個字母和一個數字';
+      newErrors.password = t('auth.errors.passwordPattern');
     }
 
     if (!formData.confirmPassword.trim()) {
-      newErrors.confirmPassword = '確認密碼為必填項目';
+      newErrors.confirmPassword = t('auth.errors.confirmRequired');
     } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = '密碼不匹配';
+      newErrors.confirmPassword = t('auth.errors.passwordMismatch');
     }
 
     if (!formData.phone.trim()) {
-      newErrors.phone = '電話號碼為必填項目';
+      newErrors.phone = t('auth.errors.phoneRequired');
     } else if (!/^[0-9]+$/.test(formData.phone)) {
-      newErrors.phone = '電話號碼只能包含數字';
+      newErrors.phone = t('auth.errors.phoneInvalid');
     }
 
     setErrors(newErrors);
@@ -123,16 +125,16 @@ const Register: React.FC = () => {
             <span className="text-3xl font-bold text-gray-900">PickleVibes</span>
           </Link>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            創建您的帳戶
+            {t('auth.registerHeading')}
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            或者{' '}
+            {t('auth.orCreate')}{' '}
             <Link
               to="/login"
               state={redirectFrom ? { from: redirectFrom } : undefined}
               className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
             >
-              登入現有帳戶
+              {t('auth.signInExisting')}
             </Link>
           </p>
         </motion.div>
@@ -156,7 +158,7 @@ const Register: React.FC = () => {
             {/* 姓名 */}
             <div>
               <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-                姓名
+                {t('auth.name')}
               </label>
               <div className="mt-1">
                 <input
@@ -169,7 +171,7 @@ const Register: React.FC = () => {
                   className={`input-field ${
                     errors.name ? 'border-red-500 focus:ring-red-500' : ''
                   }`}
-                  placeholder="請輸入您的姓名"
+                  placeholder={t('auth.name')}
                 />
                 {errors.name && (
                   <p className="mt-1 text-sm text-red-600">{errors.name}</p>
@@ -180,7 +182,7 @@ const Register: React.FC = () => {
             {/* 電子郵件 */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                電子郵件地址
+                {t('auth.email')}
               </label>
               <div className="mt-1">
                 <input
@@ -193,7 +195,7 @@ const Register: React.FC = () => {
                   className={`input-field ${
                     errors.email ? 'border-red-500 focus:ring-red-500' : ''
                   }`}
-                  placeholder="請輸入您的電子郵件"
+                  placeholder={t('auth.emailPlaceholder')}
                 />
                 {errors.email && (
                   <p className="mt-1 text-sm text-red-600">{errors.email}</p>
@@ -204,7 +206,7 @@ const Register: React.FC = () => {
             {/* 電話號碼 */}
             <div>
               <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                電話號碼
+                {t('auth.phone')}
               </label>
               <div className="mt-1">
                 <input
@@ -217,7 +219,7 @@ const Register: React.FC = () => {
                   className={`input-field ${
                     errors.phone ? 'border-red-500 focus:ring-red-500' : ''
                   }`}
-                  placeholder="請輸入您的電話號碼"
+                  placeholder={t('auth.phone')}
                 />
                 {errors.phone && (
                   <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
@@ -228,7 +230,7 @@ const Register: React.FC = () => {
             {/* 密碼 */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                密碼
+                {t('auth.password')}
               </label>
               <div className="mt-1 relative">
                 <input
@@ -241,7 +243,7 @@ const Register: React.FC = () => {
                   className={`input-field pr-10 ${
                     errors.password ? 'border-red-500 focus:ring-red-500' : ''
                   }`}
-                  placeholder="請輸入您的密碼"
+                  placeholder={t('auth.passwordPlaceholder')}
                 />
                 <button
                   type="button"
@@ -263,7 +265,7 @@ const Register: React.FC = () => {
             {/* 確認密碼 */}
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700">
-                確認密碼
+                {t('auth.confirmPassword')}
               </label>
               <div className="mt-1 relative">
                 <input
@@ -276,7 +278,7 @@ const Register: React.FC = () => {
                   className={`input-field pr-10 ${
                     errors.confirmPassword ? 'border-red-500 focus:ring-red-500' : ''
                   }`}
-                  placeholder="請再次輸入您的密碼"
+                  placeholder={t('auth.confirmPassword')}
                 />
                 <button
                   type="button"
@@ -331,7 +333,7 @@ const Register: React.FC = () => {
                     : 'bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500'
                 }`}
               >
-                {isLoading ? '註冊中...' : '創建帳戶'}
+                {isLoading ? t('auth.registering') : t('auth.register')}
               </button>
             </div>
           </form>

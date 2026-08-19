@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link, useLocation, useNavigate, type Location } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import { getPostAuthRedirectPath } from '../utils/authRedirect';
 
 const Login: React.FC = () => {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -56,13 +58,13 @@ const Login: React.FC = () => {
     const newErrors: { [key: string]: string } = {};
 
     if (!formData.email.trim()) {
-      newErrors.email = '電子郵件為必填項目';
+      newErrors.email = t('auth.errors.emailRequired');
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = '請輸入有效的電子郵件地址';
+      newErrors.email = t('auth.errors.emailInvalid');
     }
 
     if (!formData.password.trim()) {
-      newErrors.password = '密碼為必填項目';
+      newErrors.password = t('auth.errors.passwordRequired');
     }
 
     setErrors(newErrors);
@@ -111,16 +113,16 @@ const Login: React.FC = () => {
             <span className="text-3xl font-bold text-gray-900">PickleVibes</span>
           </Link>
           <h2 className="mt-6 text-3xl font-bold text-gray-900">
-            登入您的帳戶
+            {t('auth.loginHeading')}
           </h2>
           <p className="mt-2 text-sm text-gray-600">
-            或者{' '}
+            {t('auth.orCreate')}{' '}
             <Link
               to="/register"
               state={redirectFrom ? { from: redirectFrom } : undefined}
               className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
             >
-              創建新帳戶
+              {t('auth.createAccount')}
             </Link>
           </p>
         </motion.div>
@@ -144,7 +146,7 @@ const Login: React.FC = () => {
             {/* 電子郵件 */}
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                電子郵件地址
+                {t('auth.email')}
               </label>
               <div className="mt-1">
                 <input
@@ -157,7 +159,7 @@ const Login: React.FC = () => {
                   className={`input-field ${
                     errors.email ? 'border-red-500 focus:ring-red-500' : ''
                   }`}
-                  placeholder="請輸入您的電子郵件"
+                  placeholder={t('auth.emailPlaceholder')}
                 />
                 {errors.email && (
                   <p className="mt-1 text-sm text-red-600">{errors.email}</p>
@@ -168,7 +170,7 @@ const Login: React.FC = () => {
             {/* 密碼 */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                密碼
+                {t('auth.password')}
               </label>
               <div className="mt-1 relative">
                 <input
@@ -181,7 +183,7 @@ const Login: React.FC = () => {
                   className={`input-field pr-10 ${
                     errors.password ? 'border-red-500 focus:ring-red-500' : ''
                   }`}
-                  placeholder="請輸入您的密碼"
+                  placeholder={t('auth.passwordPlaceholder')}
                 />
                 <button
                   type="button"
@@ -212,7 +214,7 @@ const Login: React.FC = () => {
                   className="h-4 w-4 text-primary-600 focus:ring-primary-500 border-gray-300 rounded"
                 />
                 <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
-                  記住我
+                  {t('auth.rememberMe')}
                 </label>
               </div>
 
@@ -221,7 +223,7 @@ const Login: React.FC = () => {
                   to="/forgot-password"
                   className="font-medium text-primary-600 hover:text-primary-500 transition-colors duration-200"
                 >
-                  忘記密碼？
+                  {t('auth.forgotPassword')}
                 </Link>
               </div>
             </div>
@@ -237,7 +239,7 @@ const Login: React.FC = () => {
                     : 'bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500'
                 }`}
               >
-                {isLoading ? '登入中...' : '登入'}
+                {isLoading ? t('auth.loggingIn') : t('auth.login')}
               </button>
             </div>
           </form>

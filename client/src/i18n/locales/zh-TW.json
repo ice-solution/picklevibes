@@ -2,57 +2,638 @@
   "nav": {
     "home": "首頁",
     "about": "關於我們",
+    "courts": "場地",
+    "vips": "VIP",
+    "courtsVip": "場地",
     "facilities": "設施",
-    "pricing": "設施及價格",
+    "pricing": "價格",
     "booking": "預約",
+    "activities": "活動中心",
     "dashboard": "儀表板",
     "admin": "管理",
     "login": "登入",
     "register": "註冊",
     "logout": "登出",
-    "profile": "個人資料"
+    "profile": "個人資料",
+    "myBookings": "我的預約",
+    "balance": "我的積分",
+    "recharge": "積分充值",
+    "shop": "商店",
+    "cart": "購物車",
+    "myAccount": "我的",
+    "editProfile": "編輯資料",
+    "myActivities": "我的活動",
+    "orders": "訂單歷史",
+    "adminLegacy": "返回舊版"
   },
   "language": {
     "chinese": "中文",
     "english": "English",
     "switch": "切換語言"
   },
+  "common": {
+    "loading": "載入中...",
+    "error": "錯誤",
+    "success": "成功",
+    "cancel": "取消",
+    "confirm": "確認",
+    "save": "儲存",
+    "edit": "編輯",
+    "delete": "刪除",
+    "view": "查看",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "submit": "提交",
+    "search": "搜尋",
+    "filter": "篩選",
+    "sort": "排序",
+    "date": "日期",
+    "time": "時間",
+    "price": "價格",
+    "total": "總計",
+    "subtotal": "小計",
+    "discount": "折扣",
+    "currency": "積分",
+    "learnMore": "了解更多",
+    "bookNow": "立即預約",
+    "selectStore": "選擇店鋪",
+    "noData": "暫無資料",
+    "people": "人",
+    "seeBookingPage": "詳見預約頁",
+    "selected": "已選擇",
+    "notSelected": "未選擇",
+    "hours": "{{n}} 小時",
+    "minutes": "{{n}} 分鐘",
+    "perHourPoints": "{{n}} 積分/小時",
+    "currentTime": "當前時間",
+    "processing": "處理中...",
+    "autoFilled": "已自動填入",
+    "store": "店鋪",
+    "court": "場地",
+    "duration": "時長"
+  },
+  "footer": {
+    "company": "公司",
+    "support": "支援",
+    "legal": "法律",
+    "about": "關於我們",
+    "courts": "場地一覽",
+    "vips": "VIP 會員",
+    "pricing": "價格",
+    "booking": "預約",
+    "faq": "常見問題",
+    "privacy": "隱私政策",
+    "terms": "服務條款",
+    "hours": "營業時間",
+    "hoursValue": "24小時營業（需預約方可進場）",
+    "contact": "聯絡我們",
+    "tagline": "您的終極匹克球目的地在香港。我們不僅僅是一個匹克球場地，我們是一個通過積極生活方式和共同體驗團結人們的社區。",
+    "rights": "版權所有。"
+  },
   "home": {
     "hero": {
-      "title": "歡迎來到 PickleVibes",
-      "subtitle": "專業匹克球場地預約平台",
-      "description": "提供優質的匹克球場地，專業的教練指導，讓您享受最棒的匹克球體驗",
-      "bookNow": "立即預約",
-      "learnMore": "了解更多"
+      "brand": "Picklevibes",
+      "title": "香港智能無人匹克球場",
+      "description": "我們不僅僅是一個匹克球場地，我們是一個通過積極生活方式和共同體驗團結人們的社區。",
+      "learnMore": "了解更多",
+      "stat1Title": "3個室內場地",
+      "stat1Desc": "配備空調的現代化場地",
+      "stat2Title": "社交活動",
+      "stat2Desc": "結識新朋友，享受運動樂趣",
+      "stat3Title": "專業教練",
+      "stat3Desc": "提升您的技術水平"
     },
     "features": {
-      "title": "為什麼選擇我們？",
-      "professional": {
-        "title": "專業場地",
-        "description": "標準匹克球場地，專業地面材質"
-      },
-      "equipment": {
-        "title": "優質設備",
-        "description": "提供專業球拍和球類設備"
+      "title": "Pickle Vibes 是匹克球生活方式",
+      "subtitle": "讓我們直截了當。是什麼讓我們與眾不同？在所有世界上的匹克球場所中，為什麼選擇這一個？",
+      "registerNow": "立即登記",
+      "social": {
+        "title": "社交活動",
+        "description": "歡迎來到社交活動！堆疊您的球拍，結識新朋友，在球場上混搭。我們只有一個規則——不要做個「dink」。"
       },
       "coaching": {
-        "title": "專業教練",
-        "description": "經驗豐富的教練團隊指導"
+        "title": "教練指導",
+        "description": "我們都需要不時的幫助。無論您是想學習dink的banger，還是想學習bang的dinker，我們都能幫助您！"
       },
-      "booking": {
-        "title": "便捷預約",
-        "description": "24/7 線上預約系統"
+      "friends": {
+        "title": "與朋友一起玩",
+        "description": "有時候，您只想保持輕鬆並與朋友一起打球。我們理解。預訂私人時段。如果您不告訴別人，我們也不會。"
+      },
+      "indoor": {
+        "title": "防風雨運動",
+        "description": "不想戶外運動？我們提供空調室內場地，確保您隨時暢玩。"
+      },
+      "shop": {
+        "title": "無人商店",
+        "description": "現場有售賣機及支付機，無論租借球拍或購買用品，由支付到拿取，全程無人化，更方便快捷。"
+      },
+      "modern": {
+        "title": "現代設施",
+        "description": "配備WiFi、更衣室、淋浴設施和健康意識的食品和飲料。我們為您提供場地，您帶來氛圍。"
+      },
+      "pillarsTitle": "Pickle Vibes 的三大支柱",
+      "sport": {
+        "title": "// 運動",
+        "description": "我們為各種技能水平的球員提供服務，包括每週社交混合賽、競技聯賽、私人活動等。"
+      },
+      "socialPillar": {
+        "title": "// 社交",
+        "description": "不僅僅是匹克球，我們為您創造了一個可以閒逛、放鬆和結識志同道合的人的地方。我們提供場地，您帶來氛圍。"
+      },
+      "corporate": {
+        "title": "// 公司活動",
+        "description": "我們提供場地及設施，讓您舉辦聯誼公司活動，讓公司員工更有默契、提升士氣，並有專業教練協助，保證每位員工玩得盡興。"
       }
+    },
+    "aboutTeaser": {
+      "eyebrow": "關於我們",
+      "title": "PickleVibes 的成就故事",
+      "body": "都市人生活節奏急速，對健康與社交運動的需求日益增加。然而，傳統體育設施的固定開放時間和繁瑣的預訂流程，往往難以配合現代都市人彈性多變的日程，讓您錯失了與球友切磋或練習的黃金時間。",
+      "statHours": "小時智能服務",
+      "statMembers": "滿意會員",
+      "statCourts": "專業場地",
+      "statSatisfaction": "客戶滿意度",
+      "learnMore": "了解更多",
+      "cardTitle": "智能匹克球體驗",
+      "cardBody": "24小時智能自助服務，隨時隨地享受匹克球樂趣",
+      "open24": "24小時開放",
+      "proGear": "專業設備",
+      "community": "社群活動",
+      "healthy": "健康生活"
+    },
+    "courtsSection": {
+      "title": "您來玩的地方",
+      "subtitle": "讓我們誠實地說，匹克球可以在很多地方玩，但我們喜歡認為我們不僅僅是這樣。我們是一個通過積極生活方式和共同體驗團結人們的社區。",
+      "loading": "載入場地信息中...",
+      "defaultDesc": "專業的匹克球場地，配備現代化設施",
+      "maxPeople": "最多 {{n}} 人",
+      "hours24": "24小時營業(需預約方可進場)",
+      "viewAll": "查看所有場地",
+      "bookThis": "預約此場地",
+      "peakHour": "繁忙時間",
+      "pointsPerHour": "{{n}} 積分/小時",
+      "emptyTitle": "場地信息載入中",
+      "emptyDesc": "我們正在為您準備最佳的匹克球體驗",
+      "viewBooking": "查看預約",
+      "readyTitle": "準備好開始您的匹克球之旅了嗎？",
+      "readySubtitle": "加入我們的社區，體驗最棒的匹克球設施和友善的環境",
+      "bookCourtNow": "立即預約場地"
+    },
+    "cta": {
+      "title": "準備好開始您的匹克球之旅了嗎？",
+      "subtitle": "加入我們的社區，體驗最棒的匹克球設施和友善的環境。無論您是初學者還是專業玩家，我們都有適合您的活動。",
+      "bookNow": "立即預約場地",
+      "viewPricing": "查看價格方案",
+      "findUs": "找到我們",
+      "mapTitle": "PickleVibes 位置地圖",
+      "addressLabel": "地址：",
+      "address": "荔枝角永康街37至39號福源廣場8樓B-D室",
+      "addressHint": "荔枝角站C出口",
+      "hoursLabel": "營業時間",
+      "hoursLine1": "24小時營業(預約制)",
+      "hoursLine2": "全年無休",
+      "contactLabel": "聯繫我們",
+      "phoneLabel": "電話：",
+      "emailLabel": "郵箱：",
+      "followUs": "關注我們",
+      "finalTitle": "讓我們開始吧！",
+      "finalSubtitle": "無論是下雨、颱風還是濕度，我們都有空調！來雨或來晴，您有99個問題，但場地不是其中之一。",
+      "finalCta": "立即預約"
+    },
+    "testimonials": {
+      "title": "客戶評價",
+      "subtitle": "聽聽我們的會員如何評價 PickleVibes 的體驗",
+      "statActive": "活躍會員",
+      "statBookings": "成功預約",
+      "statRating": "平均評分",
+      "statSatisfaction": "客戶滿意度",
+      "items": [
+        {
+          "name": "張小明",
+          "role": "匹克球愛好者",
+          "content": "PickleVibes 是我在香港最喜歡的匹克球場地！設施現代化，教練專業，氛圍非常友善。每次來都有新的收穫。",
+          "avatar": "👨‍💼"
+        },
+        {
+          "name": "李美華",
+          "role": "初學者",
+          "content": "作為初學者，我對這裡的教練指導非常滿意。他們耐心細緻，讓我快速掌握了基本技巧。現在我每週都會來練習！",
+          "avatar": "👩‍🎓"
+        },
+        {
+          "name": "王大偉",
+          "role": "資深玩家",
+          "content": "場地條件一流，空調設施讓我在炎熱的夏天也能舒適地打球。會員服務也很棒，預約系統很方便。",
+          "avatar": "👨‍🏫"
+        },
+        {
+          "name": "陳小芳",
+          "role": "社交玩家",
+          "content": "這裡的社交活動很棒！我通過參加混合賽認識了很多志同道合的朋友。每次來都玩得很開心！",
+          "avatar": "👩‍💻"
+        },
+        {
+          "name": "劉志強",
+          "role": "企業客戶",
+          "content": "我們公司經常在這裡舉辦團隊建設活動。場地寬敞，服務專業，員工都很滿意。強烈推薦！",
+          "avatar": "👨‍💼"
+        },
+        {
+          "name": "黃雅婷",
+          "role": "家庭用戶",
+          "content": "帶著孩子來這裡學匹克球，教練對小朋友很有耐心。現在全家都愛上了這項運動！",
+          "avatar": "👩‍👧‍👦"
+        }
+      ]
+    }
+  },
+  "courtsPage": {
+    "seoTitle": "場地一覽 | PickleVibes",
+    "seoDescription": "選擇店鋪，瀏覽 PickleVibes 場地資訊與設施。",
+    "eyebrow": "Courts",
+    "title": "場地一覽",
+    "subtitle": "先選擇店鋪，即可查看該店可用場地、設施與參考收費。",
+    "selectStore": "選擇店鋪",
+    "loadingStores": "載入店鋪中…",
+    "loadingCourts": "載入場地中…",
+    "noStores": "暫無可用店鋪",
+    "pickStore": "請先選擇店鋪",
+    "noCourts": "此店鋪暫無公開場地",
+    "loadStoresError": "無法載入店鋪",
+    "loadCourtsError": "無法載入場地",
+    "courtNumber": "場地 #{{number}}",
+    "peakLabel": "繁忙時段",
+    "points": "{{n}} 分",
+    "goBook": "前往預約",
+    "types": {
+      "competition": "比賽場",
+      "training": "訓練場",
+      "solo": "單人場",
+      "dink": "練習場",
+      "full_venue": "包場"
+    }
+  },
+  "vipsPage": {
+    "seoTitle": "VIP 會員獎賞 | PickleVibes",
+    "seoDescription": "PickleVibes VIP 會員：儲值即享積分贈賞、場租折扣與優先預訂禮遇。",
+    "brand": "VIBES",
+    "banner": "隆重發佈 / GRAND OPENING EXCLUSIVE",
+    "title": "VIP 會員獎賞",
+    "subtitle": "儲值即享積分贈賞、場租折扣與優先預訂禮遇",
+    "exclusiveTitle": "專屬禮遇： EXCLUSIVE PERKS",
+    "ctaRecharge": "立即儲值／了解入會",
+    "ctaBook": "前往預約場地",
+    "tiers": {
+      "silver": {
+        "name": "SILVER 銀級",
+        "tag": "VIBE STARTER",
+        "join": "入會 $15,000",
+        "credits": "獲 $18,000 積分",
+        "bonus": "+$3,000 贈送積分 · 20%",
+        "perks": "12 個月 · 場租 9.5 折 · 提前 21 日預訂"
+      },
+      "gold": {
+        "name": "GOLD 金級",
+        "tag": "VIBE PRO",
+        "join": "入會 $30,000",
+        "credits": "獲 $38,000 積分",
+        "bonus": "+$8,000 贈送積分 · 27%",
+        "perks": "18 個月 · 場租 9 折 · 提前 28 日預訂 · 可綁定 1 位親友"
+      },
+      "platinum": {
+        "name": "PLATINUM 白金級",
+        "tag": "VIBE ELITE",
+        "join": "入會 $50,000",
+        "credits": "獲 $66,666 積分",
+        "bonus": "+$16,666 贈送積分 · 33%",
+        "perks": "36 個月 · 場租 8.5 折 · 提前 60 日預訂 · 可綁定 3 位親友"
+      }
+    },
+    "perks": {
+      "gifts": {
+        "title": "迎新禮品",
+        "desc": "WELCOME GIFTS"
+      },
+      "room": {
+        "title": "VIP 房優惠",
+        "desc": "VIP ROOM"
+      },
+      "coach": {
+        "title": "教練優惠",
+        "desc": "COACHING"
+      },
+      "tournament": {
+        "title": "比賽優先報名",
+        "desc": "TOURNAMENT PRIORITY"
+      }
+    }
+  },
+  "faqPage": {
+    "seoTitle": "常見問題 | Picklevibes",
+    "seoDescription": "會員註冊、場地預約、積分充值、取消退款等常見問題解答。",
+    "title": "常見問題",
+    "subtitle": "關於預約與會員制度，你需要知道的一切",
+    "stillNeedHelp": "找不到您要的答案？",
+    "stillNeedHelpDesc": "我們的客服團隊隨時為您提供協助",
+    "callUs": "致電客服",
+    "emailUs": "發送郵件",
+    "categories": {
+      "membership": "會員註冊與場地預約",
+      "credits": "積分與收費制度",
+      "cancel": "取消、退款與優惠",
+      "service": "服務與政策"
+    },
+    "items": {
+      "q1": {
+        "q": "我如何才能預約 Picklevibes 的場地？",
+        "a": "您必須先透過我們的官方平台（網站或應用程式）完成會員註冊。只有註冊會員才能登入系統，並使用會員積分預約場地。"
+      },
+      "q2": {
+        "q": "Picklevibes 的場地開放時間是？",
+        "a": "Picklevibes 是 24 小時智能匹克球室。會員可以透過預約系統，隨時預訂適合您的時段。"
+      },
+      "q3": {
+        "q": "預約成功後，如何進入場地？",
+        "a": "預約確認後，系統將發送智能門禁密碼或 QR Code 給您。您只需在預約時段開始時，透過場地入口的智能門禁系統輸入密碼或掃描 QR Code 即可進入。"
+      },
+      "q4": {
+        "q": "Picklevibes 的收費模式是怎樣的？",
+        "a": "我們採用積分制。會員需要先充值購買積分，然後在預約場地時，系統會根據您選擇的時段扣除相應的積分。"
+      },
+      "q5": {
+        "q": "我該如何充值購買積分？",
+        "a": "您可以登入會員帳戶，在「積分充值」頁面選擇不同的積分套餐進行購買。我們提供多種支付方式供您選擇。"
+      },
+      "q6": {
+        "q": "積分有使用期限嗎？",
+        "a": "積分暫時是沒有期限，但我們會適時作出調整。"
+      },
+      "q7": {
+        "q": "我可以將帳戶中剩餘的積分退回現金嗎？",
+        "a": "不可以。所有購買的積分僅用於預約 Picklevibes 的場地及服務，積分不能退回現金，亦不可轉讓。"
+      },
+      "q8": {
+        "q": "如果我需要取消已預約的場地，積分會退還嗎？",
+        "a": "如果您在指定取消期限（例如：預約時間前 24 小時）內取消預約，被扣除的積分將會全數退還至您的會員帳戶，供下次使用。若超過取消期限，則可能無法退還積分，詳情請參閱會員服務條款。"
+      },
+      "q9": {
+        "q": "如何獲得優惠或使用優惠代碼？",
+        "a": "我們會不定期向會員派發優惠代碼（Promo Code）。請持續關注我們的官方網站、社交媒體或留意會員電郵通知。您可以在預約結帳時輸入優惠代碼以享受折扣。"
+      },
+      "q10": {
+        "q": "Picklevibes 有提供訓練設施嗎？",
+        "a": "是的。除了標準匹克球場地外，我們還設有發球機練習場，供會員進行高效的個人化訓練。"
+      },
+      "q11": {
+        "q": "Picklevibes 的會員制度會改變嗎？",
+        "a": "我們會不定期審視會員制度和服務條款，並會適當時間作出改善和跟進，致力為會員提供最佳體驗。任何重大變動將提前通知所有會員。"
+      }
+    }
+  },
+  "aboutPage": {
+    "seoTitle": "關於我們 | Picklevibes",
+    "seoDescription": "了解 Picklevibes 的品牌故事、使命與目標。",
+    "title": "關於 PickleVibes",
+    "subtitle": "香港智能匹克球室的領導者，致力於推廣全民匹克球運動普及化",
+    "storyTitle": "我們的品牌故事",
+    "story": [
+      "都市人生活節奏急速，對健康與社交運動的需求日益增加。然而，傳統體育設施的固定開放時間和繁瑣的預訂流程，往往難以配合現代都市人彈性多變的日程，讓您錯失了與球友切磋或練習的黃金時間。",
+      "我們借鑒國際趨勢，創立了本地連鎖24小時智能匹克球室品牌 Picklevibes。我們致力於為大眾服務，並推廣全民匹克球運動普及化。會員可以無時間限制，隨時隨地透過手機預約，按自己的時間和進度，享受這項充滿樂趣的社交運動。",
+      "會員可透過全天候網上預約系統及智能自助服務，體驗先進專業的匹克球場地。從預訂、付款到智能門禁入場，全程實現無人管理與自動化，為您提供極致的便利與安心。",
+      "為了滿足追求高效訓練的玩家，我們特別設置了專業的發球機練習場。玩家可以利用這些高科技設備，隨時進行高重複性、針對性的個人訓練，極大提升練習效率，助您在短時間內突破技術瓶頸。",
+      "我們更照顧到不同玩家的需要，另設有專業教練課程及聯誼活動，讓您在輕鬆的環境中提升球技並擴展社交圈子。我們的專業團隊與熱情社群，助您實現健身、社交與技能提升的目標。",
+      "同時，我們推行按時段收費、無需長期合約的模式，明碼實價，高透明度收費。以優惠及合理的價錢，讓您體驗舒適自在、無時間約束的匹克球運動模式，為香港匹克球業界樹立健康、創新的服務典範。"
+    ],
+    "missionTitle": "我們的使命",
+    "mission": [
+      "我們以24小時智能自助服務，全面照顧到不同匹克球愛好者的需求，服務大眾並推廣全民匹克球運動普及化。",
+      "為了讓玩家能夠進行高效率的個人化訓練，我們特別設立了專業發球機練習場，結合我們的全天候開放模式，讓您隨時隨地都能專注於技能提升。",
+      "我們一改傳統體育場地租賃在玩家心目中的形象，推行全自動化網上預約及智能自助服務，免除人手交接的繁瑣，提供極致的便利性。"
+    ],
+    "visionTitle": "我們的目標",
+    "vision": [
+      "作為香港智能匹克球室的市場領導者，我們的目標是迅速擴展服務網絡，讓匹克球愛好者無論身在何處，都能輕鬆找到最近的 Picklevibes 場地。",
+      "我們展望將來，致力於將 Picklevibes 打造成香港最受歡迎、最專業的匹克球社群中心。我們將持續引進高科技智能訓練設備（包括先進的發球機系統）和場地管理系統。",
+      "我們的願景是將這種智能、便捷、高品質的匹克球體驗帶到亞太區以至世界各地，成為全球智能運動場地的典範。"
+    ],
+    "featuresTitle": "我們的特色服務",
+    "featuresSubtitle": "為您提供最優質的匹克球體驗",
+    "feature24Title": "24小時服務",
+    "feature24Desc": "全天候智能自助服務，隨時享受匹克球樂趣",
+    "featureGearTitle": "專業設備",
+    "featureGearDesc": "先進發球機系統，提升訓練效率",
+    "featureCommunityTitle": "社群活動",
+    "featureCommunityDesc": "專業教練課程及聯誼活動，擴展社交圈子",
+    "featureHealthTitle": "健康生活",
+    "featureHealthDesc": "推廣全民匹克球運動，享受健康生活",
+    "contactTitle": "聯絡我們",
+    "address": "地址",
+    "phone": "電話",
+    "email": "電郵"
+  },
+  "pricingPage": {
+    "seoTitle": "價格 | Picklevibes",
+    "seoDescription": "Picklevibes 會員方案與場地收費。",
+    "title": "收費方案",
+    "subtitle": "透明的價格，無隱藏費用。選擇最適合您的方案",
+    "membershipTitle": "會員方案",
+    "membershipSubtitle": "選擇最適合您的會員等級，享受相應的優惠和服務",
+    "basicName": "基本會員",
+    "basicPeriod": "免費",
+    "basicDesc": "適合偶爾打球的玩家",
+    "vipName": "VIP會員",
+    "vipPeriod": "新張期內免費",
+    "vipDesc": "適合經常打球的玩家",
+    "popular": "最受歡迎",
+    "launchFree": "🎉 新張期內免費！",
+    "free": "免費",
+    "originalPrice": "原價 $800/半年",
+    "features": "包含功能",
+    "limitations": "限制",
+    "basicFeatures": [
+      "場地預約",
+      "基本設施使用",
+      "在線預約系統",
+      "基本客戶支持"
+    ],
+    "basicLimits": [
+      "無會員折扣",
+      "無優先預約",
+      "無專屬時段"
+    ],
+    "vipFeatures": [
+      "場地預約",
+      "所有設施使用",
+      "20% 會員折扣",
+      "優先預約權",
+      "免費球拍租借",
+      "專屬會員活動",
+      "優先客戶支持"
+    ],
+    "ctaBasic": "免費註冊",
+    "ctaVip": "🎉 立即免費成為VIP！",
+    "ctaSelect": "選擇方案",
+    "peakHour": "繁忙時段",
+    "offPeak": "非繁忙時段",
+    "memberDiscount": "會員折扣",
+    "cta": "開始預約",
+    "amenitiesTitle": "其他設施",
+    "amenitiesSubtitle": "除了專業的匹克球場地，我們還提供各種便利設施",
+    "amenityCourtsTitle": "3個專業場地",
+    "amenityCourtsDesc": "比賽場、訓練場、單人場，配備空調的現代化室內場地",
+    "amenityCourtsFeatures": [
+      "空調控制",
+      "專業照明",
+      "防滑地面",
+      "標準尺寸"
+    ],
+    "amenityShowerTitle": "淋浴設施",
+    "amenityShowerDesc": "現代化淋浴設施，讓您運動後保持清爽",
+    "amenityShowerFeatures": [
+      "熱水淋浴",
+      "私人空間",
+      "清潔環境",
+      "便利使用"
+    ],
+    "discountTitle": "會員折扣",
+    "discountSubtitle": "會員可享受場地費用的折扣優惠",
+    "discountBasicRate": "無折扣",
+    "discountVipRate": "所有場地費用",
+    "faqTitle": "常見問題",
+    "faqSubtitle": "關於價格和會員方案的常見問題",
+    "faq": [
+      {
+        "q": "如何取消會員訂閱？",
+        "a": "您可以隨時在個人資料頁面取消會員訂閱。取消後，您將在當前計費週期結束前繼續享受會員優惠。"
+      },
+      {
+        "q": "會員折扣何時生效？",
+        "a": "會員折扣在您完成註冊並支付會員費用後立即生效。"
+      },
+      {
+        "q": "可以更改會員方案嗎？",
+        "a": "是的，您可以隨時升級或降級您的會員方案。升級立即生效，降級在當前計費週期結束後生效。"
+      },
+      {
+        "q": "場地預約需要提前多久？",
+        "a": "基本會員需要提前24小時預約，VIP會員可以提前48小時預約。"
+      }
+    ],
+    "bottomCtaTitle": "準備開始了嗎？",
+    "bottomCtaSubtitle": "選擇適合您的方案，開始您的匹克球之旅",
+    "bottomCtaRegister": "立即註冊",
+    "bottomCtaBook": "預約場地",
+    "intro": {
+      "feeModeLabel": "收費模式簡介",
+      "heading": "找出最適合你的匹克球方案",
+      "description1": "我們依據不同玩家的使用頻率與需求，提供具彈性且透明的收費模式。",
+      "description2": "你可以先從基本會員開始體驗，也可以直接升級為 VIP 享受更多權益。",
+      "badgeText": "新張期限定：享免費 VIP 升級",
+      "highlights": {
+        "simpleTitle": "簡單易明",
+        "simpleDesc": "我們採用積分制訂場，目的是想讓用戶簡單使用，不用複雜的計算。",
+        "transparentTitle": "透明公開",
+        "transparentPrefix": "我們積分儲值採用 ",
+        "transparentBadge": "\"HKD 1 = 1 積分\"",
+        "transparentSuffix": "，絕無任何附加收費。",
+        "rewardsTitle": "積分回饋",
+        "rewardsDesc": "公司定期會有特別充值優惠，多充多送。"
+      },
+      "courtsDetailsTitle": "場地詳情",
+      "courtsDetailsSubtitle": "每個場地都經過精心設計，確保您獲得最佳的匹克球體驗",
+      "loadingCourts": "載入場地信息中...",
+      "vipBannerTitle": "VIP會員8折!!",
+      "vipBannerSub": "成為VIP會員即可享受所有場地8折優惠",
+      "amenitiesLabel": "設施",
+      "operatingHoursTitle": "營業時間",
+      "soloHours": "每天 08:00-23:00",
+      "fullHours": "24小時營業(需預約方可進場)",
+      "offPeakLabel": "非繁忙時間",
+      "peakLabel": "繁忙時間",
+      "amenities": {
+        "air_conditioning": "空調",
+        "lighting": "照明",
+        "net": "球網",
+        "paddles": "球拍租借",
+        "balls": "球類提供",
+        "water": "飲水機",
+        "shower": "淋浴設施",
+        "vending_machine": "售賣機"
+      }
+    }
+  },
+  "auth": {
+    "login": "登入",
+    "register": "註冊",
+    "email": "電郵",
+    "password": "密碼",
+    "confirmPassword": "確認密碼",
+    "name": "姓名",
+    "phone": "電話",
+    "forgotPassword": "忘記密碼？",
+    "noAccount": "還沒有帳戶？",
+    "hasAccount": "已有帳戶？",
+    "signUp": "立即註冊",
+    "signIn": "立即登入",
+    "loginTitle": "歡迎回來",
+    "loginHeading": "登入您的帳戶",
+    "orCreate": "或者",
+    "createAccount": "創建新帳戶",
+    "signInExisting": "登入現有帳戶",
+    "registerHeading": "創建您的帳戶",
+    "emailPlaceholder": "請輸入您的電子郵件",
+    "passwordPlaceholder": "請輸入您的密碼",
+    "registerTitle": "建立帳戶",
+    "resetPassword": "重設密碼",
+    "sendResetLink": "發送重設連結",
+    "rememberMe": "記住我",
+    "loggingIn": "登入中…",
+    "registering": "註冊中…",
+    "errors": {
+      "emailRequired": "電子郵件為必填項目",
+      "emailInvalid": "請輸入有效的電子郵件地址",
+      "passwordRequired": "密碼為必填項目",
+      "nameRequired": "姓名為必填項目",
+      "nameMin": "姓名至少需要2個字符",
+      "passwordMin": "密碼至少需要8個字符",
+      "passwordPattern": "密碼必須包含至少一個字母和一個數字",
+      "confirmRequired": "確認密碼為必填項目",
+      "passwordMismatch": "密碼不匹配",
+      "phoneRequired": "電話號碼為必填項目",
+      "phoneInvalid": "電話號碼只能包含數字"
+    }
+  },
+  "booking": {
+    "title": "預約場地",
+    "selectCourt": "選擇場地",
+    "selectDate": "選擇日期",
+    "selectTime": "選擇時間",
+    "playerInfo": "球員資料",
+    "summary": "預約摘要",
+    "confirm": "確認預約",
+    "selectStore": "選擇店鋪",
+    "status": {
+      "confirmed": "已確認",
+      "pending": "待確認",
+      "cancelled": "已取消",
+      "completed": "已完成",
+      "noShow": "未出席"
+    },
+    "payment": {
+      "paid": "已付款",
+      "pending": "待付款",
+      "failed": "失敗"
     }
   },
   "dashboard": {
     "welcome": "歡迎回來，{{name}}！",
     "subtitle": "管理您的預約和查看您的匹克球活動",
     "stats": {
-      "totalBookings": "總預約",
+      "totalBookings": "總預約數",
       "upcoming": "即將到來",
       "membershipLevel": "會員等級",
-      "skillLevel": "技能等級"
+      "skillLevel": "技術水平"
     },
     "upcomingBookings": "即將到來的預約",
     "newBooking": "新預約",
@@ -61,37 +642,16 @@
     "bookNow": "立即預約",
     "quickActions": "快速操作",
     "bookCourt": "預約場地",
-    "editProfile": "編輯資料",
+    "editProfile": "編輯個人資料",
     "viewPricing": "查看價格",
     "recentActivity": "最近活動",
     "noActivity": "暫無活動記錄"
   },
-  "booking": {
-    "title": "預約場地",
-    "selectCourt": "選擇場地",
-    "selectDate": "選擇日期",
-    "selectTime": "選擇時間",
-    "playerInfo": "參與者信息",
-    "summary": "預約摘要",
-    "confirm": "確認預約",
-    "status": {
-      "confirmed": "已確認",
-      "pending": "待確認",
-      "cancelled": "已取消",
-      "completed": "已完成",
-      "noShow": "未到場"
-    },
-    "payment": {
-      "paid": "已付款",
-      "pending": "待付款",
-      "failed": "付款失敗"
-    }
-  },
   "admin": {
-    "title": "管理員控制台",
-    "subtitle": "管理預約、場地和查看系統統計數據",
+    "title": "管理控制台",
+    "subtitle": "管理預約、場地並查看系統統計",
     "stats": {
-      "totalBookings": "總預約",
+      "totalBookings": "總預約數",
       "confirmed": "已確認",
       "pending": "待確認",
       "totalRevenue": "總收入"
@@ -107,57 +667,642 @@
     "revenueStats": "收入統計",
     "dataAnalytics": "數據分析"
   },
-  "auth": {
-    "login": "登入",
-    "register": "註冊",
-    "email": "電子郵件",
-    "password": "密碼",
-    "confirmPassword": "確認密碼",
-    "name": "姓名",
-    "phone": "電話",
-    "forgotPassword": "忘記密碼？",
-    "noAccount": "沒有帳戶？",
-    "hasAccount": "已有帳戶？",
-    "signUp": "立即註冊",
-    "signIn": "立即登入"
-  },
-  "common": {
-    "loading": "載入中...",
-    "error": "錯誤",
-    "success": "成功",
-    "cancel": "取消",
-    "confirm": "確認",
-    "save": "保存",
-    "edit": "編輯",
-    "delete": "刪除",
-    "view": "查看",
-    "back": "返回",
-    "next": "下一步",
-    "previous": "上一步",
-    "submit": "提交",
-    "search": "搜索",
-    "filter": "篩選",
-    "sort": "排序",
-    "date": "日期",
-    "time": "時間",
-    "price": "價格",
-    "total": "總計",
-    "subtotal": "小計",
-    "discount": "折扣",
-    "currency": "積分"
-  },
   "facilities": {
-    "title": "設施介紹",
-    "subtitle": "專業的匹克球設施，為您提供最佳的運動體驗",
+    "title": "設施",
+    "subtitle": "專業匹克球設施，帶來最佳運動體驗",
     "courts": "場地設施",
     "amenities": "配套設施",
     "features": "特色服務"
   },
   "pricing": {
-    "title": "價格方案",
-    "subtitle": "選擇最適合您的價格方案",
-    "peakHour": "高峰時段",
-    "offPeak": "非高峰時段",
+    "title": "收費方案",
+    "subtitle": "選擇最適合您的方案",
+    "peakHour": "繁忙時段",
+    "offPeak": "非繁忙時段",
     "memberDiscount": "會員折扣"
+  },
+  "termsPage": {
+    "seoTitle": "服務使用條款 | Picklevibes",
+    "seoDescription": "Picklevibes 智能匹克球室服務使用條款。請仔細閱讀以下條款，使用我們的服務即表示您同意遵守這些條款。",
+    "title": "服務使用條款",
+    "subtitle": "請仔細閱讀以下條款，使用我們的服務即表示您同意遵守這些條款",
+    "lastUpdated": "最後更新：2025年10月",
+    "sections": [
+      {
+        "title": "接受條款",
+        "items": [
+          {
+            "title": "1.1 協議範圍",
+            "paragraphs": [
+              "本《服務使用條款》（下稱「本條款」）構成您（下稱「會員」或「用戶」）與 Picklevibes 智能匹克球室（下稱「本公司」）之間具有法律約束力的協議。本條款適用於您使用本公司提供的所有服務，包括但不限於場地租賃、發球機設施、線上預約系統、會員積分系統及所有相關設施（下稱「本服務」）。"
+            ]
+          },
+          {
+            "title": "1.2 接受",
+            "paragraphs": [
+              "透過註冊成為本公司會員、充值積分或使用本服務，即表示您已閱讀、理解並同意遵守本條款的所有內容。如果您不同意本條款的任何部分，請勿使用本服務。"
+            ]
+          },
+          {
+            "title": "1.3 修訂",
+            "paragraphs": [
+              "本公司保留隨時修訂、更改或更新本條款的權利。所有修訂將在本公司網站或應用程式上公佈後立即生效。您在修訂發布後繼續使用本服務，即視為接受修訂後的條款。"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "會員資格與帳戶安全",
+        "items": [
+          {
+            "title": "2.1 會員註冊",
+            "paragraphs": [
+              "使用本服務必須註冊成為會員。您必須提供真實、準確、完整和最新的個人資料。"
+            ]
+          },
+          {
+            "title": "2.2 帳戶責任",
+            "paragraphs": [
+              "您須對您的會員帳戶及其密碼的保密性負全部責任，並對透過您的帳戶進行的所有活動負全部責任。如發現任何未經授權使用您的帳戶，您必須立即通知本公司。"
+            ]
+          },
+          {
+            "title": "2.3 年齡限制",
+            "paragraphs": [
+              "未滿 18 歲的人士必須在父母或法定監護人的監督和同意下，方可註冊和使用本服務。"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "預約、積分與收費",
+        "items": [
+          {
+            "title": "3.1 積分制",
+            "paragraphs": [
+              "本服務採用積分制收費。會員必須先充值購買積分，方可用於預約場地及發球機設施。"
+            ]
+          },
+          {
+            "title": "3.2 積分充值",
+            "paragraphs": [
+              "積分充值一經完成，即視為最終交易。所有已充值或已購買的積分，在任何情況下均不可退回現金。"
+            ]
+          },
+          {
+            "title": "3.3 預約與扣除",
+            "paragraphs": [
+              "預約場地或設施時，系統將即時從您的會員帳戶中扣除相應積分。不同時段、不同設施（例如：標準場地或發球機練習區）所需的積分可能不同，請以預約系統顯示為準。"
+            ]
+          },
+          {
+            "title": "3.4 優惠代碼",
+            "paragraphs": [
+              "本公司會不定期發放優惠代碼。優惠代碼的使用受限於其特定的條款和條件，且不可兌換現金。"
+            ]
+          },
+          {
+            "title": "3.5 取消政策",
+            "paragraphs": [
+              "a. 會員必須在預約時段開始前的指定時間（例如：24小時）內取消預約，被扣除的積分方可退還至會員帳戶。",
+              "b. 超過指定時間取消或未出席（No Show），該次預約所扣除的積分將不予退還。",
+              "c. 本公司保留因不可抗力因素（如惡劣天氣、設備故障）取消預約的權利。在此情況下，會員將獲全額積分退還。"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "場地使用與行為規範",
+        "items": [
+          {
+            "title": "4.1 自助服務",
+            "paragraphs": [
+              "本公司提供 24 小時智能自助服務。會員需自行負責進場、使用設施和離場的流程。"
+            ]
+          },
+          {
+            "title": "4.2 進場與離場",
+            "paragraphs": [
+              "會員必須在預約時段開始後方可使用智能門禁進入場地，並必須在預約時段結束前準時離場。超時使用將可能導致額外收費或暫停會員資格。"
+            ]
+          },
+          {
+            "title": "4.3 設施維護",
+            "paragraphs": [
+              "會員有責任愛護場地及設施，包括匹克球場地、球網、發球機及休息區。如因會員行為造成設施損壞，本公司保留向該會員追討全部維修或更換費用的權利。"
+            ]
+          },
+          {
+            "title": "4.4 發球機使用",
+            "paragraphs": [
+              "使用發球機設施前，會員必須仔細閱讀並遵守所有操作指示和安全規定。因不當操作發球機而導致的任何傷害或設備損壞，會員須自行承擔責任。"
+            ]
+          },
+          {
+            "title": "4.5 行為準則",
+            "paragraphs": [
+              "a. 會員在使用場地時，應保持禮貌，尊重其他使用者。",
+              "b. 嚴禁在場地內吸煙、飲酒、使用違禁藥物或進行任何非法活動。",
+              "c. 嚴禁攜帶寵物（導盲犬除外）或危險物品進入場地。",
+              "d. 會員須保持場地清潔，並將垃圾帶走或丟棄至指定垃圾桶。"
+            ]
+          },
+          {
+            "title": "4.6 監控",
+            "paragraphs": [
+              "為了安全和管理目的，所有場地均設有閉路電視監控系統。會員同意本公司在遵守私隱政策的前提下，收集和使用相關錄像。"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "免責聲明與責任限制",
+        "items": [
+          {
+            "title": "5.1 運動風險",
+            "paragraphs": [
+              "匹克球運動存在固有風險。會員承認並承擔在使用本服務期間可能發生的所有風險，包括但不限於受傷、財產損失或死亡。"
+            ]
+          },
+          {
+            "title": "5.2 財物安全",
+            "paragraphs": [
+              "本公司對會員在場地內遺失、被盜或損壞的個人財物不承擔任何責任。"
+            ]
+          },
+          {
+            "title": "5.3 設備故障",
+            "paragraphs": [
+              "儘管本公司會定期維護設施，但若發生設備（包括發球機、空調、照明等）臨時故障，本公司將盡快處理，但不對因此造成的任何時間損失、預約取消或間接損失承擔責任。"
+            ]
+          },
+          {
+            "title": "5.4 責任限制",
+            "paragraphs": [
+              "在法律允許的最大範圍內，本公司對會員因使用或無法使用本服務而產生的任何直接、間接、附帶、特殊或懲罰性損害概不負責，即使本公司已被告知此類損害的可能性。"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "會員資格終止",
+        "items": [
+          {
+            "title": "6.1 本公司權利",
+            "paragraphs": [
+              "本公司保留在以下情況下，立即暫停或終止任何會員的服務使用權利和會員資格的權利，且無需退還任何已充值積分：",
+              "a. 違反本條款的任何規定。",
+              "b. 進行任何非法、欺詐或濫用本服務的行為。",
+              "c. 嚴重破壞場地設施或影響其他會員的正常使用。"
+            ]
+          },
+          {
+            "title": "6.2 會員註銷",
+            "paragraphs": [
+              "會員可隨時透過本公司指定的程序申請註銷帳戶。帳戶註銷後，所有剩餘積分將被作廢，且不可退回現金。"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "準據法與爭議解決",
+        "items": [
+          {
+            "title": "7.1 準據法",
+            "paragraphs": [
+              "本條款受香港特別行政區法律管轄並依其解釋。"
+            ]
+          },
+          {
+            "title": "7.2 爭議解決",
+            "paragraphs": [
+              "任何因本條款引起或與本條款有關的爭議、索賠或分歧，雙方應首先尋求友好協商解決。若協商不成，雙方同意將爭議提交香港法院進行專屬管轄。"
+            ]
+          }
+        ]
+      },
+      {
+        "title": "一般條款",
+        "items": [
+          {
+            "title": "8.1 完整協議",
+            "paragraphs": [
+              "本條款（連同私隱政策和任何相關的服務規則或指南）構成您與本公司之間關於使用本服務的完整協議。"
+            ]
+          }
+        ]
+      }
+    ],
+    "contactTitle": "聯繫我們",
+    "contactIntro": "如果您對本使用條款有任何疑問，請聯繫我們：",
+    "email": "📧 電子郵件：info@picklevibes.hk",
+    "phone": "📞 電話：+852 6190 2761",
+    "address": "📍 地址：荔枝角永康街37至39號福源廣場8樓B-D室",
+    "importantTitle": "重要提醒",
+    "importantBody": "請仔細閱讀以上條款。使用我們的服務即表示您已理解並同意遵守所有條款和條件。如有任何疑問，請在註冊前聯繫我們。"
+  },
+  "privacyPage": {
+    "seoTitle": "隱私政策 | Picklevibes",
+    "seoDescription": "Picklevibes 智能匹克球室個人資料收集聲明與隱私政策。了解我們如何收集、使用和保護您的個人資料。",
+    "title": "隱私政策",
+    "subtitle": "Picklevibes 智能匹克球室個人資料收集聲明",
+    "intro": "Picklevibes 智能匹克球室（「本公司」）致力遵守香港特別行政區法例《個人資料（私隱）條例》（第486章）（「該條例」）的規定，以保障本公司所持有的個人資料的私隱性、保密性及安全性。本公司同樣致力於確保我們的所有員工、高級職員和代理人遵守這些義務。本個人資料收集聲明（「本聲明」）旨在通知閣下有關本公司收集、使用、儲存、轉移及披露閣下的個人資料。",
+    "s1Title": "1. 個人資料的目的與收集",
+    "s1P1": "本公司將在您註冊成為會員時收集您的個人資料。閣下無需提供個人資料；然而，本公司可能無法處理閣下的註冊及向閣下提供服務。",
+    "s1P2": "本公司可能會收集閣下的全名、性別、出生月份*、流動電話號碼、電郵地址及/或住址，用於以下一個或多個用途：",
+    "s1Items": [
+      "為公司提供的匹克球場地、發球機訓練場地、智能門禁系統和/或相關服務；",
+      "用於通訊、宣傳、客戶關係管理和/或公共關係；",
+      "用於客戶、會員或使用者帳戶和記錄的申請、建立、操作和管理；",
+      "處理意見、查詢和投訴；",
+      "處理或要求開單和支付積分充值，確定未付金額，必要時收取未付款項；",
+      "用於識別和驗證您的身份，特別是透過智能門禁系統進出設施時；和/或",
+      "用於與上述任何目的直接相關之目的。"
+    ],
+    "s1Note": "*提供您的出生月份是自願的。本公司僅會使用您的出生月份來提供特別的生日促銷和優惠。",
+    "s2Title": "2. 直銷中使用您的個人資料",
+    "s2P1": "本公司明確保留其、其代理人¹、其特許經營者² 和/或其關聯公司，包括其子公司²和其聯營公司³ (\"關聯公司\")使用您的全名、電話號碼、電郵地址和住宅地址 (\"個人資料\")，向您發送與本公司、其代理人、其特許經營者和/或其關聯公司可能提供的下列類別商品和服務相關的直接促銷通訊，包括匹克球、運動訓練、運動裝備、健康生活及相關服務 (\"直接促銷用途\"）。",
+    "s2P2": "除非本公司在使用您的個人資料之前已獲得您的書面同意 (包括您表示不反對)，否則本公司、其代理人、其特許經營者和/或其關聯公司不得使用您的個人資料。如會員對前述個人資料的使用已表示同意，將有權以書面方式向 info@picklevibes.com 提交申請選擇退出上述內容。本公司不會對您要求本公司停止使用您的個人資用於直接促銷料的請求收取任何費用。",
+    "s2NotesTitle": "附注:",
+    "s2Notes": [
+      "¹ 代理人是指 Picklevibes 聘請的任何通訊、宣傳、客戶關係管理和/或公共關係服務的代理人。",
+      "² 特許經營者及子公司是指 Picklevibes 品牌的匹克球中心。",
+      "³ 聯營公司是指 Picklevibes 旗下可能提供的其他運動或健康相關品牌。"
+    ],
+    "s3Title": "3. 披露",
+    "s3P1": "本公司將採取一切可行措施，確保您的個人資料保密。在遵守任何適用法律規定的前提下，您的個人資料可能會出於以下目的提供給以下各方：",
+    "s3Items": [
+      "本公司聘請的任何代理人，負責進行通訊、宣傳、客戶關係管理和/或公共關服務，以及任何發送直接促銷通訊的其特許經營者和關聯公司（包括向會員發送直接促銷通訊，介紹本公司認為會員可能感興趣的任何促銷活動和服務）；",
+      "任何向本公司提供與本公司業務和運營相關服務或技術的承包商或服務提供商，包括行政、電信、數據處理、智能預約系統、支付服務或技術、處理和調查爭議，以及與本公司業務運營相關的其他服務；",
+      "向本公司提供行政（包括會員帳戶和積分記錄的管理）、技術（包括資訊技術和雲端服務）或其他服務（包括律師和審計師等專業顧問）且對本公司負有保密義務的任何代理人、承包商或服務提供商；",
+      "本公司根據任何對本公司具有約束力或適用於本公司的法律要求，或為遵守監管機構或其他機構（包括行業和自我監管機構）發布的任何指南或行為準則而必須向其披露信息的任何人; 及",
+      "本公司權利或業務的任何實際或擬議受讓人、受讓方、參與方或次級參與方。"
+    ],
+    "s4Title": "4. 安全性",
+    "s4P1": "本公司採取適當的安全措施和保障措施，以保護會員的個人資料（包括生物資料）不受意外、非法或未經授權的破壞、遺失、篡改、存取、披露或使用。",
+    "s4P2": "我們的所有員工、代理人、其特許經營者、關聯公司和供應商均受保密約束。只有獲授權人士可根據該條例和本聲明，在 「有需要知道 」的基礎上處理您的個人資料（包括生物資料）。",
+    "s4AccountTitle": "個人資訊主體註銷帳戶",
+    "s4AccountP1": "您隨時可註銷先前註冊的帳戶，您可以透過以下方式自行操作：透過「設定-帳號安全-註銷帳號」進行註銷或聯絡線上客服或撥打客服電話。",
+    "s4AccountP2": "在註銷帳戶之後(三個工作天內完成註銷)，我們將停止為您提供產品或服務，並依據您的要求，刪除您的個人信息，法律法規另有規定的除外。",
+    "s5Title": "5. 一般事項",
+    "s5P1": "您可以隨時要求 (i) 查閱或改正您的個人資料；及/或 (ii) 選擇退出直接促銷通訊。為了行使您的權利，並避免潛在的誤傳或誤解，本公司建議您將書面請求寄至 info@picklevibes.hk。本公司將在合理可行的情況下盡快滿足您的要求。",
+    "s5P2": "本公司保留您個人資料的時間，以達成收集資料之目的所需為限。如果您終止會員資格，本公司將在切實可行的範圍內盡快刪除您的個人資料。",
+    "s5P3": "中英文版本如有歧異，概以英文版本為準。",
+    "s6Title": "6. 免責聲明",
+    "s6P1": "本網頁所包含的所有資訊僅供參考，可能會有所變更。Picklevibes 不保證或聲明此處提供的資訊是準確、完整或最新的，並拒絕承擔因本網頁內容而產生或因依賴本網頁內容而引致的任何損失或損害的責任。"
+  },
+  "activitiesPage": {
+    "seoTitle": "活動中心 | Picklevibes 匹克球活動與課程",
+    "seoDescription": "探索 Picklevibes 精彩的匹克球活動、教練課程及聯誼活動。與其他玩家一起享受運動樂趣，提升球技並擴展社交圈子。",
+    "loading": "載入活動中…",
+    "headerTitle": "活動中心",
+    "headerSubtitle": "探索精彩的匹克球活動，與其他玩家一起享受運動樂趣",
+    "tabs": {
+      "activities": "現在活動",
+      "regular": "恆常活動"
+    },
+    "filters": {
+      "all": "全部活動",
+      "upcoming": "即將開始",
+      "ongoing": "進行中",
+      "completed": "已完結"
+    },
+    "empty": {
+      "title": "暫無活動",
+      "description": "目前沒有符合條件的活動，請稍後再來查看"
+    },
+    "pinned": "置頂",
+    "status": {
+      "upcoming": "即將開始",
+      "ongoing": "進行中",
+      "completed": "已完結",
+      "cancelled": "已取消"
+    },
+    "deadline": "{{date}} 截止",
+    "progress": {
+      "label": "報名進度",
+      "spots": "{{n}} 個名額"
+    },
+    "actions": {
+      "viewDetail": "查看詳情",
+      "registerNow": "立即報名"
+    },
+    "registration": {
+      "yourRegistered": "你已報名",
+      "completed": "已完結",
+      "ongoing": "進行中",
+      "registrationClosed": "報名已截止",
+      "full": "人數已滿",
+      "maxReached": "人數已到上限"
+    },
+    "pagination": {
+      "prev": "上一頁",
+      "next": "下一頁"
+    },
+    "deadlineShort": "截止"
+  },
+  "regularActivities": {
+    "loading": "載入恆常活動中…",
+    "empty": {
+      "title": "暫無恆常活動",
+      "description": "目前沒有恆常活動，請稍後再來查看"
+    },
+    "pinned": "置頂",
+    "requirements": "活動要求",
+    "actions": {
+      "viewDetails": "查看詳情",
+      "igQuery": "IG 查詢"
+    },
+    "pagination": {
+      "prev": "上一頁",
+      "next": "下一頁"
+    },
+    "modal": {
+      "title": "活動詳情",
+      "descriptionLabel": "活動描述",
+      "introductionLabel": "活動介紹",
+      "requirementsLabel": "活動要求",
+      "feeLabel": "收費",
+      "igDetails": "IG 了解詳情"
+    }
+  },
+  "activityDetail": {
+    "loading": "載入活動詳情中…",
+    "errors": {
+      "notFoundTitle": "活動不存在",
+      "notFoundDesc": "找不到指定的活動"
+    },
+    "backToList": "返回活動列表",
+    "status": {
+      "upcoming": "即將開始",
+      "ongoing": "進行中",
+      "completed": "已完結",
+      "cancelled": "已取消"
+    },
+    "registration": {
+      "yourRegistered": "你已報名",
+      "completed": "已完結",
+      "ongoing": "進行中",
+      "registrationClosed": "報名已截止",
+      "full": "人數已滿",
+      "maxReached": "人數已到上限",
+      "registerNow": "立即報名",
+      "loginToRegister": "登入後報名",
+      "cannotRegister.deadline": "報名已截止，無法再報名此活動",
+      "cannotRegister.full": "活動人數已滿，無法再報名"
+    },
+    "labels": {
+      "time": "活動時間",
+      "location": "活動地點",
+      "limit": "人數限制",
+      "fee": "費用",
+      "deadline": "報名截止",
+      "organizer": "主辦方",
+      "coach": "負責教練",
+      "requirements": "活動要求",
+      "progress": "報名進度",
+      "spots": "{{n}} 個名額"
+    },
+    "actions": {
+      "registerNow": "立即報名",
+      "igQuery": "IG 查詢"
+    },
+    "imagePreview": {
+      "openAriaLabel": "放大檢視活動圖片",
+      "openTitle": "點擊放大",
+      "closeAriaLabel": "關閉預覽"
+    }
+  },
+  "activityRegister": {
+    "errors": {
+      "activityNotFound": "活動不存在",
+      "cannotRegister.expired": "活動報名已截止",
+      "cannotRegister.full": "活動人數已滿",
+      "cannotRegister.general": "活動不可報名",
+      "participantsMin": "參加人數至少為1人",
+      "participantsLimit": "人數已到上限，剩餘名額：{{n}}人",
+      "contactMissing": "請填寫完整的聯繫信息",
+      "submitFailed": "報名失敗"
+    },
+    "loading": "載入活動詳情中…",
+    "invalid": {
+      "title": "無法報名",
+      "backToList": "返回活動列表"
+    },
+    "success": {
+      "title": "報名成功！",
+      "message": "您已成功報名活動「{{title}}」",
+      "redirect": "系統將在3秒後跳轉到我的活動頁面",
+      "cta": "立即查看我的活動"
+    },
+    "header": {
+      "title": "活動報名",
+      "backToDetail": "返回活動詳情"
+    },
+    "sidebar": {
+      "time": "活動時間",
+      "location": "活動地點",
+      "participants": "人數",
+      "remaining": "剩餘名額",
+      "pointsPerPerson": "{{n}} 積分/人"
+    },
+    "form": {
+      "fillInfo": "填寫報名信息",
+      "participantCount": "參加人數",
+      "maxSelectable": "最多可選擇 {{n}} 人",
+      "email": "聯繫郵箱",
+      "phone": "聯繫電話",
+      "notes": "備註",
+      "notesPlaceholder": "如有特殊需求或備註，請在此填寫",
+      "charCount": "{{n}}/200 字符"
+    },
+    "cost": {
+      "title": "費用明細",
+      "unitPrice": "單價",
+      "peopleCount": "人數",
+      "original": "原價",
+      "discount": "折扣",
+      "total": "總計"
+    },
+    "buttons": {
+      "cancel": "取消",
+      "submit": "確認報名 ({{totalPts}} 積分)",
+      "submitting": "提交中…"
+    }
+  },
+  "redeem": {
+    "title": "兌換碼",
+    "placeholder": "輸入兌換碼",
+    "validate": "驗證",
+    "validating": "驗證中…",
+    "errors": {
+      "codeRequired": "請輸入兌換碼",
+      "validationFailed": "兌換碼驗證失敗"
+    },
+    "remove": "移除",
+    "fixed": "減 {{value}} 積分",
+    "percentage": "{{value}}折",
+    "labels": {
+      "original": "原價",
+      "discount": "折扣",
+      "payable": "實付"
+    },
+    "limitNote": "每個兌換碼有使用次數和期限限制"
+  },
+  "bookingPage": {
+    "title": "預約場地",
+    "subtitle": "選擇您喜歡的場地和時間，開始您的匹克球之旅",
+    "loading": "載入中...",
+    "steps": {
+      "store": "選擇店鋪",
+      "court": "選擇場地",
+      "date": "選擇日期",
+      "time": "選擇時間",
+      "info": "填寫信息",
+      "confirm": "確認預約"
+    },
+    "nav": {
+      "prev": "上一步",
+      "next": "下一步"
+    },
+    "sidebar": {
+      "title": "預約摘要",
+      "court": "場地",
+      "date": "日期",
+      "time": "時間",
+      "players": "人數",
+      "total": "總價",
+      "loginNotice": "請先登入以完成預約"
+    },
+    "storeSelector": {
+      "loading": "載入店鋪中...",
+      "title": "選擇店鋪",
+      "subtitle": "請先選擇您要預約的店鋪，再選擇場地",
+      "empty": "暫無可預約店鋪"
+    },
+    "courtSelector": {
+      "loading": "載入場地信息中...",
+      "title": "選擇場地",
+      "subtitle": "請選擇您想要預約的場地",
+      "vipBanner": "VIP會員8折!!",
+      "vipBannerSub": "成為VIP會員即可享受所有場地8折優惠",
+      "defaultDescription": "專業的匹克球場地，配備現代化設施",
+      "capacity": "最多 {{n}} 人",
+      "courtNumber": "場地 {{n}}",
+      "moreAmenities": "+{{n}} 更多",
+      "priceError": "時間段 {{start}} - {{end}} 的價格信息缺失。請聯繫管理員或選擇其他時間段。",
+      "offPeak": "非繁忙時間",
+      "peak": "繁忙時間",
+      "emptyTitle": "暫無可用場地",
+      "emptySubtitle": "請稍後再試或聯繫我們了解更多信息",
+      "types": {
+        "competition": "比賽場",
+        "training": "訓練場",
+        "solo": "單人場",
+        "dink": "練習場",
+        "full_venue": "包場",
+        "default": "場地"
+      }
+    },
+    "dateSelector": {
+      "title": "選擇日期",
+      "subtitle": "請選擇您想要預約的日期",
+      "selected": "已選擇: {{date}}",
+      "maxAdvance": "最多可預約 {{n}} 天內的場地",
+      "disabledDates": "灰色日期表示不可預約",
+      "todayHint": "粉紅色日期表示今天",
+      "weekdays": [
+        "日",
+        "一",
+        "二",
+        "三",
+        "四",
+        "五",
+        "六"
+      ]
+    },
+    "timeSlotSelector": {
+      "needCourtAndDate": "請先選擇場地和日期",
+      "title": "選擇時間",
+      "ampmNotice": "以下為 12 小時制（AM/PM），請確認時間",
+      "subtitle": "請選擇您想要預約的時間段",
+      "duration": "預約時長",
+      "refreshTime": "刷新時間檢查",
+      "checking": "檢查可用性中...",
+      "priceErrorShort": "價格錯誤",
+      "expired": "已過期",
+      "booked": "已預約",
+      "selected": "已選擇: {{start}} - {{end}}",
+      "expiredHint": "深灰色時段表示已過期（不能預約過去的時間）",
+      "bookedHint": "淺灰色時段表示已被預約",
+      "priceHint": "價格可能因高峰時段而有所不同",
+      "owlHint": "🦉 表示貓頭鷹時段（深夜優惠價）",
+      "durations": {
+        "1h": "1小時",
+        "2h": "2小時"
+      }
+    },
+    "playerForm": {
+      "title": "預約信息",
+      "subtitle": "請填寫參加人數和負責人聯絡信息",
+      "participants": "參加人數",
+      "contactInfo": "負責人聯絡信息",
+      "contactName": "負責人姓名",
+      "contactEmail": "聯絡電子郵件",
+      "contactPhone": "聯絡電話號碼",
+      "summaryPlayers": "預約人數: {{n}} 人",
+      "summaryContact": "負責人: {{name}}",
+      "notFilled": "未填寫",
+      "info1": "負責人聯絡信息已從您的帳戶自動填入，無法修改",
+      "info2": "如需修改聯絡信息，請前往個人資料頁面更新",
+      "info3": "我們會發送預約確認到您的電子郵件",
+      "info4": "如有任何變更，我們會通過電話聯繫您"
+    },
+    "bookingSummary": {
+      "incomplete": "請完成前面的步驟",
+      "title": "確認預約",
+      "subtitle": "請確認您的預約信息無誤",
+      "details": "預約詳情",
+      "date": "日期",
+      "time": "時間",
+      "players": "人數",
+      "contactInfo": "負責人聯絡信息",
+      "role": "負責人",
+      "contactNote": "* 聯絡信息已從您的帳戶資料自動填入，如需修改請前往個人資料頁面",
+      "specialRequests": "特殊要求（可選）",
+      "specialRequestsPlaceholder": "請輸入任何特殊要求或備註...",
+      "extraService": "額外服務",
+      "includeSoloCourt": "同時租用單人場",
+      "extraFee": "額外費用",
+      "soloCourtNote": "* 單人場與主場地同時段使用，適合個人練習",
+      "redeemTitle": "兌換碼",
+      "pricingTitle": "價格詳情",
+      "courtFee": "場地費用",
+      "soloCourtFee": "單人場租用",
+      "vipDiscount": "會員折扣 (8折)",
+      "redeemDiscount": "兌換碼折扣",
+      "total": "總計",
+      "vipApplied": "已享受 VIP 會員 8 折優惠",
+      "plusRedeem": " + 兌換碼折扣",
+      "policyTitle": "取消及惡劣天氣政策",
+      "importantNotice": "重要提醒",
+      "notice1": "請提前15分鐘到達場地",
+      "notice2Before": "避免穿著黑底運動鞋，造成污漬將會收取每一條鞋痕",
+      "notice2After": "清潔費",
+      "notice3": "場地內禁止吸煙和飲酒",
+      "save": "保存修改",
+      "cancelEdit": "取消編輯",
+      "confirm": "確認預約",
+      "submitting": "提交中...",
+      "loginFirst": "請先登入",
+      "fillRequired": "請完成所有必填信息",
+      "success": "預約成功！已扣除積分。請留意您的郵箱，已發送預約碼到您的郵箱。",
+      "failed": "預約失敗，請稍後再試",
+      "insufficient": "積分餘額不足，請先充值後再完成預約。",
+      "soleTitle": "場地使用須知",
+      "soleAcknowledge": "本人已閱讀並同意上述須知，確認繼續預約及積分扣款程序。",
+      "soleCancel": "取消",
+      "soleConfirm": "確認並扣款"
+    }
   }
 }

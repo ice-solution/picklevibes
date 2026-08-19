@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useBooking } from '../../contexts/BookingContext';
 import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
@@ -54,6 +55,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
 }) => {
   const { createBooking } = useBooking();
   const { user } = useAuth();
+  const { t, i18n } = useTranslation();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [specialRequests, setSpecialRequests] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -151,13 +153,13 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
     console.log('🔍 handleSubmit 開始執行');
     
     if (!user) {
-      alert('請先登入');
+      alert(t('bookingPage.bookingSummary.loginFirst'));
       return;
     }
 
     if (!court || !date || !timeSlot || !bookingData.contactName) {
       console.log('🔍 驗證失敗:', { court: !!court, date: !!date, timeSlot: !!timeSlot, contactName: !!bookingData.contactName });
-      alert('請完成所有必填信息');
+      alert(t('bookingPage.bookingSummary.fillRequired'));
       return;
     }
 
@@ -202,18 +204,18 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       console.log('🔍 步驟 2: 預約已使用積分支付完成');
       
       // 顯示成功消息並跳轉
-      alert('預約成功！已扣除積分。請留意您的郵箱，已發送預約碼到您的郵箱。');
+      alert(t('bookingPage.bookingSummary.success'));
       window.location.href = '/my-bookings';
     } catch (error: any) {
       console.error('❌ 支付流程錯誤:', error);
-      const message = error?.message || '預約失敗，請稍後再試';
+      const message = error?.message || t('bookingPage.bookingSummary.failed');
       const isInsufficientBalance =
         error?.isInsufficientBalance === true ||
         message.includes('積分餘額不足') ||
         message.includes('餘額不足');
 
       if (isInsufficientBalance) {
-        alert('積分餘額不足，請先充值後再完成預約。');
+        alert(t('bookingPage.bookingSummary.insufficient'));
         window.location.assign('/recharge?from=booking&reason=insufficient_balance');
         return;
       }
@@ -225,11 +227,11 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
 
   const handleConfirmBookingClick = () => {
     if (!user) {
-      alert('請先登入');
+      alert(t('bookingPage.bookingSummary.loginFirst'));
       return;
     }
     if (!court || !date || !timeSlot || !bookingData.contactName) {
-      alert('請完成所有必填信息');
+      alert(t('bookingPage.bookingSummary.fillRequired'));
       return;
     }
     setSoleNoticeAcknowledged(false);
@@ -254,20 +256,20 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
     return (
       <div className="text-center py-12">
         <ExclamationTriangleIcon className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-        <p className="text-gray-600">請完成前面的步驟</p>
+        <p className="text-gray-600">{t('bookingPage.bookingSummary.incomplete')}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">確認預約</h2>
-      <p className="text-gray-600 mb-8">請確認您的預約信息無誤</p>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('bookingPage.bookingSummary.title')}</h2>
+      <p className="text-gray-600 mb-8">{t('bookingPage.bookingSummary.subtitle')}</p>
 
       <div className="space-y-6">
         {/* 預約詳情 */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">預約詳情</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.details')}</h3>
           
           {/* 場地圖片 */}
           {court.images && court.images.length > 0 && (
@@ -285,7 +287,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               <div className="flex items-center gap-3 md:col-span-2">
                 <MapPinIcon className="w-5 h-5 text-primary-600" />
                 <div>
-                  <p className="text-sm text-gray-500">店鋪</p>
+                  <p className="text-sm text-gray-500">{t('common.store')}</p>
                   <p className="font-medium">{storeName}</p>
                   {storeAddress && <p className="text-sm text-gray-600">{storeAddress}</p>}
                 </div>
@@ -294,7 +296,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             <div className="flex items-center gap-3">
               <MapPinIcon className="w-5 h-5 text-primary-600" />
               <div>
-                <p className="text-sm text-gray-500">場地</p>
+                <p className="text-sm text-gray-500">{t('common.court')}</p>
                 <p className="font-medium">{court.name}</p>
               </div>
             </div>
@@ -302,9 +304,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             <div className="flex items-center gap-3">
               <CalendarDaysIcon className="w-5 h-5 text-primary-600" />
               <div>
-                <p className="text-sm text-gray-500">日期</p>
+                <p className="text-sm text-gray-500">{t('bookingPage.bookingSummary.date')}</p>
                 <p className="font-medium">
-                  {new Date(date).toLocaleDateString('zh-TW', {
+                  {new Date(date).toLocaleDateString(i18n.language?.startsWith('en') ? 'en-US' : 'zh-TW', {
                     year: 'numeric',
                     month: 'long',
                     day: 'numeric',
@@ -317,7 +319,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             <div className="flex items-center gap-3">
               <ClockIcon className="w-5 h-5 text-primary-600" />
               <div>
-                <p className="text-sm text-gray-500">時間</p>
+                <p className="text-sm text-gray-500">{t('bookingPage.bookingSummary.time')}</p>
                 <p className="font-medium">
                   {formatTime(timeSlot.start)} - {formatTime(timeSlot.end)}
                 </p>
@@ -327,8 +329,8 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             <div className="flex items-center gap-3">
               <UsersIcon className="w-5 h-5 text-primary-600" />
               <div>
-                <p className="text-sm text-gray-500">人數</p>
-                <p className="font-medium">{bookingData.totalPlayers} 人</p>
+                <p className="text-sm text-gray-500">{t('bookingPage.bookingSummary.players')}</p>
+                <p className="font-medium">{bookingData.totalPlayers} {t('common.people')}</p>
               </div>
             </div>
 
@@ -338,9 +340,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         {/* 聯絡信息 */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-gray-900">負責人聯絡信息</h3>
+            <h3 className="text-lg font-semibold text-gray-900">{t('bookingPage.bookingSummary.contactInfo')}</h3>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-              已自動填入
+              {t('common.autoFilled')}
             </span>
           </div>
           
@@ -351,28 +353,28 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 <p className="text-sm text-gray-600">{bookingData.contactEmail}</p>
                 <p className="text-sm text-gray-600">{bookingData.contactPhone}</p>
               </div>
-              <span className="text-sm text-gray-500">負責人</span>
+              <span className="text-sm text-gray-500">{t('bookingPage.bookingSummary.role')}</span>
             </div>
           </div>
           
           <p className="text-xs text-gray-500 mt-3">
-            * 聯絡信息已從您的帳戶資料自動填入，如需修改請前往個人資料頁面
+            {t('bookingPage.bookingSummary.contactNote')}
           </p>
         </div>
 
         {/* 特殊要求 */}
         <div className="bg-white border border-gray-200 rounded-xl p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">特殊要求（可選）</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.specialRequests')}</h3>
           <textarea
             value={specialRequests}
             onChange={(e) => setSpecialRequests(e.target.value)}
             className="w-full p-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             rows={3}
-            placeholder="請輸入任何特殊要求或備註..."
+            placeholder={t('bookingPage.bookingSummary.specialRequestsPlaceholder')}
             maxLength={500}
           />
           <p className="text-sm text-gray-500 mt-2">
-            {specialRequests.length}/500 字符
+            {specialRequests.length}/500
           </p>
         </div>
 
@@ -387,7 +389,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         })()}
         {court?.type === 'competition' && soloCourtAvailable && onToggleSoloCourt && (
           <div className="bg-white border border-gray-200 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">額外服務</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.extraService')}</h3>
             
             <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
               <div className="flex items-center space-x-3">
@@ -399,17 +401,17 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   className="w-4 h-4 text-primary-600 bg-gray-100 border-gray-300 rounded focus:ring-primary-500"
                 />
                 <label htmlFor="includeSoloCourt" className="text-sm font-medium text-gray-900">
-                  同時租用單人場
+                  {t('bookingPage.bookingSummary.includeSoloCourt')}
                 </label>
               </div>
               <div className="text-right">
-                <div className="text-sm text-gray-500">額外費用</div>
-                <div className="text-lg font-semibold text-primary-600">100 積分</div>
+                <div className="text-sm text-gray-500">{t('bookingPage.bookingSummary.extraFee')}</div>
+                <div className="text-lg font-semibold text-primary-600">100 {t('common.currency')}</div>
               </div>
             </div>
             
             <p className="text-xs text-gray-500 mt-2">
-              * 單人場與主場地同時段使用，適合個人練習
+              {t('bookingPage.bookingSummary.soloCourtNote')}
             </p>
           </div>
         )}
@@ -417,7 +419,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         {/* 兌換碼輸入 */}
         {availability && (
           <div className="bg-white border border-gray-200 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">兌換碼</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.redeemTitle')}</h3>
             <RedeemCodeInput
               amount={(availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)}
               orderType="booking"
@@ -437,7 +439,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         {/* 價格詳情 */}
         {availability && (
           <div className="bg-white border border-gray-200 rounded-xl p-6">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">價格詳情</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.pricingTitle')}</h3>
             
             {/* VIP折扣提示框 */}
             {user?.membershipLevel !== 'vip' && (
@@ -445,26 +447,26 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <span className="text-2xl animate-bounce">🎉</span>
                   <span className="text-lg font-bold text-red-600">
-                    VIP會員8折!!
+                    {t('bookingPage.courtSelector.vipBanner')}
                   </span>
                   <span className="text-2xl animate-bounce">🎉</span>
                 </div>
                 <p className="text-center text-sm text-gray-600">
-                  成為VIP會員即可享受所有場地8折優惠
+                  {t('bookingPage.courtSelector.vipBannerSub')}
                 </p>
               </div>
             )}
             
             <div className="space-y-3">
               <div className="flex justify-between">
-                <span className="text-gray-600">場地費用</span>
-                <span className="font-medium">{availability.pricing?.totalPrice || 0} 積分</span>
+                <span className="text-gray-600">{t('bookingPage.bookingSummary.courtFee')}</span>
+                <span className="font-medium">{availability.pricing?.totalPrice || 0} {t('common.currency')}</span>
               </div>
               
               {includeSoloCourt && (
                 <div className="flex justify-between">
-                  <span className="text-gray-600">單人場租用</span>
-                  <span className="font-medium">100 積分</span>
+                  <span className="text-gray-600">{t('bookingPage.bookingSummary.soloCourtFee')}</span>
+                  <span className="font-medium">100 {t('common.currency')}</span>
                 </div>
               )}
               
@@ -473,10 +475,10 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 <div className="flex justify-between text-green-600">
                   <span className="flex items-center gap-2">
                     <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">VIP</span>
-                    會員折扣 (8折)
+                    {t('bookingPage.bookingSummary.vipDiscount')}
                   </span>
                   <span className="font-medium">
-                    -{Math.round(((availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)) * 0.2)} 積分
+                    -{Math.round(((availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)) * 0.2)} {t('common.currency')}
                   </span>
                 </div>
               )}
@@ -485,23 +487,23 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               {redeemData && (
                 <div className="flex justify-between text-blue-600">
                   <span className="flex items-center gap-2">
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">兌換碼</span>
+                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">{t('bookingPage.bookingSummary.redeemTitle')}</span>
                     {redeemData.name}
                   </span>
                   <span className="font-medium">
-                    -{redeemData.discountAmount} 積分
+                    -{redeemData.discountAmount} {t('common.currency')}
                   </span>
                 </div>
               )}
               
               <div className="flex justify-between">
-                <span className="text-gray-600">時長</span>
-                <span className="font-medium">{calculateDuration()} 分鐘</span>
+                <span className="text-gray-600">{t('common.duration')}</span>
+                <span className="font-medium">{t('common.minutes', { n: calculateDuration() })}</span>
               </div>
               
               <div className="border-t border-gray-200 pt-3">
                 <div className="flex justify-between text-lg font-semibold">
-                  <span>總計</span>
+                  <span>{t('bookingPage.bookingSummary.total')}</span>
                   <span className="text-primary-600">
                     {(() => {
                       let totalPrice = (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0);
@@ -517,12 +519,12 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                       }
                       
                       return Math.max(0, totalPrice);
-                    })()} 積分
+                    })()} {t('common.currency')}
                   </span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1 text-right">
-                  {user?.membershipLevel === 'vip' && '已享受 VIP 會員 8 折優惠'}
-                  {redeemData && ' + 兌換碼折扣'}
+                  {user?.membershipLevel === 'vip' && t('bookingPage.bookingSummary.vipApplied')}
+                  {redeemData && t('bookingPage.bookingSummary.plusRedeem')}
                 </div>
               </div>
             </div>
@@ -534,7 +536,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           <div className="flex items-start gap-3">
             <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
             <div>
-              <h4 className="font-semibold text-amber-900 mb-2">取消及惡劣天氣政策</h4>
+              <h4 className="font-semibold text-amber-900 mb-2">{t('bookingPage.bookingSummary.policyTitle')}</h4>
               <ul className="text-sm text-amber-900 space-y-1 list-disc list-inside">
                 {BOOKING_CANCELLATION_POLICY_LINES.map((line) => (
                   <li key={line}>{line}</li>
@@ -549,15 +551,15 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           <div className="flex items-start gap-3">
             <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600 mt-0.5" />
             <div>
-              <h4 className="font-semibold text-yellow-800 mb-2">重要提醒</h4>
+              <h4 className="font-semibold text-yellow-800 mb-2">{t('bookingPage.bookingSummary.importantNotice')}</h4>
               <ul className="text-sm text-yellow-700 space-y-1">
-                <li>• 請提前15分鐘到達場地</li>
+                <li>• {t('bookingPage.bookingSummary.notice1')}</li>
                 <li>
-                  • ‼️避免穿著黑底運動鞋，造成污漬將會收取每一條鞋痕
+                  • ‼️{t('bookingPage.bookingSummary.notice2Before')}
                   <span className="text-red-600 font-semibold text-[1.2em]">$100</span>
-                  清潔費‼️
+                  {t('bookingPage.bookingSummary.notice2After')}‼️
                 </li>
-                <li>• 場地內禁止吸煙和飲酒</li>
+                <li>• {t('bookingPage.bookingSummary.notice3')}</li>
               </ul>
             </div>
           </div>
@@ -571,13 +573,13 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             onClick={handleSave}
             className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 transition-colors"
           >
-            保存修改
+            {t('bookingPage.bookingSummary.save')}
           </button>
           <button
             onClick={handleCancel}
             className="flex-1 px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-colors"
           >
-            取消編輯
+            {t('bookingPage.bookingSummary.cancelEdit')}
           </button>
         </div>
       )}
@@ -588,7 +590,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           onClick={onPrevStep || onReset}
           className="flex-1 bg-gray-200 text-gray-700 hover:bg-gray-300 font-medium py-3 px-6 rounded-lg transition-colors duration-200"
         >
-          上一步
+          {t('bookingPage.nav.prev')}
         </button>
         
         <button
@@ -601,14 +603,14 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               : 'bg-primary-600 text-white hover:bg-primary-700'
           }`}
         >
-          {isSubmitting ? '提交中...' : '確認預約'}
+          {isSubmitting ? t('bookingPage.bookingSummary.submitting') : t('bookingPage.bookingSummary.confirm')}
         </button>
       </div>
 
       {!user && (
         <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
           <p className="text-red-800 text-sm">
-            請先登入以完成預約
+            {t('bookingPage.sidebar.loginNotice')}
           </p>
         </div>
       )}
@@ -627,7 +629,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
         >
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6">
             <h3 id="sole-notice-title" className="text-lg font-bold text-gray-900 mb-3">
-              場地使用須知
+              {t('bookingPage.bookingSummary.soleTitle')}
             </h3>
             <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line border border-gray-200 rounded-lg p-4 bg-gray-50 mb-5">
               {SOLE_NOTICE_MESSAGE}
@@ -640,7 +642,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 className="mt-1 w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
               />
               <span className="text-sm text-gray-800">
-                本人已閱讀並同意上述須知，確認繼續預約及積分扣款程序。
+                {t('bookingPage.bookingSummary.soleAcknowledge')}
               </span>
             </label>
             <div className="flex gap-3">
@@ -650,7 +652,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 disabled={isSubmitting}
                 className="flex-1 py-3 px-4 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium disabled:opacity-50"
               >
-                取消
+                {t('bookingPage.bookingSummary.soleCancel')}
               </button>
               <button
                 type="button"
@@ -662,7 +664,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                     : 'bg-gray-200 text-gray-500 cursor-not-allowed'
                 }`}
               >
-                {isSubmitting ? '處理中...' : '確認並扣款'}
+                {isSubmitting ? t('common.processing') : t('bookingPage.bookingSummary.soleConfirm')}
               </button>
             </div>
           </div>

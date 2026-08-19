@@ -1,5 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useBooking } from '../../contexts/BookingContext';
 import apiConfig from '../../config/api';
 import { 
@@ -15,15 +16,16 @@ interface CourtSelectorProps {
 
 const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }) => {
   const { courts, loading } = useBooking();
+  const { t } = useTranslation();
 
   const getCourtTypeText = (type: string) => {
     switch (type) {
-      case 'competition': return '比賽場';
-      case 'training': return '訓練場';
-      case 'solo': return '單人場';
-      case 'dink': return '練習場';
-      case 'full_venue': return '包場';
-      default: return '場地';
+      case 'competition': return t('bookingPage.courtSelector.types.competition');
+      case 'training': return t('bookingPage.courtSelector.types.training');
+      case 'solo': return t('bookingPage.courtSelector.types.solo');
+      case 'dink': return t('bookingPage.courtSelector.types.dink');
+      case 'full_venue': return t('bookingPage.courtSelector.types.full_venue');
+      default: return t('bookingPage.courtSelector.types.default');
     }
   };
 
@@ -42,25 +44,25 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
     return (
       <div className="text-center py-12">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">載入場地信息中...</p>
+        <p className="mt-4 text-gray-600">{t('bookingPage.courtSelector.loading')}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">選擇場地</h2>
-      <p className="text-gray-600 mb-8">請選擇您想要預約的場地</p>
+      <h2 className="text-2xl font-bold text-gray-900 mb-6">{t('bookingPage.courtSelector.title')}</h2>
+      <p className="text-gray-600 mb-8">{t('bookingPage.courtSelector.subtitle')}</p>
 
       {/* VIP折扣提示 */}
       <div className="mb-6 bg-gradient-to-r from-red-500 via-pink-500 to-red-500 text-white px-6 py-4 rounded-xl shadow-lg animate-pulse">
         <div className="flex items-center justify-center gap-3">
           <span className="text-2xl animate-bounce">🎉</span>
-          <span className="text-xl font-bold">VIP會員8折!!</span>
+          <span className="text-xl font-bold">{t('bookingPage.courtSelector.vipBanner')}</span>
           <span className="text-2xl animate-bounce">🎉</span>
         </div>
         <p className="text-center text-sm mt-2 text-red-100">
-          成為VIP會員即可享受所有場地8折優惠
+          {t('bookingPage.courtSelector.vipBannerSub')}
         </p>
       </div>
 
@@ -116,18 +118,18 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
               </h3>
               
               <p className="text-gray-600 mb-4 line-clamp-2">
-                {court.description || '專業的匹克球場地，配備現代化設施'}
+                {court.description || t('bookingPage.courtSelector.defaultDescription')}
               </p>
 
               {/* 場地特色 */}
               <div className="flex items-center gap-4 mb-4 text-sm text-gray-500">
                 <div className="flex items-center gap-1">
                   <UsersIcon className="w-4 h-4" />
-                  <span>最多 {court.capacity} 人</span>
+                  <span>{t('bookingPage.courtSelector.capacity', { n: court.capacity })}</span>
                 </div>
                 <div className="flex items-center gap-1">
                   <MapPinIcon className="w-4 h-4" />
-                  <span>場地 {court.number}</span>
+                  <span>{t('bookingPage.courtSelector.courtNumber', { n: court.number })}</span>
                 </div>
               </div>
 
@@ -145,7 +147,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                     ))}
                     {court.amenities.length > 3 && (
                       <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full">
-                        +{court.amenities.length - 3} 更多
+                        {t('bookingPage.courtSelector.moreAmenities', { n: court.amenities.length - 3 })}
                       </span>
                     )}
                   </div>
@@ -157,7 +159,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                 <div className="flex items-center justify-center gap-2">
                   <span className="text-xl animate-bounce">🎉</span>
                   <span className="text-base font-bold text-red-600">
-                    VIP會員8折!!
+                    {t('bookingPage.courtSelector.vipBanner')}
                   </span>
                   <span className="text-xl animate-bounce">🎉</span>
                 </div>
@@ -171,10 +173,10 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                       <span className="text-sm text-gray-500">{slot.name}</span>
                       <div className="flex flex-col items-end">
                         <span className="text-sm font-bold text-primary-600">
-                          {slot.price} 積分/小時
+                          {t('common.perHourPoints', { n: slot.price })}
                         </span>
                         <span className="text-xs text-red-600 font-semibold">
-                          VIP: {Math.round(slot.price * 0.8)} 積分/小時
+                          VIP: {t('common.perHourPoints', { n: Math.round(slot.price * 0.8) })}
                         </span>
                       </div>
                     </div>
@@ -182,24 +184,24 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">非繁忙時間</span>
+                      <span className="text-sm text-gray-500">{t('bookingPage.courtSelector.offPeak')}</span>
                       <div className="flex flex-col items-end">
                         <span className="text-sm font-bold text-primary-600">
-                          {court.pricing.offPeak} 積分/小時
+                          {t('common.perHourPoints', { n: court.pricing.offPeak })}
                         </span>
                         <span className="text-xs text-red-600 font-semibold">
-                          VIP: {Math.round(court.pricing.offPeak * 0.8)} 積分/小時
+                          VIP: {t('common.perHourPoints', { n: Math.round(court.pricing.offPeak * 0.8) })}
                         </span>
                       </div>
                     </div>
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-500">繁忙時間</span>
+                      <span className="text-sm text-gray-500">{t('bookingPage.courtSelector.peak')}</span>
                       <div className="flex flex-col items-end">
                         <span className="text-sm font-bold text-primary-600">
-                          {court.pricing.peakHour} 積分/小時
+                          {t('common.perHourPoints', { n: court.pricing.peakHour })}
                         </span>
                         <span className="text-xs text-red-600 font-semibold">
-                          VIP: {Math.round(court.pricing.peakHour * 0.8)} 積分/小時
+                          VIP: {t('common.perHourPoints', { n: Math.round(court.pricing.peakHour * 0.8) })}
                         </span>
                       </div>
                     </div>
@@ -217,10 +219,10 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
             <span className="text-4xl">🏓</span>
           </div>
           <h3 className="text-2xl font-bold text-gray-900 mb-4">
-            暫無可用場地
+            {t('bookingPage.courtSelector.emptyTitle')}
           </h3>
           <p className="text-gray-600">
-            請稍後再試或聯繫我們了解更多信息
+            {t('bookingPage.courtSelector.emptySubtitle')}
           </p>
         </div>
       )}

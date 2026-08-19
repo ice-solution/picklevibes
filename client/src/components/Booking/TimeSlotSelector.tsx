@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useBooking } from '../../contexts/BookingContext';
 import { ClockIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 
@@ -18,6 +19,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   selectedTimeSlot,
   onAvailabilityChange
 }) => {
+  const { t } = useTranslation();
   const { checkAvailability, checkBatchAvailability } = useBooking();
   const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number; slotName?: string }>>([]);
   const [loading, setLoading] = useState(false);
@@ -26,8 +28,8 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   const [forceUpdate, setForceUpdate] = useState(0); // 強制更新計數器
 
   const durations = [
-    { value: 60, label: '1小時' },
-    { value: 120, label: '2小時' }
+    { value: 60, label: t('bookingPage.timeSlotSelector.durations.1h') },
+    { value: 120, label: t('bookingPage.timeSlotSelector.durations.2h') }
   ];
 
   // 定期更新當前時間
@@ -216,7 +218,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
         });
         
         // 顯示錯誤提示
-        alert(`錯誤：時間段 ${slot.start} - ${slot.end} 的價格信息缺失。請聯繫管理員或選擇其他時間段。`);
+        alert(t('bookingPage.courtSelector.priceError', { start: slot.start, end: slot.end }));
         return;
       }
       
@@ -249,25 +251,25 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
     return (
       <div className="text-center py-12">
         <ClockIcon className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-        <p className="text-gray-600">請先選擇場地和日期</p>
+        <p className="text-gray-600">{t('bookingPage.timeSlotSelector.needCourtAndDate')}</p>
       </div>
     );
   }
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-3">選擇時間</h2>
+      <h2 className="text-2xl font-bold text-gray-900 mb-3">{t('bookingPage.timeSlotSelector.title')}</h2>
       <div className="mb-6 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
         <p className="text-lg font-semibold text-yellow-800">
-          以下為 12 小時制（AM/PM），請確認時間
+          {t('bookingPage.timeSlotSelector.ampmNotice')}
         </p>
       </div>
-      <p className="text-gray-600 mb-8">請選擇您想要預約的時間段</p>
+      <p className="text-gray-600 mb-8">{t('bookingPage.timeSlotSelector.subtitle')}</p>
 
       {/* 時長選擇 */}
       <div className="mb-8">
         <label className="block text-sm font-medium text-gray-700 mb-3">
-          預約時長
+          {t('bookingPage.timeSlotSelector.duration')}
         </label>
         <div className="flex gap-2">
           {durations.map((duration) => (
@@ -295,10 +297,10 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
             }}
             className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
           >
-            刷新時間檢查
+            {t('bookingPage.timeSlotSelector.refreshTime')}
           </button>
           <span className="ml-2 text-xs text-gray-500">
-            當前時間: {currentTime.toLocaleTimeString()}
+            {t('common.currentTime')}: {currentTime.toLocaleTimeString()}
           </span>
         </div>
       </div>
@@ -307,7 +309,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">檢查可用性中...</p>
+          <p className="mt-4 text-gray-600">{t('bookingPage.timeSlotSelector.checking')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
@@ -344,19 +346,19 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               
               {slot.available && slot.price > 0 && (
                 <div className="text-xs font-semibold mt-1">
-                  {slot.price} 積分{slot.slotName === '貓頭鷹時間' ? ' 🦉' : ''}
+                  {slot.price} {t('common.currency')}{slot.slotName === '貓頭鷹時間' ? ' 🦉' : ''}
                 </div>
               )}
               
               {slot.available && (slot.price === 0 || slot.price === undefined || slot.price === null) && (
                 <div className="text-xs font-semibold mt-1 text-red-600">
-                  ❌ 價格錯誤
+                  ❌ {t('bookingPage.timeSlotSelector.priceErrorShort')}
                 </div>
               )}
               
               {!slot.available && (
                 <div className="text-xs mt-1">
-                  {(slot as any).isPast ? '已過期' : '已預約'}
+                  {(slot as any).isPast ? t('bookingPage.timeSlotSelector.expired') : t('bookingPage.timeSlotSelector.booked')}
                 </div>
               )}
             </motion.button>
@@ -374,7 +376,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
           <div className="flex items-center gap-2">
             <ClockIcon className="w-5 h-5 text-primary-600" />
             <span className="text-primary-800 font-medium">
-              已選擇: {formatTime(selectedTimeSlot.start)} - {formatTime(selectedTimeSlot.end)}
+              {t('bookingPage.timeSlotSelector.selected', { start: formatTime(selectedTimeSlot.start), end: formatTime(selectedTimeSlot.end) })}
             </span>
           </div>
         </motion.div>
@@ -382,10 +384,10 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
       {/* 說明文字 */}
       <div className="mt-6 text-sm text-gray-500">
-        <p>• 深灰色時段表示已過期（不能預約過去的時間）</p>
-        <p>• 淺灰色時段表示已被預約</p>
-        <p>• 價格可能因高峰時段而有所不同</p>
-        <p>• 🦉 表示貓頭鷹時段（深夜優惠價）</p>
+        <p>• {t('bookingPage.timeSlotSelector.expiredHint')}</p>
+        <p>• {t('bookingPage.timeSlotSelector.bookedHint')}</p>
+        <p>• {t('bookingPage.timeSlotSelector.priceHint')}</p>
+        <p>• {t('bookingPage.timeSlotSelector.owlHint')}</p>
       </div>
     </div>
   );

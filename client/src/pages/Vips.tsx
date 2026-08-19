@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import SEO from '../components/SEO/SEO';
 import {
   GiftIcon,
@@ -9,30 +10,18 @@ import {
   TrophyIcon,
 } from '@heroicons/react/24/outline';
 
-type Tier = {
-  id: string;
+type TierMeta = {
+  id: 'silver' | 'gold' | 'platinum';
   code: string;
-  nameZh: string;
-  nameEn: string;
-  join: string;
-  credits: string;
-  bonus: string;
-  perks: string;
   accent: string;
   glow: string;
   badge: string;
 };
 
-const TIERS: Tier[] = [
+const TIER_META: TierMeta[] = [
   {
     id: 'silver',
     code: 'S',
-    nameZh: 'SILVER 銀級',
-    nameEn: 'VIBE STARTER',
-    join: '入會 $15,000　JOIN AT $15,000',
-    credits: '獲 $18,000 積分　RECEIVE $18,000 CREDITS',
-    bonus: '+$3,000 贈送積分 · 20%　+$3,000 BONUS · 20%',
-    perks: '12 個月 · 場租 9.5 折 · 提前 21 日預訂　|　12 MONTHS · 5% OFF COURTS · BOOK 21 DAYS AHEAD',
     accent: '#ff4fd8',
     glow: 'rgba(255,79,216,0.45)',
     badge: 'from-pink-300 to-fuchsia-500',
@@ -40,13 +29,6 @@ const TIERS: Tier[] = [
   {
     id: 'gold',
     code: 'G',
-    nameZh: 'GOLD 金級',
-    nameEn: 'VIBE PRO',
-    join: '入會 $30,000　JOIN AT $30,000',
-    credits: '獲 $38,000 積分　RECEIVE $38,000 CREDITS',
-    bonus: '+$8,000 贈送積分 · 27%　+$8,000 BONUS · 27%',
-    perks:
-      '18 個月 · 場租 9 折 · 提前 28 日預訂 · 可綁定 1 位親友　|　18 MONTHS · 10% OFF COURTS · BOOK 28 DAYS AHEAD · 1 FRIEND LINK',
     accent: '#f5c542',
     glow: 'rgba(245,197,66,0.4)',
     badge: 'from-amber-300 to-yellow-500',
@@ -54,13 +36,6 @@ const TIERS: Tier[] = [
   {
     id: 'platinum',
     code: 'P',
-    nameZh: 'PLATINUM 白金級',
-    nameEn: 'VIBE ELITE',
-    join: '入會 $50,000　JOIN AT $50,000',
-    credits: '獲 $66,666 積分　RECEIVE $66,666 CREDITS',
-    bonus: '+$16,666 贈送積分 · 33%　+$16,666 BONUS · 33%',
-    perks:
-      '36 個月 · 場租 8.5 折 · 提前 60 日預訂 · 可綁定 3 位親友　|　36 MONTHS · 15% OFF COURTS · BOOK 60 DAYS AHEAD · 3 FRIEND LINKS',
     accent: '#2de2e6',
     glow: 'rgba(45,226,230,0.4)',
     badge: 'from-cyan-300 to-teal-400',
@@ -68,19 +43,21 @@ const TIERS: Tier[] = [
 ];
 
 const EXCLUSIVE = [
-  { icon: GiftIcon, zh: '迎新禮品', en: 'WELCOME GIFTS' },
-  { icon: HomeModernIcon, zh: 'VIP 房優惠', en: 'VIP ROOM' },
-  { icon: AcademicCapIcon, zh: '教練優惠', en: 'COACHING' },
-  { icon: TrophyIcon, zh: '比賽優先報名', en: 'TOURNAMENT PRIORITY' },
+  { icon: GiftIcon, key: 'gifts' as const },
+  { icon: HomeModernIcon, key: 'room' as const },
+  { icon: AcademicCapIcon, key: 'coach' as const },
+  { icon: TrophyIcon, key: 'tournament' as const },
 ];
 
 const Vips: React.FC = () => {
+  const { t } = useTranslation();
+
   return (
     <>
       <SEO
-        title="VIP 會員獎賞 | PickleVibes"
-        description="PickleVibes VIP 會員：儲值即享積分贈賞、場租折扣與優先預訂禮遇。"
-        keywords="VIP會員,銀級,金級,白金,PickleVibes"
+        title={t('vipsPage.seoTitle')}
+        description={t('vipsPage.seoDescription')}
+        keywords="VIP,membership,PickleVibes"
       />
       <div className="min-h-screen text-white relative overflow-hidden bg-[#05070f]">
         <div
@@ -118,7 +95,7 @@ const Vips: React.FC = () => {
                 textShadow: '0 0 18px rgba(45,226,230,0.65), 0 0 40px rgba(45,226,230,0.25)',
               }}
             >
-              VIBES
+              {t('vipsPage.brand')}
             </p>
             <div
               className="inline-block px-5 py-2 mb-6 border rounded-md text-sm sm:text-base font-semibold tracking-wide"
@@ -128,7 +105,7 @@ const Vips: React.FC = () => {
                 boxShadow: '0 0 18px rgba(255,79,216,0.35), inset 0 0 12px rgba(255,79,216,0.12)',
               }}
             >
-              隆重發佈　/　GRAND OPENING EXCLUSIVE
+              {t('vipsPage.banner')}
             </div>
             <h1
               className="text-4xl sm:text-6xl font-black tracking-tight mb-3"
@@ -137,14 +114,8 @@ const Vips: React.FC = () => {
                 textShadow: '0 0 22px rgba(255,79,216,0.55), 0 0 48px rgba(255,79,216,0.25)',
               }}
             >
-              VIP 會員獎賞
+              {t('vipsPage.title')}
             </h1>
-            <p
-              className="text-sm sm:text-base font-semibold tracking-[0.18em] mb-4"
-              style={{ color: '#5cf0f2' }}
-            >
-              VIP MEMBERSHIP REWARDS
-            </p>
             <p
               className="text-base sm:text-lg max-w-2xl mx-auto"
               style={{
@@ -152,12 +123,12 @@ const Vips: React.FC = () => {
                 textShadow: '0 0 12px rgba(245,197,66,0.25)',
               }}
             >
-              儲值即享積分贈賞、場租折扣與優先預訂禮遇
+              {t('vipsPage.subtitle')}
             </p>
           </motion.header>
 
           <div className="space-y-5">
-            {TIERS.map((tier, index) => (
+            {TIER_META.map((tier, index) => (
               <motion.article
                 key={tier.id}
                 initial={{ opacity: 0, y: 20 }}
@@ -179,17 +150,23 @@ const Vips: React.FC = () => {
                   <div className="min-w-0 flex-1 space-y-1.5">
                     <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
                       <h2 className="text-xl sm:text-2xl font-bold" style={{ color: tier.accent }}>
-                        {tier.nameZh}
+                        {t(`vipsPage.tiers.${tier.id}.name`)}
                       </h2>
-                      <span className="text-sm tracking-[0.14em] text-white/70">{tier.nameEn}</span>
+                      <span className="text-sm tracking-[0.14em] text-white/70">
+                        {t(`vipsPage.tiers.${tier.id}.tag`)}
+                      </span>
                     </div>
-                    <p className="text-sm sm:text-base text-white/90">{tier.join}</p>
-                    <p className="text-sm sm:text-base font-semibold text-white">{tier.credits}</p>
+                    <p className="text-sm sm:text-base text-white/90">
+                      {t(`vipsPage.tiers.${tier.id}.join`)}
+                    </p>
+                    <p className="text-sm sm:text-base font-semibold text-white">
+                      {t(`vipsPage.tiers.${tier.id}.credits`)}
+                    </p>
                     <p className="text-sm" style={{ color: tier.accent }}>
-                      {tier.bonus}
+                      {t(`vipsPage.tiers.${tier.id}.bonus`)}
                     </p>
                     <p className="text-xs sm:text-sm text-white/65 leading-relaxed pt-1">
-                      {tier.perks}
+                      {t(`vipsPage.tiers.${tier.id}.perks`)}
                     </p>
                   </div>
                 </div>
@@ -212,11 +189,11 @@ const Vips: React.FC = () => {
               className="text-center text-lg font-bold mb-5 tracking-wide"
               style={{ color: '#ff9ae6' }}
             >
-              專屬禮遇：　EXCLUSIVE PERKS
+              {t('vipsPage.exclusiveTitle')}
             </h3>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {EXCLUSIVE.map((item) => (
-                <div key={item.en} className="text-center space-y-2">
+                <div key={item.key} className="text-center space-y-2">
                   <div
                     className="mx-auto w-12 h-12 rounded-full border flex items-center justify-center"
                     style={{
@@ -226,8 +203,12 @@ const Vips: React.FC = () => {
                   >
                     <item.icon className="w-6 h-6" style={{ color: '#5cf0f2' }} />
                   </div>
-                  <p className="text-sm font-semibold text-white">{item.zh}</p>
-                  <p className="text-[11px] tracking-wider text-white/55">{item.en}</p>
+                  <p className="text-sm font-semibold text-white">
+                    {t(`vipsPage.perks.${item.key}.title`)}
+                  </p>
+                  <p className="text-[11px] tracking-wider text-white/55">
+                    {t(`vipsPage.perks.${item.key}.desc`)}
+                  </p>
                 </div>
               ))}
             </div>
@@ -247,14 +228,14 @@ const Vips: React.FC = () => {
                 boxShadow: '0 0 24px rgba(255,79,216,0.35)',
               }}
             >
-              立即儲值／了解入會
+              {t('vipsPage.ctaRecharge')}
             </Link>
             <Link
               to="/booking"
               className="inline-flex items-center justify-center px-6 py-3 rounded-lg font-semibold border transition-colors hover:bg-white/5"
               style={{ borderColor: '#5cf0f2', color: '#5cf0f2' }}
             >
-              前往預約場地
+              {t('vipsPage.ctaBook')}
             </Link>
           </motion.div>
         </div>

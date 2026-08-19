@@ -1,56 +1,29 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../../contexts/AuthContext';
-import { 
-  HeartIcon, 
-  UserGroupIcon, 
+import {
+  HeartIcon,
+  UserGroupIcon,
   ShoppingBagIcon,
   TrophyIcon,
   SunIcon,
-  WifiIcon
+  WifiIcon,
 } from '@heroicons/react/24/outline';
 
 const Features: React.FC = () => {
   const { user } = useAuth();
+  const { t } = useTranslation();
+
   const features = [
-    {
-      icon: HeartIcon,
-      title: '社交活動',
-      description: '歡迎來到社交活動！堆疊您的球拍，結識新朋友，在球場上混搭。我們只有一個規則——不要做個「dink」。',
-      color: 'text-primary-500'
-    },
-    {
-      icon: TrophyIcon,
-      title: '教練指導',
-      description: '我們都需要不時的幫助。無論您是想學習dink的banger，還是想學習bang的dinker，我們都能幫助您！',
-      color: 'text-accent-500'
-    },
-    {
-      icon: UserGroupIcon,
-      title: '與朋友一起玩',
-      description: '有時候，您只想保持輕鬆並與朋友一起打球。我們理解。預訂私人時段。如果您不告訴別人，我們也不會。',
-      color: 'text-secondary-500'
-    },
-    {
-      icon: SunIcon,
-      title: '防風雨運動',
-      description: '不想互外運動？我們提供空調。運營室內設施，確保。',
-      color: 'text-primary-600'
-    },
-    {
-      icon: ShoppingBagIcon,
-      title: '無人商店',
-      description: '現場有售賣機及支付機，無輪租借球拍或購買用品，由支付到拿取，全程無人化，更方便快捷。',
-      color: 'text-secondary-600'
-    },
-    {
-      icon: WifiIcon,
-      title: '現代設施',
-      description: '配備WiFi、更衣室、淋浴設施和健康意識的食品和飲料。我們為您提供場地，您帶來氛圍。',
-      color: 'text-accent-600'
-    }
-  ];
+    { icon: HeartIcon, key: 'social', color: 'text-primary-500' },
+    { icon: TrophyIcon, key: 'coaching', color: 'text-accent-500' },
+    { icon: UserGroupIcon, key: 'friends', color: 'text-secondary-500' },
+    { icon: SunIcon, key: 'indoor', color: 'text-primary-600' },
+    { icon: ShoppingBagIcon, key: 'shop', color: 'text-secondary-600' },
+    { icon: WifiIcon, key: 'modern', color: 'text-accent-600' },
+  ] as const;
 
   return (
     <section className="py-20 bg-gray-50">
@@ -63,10 +36,10 @@ const Features: React.FC = () => {
           className="text-center mb-16"
         >
           <h2 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-            Pickle Vibes 是匹克球生活方式
+            {t('home.features.title')}
           </h2>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            讓我們直截了當。是什麼讓我們與眾不同？在所有世界上的匹克球場所中，為什麼選擇這一個？
+            {t('home.features.subtitle')}
           </p>
 
           <div className="mt-6 flex justify-center">
@@ -74,7 +47,7 @@ const Features: React.FC = () => {
               to={user ? '/profile' : '/register'}
               className="group bg-accent-400 hover:bg-accent-500 text-gray-900 font-bold py-3 px-7 rounded-full text-base transition-all duration-300 transform hover:scale-105 shadow-lg hover:shadow-xl inline-flex items-center gap-2"
             >
-              立即登記
+              {t('home.features.registerNow')}
             </Link>
           </div>
         </motion.div>
@@ -82,29 +55,30 @@ const Features: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (
             <motion.div
-              key={index}
+              key={feature.key}
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: index * 0.1 }}
               viewport={{ once: true }}
               className="card-primary p-8"
             >
-              <div className={`w-16 h-16 ${feature.color} bg-opacity-10 rounded-2xl flex items-center justify-center mb-6`}>
+              <div
+                className={`w-16 h-16 ${feature.color} bg-opacity-10 rounded-2xl flex items-center justify-center mb-6`}
+              >
                 <feature.icon className={`w-8 h-8 ${feature.color}`} />
               </div>
-              
+
               <h3 className="text-2xl font-bold text-gray-900 mb-4">
-                {feature.title}
+                {t(`home.features.${feature.key}.title`)}
               </h3>
-              
+
               <p className="text-gray-600 leading-relaxed">
-                {feature.description}
+                {t(`home.features.${feature.key}.description`)}
               </p>
             </motion.div>
           ))}
         </div>
 
-        {/* 三個支柱 */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -113,38 +87,38 @@ const Features: React.FC = () => {
           className="mt-20 bg-white rounded-3xl p-8 md:p-12 shadow-xl"
         >
           <h3 className="text-3xl md:text-4xl font-bold text-center text-gray-900 mb-12">
-          Pickle Vibes 的三大支柱
+            {t('home.features.pillarsTitle')}
           </h3>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
               <div className="w-20 h-20 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <TrophyIcon className="w-10 h-10 text-primary-600" />
               </div>
-              <h4 className="text-2xl font-bold text-gray-900 mb-4">// 運動</h4>
-              <p className="text-gray-600">
-                我們為各種技能水平的球員提供服務，包括每週社交混合賽、競技聯賽、私人活動等。
-              </p>
+              <h4 className="text-2xl font-bold text-gray-900 mb-4">
+                {t('home.features.sport.title')}
+              </h4>
+              <p className="text-gray-600">{t('home.features.sport.description')}</p>
             </div>
-            
+
             <div className="text-center">
               <div className="w-20 h-20 bg-secondary-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <UserGroupIcon className="w-10 h-10 text-secondary-600" />
               </div>
-              <h4 className="text-2xl font-bold text-gray-900 mb-4">// 社交</h4>
-              <p className="text-gray-600">
-                不僅僅是匹克球，我們為您創造了一個可以閒逛、放鬆和結識志同道合的人的地方。我們提供場地，您帶來氛圍。
-              </p>
+              <h4 className="text-2xl font-bold text-gray-900 mb-4">
+                {t('home.features.socialPillar.title')}
+              </h4>
+              <p className="text-gray-600">{t('home.features.socialPillar.description')}</p>
             </div>
-            
+
             <div className="text-center">
               <div className="w-20 h-20 bg-yellow-100 rounded-full flex items-center justify-center mx-auto mb-6">
                 <ShoppingBagIcon className="w-10 h-10 text-yellow-600" />
               </div>
-              <h4 className="text-2xl font-bold text-gray-900 mb-4">// 公司活動</h4>
-              <p className="text-gray-600">
-                我們提供場地及設施，讓您舉辦聯誼公司活動，讓你公司工員更有默契，氣升士氣，我們有專業教練協助，保証每位員工也玩得盡興。
-              </p>
+              <h4 className="text-2xl font-bold text-gray-900 mb-4">
+                {t('home.features.corporate.title')}
+              </h4>
+              <p className="text-gray-600">{t('home.features.corporate.description')}</p>
             </div>
           </div>
         </motion.div>

@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useBooking } from '../../contexts/BookingContext';
 import apiConfig from '../../config/api';
+import { useTranslation } from 'react-i18next';
 import { 
   MapPinIcon, 
   UsersIcon,
@@ -19,6 +20,7 @@ import {
  */
 const PricingIntro: React.FC = () => {
   const { courts, fetchCourts, loading } = useBooking();
+  const { t } = useTranslation();
 
   useEffect(() => {
     fetchCourts();
@@ -29,30 +31,22 @@ const PricingIntro: React.FC = () => {
 
   const highlights = [
     {
-      title: '簡單易明',
+      title: t('pricingPage.intro.highlights.simpleTitle'),
+      description: <>{t('pricingPage.intro.highlights.simpleDesc')}</>
+    },
+    {
+      title: t('pricingPage.intro.highlights.transparentTitle'),
       description: (
         <>
-          我們採用積分制訂場，目的是想讓用戶簡單使用，不用複雜的計算。
+          {t('pricingPage.intro.highlights.transparentPrefix')}
+          <span className={highlightBadgeClass}>{t('pricingPage.intro.highlights.transparentBadge')}</span>
+          {t('pricingPage.intro.highlights.transparentSuffix')}
         </>
       )
     },
     {
-      title: '透明公開',
-      description: (
-        <>
-          我們積分儲值採用{' '}
-          <span className={highlightBadgeClass}>"HKD 1 = 1 積分"</span>
-          ，絕無任何附加收費。
-        </>
-      )
-    },
-    {
-      title: '積分回饋',
-      description: (
-        <>
-          公司定期會有特別充值優惠，多充多送。
-        </>
-      )
+      title: t('pricingPage.intro.highlights.rewardsTitle'),
+      description: <>{t('pricingPage.intro.highlights.rewardsDesc')}</>
     }
   ];
 
@@ -80,21 +74,21 @@ const PricingIntro: React.FC = () => {
   const getAmenityText = (amenity: string) => {
     switch (amenity) {
       case 'air_conditioning':
-        return '空調';
+        return t('pricingPage.intro.amenities.air_conditioning');
       case 'lighting':
-        return '照明';
+        return t('pricingPage.intro.amenities.lighting');
       case 'net':
-        return '球網';
+        return t('pricingPage.intro.amenities.net');
       case 'paddles':
-        return '球拍租借';
+        return t('pricingPage.intro.amenities.paddles');
       case 'balls':
-        return '球類提供';
+        return t('pricingPage.intro.amenities.balls');
       case 'water':
-        return '飲水機';
+        return t('pricingPage.intro.amenities.water');
       case 'shower':
-        return '淋浴設施';
+        return t('pricingPage.intro.amenities.shower');
       case 'vending_machine':
-        return '售賣機';
+        return t('pricingPage.intro.amenities.vending_machine');
       default:
         return amenity;
     }
@@ -102,11 +96,16 @@ const PricingIntro: React.FC = () => {
 
   const getCourtTypeText = (type: string) => {
     switch (type) {
-      case 'competition': return '比賽場';
-      case 'training': return '訓練場';
-      case 'solo': return '單人場';
-      case 'dink': return '練習場';
-      default: return '場地';
+      case 'competition':
+        return t('bookingPage.courtSelector.types.competition');
+      case 'training':
+        return t('bookingPage.courtSelector.types.training');
+      case 'solo':
+        return t('bookingPage.courtSelector.types.solo');
+      case 'dink':
+        return t('bookingPage.courtSelector.types.dink');
+      default:
+        return t('bookingPage.courtSelector.types.default');
     }
   };
 
@@ -133,16 +132,17 @@ const PricingIntro: React.FC = () => {
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 mb-10">
             <div>
               <p className="text-sm font-semibold text-primary-600 uppercase tracking-wide mb-3">
-                收費模式簡介
+                {t('pricingPage.intro.feeModeLabel')}
               </p>
               <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
-                找出最適合你的匹克球方案
+                {t('pricingPage.intro.heading')}
               </h2>
               <p className="text-lg text-gray-600 leading-relaxed">
-                我們依據不同玩家的使用頻率與需求，提供具彈性且透明的收費模式。
-                你可以先從基本會員開始體驗，也可以直接升級為 VIP 享受更多權益。
+                {t('pricingPage.intro.description1')}
+                <br />
+                {t('pricingPage.intro.description2')}
                 <span className={`ml-2 ${highlightBadgeClass}`}>
-                  新張期限定：享免費 VIP 升級
+                  {t('pricingPage.intro.badgeText')}
                 </span>
               </p>
             </div>
@@ -176,16 +176,18 @@ const PricingIntro: React.FC = () => {
       >
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-12">
-            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">場地詳情</h2>
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">
+              {t('pricingPage.intro.courtsDetailsTitle')}
+            </h2>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              每個場地都經過精心設計，確保您獲得最佳的匹克球體驗
+              {t('pricingPage.intro.courtsDetailsSubtitle')}
             </p>
           </div>
 
           {loading ? (
             <div className="text-center py-12">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">載入場地信息中...</p>
+              <p className="mt-4 text-gray-600">{t('pricingPage.intro.loadingCourts')}</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
@@ -201,7 +203,7 @@ const PricingIntro: React.FC = () => {
                   {/* VIP折扣提示 - 最醒目的位置 */}
                   <div className="bg-gradient-to-r from-red-500 via-pink-500 to-red-500 text-white px-4 py-3 text-center font-bold text-lg shadow-lg animate-pulse">
                     <span className="inline-block animate-bounce">🎉</span>
-                    <span className="mx-2">VIP會員8折!!</span>
+                  <span className="mx-2">{t('pricingPage.intro.vipBannerTitle')}</span>
                     <span className="inline-block animate-bounce">🎉</span>
                   </div>
 
@@ -232,25 +234,25 @@ const PricingIntro: React.FC = () => {
                     </h3>
                     
                     <p className="text-gray-600 mb-4">
-                      {court.description || '專業的匹克球場地，配備現代化設施'}
+                      {court.description || t('bookingPage.courtSelector.defaultDescription')}
                     </p>
 
                     {/* 場地特色 */}
                     <div className="flex items-center gap-4 mb-4 text-sm text-gray-500">
                       <div className="flex items-center gap-1">
                         <UsersIcon className="w-4 h-4" />
-                        <span>最多 {court.capacity} 人</span>
+                        <span>{t('bookingPage.courtSelector.capacity', { n: court.capacity })}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <MapPinIcon className="w-4 h-4" />
-                        <span>場地 {court.number}</span>
+                        <span>{t('bookingPage.courtSelector.courtNumber', { n: court.number })}</span>
                       </div>
                     </div>
 
                     {/* 設施列表 */}
                     {court.amenities && court.amenities.length > 0 && (
                       <div className="mb-6">
-                        <h4 className="text-sm font-medium text-gray-700 mb-3">設施</h4>
+                        <h4 className="text-sm font-medium text-gray-700 mb-3">{t('pricingPage.intro.amenitiesLabel')}</h4>
                         <div className="grid grid-cols-2 gap-2">
                           {court.amenities.map((amenity, idx) => (
                             <div key={idx} className="flex items-center gap-2 text-sm text-gray-600">
@@ -266,12 +268,12 @@ const PricingIntro: React.FC = () => {
 
                     {/* 營業時間 */}
                     <div className="mb-6">
-                      <h4 className="text-sm font-medium text-gray-700 mb-2">營業時間</h4>
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">{t('pricingPage.intro.operatingHoursTitle')}</h4>
                       <div className="text-sm text-gray-600">
                         <div className="flex items-center gap-1">
                           <ClockIcon className="w-4 h-4" />
                           <span>
-                            {court.type === 'solo' ? '每天 08:00-23:00' : '24小時營業(需預約方可進場)'}
+                            {court.type === 'solo' ? t('pricingPage.intro.soloHours') : t('pricingPage.intro.fullHours')}
                           </span>
                         </div>
                       </div>
@@ -284,12 +286,12 @@ const PricingIntro: React.FC = () => {
                         <div className="flex items-center justify-center gap-2">
                           <span className="text-2xl animate-bounce">🎉</span>
                           <span className="text-lg font-bold text-red-600">
-                            VIP會員8折!!
+                            {t('pricingPage.intro.vipBannerTitle')}
                           </span>
                           <span className="text-2xl animate-bounce">🎉</span>
                         </div>
                         <p className="text-xs text-gray-600 text-center mt-1">
-                          成為VIP會員即可享受所有場地8折優惠
+                          {t('pricingPage.intro.vipBannerSub')}
                         </p>
                       </div>
 
@@ -299,10 +301,10 @@ const PricingIntro: React.FC = () => {
                             <span className="text-sm text-gray-500">{slot.name}</span>
                             <div className="flex flex-col items-end">
                               <span className="text-lg font-bold text-primary-600">
-                                {slot.price} 積分/小時
+                                {t('common.perHourPoints', { n: slot.price })}
                               </span>
                               <span className="text-xs text-red-600 font-semibold">
-                                VIP: {Math.round(slot.price * 0.8)} 積分/小時
+                                VIP: {t('common.perHourPoints', { n: Math.round(slot.price * 0.8) })}
                               </span>
                             </div>
                           </div>
@@ -310,24 +312,24 @@ const PricingIntro: React.FC = () => {
                       ) : (
                         <>
                           <div className="flex justify-between items-center mb-2">
-                            <span className="text-sm text-gray-500">非繁忙時間</span>
+                            <span className="text-sm text-gray-500">{t('pricingPage.intro.offPeakLabel')}</span>
                             <div className="flex flex-col items-end">
                               <span className="text-lg font-bold text-primary-600">
-                                {court.pricing.offPeak} 積分/小時
+                                {t('common.perHourPoints', { n: court.pricing.offPeak })}
                               </span>
                               <span className="text-xs text-red-600 font-semibold">
-                                VIP: {Math.round(court.pricing.offPeak * 0.8)} 積分/小時
+                                VIP: {t('common.perHourPoints', { n: Math.round(court.pricing.offPeak * 0.8) })}
                               </span>
                             </div>
                           </div>
                           <div className="flex justify-between items-center">
-                            <span className="text-sm text-gray-500">繁忙時間</span>
+                            <span className="text-sm text-gray-500">{t('pricingPage.intro.peakLabel')}</span>
                             <div className="flex flex-col items-end">
                               <span className="text-lg font-bold text-primary-600">
-                                {court.pricing.peakHour} 積分/小時
+                                {t('common.perHourPoints', { n: court.pricing.peakHour })}
                               </span>
                               <span className="text-xs text-red-600 font-semibold">
-                                VIP: {Math.round(court.pricing.peakHour * 0.8)} 積分/小時
+                                VIP: {t('common.perHourPoints', { n: Math.round(court.pricing.peakHour * 0.8) })}
                               </span>
                             </div>
                           </div>

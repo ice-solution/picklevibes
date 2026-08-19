@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
@@ -14,6 +15,7 @@ import BackToTop from '../components/Common/BackToTop';
 import { CalendarDaysIcon, ClockIcon, UsersIcon } from '@heroicons/react/24/outline';
 
 const Booking: React.FC = () => {
+  const { t, i18n } = useTranslation();
   const { 
     stores,
     selectedStore,
@@ -104,12 +106,12 @@ const Booking: React.FC = () => {
     : (maxAdvanceDaysByRole.user ?? 7);
 
   const steps = [
-    { id: 1, name: '選擇店鋪', icon: CalendarDaysIcon },
-    { id: 2, name: '選擇場地', icon: CalendarDaysIcon },
-    { id: 3, name: '選擇日期', icon: CalendarDaysIcon },
-    { id: 4, name: '選擇時間', icon: ClockIcon },
-    { id: 5, name: '填寫信息', icon: UsersIcon },
-    { id: 6, name: '確認預約', icon: CalendarDaysIcon }
+    { id: 1, name: t('bookingPage.steps.store'), icon: CalendarDaysIcon },
+    { id: 2, name: t('bookingPage.steps.court'), icon: CalendarDaysIcon },
+    { id: 3, name: t('bookingPage.steps.date'), icon: CalendarDaysIcon },
+    { id: 4, name: t('bookingPage.steps.time'), icon: ClockIcon },
+    { id: 5, name: t('bookingPage.steps.info'), icon: UsersIcon },
+    { id: 6, name: t('bookingPage.steps.confirm'), icon: CalendarDaysIcon }
   ];
 
   const canProceed = () => {
@@ -194,10 +196,10 @@ const Booking: React.FC = () => {
           className="text-center mb-12"
         >
           <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
-            預約場地
+            {t('bookingPage.title')}
           </h1>
           <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-            選擇您喜歡的場地和時間，開始您的匹克球之旅
+            {t('bookingPage.subtitle')}
           </p>
         </motion.div>
 
@@ -257,7 +259,7 @@ const Booking: React.FC = () => {
         {loading && (
           <div className="text-center py-12">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-            <p className="mt-4 text-gray-600">載入中...</p>
+            <p className="mt-4 text-gray-600">{t('bookingPage.loading')}</p>
           </div>
         )}
 
@@ -342,7 +344,7 @@ const Booking: React.FC = () => {
                           : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                       }`}
                     >
-                      上一步
+                      {t('bookingPage.nav.prev')}
                     </button>
 
                     <button
@@ -354,7 +356,7 @@ const Booking: React.FC = () => {
                           : 'bg-gray-100 text-gray-400 cursor-not-allowed'
                       }`}
                     >
-                      下一步
+                      {t('bookingPage.nav.next')}
                     </button>
                   </div>
                 )}
@@ -364,43 +366,43 @@ const Booking: React.FC = () => {
             {/* Sidebar */}
             <div className="lg:col-span-1">
               <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-8">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">預約摘要</h3>
+                <h3 className="text-lg font-bold text-gray-900 mb-4">{t('bookingPage.sidebar.title')}</h3>
                 
                 <div className="space-y-4">
                   <div>
-                    <span className="text-sm text-gray-500">場地</span>
+                    <span className="text-sm text-gray-500">{t('bookingPage.sidebar.court')}</span>
                     <p className="font-medium">
-                      {selectedCourt ? selectedCourt.name : '未選擇'}
+                      {selectedCourt ? selectedCourt.name : t('common.notSelected')}
                     </p>
                   </div>
                   
                   <div>
-                    <span className="text-sm text-gray-500">日期</span>
+                    <span className="text-sm text-gray-500">{t('bookingPage.sidebar.date')}</span>
                     <p className="font-medium">
-                      {selectedDate ? new Date(selectedDate).toLocaleDateString('zh-TW') : '未選擇'}
+                      {selectedDate ? new Date(selectedDate).toLocaleDateString(i18n.language?.startsWith('en') ? 'en-US' : 'zh-TW') : t('common.notSelected')}
                     </p>
                   </div>
                   
                   <div>
-                    <span className="text-sm text-gray-500">時間</span>
+                    <span className="text-sm text-gray-500">{t('bookingPage.sidebar.time')}</span>
                     <p className="font-medium">
-                      {selectedTimeSlot ? `${selectedTimeSlot.start} - ${selectedTimeSlot.end}` : '未選擇'}
+                      {selectedTimeSlot ? `${selectedTimeSlot.start} - ${selectedTimeSlot.end}` : t('common.notSelected')}
                     </p>
                   </div>
                   
                   <div>
-                    <span className="text-sm text-gray-500">人數</span>
+                    <span className="text-sm text-gray-500">{t('bookingPage.sidebar.players')}</span>
                     <p className="font-medium">
-                      {bookingFormData.totalPlayers} 人
+                      {bookingFormData.totalPlayers} {t('common.people')}
                     </p>
                   </div>
 
                   {availability && (
                     <div className="pt-4 border-t border-gray-200">
                       <div className="flex justify-between">
-                        <span className="text-sm text-gray-500">總價</span>
+                        <span className="text-sm text-gray-500">{t('bookingPage.sidebar.total')}</span>
                         <span className="font-bold text-lg text-primary-600">
-                          {availability.pricing?.totalPrice || 0} 積分
+                          {availability.pricing?.totalPrice || 0} {t('common.currency')}
                         </span>
                       </div>
                     </div>
@@ -410,7 +412,7 @@ const Booking: React.FC = () => {
                 {!user && (
                   <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
                     <p className="text-sm text-yellow-800">
-                      請先登入以完成預約
+                      {t('bookingPage.sidebar.loginNotice')}
                     </p>
                   </div>
                 )}
