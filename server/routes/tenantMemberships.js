@@ -282,11 +282,88 @@ router.post('/', [
   }
 });
 
-/** PATCH /api/tenant-memberships/:id */
+/** PATCH /api/tenant-memberships/:id
+ *  可更新該筆 role／modules／isActive，以及帳號 name／phone／password。
+ *  若帶 storeId／storeIds：同步該用戶「可使用店鋪」集合（增／更新／移除），
+ *  並將本次 role／modules 套用到所有仍指派的店鋪。
+ */
 router.patch('/:id', [auth, platformAdminAuth], async (req, res) => {
   try {
     const membership = await TenantMembership.findById(req.params.id);
     if (!membership) return res.status(404).json({ message: '指派紀錄不存在' });
+
+    const wantsStoreSync =
+      Object.prototype.hasOwnProperty.call(req.body, 'storeIds') ||
+      Object.prototype.hasOwnProperty.call(req.body, 'storeId');
+
+    const user = await User.findById(membership.user);
+    if (!user) return res.status(404).json({ message: '用戶不存在' });
+
+    if (typeof req.body.name === 'string' && req.body.name.trim()) {
+      user.name = req.body.name.trim();
+    }
+    if (typeof req.body.phone === 'string' && req.body.phone.trim()) {
+      if (!/^[0-9]+$/.test(req.body.phone.trim())) {
+        return res.status(400).json({ message: '電話只能包含數字' });
+      }
+      user.phone = req.body.phone.trim();
+    }
+    if (typeof req.body.password === 'string' && req.body.password.length > 0) {
+      if (req.body.password.length < 8 || !/^(?=.*[a-zA-Z])(?=.*\d)/.test(req.body.password)) {
+        return res.status(400).json({ message: '密碼至少 8 字，且須包含字母與數字' });
+      }
+      user.password = req.body.password;
+    }
+    if (user.isModified()) {
+      await user.save();
+    }
+
+    if (wantsStoreSync) {
+      const desiredIds = await resolveStoreIds(req.body.storeId, req.body.storeIds);
+      if (!desiredIds.length) {
+        return res.status(400).json({ message: '請選擇至少一間店鋪' });
+      }
+
+      const role = req.body.role || membership.role;
+      if (!['manager', 'staff', 'shareholder'].includes(role)) {
+        return res.status(400).json({ message: 'role 無效' });
+      }
+      const modules = Object.prototype.hasOwnProperty.call(req.body, 'modules')
+        ? req.body.modules
+        : membership.modules;
+
+      const desiredSet = new Set(desiredIds.map((id) => String(id)));
+      const existing = await TenantMembership.find({ user: user._id });
+
+      const synced = [];
+      for (const storeId of desiredIds) {
+        synced.push(await assignUserToStore(user, storeId, role, modules));
+      }
+
+      for (const row of existing) {
+        if (!desiredSet.has(String(row.store))) {
+          await TenantMembership.findByIdAndDelete(row._id);
+        }
+      }
+
+      const remaining = await TenantMembership.countDocuments({
+        user: user._id,
+        isActive: true,
+      });
+      if (remaining === 0 && user.role === 'staff') {
+        user.role = 'user';
+        await user.save();
+      }
+
+      const primary =
+        synced.find((m) => String(m._id) === String(membership._id)) || synced[0];
+
+      return res.json({
+        message: `已更新（可使用 ${synced.length} 間店鋪）`,
+        membership: primary,
+        memberships: synced,
+      });
+    }
 
     if (req.body.role) {
       if (!['manager', 'staff', 'shareholder'].includes(req.body.role)) {
@@ -309,28 +386,6 @@ router.patch('/:id', [auth, platformAdminAuth], async (req, res) => {
       }
     }
 
-    const user = await User.findById(membership.user);
-    if (user) {
-      if (typeof req.body.name === 'string' && req.body.name.trim()) {
-        user.name = req.body.name.trim();
-      }
-      if (typeof req.body.phone === 'string' && req.body.phone.trim()) {
-        if (!/^[0-9]+$/.test(req.body.phone.trim())) {
-          return res.status(400).json({ message: '電話只能包含數字' });
-        }
-        user.phone = req.body.phone.trim();
-      }
-      if (typeof req.body.password === 'string' && req.body.password.length > 0) {
-        if (req.body.password.length < 8 || !/^(?=.*[a-zA-Z])(?=.*\d)/.test(req.body.password)) {
-          return res.status(400).json({ message: '密碼至少 8 字，且須包含字母與數字' });
-        }
-        user.password = req.body.password;
-      }
-      if (user.isModified()) {
-        await user.save();
-      }
-    }
-
     await membership.save();
     await membership.populate([
       { path: 'user', select: 'name email phone role' },
@@ -339,6 +394,9 @@ router.patch('/:id', [auth, platformAdminAuth], async (req, res) => {
 
     res.json({ message: '已更新', membership });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message, code: error.code });
+    }
     console.error('更新 tenant membership 錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }

@@ -132,7 +132,7 @@ function StoreMultiSelect({
 
   return (
     <div className="border rounded-md p-3 space-y-2 bg-gray-50">
-      <div className="text-sm font-medium text-gray-800">指派店鋪 *</div>
+      <div className="text-sm font-medium text-gray-800">可使用店鋪 *</div>
       <p className="text-xs text-gray-500">可同時勾選多間店鋪，或一次選全部。</p>
       {stores.length === 0 ? (
         <p className="text-sm text-red-600">沒有可指派的店鋪</p>
@@ -202,6 +202,7 @@ const TenantStaffManagement: React.FC = () => {
   const [editing, setEditing] = useState<Membership | null>(null);
   const [editRole, setEditRole] = useState<StaffRole>('staff');
   const [editModules, setEditModules] = useState<string[]>([]);
+  const [editStoreIds, setEditStoreIds] = useState<string[]>([]);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editPassword, setEditPassword] = useState('');
@@ -249,6 +250,11 @@ const TenantStaffManagement: React.FC = () => {
     setEditName(m.user?.name || '');
     setEditPhone(m.user?.phone || '');
     setEditPassword('');
+    const userId = m.user?._id;
+    const storeIdsForUser = memberships
+      .filter((row) => row.user?._id === userId && row.store?._id)
+      .map((row) => row.store._id);
+    setEditStoreIds([...new Set(storeIdsForUser.length ? storeIdsForUser : [m.store?._id].filter(Boolean))]);
     const custom = Array.isArray(m.modules) && m.modules.length > 0 ? m.modules : null;
     setEditModules(
       m.role === 'manager'
@@ -345,6 +351,14 @@ const TenantStaffManagement: React.FC = () => {
       alert('請填寫電話');
       return;
     }
+    if (editStoreIds.length === 0) {
+      alert('請選擇至少一間可使用店鋪');
+      return;
+    }
+    const assigningAll = editStoreIds.length === stores.length;
+    if (assigningAll && !window.confirm(`將可使用全部 ${stores.length} 間店鋪，確定？`)) {
+      return;
+    }
     try {
       setSaving(true);
       const payload: Record<string, unknown> = {
@@ -352,14 +366,15 @@ const TenantStaffManagement: React.FC = () => {
         name: editName.trim(),
         phone: editPhone.trim(),
         ...modulesPayload(editRole, editModules),
+        ...storeAssignPayload(editStoreIds, stores.length),
       };
       if (editPassword.trim()) {
         payload.password = editPassword.trim();
       }
-      await axios.patch(`/tenant-memberships/${editing._id}`, payload);
+      const res = await axios.patch(`/tenant-memberships/${editing._id}`, payload);
       setEditing(null);
       fetchData();
-      alert('已更新');
+      alert(res.data?.message || '已更新');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       alert(msg || '更新失敗');
@@ -400,9 +415,7 @@ const TenantStaffManagement: React.FC = () => {
           <h3 id="tenant-staff-edit-title" className="font-semibold text-gray-900 text-lg">
             編輯店鋪員工
           </h3>
-          <p className="text-sm text-gray-600">
-            {editing.user?.email} · {editing.store?.name}
-          </p>
+          <p className="text-sm text-gray-600">{editing.user?.email}</p>
 
           <div className="space-y-3">
             <div>
@@ -434,6 +447,14 @@ const TenantStaffManagement: React.FC = () => {
                 autoComplete="new-password"
               />
             </div>
+            <StoreMultiSelect
+              stores={stores}
+              selectedIds={editStoreIds}
+              onChange={setEditStoreIds}
+            />
+            <p className="text-xs text-gray-500 -mt-1">
+              勾選變更會同步此帳號可進入的店鋪；角色與功能會套用到所有已勾選店鋪。
+            </p>
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">店鋪角色</label>
               <select
