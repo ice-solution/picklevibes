@@ -525,7 +525,7 @@ router.get('/:id/submissions/export', async (req, res) => {
 });
 
 // @route   POST /api/application-forms/:id/submissions/notify
-// @desc    建立 OpenWA 批量通知（佇列每 2 秒一則）
+// @desc    建立 OpenWA 批量通知（佇列隨機 20–45 秒一則）
 router.post(
   '/:id/submissions/notify',
   [body('template').trim().notEmpty().withMessage('請輸入訊息內容')],
@@ -552,6 +552,8 @@ router.post(
           : undefined,
         createdBy: req.user?.id || req.user?._id,
         intervalMs: req.body.intervalMs,
+        intervalMinMs: req.body.intervalMinMs,
+        intervalMaxMs: req.body.intervalMaxMs,
       });
 
       if (result.error) {
@@ -561,8 +563,10 @@ router.post(
         });
       }
 
+      const minSec = Math.round((result.job.intervalMinMs || 20000) / 1000);
+      const maxSec = Math.round((result.job.intervalMaxMs || 45000) / 1000);
       res.status(201).json({
-        message: `已加入發送佇列（共 ${result.job.total} 則，約每 2 秒一則）`,
+        message: `已加入發送佇列（共 ${result.job.total} 則，隨機約每 ${minSec}–${maxSec} 秒一則）`,
         job: serializeJob(result.job),
       });
     } catch (error) {

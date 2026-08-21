@@ -7,7 +7,11 @@ const {
   sendTextMessage,
 } = require('./openWaService');
 
-const DEFAULT_INTERVAL_MS = 2000;
+/** 預設間隔範圍（毫秒）：隨機，降低被 WhatsApp 判定為 bot 的風險 */
+const DEFAULT_INTERVAL_MIN_MS = 20000;
+const DEFAULT_INTERVAL_MAX_MS = 45000;
+/** 舊欄位相容：未設 max 時，以 intervalMs 為下限 */
+const DEFAULT_INTERVAL_MS = DEFAULT_INTERVAL_MIN_MS;
 
 let workerTimer = null;
 let processing = false;
@@ -50,12 +54,41 @@ function resolvePhone(submission) {
   return String(raw || '').trim();
 }
 
+/** 開頭加 submission _id，令每則長度／指紋不一 */
+function buildOutboundMessage(submissionId, body) {
+  const id = String(submissionId || '').trim();
+  const text = String(body || '').trim();
+  if (!id) return text;
+  if (!text) return id;
+  return `${id}\n${text}`;
+}
+
+function normalizeIntervalRange(minMs, maxMs) {
+  const min = Math.max(5000, Number(minMs) || DEFAULT_INTERVAL_MIN_MS);
+  const max = Math.max(min, Number(maxMs) || DEFAULT_INTERVAL_MAX_MS);
+  return { min, max };
+}
+
+/** 每則之間隨機等待（含上下限） */
+function randomIntervalMs(minMs, maxMs) {
+  const { min, max } = normalizeIntervalRange(minMs, maxMs);
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
+function jobIntervalRange(job) {
+  const min = job?.intervalMinMs ?? job?.intervalMs ?? DEFAULT_INTERVAL_MIN_MS;
+  const max = job?.intervalMaxMs ?? DEFAULT_INTERVAL_MAX_MS;
+  return normalizeIntervalRange(min, max);
+}
+
 async function createNotifyJob({
   formId,
   template,
   submissionIds,
   createdBy,
-  intervalMs = DEFAULT_INTERVAL_MS,
+  intervalMs,
+  intervalMinMs,
+  intervalMaxMs,
 }) {
   if (!isOpenWaConfigured()) {
     return { error: 'OpenWA 未設定，無法發送通知', status: 503 };
@@ -84,6 +117,11 @@ async function createNotifyJob({
     return { error: '沒有可發送的提交記錄', status: 400 };
   }
 
+  const range = normalizeIntervalRange(
+    intervalMinMs ?? intervalMs ?? DEFAULT_INTERVAL_MIN_MS,
+    intervalMaxMs ?? DEFAULT_INTERVAL_MAX_MS
+  );
+
   const items = [];
   let skippedCount = 0;
   for (const sub of submissions) {
@@ -93,15 +131,15 @@ async function createNotifyJob({
       continue;
     }
     const ctx = buildTemplateContext(sub);
-    const message = renderTemplate(tpl, ctx).trim();
-    if (!message) {
+    const body = renderTemplate(tpl, ctx).trim();
+    if (!body) {
       skippedCount += 1;
       continue;
     }
     items.push({
       submission: sub._id,
       phone,
-      message,
+      message: buildOutboundMessage(sub._id, body),
       status: 'pending',
     });
   }
@@ -119,7 +157,9 @@ async function createNotifyJob({
     store: form.store,
     template: tpl,
     status: 'pending',
-    intervalMs: Math.max(1000, Number(intervalMs) || DEFAULT_INTERVAL_MS),
+    intervalMs: range.min,
+    intervalMinMs: range.min,
+    intervalMaxMs: range.max,
     items,
     total: items.length,
     sentCount: 0,
@@ -134,12 +174,15 @@ async function createNotifyJob({
 
 function serializeJob(job) {
   const j = job.toObject ? job.toObject() : job;
+  const range = jobIntervalRange(j);
   return {
     _id: j._id,
     form: j.form,
     status: j.status,
     template: j.template,
-    intervalMs: j.intervalMs,
+    intervalMs: range.min,
+    intervalMinMs: range.min,
+    intervalMaxMs: range.max,
     total: j.total,
     sentCount: j.sentCount,
     failedCount: j.failedCount,
@@ -196,7 +239,9 @@ async function processOneItem() {
     items: { $elemMatch: { status: 'pending' } },
   }).sort({ createdAt: 1 });
 
-  if (!job) return { didWork: false, intervalMs: DEFAULT_INTERVAL_MS };
+  if (!job) {
+    return { didWork: false, intervalMs: randomIntervalMs() };
+  }
 
   if (job.status === 'pending') {
     job.status = 'running';
@@ -204,11 +249,12 @@ async function processOneItem() {
   }
 
   const item = job.items.find((i) => i.status === 'pending');
+  const range = jobIntervalRange(job);
   if (!item) {
     job.status = 'completed';
     job.finishedAt = new Date();
     await job.save();
-    return { didWork: false, intervalMs: job.intervalMs || DEFAULT_INTERVAL_MS };
+    return { didWork: false, intervalMs: randomIntervalMs(range.min, range.max) };
   }
 
   try {
@@ -233,7 +279,7 @@ async function processOneItem() {
   await job.save();
   return {
     didWork: true,
-    intervalMs: job.intervalMs || DEFAULT_INTERVAL_MS,
+    intervalMs: randomIntervalMs(range.min, range.max),
   };
 }
 
@@ -246,7 +292,7 @@ function scheduleNext(delayMs) {
       return;
     }
     processing = true;
-    let result = { didWork: false, intervalMs: DEFAULT_INTERVAL_MS };
+    let result = { didWork: false, intervalMs: randomIntervalMs() };
     try {
       result = await processOneItem();
     } catch (err) {
@@ -269,12 +315,15 @@ function kickWorker() {
 /** 伺服器啟動時恢復未完成佇列 */
 function startApplicationNotifyWorker() {
   kickWorker();
-  console.log('📲 申請表 OpenWA 通知佇列已啟動（間隔 2 秒／則）');
+  console.log(
+    `📲 申請表 OpenWA 通知佇列已啟動（隨機間隔 ${DEFAULT_INTERVAL_MIN_MS / 1000}–${DEFAULT_INTERVAL_MAX_MS / 1000} 秒／則）`
+  );
 }
 
 module.exports = {
   formHasPhoneField,
   renderTemplate,
+  buildOutboundMessage,
   createNotifyJob,
   getJob,
   cancelJob,
@@ -282,4 +331,6 @@ module.exports = {
   kickWorker,
   startApplicationNotifyWorker,
   DEFAULT_INTERVAL_MS,
+  DEFAULT_INTERVAL_MIN_MS,
+  DEFAULT_INTERVAL_MAX_MS,
 };

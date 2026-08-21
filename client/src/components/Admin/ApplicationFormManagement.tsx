@@ -85,6 +85,8 @@ type NotifyJob = {
   skippedCount: number;
   pendingCount: number;
   intervalMs?: number;
+  intervalMinMs?: number;
+  intervalMaxMs?: number;
 };
 
 function formHasPhoneField(form: ApplicationFormDoc | null) {
@@ -389,7 +391,8 @@ const ApplicationFormManagement: React.FC = () => {
     const data = { ...(sample.data || {}) };
     if (sample.contactName && !data.name) data.name = sample.contactName;
     if (sample.contactPhone && !data.phone) data.phone = sample.contactPhone;
-    return renderTemplatePreview(notifyTemplate, data);
+    const body = renderTemplatePreview(notifyTemplate, data);
+    return sample._id ? `${sample._id}\n${body}` : body;
   }, [notifyTemplate, submissions]);
 
   const toggleSelectSubmission = (id: string) => {
@@ -432,8 +435,8 @@ const ApplicationFormManagement: React.FC = () => {
     if (
       !window.confirm(
         notifyScope === 'selected'
-          ? `確認以 OpenWA 發送 ${selectedSubmissionIds.length} 筆通知？（每 2 秒一則）`
-          : '確認向所有有 phone 的提交發送 OpenWA 通知？（每 2 秒一則）'
+          ? `確認以 OpenWA 發送 ${selectedSubmissionIds.length} 筆通知？（隨機約每 20–45 秒一則）`
+          : '確認向所有有 phone 的提交發送 OpenWA 通知？（隨機約每 20–45 秒一則）'
       )
     ) {
       return;
@@ -1096,7 +1099,8 @@ const ApplicationFormManagement: React.FC = () => {
               <div>
                 <h3 className="font-semibold">OpenWA 通知 · {submissionsForm.title}</h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  使用 {'{{fieldName}}'} 插入欄位；後台每 2 秒發送一則
+                  使用 {'{{fieldName}}'} 插入欄位；實際發送會在開頭加 submission _id；隨機約每
+                  20–45 秒一則
                 </p>
               </div>
               <button type="button" onClick={() => setNotifyOpen(false)}>

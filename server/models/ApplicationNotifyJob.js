@@ -23,7 +23,7 @@ const notifyItemSchema = new mongoose.Schema(
 
 /**
  * 申請表 WhatsApp（OpenWA）批量通知工作
- * 後台佇列：預設每 2 秒發送一則，避免被封鎖
+ * 後台佇列：預設每則隨機間隔 20–45 秒，訊息開頭帶 submission _id
  */
 const applicationNotifyJobSchema = new mongoose.Schema(
   {
@@ -45,7 +45,10 @@ const applicationNotifyJobSchema = new mongoose.Schema(
       default: 'pending',
       index: true,
     },
-    intervalMs: { type: Number, default: 2000, min: 1000 },
+    /** 相容舊欄位；等同 intervalMinMs */
+    intervalMs: { type: Number, default: 20000, min: 1000 },
+    intervalMinMs: { type: Number, default: 20000, min: 1000 },
+    intervalMaxMs: { type: Number, default: 45000, min: 1000 },
     items: { type: [notifyItemSchema], default: [] },
     total: { type: Number, default: 0 },
     sentCount: { type: Number, default: 0 },
