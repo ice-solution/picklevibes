@@ -66,6 +66,16 @@ function calculateDuration(startTime, endTime) {
   return endTotalMin - startTotalMin;
 }
 
+/** YYYY-MM-DD → 本地日曆日（避免 UTC 解析令 getDay 錯日） */
+function parseBookingDate(dateStr) {
+  const raw = String(dateStr || '').slice(0, 10);
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (m) {
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  }
+  return new Date(dateStr);
+}
+
 // @route   GET /api/courts
 // @desc    獲取所有場地
 // @access  Public
@@ -185,57 +195,45 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
       });
     }
     
-    // 檢查每個時間段是否在營業時間內開放
-    const bookingDate = new Date(date);
-    const unavailableSlots = [];
-    const validTimeSlots = [];
-    
-    for (const slot of timeSlots) {
-      if (!court.isOpenAt(bookingDate, slot.startTime, slot.endTime)) {
-        unavailableSlots.push({
-          startTime: slot.startTime,
-          endTime: slot.endTime,
-          available: false,
-          reason: '場地在該時間段不開放'
-        });
-      } else {
-        validTimeSlots.push(slot);
-      }
-    }
-    
-    // 繼續處理營業時間內的時間段，即使有一些時間段不在營業時間內
-    
-    // 批量檢查時間衝突（只檢查營業時間內的時間段）
-    const availabilityResults = await Promise.all(
-      validTimeSlots.map(async (slot) => {
+    // 檢查每個時間段是否在營業時間內開放（保持與輸入相同順序）
+    const bookingDate = parseBookingDate(date);
+    const allResults = await Promise.all(
+      timeSlots.map(async (slot) => {
         try {
+          if (!court.isOpenAt(bookingDate, slot.startTime, slot.endTime)) {
+            return {
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              available: false,
+              reason: '場地在該時間段不開放',
+            };
+          }
+
           const hasConflict = await Booking.checkTimeConflict(
-            req.params.id, 
-            date, 
-            slot.startTime, 
+            req.params.id,
+            date,
+            slot.startTime,
             slot.endTime
           );
-          
+
           if (hasConflict) {
             return {
               startTime: slot.startTime,
               endTime: slot.endTime,
               available: false,
-              reason: '該時間段已被預約'
+              reason: '該時間段已被預約',
             };
           }
-          
-          // 計算價格
+
           const duration = calculateDuration(slot.startTime, slot.endTime);
           const basePrice = court.getPriceForTime(slot.startTime, bookingDate);
           const totalPrice = Math.round(basePrice * (duration / 60));
           const slotName = court.getTimeSlotName(slot.startTime, bookingDate);
-          
-          // 判斷是否為高峰時段（用於顯示）
-          const hour = parseInt(slot.startTime.split(':')[0]);
+
+          const hour = parseInt(slot.startTime.split(':')[0], 10);
           const isWeekend = bookingDate.getDay() === 0 || bookingDate.getDay() === 6;
           const isPeakHour = isWeekend || (hour >= 18 && hour < 23);
-          
+
           return {
             startTime: slot.startTime,
             endTime: slot.endTime,
@@ -245,8 +243,8 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
               totalPrice,
               duration,
               isPeakHour,
-              slotName
-            }
+              slotName,
+            },
           };
         } catch (error) {
           console.error(`檢查時間段 ${slot.startTime}-${slot.endTime} 可用性錯誤:`, error);
@@ -254,19 +252,16 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
             startTime: slot.startTime,
             endTime: slot.endTime,
             available: false,
-            reason: '檢查可用性時發生錯誤'
+            reason: '檢查可用性時發生錯誤',
           };
         }
       })
     );
-    
-    // 合併營業時間外的不可用時間段和營業時間內的檢查結果
-    const allResults = [...unavailableSlots, ...availabilityResults];
-    
+
     res.json({
       date,
       courtId: req.params.id,
-      timeSlots: allResults
+      timeSlots: allResults,
     });
     
   } catch (error) {
@@ -307,9 +302,9 @@ router.get('/:id/availability', [
       });
     }
     
-    // 檢查場地是否在營業時間內開放
-    const bookingDate = new Date(date);
-    if (!court.isOpenAt(bookingDate)) {
+    // 檢查場地是否在營業時間內開放（須含開始+結束，避免 9pm 訂 2 小時超出收場）
+    const bookingDate = parseBookingDate(date);
+    if (!court.isOpenAt(bookingDate, startTime, endTime)) {
       return res.json({ 
         available: false, 
         reason: '場地在該時間段不開放' 

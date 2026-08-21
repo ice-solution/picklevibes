@@ -32,6 +32,37 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
     { value: 120, label: t('bookingPage.timeSlotSelector.durations.2h') }
   ];
 
+  /** 由場地 operatingHours 取當日開放小時範圍（結束小時為不可達上界，如 22 表示開到 22:00） */
+  const getCourtOpenHourRange = (courtDoc: any, selectedDate: string) => {
+    const fallback =
+      courtDoc?.type === 'solo'
+        ? { startHour: 8, endHour: 23 }
+        : { startHour: 0, endHour: 24 };
+
+    const hours = courtDoc?.operatingHours;
+    if (!hours) return fallback;
+
+    const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+    const [y, m, d] = String(selectedDate).slice(0, 10).split('-').map(Number);
+    const localDate = y && m && d ? new Date(y, m - 1, d) : new Date(selectedDate);
+    const dayKey = dayNames[localDate.getDay()];
+    const day = hours[dayKey];
+    if (!day || day.isOpen === false) return { startHour: 0, endHour: 0 };
+
+    const parseHour = (t: string, isEnd = false) => {
+      if (!t) return isEnd ? 24 : 0;
+      if (t === '24:00' || t.startsWith('24:')) return 24;
+      const [hh, mm] = t.split(':').map(Number);
+      if (isEnd && mm > 0) return Math.min(24, hh + 1); // 非整點結束：保守多開一小時格
+      return hh;
+    };
+
+    return {
+      startHour: parseHour(day.start || '00:00', false),
+      endHour: parseHour(day.end || '24:00', true),
+    };
+  };
+
   // 定期更新當前時間
   useEffect(() => {
     // 立即更新一次
@@ -77,39 +108,29 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
   const generateTimeSlots = useCallback(() => {
     const slots = [];
-    
-    // 根據場地類型確定營業時間
-    let startHour, endHour;
-    if (court?.type === 'solo') {
-      // 單人場營業時間：08:00-23:00
-      startHour = 8;
-      endHour = 23;
-    } else {
-      // 其他場地24小時營業
-      startHour = 0;
-      endHour = 24;
-    }
-    
-    // 每1小時為一組，不提供半小時選項
+    const { startHour, endHour } = getCourtOpenHourRange(court, date);
+
     for (let hour = startHour; hour < endHour; hour++) {
       const startTime = `${hour.toString().padStart(2, '0')}:00`;
-      const endHour = hour + Math.floor(selectedDuration / 60);
-      const endTime = `${endHour.toString().padStart(2, '0')}:00`;
-      
-      if (endHour <= 24) {
-        const isPast = isTimeInPast(startTime, date);
-        slots.push({
-          start: startTime,
-          end: endTime,
-          available: !isPast, // 過去的時間設為不可用
-          price: 0,
-          isPast: isPast // 標記是否為過去時間
-        });
-      }
+      const slotEndHour = hour + Math.floor(selectedDuration / 60);
+      const endTime =
+        slotEndHour >= 24 ? '24:00' : `${slotEndHour.toString().padStart(2, '0')}:00`;
+
+      // 結束時間不可超過場地營業結束（例：收場 22:00 則 21:00 起唔可以訂 2 小時）
+      if (slotEndHour > endHour) continue;
+
+      const isPast = isTimeInPast(startTime, date);
+      slots.push({
+        start: startTime,
+        end: endTime,
+        available: !isPast,
+        price: 0,
+        isPast,
+      });
     }
-    
+
     return slots;
-  }, [selectedDuration, date, isTimeInPast, currentTime, forceUpdate, court?.type]);
+  }, [selectedDuration, date, isTimeInPast, court]);
 
   const checkSlotAvailability = useCallback(async (slot: { start: string; end: string }) => {
     if (!court || !date) return { available: false, price: 0 };
@@ -130,57 +151,39 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   useEffect(() => {
     if (court && date) {
       setLoading(true);
-      
-      // 直接在useEffect內部生成時間段，確保使用最新的currentTime
-      const slots: Array<{ start: string; end: string; available: boolean; price: number; isPast: boolean }> = [];
-      
-      // 根據場地類型確定營業時間
-      let startHour, endHour;
-      if (court?.type === 'solo') {
-        // 單人場營業時間：08:00-23:00
-        startHour = 8;
-        endHour = 23;
-      } else {
-        // 其他場地24小時營業
-        startHour = 0;
-        endHour = 24;
-      }
-      
-      for (let hour = startHour; hour < endHour; hour++) {
-        const startTime = `${hour.toString().padStart(2, '0')}:00`;
-        const slotEndHour = hour + Math.floor(selectedDuration / 60);
-        const endTime = `${slotEndHour.toString().padStart(2, '0')}:00`;
-        
-        if (slotEndHour <= 24) {
-          const isPast = isTimeInPast(startTime, date);
-          slots.push({
-            start: startTime,
-            end: endTime,
-            available: !isPast, // 過去的時間設為不可用
-            price: 0,
-            isPast: isPast // 標記是否為過去時間
-          });
-        }
-      }
-      
+
+      const slots = generateTimeSlots();
+
       // 使用批量 API 檢查所有時段的可用性
-      const timeSlotData = slots.map(slot => ({
+      const timeSlotData = slots.map((slot) => ({
         startTime: slot.start,
-        endTime: slot.end
+        endTime: slot.end,
       }));
-      
+
       checkBatchAvailability(court._id, date, timeSlotData)
         .then((batchResult) => {
-          const results = slots.map((slot, index) => {
-            const availability = batchResult.timeSlots[index];
+          type BatchSlot = {
+            startTime?: string;
+            endTime?: string;
+            available?: boolean;
+            pricing?: { totalPrice?: number; slotName?: string };
+          };
+          const byKey = new Map<string, BatchSlot>(
+            (batchResult.timeSlots || []).map((a: BatchSlot) => [
+              `${a.startTime}-${a.endTime}`,
+              a,
+            ])
+          );
+          const results = slots.map((slot) => {
+            const availability = byKey.get(`${slot.start}-${slot.end}`);
             return {
               ...slot,
-              available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
-              price: availability.pricing?.totalPrice || 0,
-              slotName: availability.pricing?.slotName
+              available: slot.isPast ? false : Boolean(availability?.available),
+              price: availability?.pricing?.totalPrice || 0,
+              slotName: availability?.pricing?.slotName,
             };
           });
-          
+
           setTimeSlots(results);
           setLoading(false);
         })
@@ -190,11 +193,11 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
           Promise.all(
             slots.map(async (slot) => {
               const availability = await checkSlotAvailability(slot);
-              return { 
-                ...slot, 
-                available: slot.isPast ? false : availability.available, // 過去時間強制設為不可用
+              return {
+                ...slot,
+                available: slot.isPast ? false : availability.available,
                 price: availability.price,
-                slotName: availability.slotName
+                slotName: availability.slotName,
               };
             })
           ).then((results) => {
@@ -203,7 +206,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
           });
         });
     }
-  }, [court, date, selectedDuration, forceUpdate, currentTime]);
+  }, [court, date, selectedDuration, forceUpdate, currentTime, generateTimeSlots, checkBatchAvailability, checkSlotAvailability]);
 
   const handleSlotSelect = (slot: { start: string; end: string; available: boolean; price: number }) => {
     if (slot.available) {

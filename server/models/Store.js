@@ -1,11 +1,5 @@
 const mongoose = require('mongoose');
 
-const dayHoursSchema = {
-  start: { type: String, default: '08:00' },
-  end: { type: String, default: '23:00' },
-  isOpen: { type: Boolean, default: true },
-};
-
 const storeSchema = new mongoose.Schema({
   name: {
     type: String,
@@ -26,19 +20,29 @@ const storeSchema = new mongoose.Schema({
     trim: true,
     maxlength: [200, '地址不能超過200個字符'],
   },
+  /** 前台場地頁 banner 介紹文案 */
+  description: {
+    type: String,
+    trim: true,
+    default: '',
+    maxlength: [1000, '店鋪介紹不能超過1000個字符'],
+  },
   phone: {
     type: String,
     trim: true,
     default: '',
   },
+  /** 前台場地頁預設選中此店（同時只應有一間） */
+  isDefault: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  /** 前台顯示用營業時間（簡化：每日同一時段或 24 小時） */
   operatingHours: {
-    monday: dayHoursSchema,
-    tuesday: dayHoursSchema,
-    wednesday: dayHoursSchema,
-    thursday: dayHoursSchema,
-    friday: dayHoursSchema,
-    saturday: dayHoursSchema,
-    sunday: dayHoursSchema,
+    is24Hours: { type: Boolean, default: false },
+    start: { type: String, default: '08:00', trim: true },
+    end: { type: String, default: '23:00', trim: true },
   },
   sortOrder: {
     type: Number,

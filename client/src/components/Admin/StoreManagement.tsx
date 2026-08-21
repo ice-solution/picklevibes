@@ -4,26 +4,24 @@ import { PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
 import { TUYA_BASE_URL_OPTIONS } from '../../constants/tuyaRegions';
 import StoreTuyaZonesModal from './StoreTuyaZonesModal';
 
-interface DayHours {
+/** 店鋪營業時間（簡化） */
+interface StoreOperatingHours {
+  is24Hours: boolean;
   start: string;
   end: string;
-  isOpen: boolean;
 }
-
-type OperatingHours = Record<
-  'monday' | 'tuesday' | 'wednesday' | 'thursday' | 'friday' | 'saturday' | 'sunday',
-  DayHours
->;
 
 interface Store {
   _id: string;
   name: string;
   slug: string;
   address: string;
+  description?: string;
   phone: string;
-  operatingHours?: Partial<OperatingHours>;
+  operatingHours?: StoreOperatingHours | Record<string, unknown>;
   sortOrder: number;
   isActive: boolean;
+  isDefault?: boolean;
   enableHikAccess: boolean;
   hikKey?: string;
   hikSecret?: string;
@@ -46,119 +44,54 @@ interface Store {
   tuyaZones?: { _id?: string; name: string }[];
 }
 
-const DAY_KEYS: Array<keyof OperatingHours> = [
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-];
-
-const DAY_LABELS: Record<keyof OperatingHours, string> = {
-  monday: '星期一',
-  tuesday: '星期二',
-  wednesday: '星期三',
-  thursday: '星期四',
-  friday: '星期五',
-  saturday: '星期六',
-  sunday: '星期日',
-};
-
-const defaultDayHours = (): DayHours => ({
+const defaultOperatingHours = (): StoreOperatingHours => ({
+  is24Hours: false,
   start: '08:00',
   end: '23:00',
-  isOpen: true,
 });
 
-const defaultOperatingHours = (): OperatingHours => ({
-  monday: defaultDayHours(),
-  tuesday: defaultDayHours(),
-  wednesday: defaultDayHours(),
-  thursday: defaultDayHours(),
-  friday: defaultDayHours(),
-  saturday: defaultDayHours(),
-  sunday: defaultDayHours(),
-});
-
-function normalizeOperatingHours(raw?: Partial<OperatingHours> | null): OperatingHours {
+/** 相容舊版星期一–日結構 */
+function normalizeOperatingHours(raw?: StoreOperatingHours | Record<string, any> | null): StoreOperatingHours {
   const base = defaultOperatingHours();
-  if (!raw) return base;
-  DAY_KEYS.forEach((key) => {
-    const day = raw[key];
-    if (!day) return;
-    base[key] = {
-      start: day.start || '08:00',
-      end: day.end || '23:00',
-      isOpen: day.isOpen !== false,
+  if (!raw || typeof raw !== 'object') return base;
+
+  if ('is24Hours' in raw || 'start' in raw || 'end' in raw) {
+    return {
+      is24Hours: Boolean(raw.is24Hours),
+      start: String(raw.start || '08:00'),
+      end: String(raw.end || '23:00'),
     };
-  });
+  }
+
+  const mon = raw.monday as { start?: string; end?: string } | undefined;
+  if (mon) {
+    const start = mon.start || '08:00';
+    const end = mon.end || '23:00';
+    const is24 =
+      (start === '00:00' || start === '0:00') &&
+      (end === '24:00' || end === '23:59');
+    return { is24Hours: is24, start, end };
+  }
+
   return base;
 }
 
-/** 列表摘要：例如「每日 08:00–23:00」或「週一至五 08:00–23:00」 */
-function summarizeOperatingHours(hours?: Partial<OperatingHours> | null): string {
-  const normalized = normalizeOperatingHours(hours);
-  const openDays = DAY_KEYS.filter((k) => normalized[k].isOpen);
-  if (openDays.length === 0) return '全日休息';
-
-  const formatDay = (k: keyof OperatingHours) =>
-    `${normalized[k].start}–${normalized[k].end}`;
-
-  const allSame =
-    openDays.length === 7 &&
-    openDays.every(
-      (k) =>
-        normalized[k].start === normalized[openDays[0]].start &&
-        normalized[k].end === normalized[openDays[0]].end
-    );
-  if (allSame) {
-    return `每日 ${formatDay(openDays[0])}`;
-  }
-
-  const weekdays = DAY_KEYS.slice(0, 5);
-  const weekend = DAY_KEYS.slice(5);
-  const weekdaysOpen = weekdays.every((k) => normalized[k].isOpen);
-  const weekdaysSame =
-    weekdaysOpen &&
-    weekdays.every(
-      (k) =>
-        normalized[k].start === normalized.monday.start &&
-        normalized[k].end === normalized.monday.end
-    );
-  const weekendOpen = weekend.every((k) => normalized[k].isOpen);
-  const weekendSame =
-    weekendOpen &&
-    weekend.every(
-      (k) =>
-        normalized[k].start === normalized.saturday.start &&
-        normalized[k].end === normalized.saturday.end
-    );
-
-  if (weekdaysSame && weekendSame) {
-    if (
-      normalized.monday.start === normalized.saturday.start &&
-      normalized.monday.end === normalized.saturday.end
-    ) {
-      return `每日 ${formatDay('monday')}`;
-    }
-    return `週一至五 ${formatDay('monday')}；週末 ${formatDay('saturday')}`;
-  }
-
-  return openDays
-    .map((k) => `${DAY_LABELS[k].replace('星期', '')} ${formatDay(k)}`)
-    .join('、');
+function summarizeOperatingHours(hours?: StoreOperatingHours | Record<string, any> | null): string {
+  const h = normalizeOperatingHours(hours);
+  if (h.is24Hours) return '24 小時營業';
+  return `${h.start}–${h.end}`;
 }
 
 const emptyForm = {
   name: '',
   slug: '',
   address: '',
+  description: '',
   phone: '',
   operatingHours: defaultOperatingHours(),
   sortOrder: 0,
   isActive: true,
+  isDefault: false,
   enableHikAccess: false,
   hikKey: '',
   hikSecret: '',
@@ -216,10 +149,12 @@ const StoreManagement: React.FC = () => {
       name: s.name,
       slug: s.slug,
       address: s.address,
+      description: s.description || '',
       phone: s.phone || '',
       operatingHours: normalizeOperatingHours(s.operatingHours),
       sortOrder: s.sortOrder ?? 0,
       isActive: s.isActive,
+      isDefault: Boolean(s.isDefault),
       enableHikAccess: s.enableHikAccess,
       hikKey: s.hikKey || '',
       hikSecret: s.hikSecret || '',
@@ -241,30 +176,6 @@ const StoreManagement: React.FC = () => {
     setShowForm(true);
   };
 
-  const updateDayHours = (day: keyof OperatingHours, patch: Partial<DayHours>) => {
-    setForm((prev) => ({
-      ...prev,
-      operatingHours: {
-        ...prev.operatingHours,
-        [day]: {
-          ...prev.operatingHours[day],
-          ...patch,
-        },
-      },
-    }));
-  };
-
-  const applyHoursToAllDays = () => {
-    const template = form.operatingHours.monday;
-    setForm((prev) => ({
-      ...prev,
-      operatingHours: DAY_KEYS.reduce((acc, key) => {
-        acc[key] = { ...template };
-        return acc;
-      }, {} as OperatingHours),
-    }));
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -276,7 +187,11 @@ const StoreManagement: React.FC = () => {
       const payload = {
         ...form,
         address: form.address.trim(),
-        operatingHours: form.operatingHours,
+        operatingHours: {
+          is24Hours: form.operatingHours.is24Hours,
+          start: form.operatingHours.start,
+          end: form.operatingHours.end,
+        },
         hikKey: form.hikKey || null,
         hikSecret: form.hikSecret || null,
         hikAccessLevelId: form.hikAccessLevelId || null,
@@ -369,9 +284,14 @@ const StoreManagement: React.FC = () => {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  <span className={s.isActive ? 'text-green-600' : 'text-gray-500'}>
-                    {s.isActive ? '上線' : '停用'}
-                  </span>
+                  <div className="flex flex-col gap-0.5">
+                    <span className={s.isActive ? 'text-green-600' : 'text-gray-500'}>
+                      {s.isActive ? '上線' : '停用'}
+                    </span>
+                    {s.isDefault && (
+                      <span className="text-xs font-medium text-primary-600">預設顯示</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-gray-600">
                   {s.fullVenueHourlyRate && s.fullVenueHourlyRate > 0
@@ -427,58 +347,86 @@ const StoreManagement: React.FC = () => {
                   onChange={(e) => setForm({ ...form, address: e.target.value })}
                 />
               </div>
+              <div>
+                <label className="block text-sm text-gray-700 mb-1">店鋪介紹（前台場地頁顯示）</label>
+                <textarea
+                  className="w-full border rounded-md px-3 py-2"
+                  placeholder="簡介店鋪特色、位置提示等"
+                  rows={3}
+                  maxLength={1000}
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                />
+              </div>
               <input className="w-full border rounded-md px-3 py-2" placeholder="電話" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
 
               <div className="border border-gray-200 rounded-lg p-3 space-y-3">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-gray-800">營業時間</p>
-                  <button
-                    type="button"
-                    onClick={applyHoursToAllDays}
-                    className="text-xs text-primary-600 hover:text-primary-800"
-                  >
-                    套用星期一至全日
-                  </button>
-                </div>
-                <div className="space-y-2">
-                  {DAY_KEYS.map((day) => {
-                    const hours = form.operatingHours[day];
-                    return (
-                      <div key={day} className="grid grid-cols-[72px_auto_1fr_1fr] gap-2 items-center text-sm">
-                        <span className="text-gray-700">{DAY_LABELS[day]}</span>
-                        <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap">
-                          <input
-                            type="checkbox"
-                            checked={hours.isOpen}
-                            onChange={(e) => updateDayHours(day, { isOpen: e.target.checked })}
-                          />
-                          營業
-                        </label>
-                        <input
-                          type="time"
-                          className="border rounded-md px-2 py-1.5 disabled:bg-gray-100 disabled:text-gray-400"
-                          disabled={!hours.isOpen}
-                          value={hours.start}
-                          onChange={(e) => updateDayHours(day, { start: e.target.value })}
-                        />
-                        <input
-                          type="time"
-                          className="border rounded-md px-2 py-1.5 disabled:bg-gray-100 disabled:text-gray-400"
-                          disabled={!hours.isOpen}
-                          value={hours.end}
-                          onChange={(e) => updateDayHours(day, { end: e.target.value })}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-                <p className="text-xs text-gray-500">此營業時間會顯示於店鋪列表；預約可選時段仍以各場地設定為準。</p>
+                <p className="text-sm font-medium text-gray-800">營業時間</p>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={form.operatingHours.is24Hours}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        operatingHours: {
+                          ...form.operatingHours,
+                          is24Hours: e.target.checked,
+                        },
+                      })
+                    }
+                  />
+                  24 小時營業
+                </label>
+                {!form.operatingHours.is24Hours && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <input
+                      type="time"
+                      className="border rounded-md px-2 py-1.5"
+                      value={form.operatingHours.start}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          operatingHours: {
+                            ...form.operatingHours,
+                            start: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                    <span className="text-gray-500">至</span>
+                    <input
+                      type="time"
+                      className="border rounded-md px-2 py-1.5"
+                      value={form.operatingHours.end}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          operatingHours: {
+                            ...form.operatingHours,
+                            end: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                )}
+                <p className="text-xs text-gray-500">顯示於前台場地頁；預約可選時段仍以各場地設定為準。</p>
               </div>
 
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })} />
                 上線（用戶可見）
               </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.isDefault}
+                  onChange={(e) => setForm({ ...form, isDefault: e.target.checked })}
+                />
+                前台場地頁預設顯示此店
+              </label>
+              <p className="text-xs text-gray-500 -mt-1">同時只可有一間預設店；勾選後會自動取消其他店的預設。</p>
               <div>
                 <label className="block text-sm text-gray-700 mb-1">包場時薪（積分／小時）</label>
                 <input

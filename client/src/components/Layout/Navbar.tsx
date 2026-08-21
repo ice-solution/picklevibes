@@ -37,7 +37,6 @@ const navLinkClass = (active: boolean) =>
 const Navbar: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
-  const [isCourtsDropdownOpen, setIsCourtsDropdownOpen] = useState(false);
   const [cartCount, setCartCount] = useState(0);
   const { user, logout } = useAuth();
   const { shopEnabled } = useShopConfig();
@@ -45,7 +44,6 @@ const Navbar: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
   const userDropdownRef = useRef<HTMLDivElement>(null);
-  const courtsDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const updateCartCount = () => {
@@ -70,7 +68,6 @@ const Navbar: React.FC = () => {
   useEffect(() => {
     setIsOpen(false);
     setIsUserDropdownOpen(false);
-    setIsCourtsDropdownOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -78,16 +75,12 @@ const Navbar: React.FC = () => {
       if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
         setIsUserDropdownOpen(false);
       }
-      if (courtsDropdownRef.current && !courtsDropdownRef.current.contains(event.target as Node)) {
-        setIsCourtsDropdownOpen(false);
-      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const isActive = (path: string) => location.pathname === path;
-  const isCourtsVipActive = location.pathname === '/courts' || location.pathname === '/vips';
   const isMaintenanceMode = maintenanceStatus?.maintenanceMode;
   const isAdmin = user?.role === 'admin';
   const canManage = canOpenAdminV2(user);
@@ -192,57 +185,11 @@ const Navbar: React.FC = () => {
             <Link to="/about" className={navLinkClass(isActive('/about'))}>
               {t('nav.about')}
             </Link>
-
-            <div
-              className="relative"
-              ref={courtsDropdownRef}
-              onMouseEnter={() => setIsCourtsDropdownOpen(true)}
-              onMouseLeave={() => setIsCourtsDropdownOpen(false)}
-            >
-              <button
-                type="button"
-                onClick={() => setIsCourtsDropdownOpen((open) => !open)}
-                className={`${navLinkClass(isCourtsVipActive)} inline-flex items-center gap-1`}
-              >
-                {t('nav.courtsVip')}
-                <ChevronDownIcon className={`w-3.5 h-3.5 transition-transform ${isCourtsDropdownOpen ? 'rotate-180' : ''}`} />
-              </button>
-              <AnimatePresence>
-                {isCourtsDropdownOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.12 }}
-                    className="absolute left-0 top-full pt-1 z-50"
-                  >
-                    <div className="w-44 bg-white rounded-lg shadow-lg ring-1 ring-black/5 py-1">
-                      <Link
-                        to="/courts"
-                        className={`flex items-center gap-2 px-4 py-2 text-sm ${
-                          isActive('/courts') ? 'bg-primary-50 text-primary-700' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <BuildingOfficeIcon className="w-4 h-4" />
-                        {t('nav.courts')}
-                      </Link>
-                      <Link
-                        to="/vips"
-                        className={`flex items-center gap-2 px-4 py-2 text-sm ${
-                          isActive('/vips') ? 'bg-primary-50 text-primary-700' : 'text-gray-700 hover:bg-gray-50'
-                        }`}
-                      >
-                        <TagIcon className="w-4 h-4" />
-                        {t('nav.vips')}
-                      </Link>
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
-            <Link to="/pricing" className={navLinkClass(isActive('/pricing'))}>
-              {t('nav.pricing')}
+            <Link to="/courts" className={navLinkClass(isActive('/courts'))}>
+              {t('nav.courts')}
+            </Link>
+            <Link to="/vips" className={navLinkClass(isActive('/vips'))}>
+              {t('nav.vips')}
             </Link>
             <Link to="/booking" className={navLinkClass(isActive('/booking'))}>
               {t('nav.booking')}
@@ -362,10 +309,6 @@ const Navbar: React.FC = () => {
               <Link to="/vips" onClick={() => setIsOpen(false)} className={`flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium ${isActive('/vips') ? 'text-primary-600 bg-primary-50' : 'text-gray-700 hover:bg-gray-50'}`}>
                 <TagIcon className="w-5 h-5" />
                 {t('nav.vips')}
-              </Link>
-              <Link to="/pricing" onClick={() => setIsOpen(false)} className={`flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium ${isActive('/pricing') ? 'text-primary-600 bg-primary-50' : 'text-gray-700 hover:bg-gray-50'}`}>
-                <CurrencyDollarIcon className="w-5 h-5" />
-                {t('nav.pricing')}
               </Link>
               <Link to="/booking" onClick={() => setIsOpen(false)} className={`flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium ${isActive('/booking') ? 'text-primary-600 bg-primary-50' : 'text-gray-700 hover:bg-gray-50'}`}>
                 <CalendarDaysIcon className="w-5 h-5" />

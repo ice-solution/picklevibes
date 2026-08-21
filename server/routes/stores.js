@@ -23,8 +23,8 @@ function canSeeInactiveStore(req, store) {
 router.get('/', async (req, res) => {
   try {
     const stores = await Store.find({ isActive: true })
-      .sort({ sortOrder: 1, name: 1 })
-      .select('name slug address phone operatingHours sortOrder enableHikAccess');
+      .sort({ isDefault: -1, sortOrder: 1, name: 1 })
+      .select('name slug address phone description operatingHours sortOrder isDefault enableHikAccess');
     res.json({ stores });
   } catch (error) {
     console.error('獲取店鋪列表錯誤:', error);
@@ -59,7 +59,7 @@ router.get('/by-slug/:slug', optionalAuth, async (req, res) => {
     const slug = String(req.params.slug).trim().toLowerCase();
     const forLogin = req.query.forLogin === '1' || req.query.forLogin === 'true';
     const store = await Store.findOne({ slug })
-      .select('name slug address phone operatingHours sortOrder enableHikAccess isActive');
+      .select('name slug address phone description operatingHours sortOrder enableHikAccess isActive');
     if (!store) {
       return res.status(404).json({ message: '店鋪不存在' });
     }
@@ -89,6 +89,9 @@ router.post('/', [
       return res.status(400).json({ message: '輸入驗證失敗', errors: errors.array() });
     }
     const payload = { ...req.body, slug: String(req.body.slug).trim().toLowerCase() };
+    if (payload.isDefault) {
+      await Store.updateMany({ isDefault: true }, { $set: { isDefault: false } });
+    }
     const store = await Store.create(payload);
     res.status(201).json({ message: '店鋪建立成功', store });
   } catch (error) {
@@ -107,6 +110,15 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
   try {
     const update = { ...req.body };
     if (update.slug) update.slug = String(update.slug).trim().toLowerCase();
+    if (update.isDefault === true || update.isDefault === 'true') {
+      update.isDefault = true;
+      await Store.updateMany(
+        { _id: { $ne: req.params.id }, isDefault: true },
+        { $set: { isDefault: false } }
+      );
+    } else if (update.isDefault === false || update.isDefault === 'false') {
+      update.isDefault = false;
+    }
     const store = await Store.findByIdAndUpdate(req.params.id, update, {
       new: true,
       runValidators: true,

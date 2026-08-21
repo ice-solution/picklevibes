@@ -5,12 +5,20 @@ import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import SEO from '../components/SEO/SEO';
 import apiConfig from '../config/api';
+import { resolveTimeSlotsFromCourt, PricingTimeSlot } from '../constants/courtPricing';
 import {
-  BuildingStorefrontIcon,
   MapPinIcon,
   UsersIcon,
   SparklesIcon,
+  ClockIcon,
 } from '@heroicons/react/24/outline';
+
+type StoreOperatingHours = {
+  is24Hours?: boolean;
+  start?: string;
+  end?: string;
+  monday?: { start?: string; end?: string };
+};
 
 type StoreSummary = {
   _id: string;
@@ -18,6 +26,9 @@ type StoreSummary = {
   slug: string;
   address: string;
   phone?: string;
+  description?: string;
+  operatingHours?: StoreOperatingHours;
+  isDefault?: boolean;
 };
 
 type Court = {
@@ -31,15 +42,37 @@ type Court = {
   pricing?: {
     peakHour?: number;
     offPeak?: number;
+    timeSlots?: PricingTimeSlot[];
   };
   images?: Array<{ url: string; alt?: string; isPrimary?: boolean }>;
   isActive: boolean;
 };
 
+const VIP_RATE = 0.8;
+
 function courtImageUrl(path?: string) {
   if (!path) return '';
   if (path.startsWith('http')) return path;
   return `${apiConfig.API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`;
+}
+
+function formatSlotHours(slot: PricingTimeSlot) {
+  const end = slot.endTime === '24:00' ? '24:00' : slot.endTime;
+  return `${slot.startTime}–${end}`;
+}
+
+function formatStoreHours(
+  hours: StoreOperatingHours | undefined,
+  t: (key: string) => string
+): string {
+  if (!hours) return t('courtsPage.noOperatingHours');
+  if (hours.is24Hours) return t('courtsPage.open24Hours');
+  if (hours.start && hours.end) return `${hours.start}–${hours.end}`;
+  // 舊資料：取星期一
+  if (hours.monday?.start && hours.monday?.end) {
+    return `${hours.monday.start}–${hours.monday.end}`;
+  }
+  return t('courtsPage.noOperatingHours');
 }
 
 const Courts: React.FC = () => {
@@ -61,7 +94,10 @@ const Courts: React.FC = () => {
         const list: StoreSummary[] = res.data.stores || [];
         setStores(list);
         const saved = localStorage.getItem('picklevibes_selected_store_id');
-        const initial = (saved && list.find((s) => s._id === saved)?._id) || list[0]?._id || '';
+        const savedOk = saved && list.find((s) => s._id === saved)?._id;
+        const defaultStore = list.find((s) => s.isDefault)?._id;
+        // 後台「預設顯示」優先；否則用上次選擇；再否則第一間
+        const initial = defaultStore || savedOk || list[0]?._id || '';
         setSelectedStoreId(initial);
       } catch (err: any) {
         if (!cancelled) setError(err.response?.data?.message || t('courtsPage.loadStoresError'));
@@ -104,14 +140,56 @@ const Courts: React.FC = () => {
 
   const selectedStore = stores.find((s) => s._id === selectedStoreId) || null;
 
+  const storeDescription =
+    selectedStore?.description?.trim() || t('courtsPage.noStoreDescription');
+  const hoursText = formatStoreHours(selectedStore?.operatingHours, t);
+
   return (
     <>
       <SEO
         title={t('courtsPage.seoTitle')}
         description={t('courtsPage.seoDescription')}
-        keywords="pickleball courts,PickleVibes"
+        keywords="pickleball courts,pricing,VIP,PickleVibes"
       />
       <div className="min-h-screen bg-gradient-to-b from-secondary-50 via-white to-primary-50">
+        {/* 店鋪 Tabs（banner 上方） */}
+        <div className="border-b border-gray-200 bg-white/90 backdrop-blur sticky top-0 z-20">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-4 pb-0 flex flex-col items-center">
+            <p className="text-base sm:text-lg font-semibold text-gray-800 mb-2 text-center">{t('courtsPage.selectStore')}</p>
+            {loadingStores ? (
+              <p className="text-gray-500 text-sm pb-4 text-center">{t('courtsPage.loadingStores')}</p>
+            ) : stores.length === 0 ? (
+              <p className="text-gray-500 text-sm pb-4 text-center">{t('courtsPage.noStores')}</p>
+            ) : (
+              <div
+                role="tablist"
+                aria-label={t('courtsPage.selectStore')}
+                className="flex gap-1 overflow-x-auto scrollbar-thin -mb-px justify-center max-w-full"
+              >
+                {stores.map((store) => {
+                  const active = store._id === selectedStoreId;
+                  return (
+                    <button
+                      key={store._id}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setSelectedStoreId(store._id)}
+                      className={`shrink-0 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                        active
+                          ? 'border-primary-600 text-primary-700'
+                          : 'border-transparent text-gray-600 hover:text-gray-900 hover:border-gray-300'
+                      }`}
+                    >
+                      {store.name}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
         <section className="relative overflow-hidden border-b border-secondary-100">
           <div
             className="absolute inset-0 opacity-40"
@@ -136,52 +214,44 @@ const Courts: React.FC = () => {
             >
               {t('courtsPage.title')}
             </motion.h1>
+            {selectedStore?.address && (
+              <motion.p
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.08 }}
+                className="mt-3 text-sm text-gray-500 flex items-start gap-1.5 max-w-2xl"
+              >
+                <MapPinIcon className="w-4 h-4 mt-0.5 shrink-0 text-primary-500" />
+                <span>{selectedStore.address}</span>
+              </motion.p>
+            )}
             <motion.p
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.1 }}
-              className="mt-4 max-w-2xl text-lg text-gray-600"
+              className="mt-4 max-w-2xl text-lg text-gray-600 whitespace-pre-line"
             >
-              {t('courtsPage.subtitle')}
+              {selectedStoreId ? storeDescription : t('courtsPage.subtitle')}
             </motion.p>
+
+            {selectedStoreId && (
+              <motion.div
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.15 }}
+                className="mt-8 max-w-2xl"
+              >
+                <h2 className="text-sm font-semibold text-gray-900 flex items-center gap-1.5 mb-2">
+                  <ClockIcon className="w-4 h-4 text-secondary-600" />
+                  {t('courtsPage.operatingHoursTitle')}
+                </h2>
+                <p className="text-lg font-medium text-gray-900">{hoursText}</p>
+              </motion.div>
+            )}
           </div>
         </section>
 
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14">
-          <div className="bg-white/80 backdrop-blur border border-gray-100 rounded-2xl p-5 sm:p-6 shadow-sm mb-8">
-            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="store-select">
-              {t('courtsPage.selectStore')}
-            </label>
-            {loadingStores ? (
-              <p className="text-gray-500 text-sm">{t('courtsPage.loadingStores')}</p>
-            ) : (
-              <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-                <div className="relative flex-1">
-                  <BuildingStorefrontIcon className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                  <select
-                    id="store-select"
-                    value={selectedStoreId}
-                    onChange={(e) => setSelectedStoreId(e.target.value)}
-                    className="w-full appearance-none pl-10 pr-10 py-3 rounded-xl border border-gray-200 bg-white text-gray-900 focus:ring-2 focus:ring-secondary-500 focus:border-secondary-500"
-                  >
-                    {stores.length === 0 && <option value="">{t('courtsPage.noStores')}</option>}
-                    {stores.map((store) => (
-                      <option key={store._id} value={store._id}>
-                        {store.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                {selectedStore && (
-                  <p className="text-sm text-gray-500 flex items-start gap-1.5 sm:max-w-xs">
-                    <MapPinIcon className="w-4 h-4 mt-0.5 shrink-0 text-primary-500" />
-                    <span>{selectedStore.address}</span>
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-
           {error && (
             <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               {error}
@@ -199,13 +269,14 @@ const Courts: React.FC = () => {
               {courts.map((court, index) => {
                 const image =
                   court.images?.find((img) => img.isPrimary)?.url || court.images?.[0]?.url || '';
+                const slots = resolveTimeSlotsFromCourt(court);
                 return (
                   <motion.article
                     key={court._id}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: Math.min(index * 0.05, 0.3) }}
-                    className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow"
+                    className="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm hover:shadow-md transition-shadow flex flex-col"
                   >
                     <div className="aspect-[16/9] bg-gradient-to-br from-secondary-100 to-primary-100 relative">
                       {image ? (
@@ -223,7 +294,7 @@ const Courts: React.FC = () => {
                         {t(`courtsPage.types.${court.type}`, { defaultValue: court.type })}
                       </span>
                     </div>
-                    <div className="p-5 space-y-3">
+                    <div className="p-5 space-y-3 flex-1 flex flex-col">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <h2 className="text-xl font-bold text-gray-900">{court.name}</h2>
@@ -246,30 +317,64 @@ const Courts: React.FC = () => {
                               key={item}
                               className="px-2 py-0.5 rounded-md text-xs bg-secondary-50 text-secondary-800 border border-secondary-100"
                             >
-                              {item}
+                              {t(`pricingPage.intro.amenities.${item}`, { defaultValue: item })}
                             </span>
                           ))}
                         </div>
                       )}
-                      <div className="flex items-center justify-between pt-2 border-t border-gray-100">
-                        <div className="text-sm text-gray-600">
-                          {court.pricing?.peakHour != null ? (
-                            <>
-                              {t('courtsPage.peakLabel')}{' '}
-                              <span className="font-semibold text-gray-900">
-                                {t('courtsPage.points', { n: court.pricing.peakHour })}
-                              </span>
-                            </>
+
+                      <div className="mt-auto pt-3 border-t border-gray-100 space-y-3">
+                        <div className="rounded-xl bg-primary-50 border border-primary-100 px-3 py-2.5">
+                          <p className="text-sm font-semibold text-primary-800">
+                            {t('courtsPage.vipBannerTitle')}
+                          </p>
+                          <p className="text-xs text-primary-700/80 mt-0.5">
+                            {t('courtsPage.vipBannerSub')}
+                          </p>
+                        </div>
+
+                        <div>
+                          <h3 className="text-sm font-medium text-gray-800 mb-2 flex items-center gap-1.5">
+                            <ClockIcon className="w-4 h-4 text-gray-500" />
+                            {t('courtsPage.pricingTitle')}
+                          </h3>
+                          {slots.length > 0 ? (
+                            <ul className="space-y-2">
+                              {slots.map((slot, idx) => (
+                                <li
+                                  key={`${slot.name}-${slot.startTime}-${idx}`}
+                                  className="flex items-start justify-between gap-3 text-sm"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="font-medium text-gray-800">{slot.name}</p>
+                                    <p className="text-xs text-gray-500">{formatSlotHours(slot)}</p>
+                                  </div>
+                                  <div className="text-right shrink-0">
+                                    <p className="font-semibold text-gray-900">
+                                      {t('common.perHourPoints', { n: slot.price })}
+                                    </p>
+                                    <p className="text-xs font-semibold text-primary-700">
+                                      {t('courtsPage.vipPrice', {
+                                        n: Math.round(slot.price * VIP_RATE),
+                                      })}
+                                    </p>
+                                  </div>
+                                </li>
+                              ))}
+                            </ul>
                           ) : (
-                            t('common.seeBookingPage')
+                            <p className="text-sm text-gray-500">{t('common.seeBookingPage')}</p>
                           )}
                         </div>
-                        <Link
-                          to="/booking"
-                          className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 transition-colors"
-                        >
-                          {t('courtsPage.goBook')}
-                        </Link>
+
+                        <div className="flex justify-end pt-1">
+                          <Link
+                            to="/booking"
+                            className="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 transition-colors"
+                          >
+                            {t('courtsPage.goBook')}
+                          </Link>
+                        </div>
                       </div>
                     </div>
                   </motion.article>
