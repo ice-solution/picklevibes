@@ -254,7 +254,10 @@ const TenantStaffManagement: React.FC = () => {
     const storeIdsForUser = memberships
       .filter((row) => row.user?._id === userId && row.store?._id)
       .map((row) => row.store._id);
-    setEditStoreIds([...new Set(storeIdsForUser.length ? storeIdsForUser : [m.store?._id].filter(Boolean))]);
+    const rawIds = storeIdsForUser.length
+      ? storeIdsForUser
+      : ([m.store?._id].filter(Boolean) as string[]);
+    setEditStoreIds(Array.from(new Set(rawIds)));
     const custom = Array.isArray(m.modules) && m.modules.length > 0 ? m.modules : null;
     setEditModules(
       m.role === 'manager'
