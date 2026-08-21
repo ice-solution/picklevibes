@@ -136,6 +136,51 @@ router.get('/', async (req, res) => {
   }
 });
 
+// @route   GET /api/products/admin/list
+// @desc    管理員產品列表（含停用商品）
+// @access  Private (Admin)
+router.get('/admin/list', [auth, adminAuth], async (req, res) => {
+  try {
+    const { category, page = 1, limit = 100, search, includeInactive = 'true' } = req.query;
+
+    const query = {};
+    if (includeInactive !== 'true') {
+      query.isActive = true;
+    }
+
+    if (category) {
+      query.category = category;
+    }
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+      ];
+    }
+
+    const products = await Product.find(query)
+      .populate('category', 'name')
+      .sort({ sortOrder: 1, createdAt: -1 })
+      .limit(limit * 1)
+      .skip((page - 1) * limit);
+
+    const total = await Product.countDocuments(query);
+
+    res.json({
+      products,
+      pagination: {
+        current: parseInt(page, 10),
+        pages: Math.ceil(total / limit),
+        total,
+      },
+    });
+  } catch (error) {
+    console.error('獲取管理員產品列表錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   GET /api/products/:id
 // @desc    獲取單個產品詳情
 // @access  Public

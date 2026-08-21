@@ -7,6 +7,12 @@ const RedeemUsage = require('../models/RedeemUsage');
 const RedeemBatchJob = require('../models/RedeemBatchJob');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const {
+  claimCodeToPocket,
+  assignCodeToUsers,
+  listUserPocket,
+} = require('../services/redeemPocketService');
+const UserRedeemPocket = require('../models/UserRedeemPocket');
+const {
   normalizeTemplate,
   scheduleRedeemBatchJob,
   SYNC_MAX_QUANTITY,
@@ -74,11 +80,13 @@ async function generateUniqueIndependentRedeemCode(maxTries = 10) {
 }
 
 // @route   POST /api/redeem/validate
-// @desc    驗證兌換碼
+// @desc    驗證兌換碼（可輸入 code，或用口袋 pocketItemId / redeemCodeId）
 // @access  Private
 router.post('/validate', [
   auth,
-  body('code').trim().notEmpty().withMessage('兌換碼不能為空'),
+  body('code').optional().trim(),
+  body('pocketItemId').optional().isMongoId().withMessage('無效的口袋項目'),
+  body('redeemCodeId').optional().isMongoId().withMessage('無效的兌換碼ID'),
   body('amount').isFloat({ min: 0 }).withMessage('金額必須大於等於0'),
   body('orderType').isIn(['booking', 'recharge', 'activity', 'product', 'eshop']).withMessage('訂單類型必須是 booking、recharge、activity、product 或 eshop'),
   body('restrictedCode').optional().trim(),
@@ -86,6 +94,7 @@ router.post('/validate', [
   body('date').optional().isISO8601().withMessage('請提供有效的日期'),
   body('startTime').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的開始時間'),
   body('pricingSlotName').optional().trim(),
+  body('forUserId').optional().isMongoId().withMessage('無效的用戶ID'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -96,39 +105,78 @@ router.post('/validate', [
       });
     }
 
-    const { code, amount, orderType, courtId, date, startTime, pricingSlotName } = req.body;
+    const {
+      code,
+      pocketItemId,
+      redeemCodeId,
+      amount,
+      orderType,
+      courtId,
+      date,
+      startTime,
+      pricingSlotName,
+      alsoClaimToPocket,
+      forUserId,
+    } = req.body;
 
-    // 查找兌換碼
-    const redeemCode = await RedeemCode.findOne({ 
-      code: code.toUpperCase(),
-      isActive: true 
-    });
+    // 後台代顧客驗證（POS）：僅 admin／staff 可指定 forUserId
+    let targetUserId = req.user.id;
+    if (forUserId) {
+      const isStaff = req.user.role === 'admin' || req.user.role === 'staff';
+      if (!isStaff) {
+        return res.status(403).json({ message: '無權限代其他用戶驗證兌換碼' });
+      }
+      targetUserId = forUserId;
+    }
+
+    let redeemCode = null;
+
+    if (pocketItemId) {
+      const pocket = await UserRedeemPocket.findOne({
+        _id: pocketItemId,
+        user: targetUserId,
+        status: { $ne: 'removed' },
+      });
+      if (!pocket) {
+        return res.status(404).json({ message: '口袋中找不到此兌換券' });
+      }
+      redeemCode = await RedeemCode.findById(pocket.redeemCode);
+    } else if (redeemCodeId) {
+      redeemCode = await RedeemCode.findOne({ _id: redeemCodeId, isActive: true });
+    } else if (code) {
+      redeemCode = await RedeemCode.findOne({
+        code: String(code).toUpperCase(),
+        isActive: true,
+      });
+    } else {
+      return res.status(400).json({ message: '請提供兌換碼或選擇口袋兌換券' });
+    }
 
     if (!redeemCode) {
       return res.status(404).json({ message: '兌換碼不存在或已失效' });
     }
 
-    // 檢查兌換碼是否有效
     if (!redeemCode.isValid()) {
       return res.status(400).json({ message: '兌換碼已過期或使用次數已滿' });
     }
 
-    // 使用限制僅以「適用範圍」(applicableTypes) 為準；restrictedCode 已不再使用，避免與適用範圍重複
-    // 檢查適用範圍
-    if (!redeemCode.applicableTypes.includes('all') && 
-        !redeemCode.applicableTypes.includes(orderType)) {
+    const types = redeemCode.applicableTypes || [];
+    const typeOk =
+      types.includes('all') ||
+      types.includes(orderType) ||
+      (orderType === 'product' && types.includes('eshop')) ||
+      (orderType === 'eshop' && types.includes('product'));
+    if (!typeOk) {
       return res.status(400).json({ message: '此兌換碼不適用於當前訂單類型' });
     }
 
-    // 檢查最低消費金額
     if (amount < redeemCode.minAmount) {
       return res.status(400).json({ 
         message: `此兌換碼需要最低消費 HK$${redeemCode.minAmount}` 
       });
     }
 
-    // 檢查用戶是否可以使用
-    const canUse = await redeemCode.canUserUse(req.user.id);
+    const canUse = await redeemCode.canUserUse(targetUserId);
     if (!canUse) {
       return res.status(400).json({ message: '您已超過此兌換碼的使用次數限制' });
     }
@@ -141,7 +189,15 @@ router.post('/validate', [
       pricingSlotName,
     });
 
-    // 計算折扣
+    // 預約／結帳輸入碼時預設同時放入口袋（代顧客時入顧客口袋）
+    if (alsoClaimToPocket !== false && code && !pocketItemId) {
+      try {
+        await claimCodeToPocket(targetUserId, redeemCode.code);
+      } catch (claimErr) {
+        console.error('驗證時自動入袋失敗:', claimErr.message || claimErr);
+      }
+    }
+
     const discountAmount = redeemCode.calculateDiscount(amount);
     const finalAmount = amount - discountAmount;
 
@@ -222,6 +278,165 @@ router.post('/use', [
     console.error('使用兌換碼錯誤:', error);
     const status = error?.statusCode || 500;
     res.status(status).json({ message: status === 500 ? '服務器錯誤，請稍後再試' : (error?.message || '兌換碼使用失敗') });
+  }
+});
+
+// @route   GET /api/redeem/my-pocket
+// @desc    我的兌換券口袋
+// @access  Private
+router.get('/my-pocket', auth, async (req, res) => {
+  try {
+    const status = req.query.status || 'all';
+    const items = await listUserPocket(req.user.id, { statusFilter: status });
+    res.json({ items });
+  } catch (error) {
+    console.error('獲取兌換券口袋錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/redeem/pocket/claim
+// @desc    輸入兌換碼放入口袋
+// @access  Private
+router.post('/pocket/claim', [
+  auth,
+  body('code').trim().notEmpty().withMessage('兌換碼不能為空'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const result = await claimCodeToPocket(req.user.id, req.body.code);
+    if (result.error) {
+      return res.status(result.status || 400).json({ message: result.error });
+    }
+
+    res.json({
+      message: result.message,
+      created: result.created,
+      item: result.pocket,
+    });
+  } catch (error) {
+    console.error('兌換券入袋錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/redeem/admin/claim-for-user
+// @desc    後台代客戶將兌換碼放入其口袋
+// @access  Private (Admin)
+router.post('/admin/claim-for-user', [
+  auth,
+  adminAuth,
+  body('userId').isMongoId().withMessage('請提供用戶'),
+  body('code').trim().notEmpty().withMessage('兌換碼不能為空'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const result = await claimCodeToPocket(req.body.userId, req.body.code);
+    if (result.error) {
+      return res.status(result.status || 400).json({ message: result.error });
+    }
+
+    res.json({
+      message: result.message,
+      created: result.created,
+      item: result.pocket,
+    });
+  } catch (error) {
+    console.error('代客入袋錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/redeem/admin/user-pocket/:userId
+// @desc    後台查看指定用戶口袋（POS 代客用券）
+// @access  Private (Admin)
+router.get('/admin/user-pocket/:userId', [auth, adminAuth], async (req, res) => {
+  try {
+    const status = req.query.status || 'available';
+    const items = await listUserPocket(req.params.userId, { statusFilter: status });
+    res.json({ items });
+  } catch (error) {
+    console.error('獲取用戶口袋錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/redeem/admin/assign
+// @desc    後台將兌換碼派發到用戶口袋
+// @access  Private (Admin)
+router.post('/admin/assign', [
+  auth,
+  adminAuth,
+  body('redeemCodeId').isMongoId().withMessage('請提供有效的兌換碼'),
+  body('userIds').isArray({ min: 1 }).withMessage('請至少選擇一位用戶'),
+  body('userIds.*').isMongoId().withMessage('無效的用戶ID'),
+  body('note').optional().trim(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const result = await assignCodeToUsers({
+      redeemCodeId: req.body.redeemCodeId,
+      userIds: req.body.userIds,
+      assignedBy: req.user.id || req.user._id,
+      note: req.body.note || '',
+    });
+
+    if (result.error) {
+      return res.status(result.status || 400).json({ message: result.error });
+    }
+
+    res.json({
+      message: `已派發：新增 ${result.assigned} 人，已有 ${result.alreadyHad} 人`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('派發兌換券錯誤:', error);
+    if (error.code === 11000) {
+      return res.status(400).json({ message: '部分用戶已持有此兌換券' });
+    }
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/redeem/admin/:id/pocket-holders
+// @desc    查看持有此兌換碼的用戶口袋
+// @access  Private (Admin)
+router.get('/admin/:id/pocket-holders', [auth, adminAuth], async (req, res) => {
+  try {
+    const holders = await UserRedeemPocket.find({
+      redeemCode: req.params.id,
+      status: { $ne: 'removed' },
+    })
+      .populate('user', 'name email phone')
+      .populate('assignedBy', 'name email')
+      .sort({ assignedAt: -1 })
+      .limit(200);
+
+    res.json({ holders });
+  } catch (error) {
+    console.error('獲取口袋持有者錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });
 

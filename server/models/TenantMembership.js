@@ -19,6 +19,14 @@ const tenantMembershipSchema = new mongoose.Schema({
     enum: ['manager', 'staff', 'shareholder'],
     default: 'staff',
   },
+  /**
+   * 可存取模組覆寫；空陣列／未設 = 跟角色預設
+   * 例：paymentLinks, pos, accounting…
+   */
+  modules: {
+    type: [String],
+    default: undefined,
+  },
   isActive: {
     type: Boolean,
     default: true,

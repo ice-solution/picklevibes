@@ -1,10 +1,9 @@
 const TenantMembership = require('../models/TenantMembership');
-
-/** 店員可存取的店鋪後台功能（經理可存取全部本店功能） */
-const STAFF_STORE_FEATURES = new Set(['bookings', 'calendar', 'courts']);
-
-/** 股東可唯讀的內部功能 */
-const SHAREHOLDER_STORE_FEATURES = new Set(['analytics', 'reports', 'accounting', 'calendar']);
+const {
+  resolveModules,
+  canAccessModule,
+  normalizeMembershipRole,
+} = require('./tenantPermissions');
 
 function hasAnyMembershipRole(tenantAccess, roles) {
   const wanted = new Set(roles);
@@ -44,12 +43,18 @@ async function loadTenantAccess(user) {
 
     const managedStores = memberships
       .filter((m) => m.store)
-      .map((m) => ({
-        id: m.store._id,
-        name: m.store.name,
-        slug: m.store.slug,
-        membershipRole: m.role,
-      }));
+      .map((m) => {
+        const role = normalizeMembershipRole(m.role);
+        const custom =
+          Array.isArray(m.modules) && m.modules.length > 0 ? m.modules : null;
+        return {
+          id: m.store._id,
+          name: m.store.name,
+          slug: m.store.slug,
+          membershipRole: role,
+          modules: resolveModules(role, custom),
+        };
+      });
 
     return {
       isPlatformAdmin: false,
@@ -83,20 +88,26 @@ function getMembershipRoleForStore(tenantAccess, storeId) {
   return match?.membershipRole || null;
 }
 
-/** 是否為該店經理（或平台 admin） */
+function getStoreModules(tenantAccess, storeId) {
+  if (!tenantAccess) return [];
+  if (tenantAccess.isPlatformAdmin) return null;
+  const match = (tenantAccess.managedStores || []).find(
+    (s) => String(s.id) === String(storeId)
+  );
+  return match ? match.modules : [];
+}
+
 function isStoreManager(tenantAccess, storeId) {
   const role = getMembershipRoleForStore(tenantAccess, storeId);
   return role === 'platform' || role === 'manager';
 }
 
-/** 是否僅為店員（非經理、非平台） */
 function isStoreStaffOnly(tenantAccess, storeId) {
   return getMembershipRoleForStore(tenantAccess, storeId) === 'staff';
 }
 
 /**
  * 檢查店鋪後台功能權限
- * @param {string} feature bookings|calendar|courts|accounting|redeem|…
  */
 function assertStoreFeatureAccess(tenantAccess, storeId, feature) {
   if (!tenantAccess) {
@@ -109,25 +120,30 @@ function assertStoreFeatureAccess(tenantAccess, storeId, feature) {
   }
 
   const role = getMembershipRoleForStore(tenantAccess, storeId);
-  if (role === 'manager') return { ok: true };
-  if (role === 'staff' && STAFF_STORE_FEATURES.has(feature)) return { ok: true };
-  if (role === 'shareholder' && SHAREHOLDER_STORE_FEATURES.has(feature)) return { ok: true };
+  const modules = getStoreModules(tenantAccess, storeId);
+  if (canAccessModule(role, feature, modules)) return { ok: true };
 
-  return { ok: false, status: 403, message: '店員無權限存取此功能' };
+  return { ok: false, status: 403, message: '無權限存取此功能' };
 }
 
-/** 會計／分析／報告：店長與股東可讀；店員不可 */
 function assertInternalAdminAccess(tenantAccess) {
   if (!tenantAccess) {
     return { ok: false, status: 500, message: '權限上下文未載入' };
   }
   if (tenantAccess.isPlatformAdmin) return { ok: true };
-  if (hasAnyMembershipRole(tenantAccess, ['manager', 'shareholder'])) return { ok: true };
-
-  return { ok: false, status: 403, message: '店員無權限存取內部管理功能' };
+  const stores = tenantAccess.managedStores || [];
+  for (const s of stores) {
+    if (
+      canAccessModule(s.membershipRole, 'accounting', s.modules) ||
+      canAccessModule(s.membershipRole, 'analytics', s.modules) ||
+      canAccessModule(s.membershipRole, 'reports', s.modules)
+    ) {
+      return { ok: true };
+    }
+  }
+  return { ok: false, status: 403, message: '無權限存取內部管理功能' };
 }
 
-/** Tier 等僅店長／平台 admin（股東不可） */
 function assertManagerAccess(tenantAccess) {
   if (!tenantAccess) {
     return { ok: false, status: 500, message: '權限上下文未載入' };
@@ -138,10 +154,6 @@ function assertManagerAccess(tenantAccess) {
   return { ok: false, status: 403, message: '需要店長或平台管理員權限' };
 }
 
-/**
- * 會計／財務查詢店鋪範圍。
- * 非平台帳號不得看未指派店鋪；未指定店鋪時只限自己管理的店（不是全公司、也不是預設第一間）。
- */
 function resolveAccountingStoreScope(tenantAccess, requestedStoreId) {
   const requested = requestedStoreId ? String(requestedStoreId) : '';
 
@@ -222,11 +234,16 @@ function formatTenantAccessForClient(tenantAccess) {
   }
   return {
     isPlatformAdmin: Boolean(tenantAccess.isPlatformAdmin),
-    managedStores: tenantAccess.managedStores || [],
+    managedStores: (tenantAccess.managedStores || []).map((s) => ({
+      id: s.id,
+      name: s.name,
+      slug: s.slug,
+      membershipRole: s.membershipRole,
+      modules: s.modules,
+    })),
   };
 }
 
-/** 單筆資源的店鋪存取（store 為 null 時僅平台 admin） */
 function checkDocumentStoreAccess(tenantAccess, storeId) {
   if (!storeId) {
     if (!tenantAccess?.isPlatformAdmin) {
@@ -240,7 +257,6 @@ function checkDocumentStoreAccess(tenantAccess, storeId) {
   return { ok: true };
 }
 
-/** 建立資源時解析並驗證店鋪 ID */
 function resolveStoreForCreate(tenantAccess, requestedStoreId) {
   if (!tenantAccess) {
     return { ok: false, status: 500, message: '權限上下文未載入' };
@@ -265,11 +281,10 @@ function resolveStoreForCreate(tenantAccess, requestedStoreId) {
 }
 
 module.exports = {
-  STAFF_STORE_FEATURES,
-  SHAREHOLDER_STORE_FEATURES,
   loadTenantAccess,
   canAccessStore,
   getMembershipRoleForStore,
+  getStoreModules,
   isStoreManager,
   isStoreStaffOnly,
   assertStoreFeatureAccess,

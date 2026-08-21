@@ -17,6 +17,7 @@
     "profile": "Profile",
     "myBookings": "My Bookings",
     "balance": "My Points",
+    "myRedeem": "My Vouchers",
     "recharge": "Top Up",
     "shop": "Shop",
     "cart": "Cart",
@@ -1160,6 +1161,7 @@
       "court": "Choose Court",
       "date": "Choose Date",
       "time": "Choose Time",
+      "dateTime": "Date & Time",
       "info": "Fill Info",
       "confirm": "Confirm Booking"
     },

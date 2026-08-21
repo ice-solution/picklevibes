@@ -334,8 +334,10 @@ html, body, .sheet {
         reference: id,
         items: [
           {
-            description: '帳戶充值 / Account recharge',
-            details: `獲得積分 ${points}`,
+            description: recharge.description || '帳戶充值 / Account recharge',
+            details: recharge.description
+              ? `HK$${amount.toFixed(2)}`
+              : `獲得積分 ${points}`,
             quantity: 1,
             unitPrice: amount,
             total: amount,

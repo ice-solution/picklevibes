@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import ProtectedRoute from '../components/Auth/ProtectedRoute';
@@ -12,11 +12,12 @@ import {
   ClockIcon,
   TruckIcon,
   XCircleIcon,
-  ArrowLeftIcon
+  ArrowLeftIcon,
+  BuildingStorefrontIcon,
 } from '@heroicons/react/24/outline';
 
 interface OrderItem {
-  product: {
+  product?: {
     _id: string;
     name: string;
     images: string[];
@@ -31,28 +32,37 @@ interface OrderItem {
 
 interface Order {
   _id: string;
+  orderType?: 'shop' | 'pos';
   orderNumber: string;
   items: OrderItem[];
   subtotal: number;
   discount: number;
   total: number;
-  shippingAddress: {
+  shippingAddress?: {
     name: string;
     phone: string;
     address: string;
     district?: string;
     postalCode?: string;
   };
-  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled' | 'completed';
   redeemCodeName?: string;
   trackingNumber?: string;
   shippedAt?: string;
+  paymentMethod?: string;
+  paymentMethodLabel?: string;
+  store?: { _id: string; name: string; slug?: string };
+  notes?: string;
+  cancelledAt?: string;
+  cancelReason?: string;
   createdAt: string;
 }
 
 const OrderHistory: React.FC = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id } = useParams<{ id?: string }>();
+  const isPosDetail = location.pathname.includes('/orders/pos/');
   const { user } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
   const [order, setOrder] = useState<Order | null>(null);
@@ -62,17 +72,17 @@ const OrderHistory: React.FC = () => {
   useEffect(() => {
     if (user) {
       if (id) {
-        fetchOrder(id);
+        fetchOrder(id, isPosDetail);
       } else {
         fetchOrders();
       }
     }
-  }, [user, statusFilter, id]);
+  }, [user, statusFilter, id, isPosDetail]);
 
   const fetchOrders = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ limit: '50' });
       if (statusFilter) {
         params.append('status', statusFilter);
       }
@@ -86,10 +96,11 @@ const OrderHistory: React.FC = () => {
     }
   };
 
-  const fetchOrder = async (orderId: string) => {
+  const fetchOrder = async (orderId: string, isPos: boolean) => {
     try {
       setLoading(true);
-      const response = await axios.get(`/orders/${orderId}`);
+      const url = isPos ? `/pos/my-orders/${orderId}` : `/orders/${orderId}`;
+      const response = await axios.get(url);
       setOrder(response.data);
     } catch (error) {
       console.error('獲取訂單詳情失敗:', error);
@@ -119,6 +130,7 @@ const OrderHistory: React.FC = () => {
       case 'shipped':
         return 'bg-green-100 text-green-800';
       case 'delivered':
+      case 'completed':
         return 'bg-green-100 text-green-800';
       case 'cancelled':
         return 'bg-red-100 text-red-800';
@@ -127,7 +139,7 @@ const OrderHistory: React.FC = () => {
     }
   };
 
-  const getStatusText = (status: string) => {
+  const getStatusText = (status: string, orderType?: string) => {
     switch (status) {
       case 'pending':
         return '待處理';
@@ -139,6 +151,8 @@ const OrderHistory: React.FC = () => {
         return '已出貨';
       case 'delivered':
         return '已送達';
+      case 'completed':
+        return orderType === 'pos' ? '已完成' : status;
       case 'cancelled':
         return '已取消';
       default:
@@ -155,6 +169,7 @@ const OrderHistory: React.FC = () => {
       case 'shipped':
         return <TruckIcon className="w-5 h-5" />;
       case 'delivered':
+      case 'completed':
         return <CheckCircleIcon className="w-5 h-5" />;
       case 'cancelled':
         return <XCircleIcon className="w-5 h-5" />;
@@ -163,8 +178,15 @@ const OrderHistory: React.FC = () => {
     }
   };
 
-  // 如果顯示單個訂單詳情
+  const getOrderDetailPath = (item: Order) =>
+    item.orderType === 'pos' ? `/orders/pos/${item._id}` : `/orders/${item._id}`;
+
+  const getOrderTypeLabel = (item: Order) =>
+    item.orderType === 'pos' ? '店內購買' : '網店訂單';
+
   if (id && order) {
+    const isPos = order.orderType === 'pos';
+
     return (
       <ProtectedRoute>
         <SEO 
@@ -185,12 +207,17 @@ const OrderHistory: React.FC = () => {
               <div className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs px-2 py-0.5 rounded ${isPos ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'}`}>
+                        {getOrderTypeLabel(order)}
+                      </span>
+                    </div>
                     <h1 className="text-2xl font-bold text-gray-900">訂單詳情</h1>
                     <p className="text-gray-600 mt-1">訂單編號：{order.orderNumber}</p>
                   </div>
                   <div className={`flex items-center space-x-2 px-4 py-2 rounded-full ${getStatusColor(order.status)}`}>
                     {getStatusIcon(order.status)}
-                    <span className="font-medium">{getStatusText(order.status)}</span>
+                    <span className="font-medium">{getStatusText(order.status, order.orderType)}</span>
                   </div>
                 </div>
 
@@ -224,25 +251,51 @@ const OrderHistory: React.FC = () => {
                     </div>
                   </div>
 
-                  <div>
-                    <h2 className="text-lg font-semibold mb-3">收貨地址</h2>
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <p className="font-medium">{order.shippingAddress.name}</p>
-                      <p className="text-gray-600">{order.shippingAddress.phone}</p>
-                      <p className="text-gray-600">{order.shippingAddress.address}</p>
-                      {order.shippingAddress.district && (
-                        <p className="text-gray-600">{order.shippingAddress.district}</p>
-                      )}
-                      {order.shippingAddress.postalCode && (
-                        <p className="text-gray-600">{order.shippingAddress.postalCode}</p>
-                      )}
+                  {isPos ? (
+                    <div>
+                      <h2 className="text-lg font-semibold mb-3">店內購買資訊</h2>
+                      <div className="p-4 bg-gray-50 rounded-lg space-y-2">
+                        {order.store?.name && (
+                          <p className="flex items-center gap-2 text-gray-700">
+                            <BuildingStorefrontIcon className="w-5 h-5 text-gray-400" />
+                            {order.store.name}
+                          </p>
+                        )}
+                        {order.paymentMethodLabel && (
+                          <p className="text-gray-600">付款方式：{order.paymentMethodLabel}</p>
+                        )}
+                        {order.notes && (
+                          <p className="text-gray-600">備註：{order.notes}</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  ) : order.shippingAddress && (
+                    <div>
+                      <h2 className="text-lg font-semibold mb-3">收貨地址</h2>
+                      <div className="p-4 bg-gray-50 rounded-lg">
+                        <p className="font-medium">{order.shippingAddress.name}</p>
+                        <p className="text-gray-600">{order.shippingAddress.phone}</p>
+                        <p className="text-gray-600">{order.shippingAddress.address}</p>
+                        {order.shippingAddress.district && (
+                          <p className="text-gray-600">{order.shippingAddress.district}</p>
+                        )}
+                        {order.shippingAddress.postalCode && (
+                          <p className="text-gray-600">{order.shippingAddress.postalCode}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                  {order.trackingNumber && (
+                  {!isPos && order.trackingNumber && (
                     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                       <p className="font-medium text-blue-900 mb-1">追蹤號碼</p>
                       <p className="text-blue-700">{order.trackingNumber}</p>
+                    </div>
+                  )}
+
+                  {order.status === 'cancelled' && order.cancelReason && (
+                    <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-sm text-red-800">
+                      取消原因：{order.cancelReason}
                     </div>
                   )}
 
@@ -265,8 +318,11 @@ const OrderHistory: React.FC = () => {
 
                   <div className="text-sm text-gray-500">
                     <p>訂單日期：{new Date(order.createdAt).toLocaleString('zh-TW')}</p>
-                    {order.shippedAt && (
+                    {!isPos && order.shippedAt && (
                       <p>出貨日期：{new Date(order.shippedAt).toLocaleString('zh-TW')}</p>
+                    )}
+                    {order.cancelledAt && (
+                      <p>取消日期：{new Date(order.cancelledAt).toLocaleString('zh-TW')}</p>
                     )}
                   </div>
                 </div>
@@ -288,7 +344,6 @@ const OrderHistory: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">訂單歷史</h1>
 
-          {/* 狀態篩選 */}
           <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
             <button
               onClick={() => setStatusFilter('')}
@@ -300,7 +355,7 @@ const OrderHistory: React.FC = () => {
             >
               全部
             </button>
-            {['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'].map((status) => (
+            {['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'].map((status) => (
               <button
                 key={status}
                 onClick={() => setStatusFilter(status)}
@@ -310,7 +365,7 @@ const OrderHistory: React.FC = () => {
                     : 'bg-white text-gray-700 hover:bg-gray-100'
                 }`}
               >
-                {getStatusText(status)}
+                {getStatusText(status, status === 'completed' ? 'pos' : 'shop')}
               </button>
             ))}
           </div>
@@ -333,9 +388,9 @@ const OrderHistory: React.FC = () => {
             </div>
           ) : (
             <div className="space-y-6">
-              {orders.map((order) => (
+              {orders.map((orderItem) => (
                 <motion.div
-                  key={order._id}
+                  key={`${orderItem.orderType || 'shop'}-${orderItem._id}`}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   className="bg-white rounded-lg shadow-md overflow-hidden"
@@ -343,19 +398,28 @@ const OrderHistory: React.FC = () => {
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-4">
                       <div>
-                        <h3 className="text-lg font-semibold">訂單編號：{order.orderNumber}</h3>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            orderItem.orderType === 'pos'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {getOrderTypeLabel(orderItem)}
+                          </span>
+                        </div>
+                        <h3 className="text-lg font-semibold">訂單編號：{orderItem.orderNumber}</h3>
                         <p className="text-sm text-gray-600">
-                          {new Date(order.createdAt).toLocaleString('zh-TW')}
+                          {new Date(orderItem.createdAt).toLocaleString('zh-TW')}
                         </p>
                       </div>
-                      <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${getStatusColor(order.status)}`}>
-                        {getStatusIcon(order.status)}
-                        <span className="font-medium">{getStatusText(order.status)}</span>
+                      <div className={`flex items-center space-x-2 px-3 py-1 rounded-full ${getStatusColor(orderItem.status)}`}>
+                        {getStatusIcon(orderItem.status)}
+                        <span className="font-medium">{getStatusText(orderItem.status, orderItem.orderType)}</span>
                       </div>
                     </div>
 
                     <div className="space-y-3 mb-4">
-                      {order.items.map((item, index) => (
+                      {orderItem.items.map((item, index) => (
                         <div key={index} className="flex items-center space-x-4">
                           <img
                             src={getImageUrl(item.product?.images?.[0] || '')}
@@ -380,44 +444,57 @@ const OrderHistory: React.FC = () => {
                       ))}
                     </div>
 
-                    {order.trackingNumber && (
-                      <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <p className="text-sm">
-                          <span className="font-medium">追蹤號碼：</span>
-                          {order.trackingNumber}
-                        </p>
+                    {!orderItem.orderType || orderItem.orderType === 'shop' ? (
+                      <>
+                        {orderItem.trackingNumber && (
+                          <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                            <p className="text-sm">
+                              <span className="font-medium">追蹤號碼：</span>
+                              {orderItem.trackingNumber}
+                            </p>
+                          </div>
+                        )}
+                        <div className="flex items-center justify-between border-t pt-4">
+                          <div>
+                            {orderItem.shippingAddress?.address && (
+                              <p className="text-sm text-gray-600">收貨地址：{orderItem.shippingAddress.address}</p>
+                            )}
+                            {orderItem.redeemCodeName && (
+                              <p className="text-sm text-green-600 mt-1">
+                                已使用兌換碼：{orderItem.redeemCodeName}
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            {orderItem.discount > 0 && (
+                              <p className="text-sm text-gray-600">
+                                小計：HK${orderItem.subtotal.toFixed(2)}
+                              </p>
+                            )}
+                            {orderItem.discount > 0 && (
+                              <p className="text-sm text-green-600">
+                                折扣：-HK${orderItem.discount.toFixed(2)}
+                              </p>
+                            )}
+                            <p className="text-lg font-bold">
+                              總計：HK${orderItem.total.toFixed(2)}
+                            </p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-center justify-between border-t pt-4">
+                        <div className="text-sm text-gray-600">
+                          {orderItem.store?.name && <p>店鋪：{orderItem.store.name}</p>}
+                          {orderItem.paymentMethodLabel && <p>付款：{orderItem.paymentMethodLabel}</p>}
+                        </div>
+                        <p className="text-lg font-bold">總計：HK${orderItem.total.toFixed(2)}</p>
                       </div>
                     )}
 
-                    <div className="flex items-center justify-between border-t pt-4">
-                      <div>
-                        <p className="text-sm text-gray-600">收貨地址：{order.shippingAddress.address}</p>
-                        {order.redeemCodeName && (
-                          <p className="text-sm text-green-600 mt-1">
-                            已使用兌換碼：{order.redeemCodeName}
-                          </p>
-                        )}
-                      </div>
-                      <div className="text-right">
-                        {order.discount > 0 && (
-                          <p className="text-sm text-gray-600">
-                            小計：HK${order.subtotal.toFixed(2)}
-                          </p>
-                        )}
-                        {order.discount > 0 && (
-                          <p className="text-sm text-green-600">
-                            折扣：-HK${order.discount.toFixed(2)}
-                          </p>
-                        )}
-                        <p className="text-lg font-bold">
-                          總計：HK${order.total.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-
                     <div className="mt-4 flex justify-end">
                       <Link
-                        to={`/orders/${order._id}`}
+                        to={getOrderDetailPath(orderItem)}
                         className="flex items-center space-x-2 px-4 py-2 text-primary-600 hover:text-primary-800"
                       >
                         <EyeIcon className="w-5 h-5" />
@@ -436,4 +513,3 @@ const OrderHistory: React.FC = () => {
 };
 
 export default OrderHistory;
-

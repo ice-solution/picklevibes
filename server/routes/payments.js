@@ -9,6 +9,10 @@ const {
   completeRechargePayment,
   parseRechargeIdFromReference,
 } = require('../services/rechargePaymentService');
+const {
+  completeGatewayPayment,
+  parsePaylinkIdFromReference,
+} = require('../services/paymentLinkPaymentService');
 
 const stripe =
   process.env.STRIPE_SECRET_KEY ? require('stripe')(process.env.STRIPE_SECRET_KEY) : null;
@@ -238,10 +242,22 @@ router.post('/wonder/webhook', async (req, res) => {
     ).toLowerCase();
     const isPaid = state === 'completed' || correspondenceState === 'paid';
 
+    const paylinkPaymentId = parsePaylinkIdFromReference(referenceNumber);
+    if (paylinkPaymentId) {
+      if (isPaid) {
+        const orderNumber = body.number || body.order?.number || referenceNumber;
+        await completeGatewayPayment(paylinkPaymentId, orderNumber);
+        console.log('✅ Wonder 收款連結已完成:', paylinkPaymentId);
+      } else {
+        console.log('ℹ️ Wonder webhook paylink 非 paid:', { state, correspondenceState, referenceNumber });
+      }
+      return res.status(200).json({ received: true });
+    }
+
     const rechargeId = parseRechargeIdFromReference(referenceNumber);
     if (!rechargeId) {
-      console.warn('⚠️ Wonder webhook: 找不到 recharge reference_number', referenceNumber);
-      return res.status(200).json({ received: true, warning: 'Recharge not found' });
+      console.warn('⚠️ Wonder webhook: 找不到 reference_number', referenceNumber);
+      return res.status(200).json({ received: true, warning: 'Reference not found' });
     }
 
     if (isPaid) {
@@ -301,6 +317,7 @@ router.post('/webhook', async (req, res) => {
       // 從 metadata 獲取訂單信息
       const bookingId = session.metadata?.bookingId;
       const rechargeId = session.metadata?.rechargeId;
+      const paymentLinkPaymentId = session.metadata?.paymentLinkPaymentId;
       
       // 只有在支付成功時才更新
       if (session.payment_status === 'paid') {
@@ -309,6 +326,16 @@ router.post('/webhook', async (req, res) => {
         // 預約現在使用積分支付，不再需要 Stripe 處理
         if (bookingId) {
           console.log('⚠️  收到預約訂單 webhook，但預約現在使用積分支付，跳過處理');
+        }
+
+        if (paymentLinkPaymentId) {
+          console.log('🔗 處理收款連結付款:', paymentLinkPaymentId);
+          try {
+            await completeGatewayPayment(paymentLinkPaymentId, session.id);
+            console.log('✅ 收款連結付款已完成並入帳');
+          } catch (paylinkErr) {
+            console.error('❌ 收款連結完成處理失敗:', paylinkErr);
+          }
         }
         
         // 處理充值訂單
@@ -323,10 +350,9 @@ router.post('/webhook', async (req, res) => {
         }
         
         // 如果沒有找到任何訂單ID
-        if (!bookingId && !rechargeId) {
-          console.error('❌ Checkout Session 缺少訂單 metadata (bookingId 或 rechargeId)');
+        if (!bookingId && !rechargeId && !paymentLinkPaymentId) {
+          console.error('❌ Checkout Session 缺少訂單 metadata (bookingId / rechargeId / paymentLinkPaymentId)');
         }
-
         // 更新或創建 Stripe 交易記錄
         await StripeTransaction.findOneAndUpdate(
           { paymentIntentId: session.id },

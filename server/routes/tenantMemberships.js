@@ -5,6 +5,7 @@ const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const Store = require('../models/Store');
 const { auth, platformAdminAuth } = require('../middleware/auth');
+const { sanitizeModulesInput } = require('../utils/tenantPermissions');
 
 const router = express.Router();
 
@@ -45,7 +46,7 @@ function assignedAllStores(storeId, storeIds) {
   );
 }
 
-async function assignUserToStores(user, storeId, role = 'staff', storeIds) {
+async function assignUserToStores(user, storeId, role = 'staff', storeIds, modules) {
   const ids = await resolveStoreIds(storeId, storeIds);
   if (!ids.length) {
     const err = new Error('沒有可指派的店鋪');
@@ -54,12 +55,12 @@ async function assignUserToStores(user, storeId, role = 'staff', storeIds) {
   }
   const memberships = [];
   for (const id of ids) {
-    memberships.push(await assignUserToStore(user, id, role));
+    memberships.push(await assignUserToStore(user, id, role, modules));
   }
   return memberships;
 }
 
-async function assignUserToStore(user, storeId, role = 'staff') {
+async function assignUserToStore(user, storeId, role = 'staff', modules) {
   const store = await Store.findById(storeId);
   if (!store) {
     const err = new Error('店鋪不存在');
@@ -78,18 +79,33 @@ async function assignUserToStore(user, storeId, role = 'staff') {
     throw err;
   }
 
+  const sanitized = sanitizeModulesInput(modules);
+  // undefined = 未傳 → 不覆寫既有；[] = 清回角色預設；非空 = 自訂
+  const hasModulesField = modules !== undefined;
+
   let membership = await TenantMembership.findOne({ user: user._id, store: storeId });
   if (membership) {
     membership.role = role;
     membership.isActive = true;
+    if (hasModulesField) {
+      if (!sanitized || sanitized.length === 0 || role === 'manager') {
+        membership.modules = [];
+      } else {
+        membership.modules = sanitized;
+      }
+    }
     await membership.save();
   } else {
-    membership = await TenantMembership.create({
+    const payload = {
       user: user._id,
       store: storeId,
       role,
       isActive: true,
-    });
+    };
+    if (hasModulesField && sanitized && sanitized.length > 0 && role !== 'manager') {
+      payload.modules = sanitized;
+    }
+    membership = await TenantMembership.create(payload);
   }
 
   if (user.role !== 'staff') {
@@ -161,7 +177,7 @@ router.post('/create-account', [
       return res.status(400).json({ message: errors.array()[0].msg });
     }
 
-    const { name, email, password, phone, storeId, storeIds, role = 'staff' } = req.body;
+    const { name, email, password, phone, storeId, storeIds, role = 'staff', modules } = req.body;
     const normalizedEmail = String(email).trim().toLowerCase();
 
     const existing = await User.findOne({ email: normalizedEmail });
@@ -187,7 +203,7 @@ router.post('/create-account', [
       totalSpent: 0,
     });
 
-    const memberships = await assignUserToStores(user, storeId, role, storeIds);
+    const memberships = await assignUserToStores(user, storeId, role, storeIds, modules);
 
     res.status(201).json({
       message: assignedAllStores(storeId, storeIds) || memberships.length > 1
@@ -240,12 +256,12 @@ router.post('/', [
       return res.status(400).json({ message: errors.array()[0].msg });
     }
 
-    const { userId, storeId, storeIds, role = 'staff' } = req.body;
+    const { userId, storeId, storeIds, role = 'staff', modules } = req.body;
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ message: '用戶不存在' });
 
-    const memberships = await assignUserToStores(user, storeId, role, storeIds);
+    const memberships = await assignUserToStores(user, storeId, role, storeIds, modules);
 
     res.status(201).json({
       message: assignedAllStores(storeId, storeIds) || memberships.length > 1
@@ -269,19 +285,58 @@ router.post('/', [
 /** PATCH /api/tenant-memberships/:id */
 router.patch('/:id', [auth, platformAdminAuth], async (req, res) => {
   try {
-    const update = {};
-    if (req.body.role) update.role = req.body.role;
-    if (typeof req.body.isActive === 'boolean') update.isActive = req.body.isActive;
-
-    const membership = await TenantMembership.findByIdAndUpdate(
-      req.params.id,
-      update,
-      { new: true, runValidators: true }
-    )
-      .populate('user', 'name email phone role')
-      .populate('store', 'name slug');
-
+    const membership = await TenantMembership.findById(req.params.id);
     if (!membership) return res.status(404).json({ message: '指派紀錄不存在' });
+
+    if (req.body.role) {
+      if (!['manager', 'staff', 'shareholder'].includes(req.body.role)) {
+        return res.status(400).json({ message: 'role 無效' });
+      }
+      membership.role = req.body.role;
+    }
+    if (typeof req.body.isActive === 'boolean') membership.isActive = req.body.isActive;
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'modules')) {
+      const sanitized = sanitizeModulesInput(req.body.modules);
+      if (
+        membership.role === 'manager' ||
+        !sanitized ||
+        sanitized.length === 0
+      ) {
+        membership.modules = [];
+      } else {
+        membership.modules = sanitized;
+      }
+    }
+
+    const user = await User.findById(membership.user);
+    if (user) {
+      if (typeof req.body.name === 'string' && req.body.name.trim()) {
+        user.name = req.body.name.trim();
+      }
+      if (typeof req.body.phone === 'string' && req.body.phone.trim()) {
+        if (!/^[0-9]+$/.test(req.body.phone.trim())) {
+          return res.status(400).json({ message: '電話只能包含數字' });
+        }
+        user.phone = req.body.phone.trim();
+      }
+      if (typeof req.body.password === 'string' && req.body.password.length > 0) {
+        if (req.body.password.length < 8 || !/^(?=.*[a-zA-Z])(?=.*\d)/.test(req.body.password)) {
+          return res.status(400).json({ message: '密碼至少 8 字，且須包含字母與數字' });
+        }
+        user.password = req.body.password;
+      }
+      if (user.isModified()) {
+        await user.save();
+      }
+    }
+
+    await membership.save();
+    await membership.populate([
+      { path: 'user', select: 'name email phone role' },
+      { path: 'store', select: 'name slug' },
+    ]);
+
     res.json({ message: '已更新', membership });
   } catch (error) {
     console.error('更新 tenant membership 錯誤:', error);

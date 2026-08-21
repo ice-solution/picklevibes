@@ -32,11 +32,14 @@ async function consumeRedeemCodeOnce({
     throw err;
   }
 
-  // 檢查適用範圍（僅以 applicableTypes 為準）
-  if (
-    !redeemCode.applicableTypes?.includes('all') &&
-    !redeemCode.applicableTypes?.includes(orderType)
-  ) {
+  // 檢查適用範圍（僅以 applicableTypes 為準；product / eshop 互通）
+  const types = redeemCode.applicableTypes || [];
+  const typeOk =
+    types.includes('all') ||
+    types.includes(orderType) ||
+    (orderType === 'product' && types.includes('eshop')) ||
+    (orderType === 'eshop' && types.includes('product'));
+  if (!typeOk) {
     const err = new Error('此兌換碼不適用於當前訂單類型');
     err.statusCode = 400;
     throw err;
@@ -114,6 +117,14 @@ async function consumeRedeemCodeOnce({
     await session.withTransaction(async () => {
       result = await doWork(session);
     });
+    if (result?.usage) {
+      try {
+        const { markPocketAfterConsume } = require('./redeemPocketService');
+        await markPocketAfterConsume(userId, redeemCodeId, result.usage._id);
+      } catch (pocketErr) {
+        console.error('更新兌換券口袋狀態失敗:', pocketErr.message || pocketErr);
+      }
+    }
     return result;
   } catch (err) {
     if (!isTransactionsUnsupportedError(err)) throw err;
@@ -122,7 +133,16 @@ async function consumeRedeemCodeOnce({
   }
 
   // fallback（無 transaction）
-  return await doWork(undefined);
+  const fallback = await doWork(undefined);
+  if (fallback?.usage) {
+    try {
+      const { markPocketAfterConsume } = require('./redeemPocketService');
+      await markPocketAfterConsume(userId, redeemCodeId, fallback.usage._id);
+    } catch (pocketErr) {
+      console.error('更新兌換券口袋狀態失敗:', pocketErr.message || pocketErr);
+    }
+  }
+  return fallback;
 }
 
 module.exports = {

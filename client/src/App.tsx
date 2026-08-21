@@ -27,6 +27,7 @@ import PaymentResult from './pages/PaymentResult';
 import Recharge from './pages/Recharge';
 import RechargeSuccess from './pages/RechargeSuccess';
 import Balance from './pages/Balance';
+import MyRedeemPocket from './pages/MyRedeemPocket';
 import Maintenance from './pages/Maintenance';
 import Activities from './pages/Activities';
 import ActivityDetail from './pages/ActivityDetail';
@@ -44,6 +45,8 @@ import OrderHistory from './pages/OrderHistory';
 import Vlog from './pages/Vlog';
 import GameJoin from './pages/GameJoin';
 import PublicApplicationForm from './pages/PublicApplicationForm';
+import PublicPaymentLink from './pages/PublicPaymentLink';
+import PublicPaymentLinkSuccess from './pages/PublicPaymentLinkSuccess';
 import Courts from './pages/Courts';
 import Vips from './pages/Vips';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -161,6 +164,14 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
+                <Route
+                  path="/my-redeem"
+                  element={
+                    <ProtectedRoute>
+                      <MyRedeemPocket />
+                    </ProtectedRoute>
+                  }
+                />
                 <Route path="/maintenance" element={<Maintenance />} />
                 <Route
                   path="/coach-calendar"
@@ -223,6 +234,14 @@ function App() {
                   } 
                 />
                 <Route 
+                  path="/orders/pos/:id" 
+                  element={
+                    <ProtectedRoute>
+                      <OrderHistory />
+                    </ProtectedRoute>
+                  } 
+                />
+                <Route 
                   path="/orders/:id" 
                   element={
                     <ProtectedRoute>
@@ -230,6 +249,9 @@ function App() {
                     </ProtectedRoute>
                   } 
                 />
+                {/* 收款連結公開頁（須在 /:slug 之前） */}
+                <Route path="/pay/:code/success" element={<PublicPaymentLinkSuccess />} />
+                <Route path="/pay/:code" element={<PublicPaymentLink />} />
                 {/* 申請表公開頁：/:slug（須放在固定路由之後、catch-all 之前） */}
                 <Route path="/:slug" element={<PublicApplicationForm />} />
                 <Route path="*" element={<Navigate to="/" replace />} />

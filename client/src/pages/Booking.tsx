@@ -108,19 +108,17 @@ const Booking: React.FC = () => {
   const steps = [
     { id: 1, name: t('bookingPage.steps.store'), icon: CalendarDaysIcon },
     { id: 2, name: t('bookingPage.steps.court'), icon: CalendarDaysIcon },
-    { id: 3, name: t('bookingPage.steps.date'), icon: CalendarDaysIcon },
-    { id: 4, name: t('bookingPage.steps.time'), icon: ClockIcon },
-    { id: 5, name: t('bookingPage.steps.info'), icon: UsersIcon },
-    { id: 6, name: t('bookingPage.steps.confirm'), icon: CalendarDaysIcon }
+    { id: 3, name: t('bookingPage.steps.dateTime'), icon: ClockIcon },
+    { id: 4, name: t('bookingPage.steps.info'), icon: UsersIcon },
+    { id: 5, name: t('bookingPage.steps.confirm'), icon: CalendarDaysIcon }
   ];
 
   const canProceed = () => {
     switch (currentStep) {
       case 1: return selectedStore !== null;
       case 2: return selectedCourt !== null;
-      case 3: return selectedDate !== '';
-      case 4: return selectedTimeSlot !== null;
-      case 5: return bookingFormData.totalPlayers > 0 && 
+      case 3: return selectedDate !== '' && selectedTimeSlot !== null;
+      case 4: return bookingFormData.totalPlayers > 0 && 
                      bookingFormData.contactName.trim() !== '' &&
                      bookingFormData.contactEmail.trim() !== '' &&
                      bookingFormData.contactPhone.trim() !== '';
@@ -129,7 +127,7 @@ const Booking: React.FC = () => {
   };
 
   const nextStep = () => {
-    if (canProceed() && currentStep < 6) {
+    if (canProceed() && currentStep < 5) {
       setCurrentStep(currentStep + 1);
       // 滾動到頂部
       window.scrollTo({
@@ -289,24 +287,37 @@ const Booking: React.FC = () => {
                 )}
 
                 {currentStep === 3 && (
-                  <DateSelector
-                    onSelect={setSelectedDate}
-                    selectedDate={selectedDate}
-                    maxAdvanceDays={maxAdvanceDays}
-                  />
+                  <div className="space-y-8">
+                    <DateSelector
+                      onSelect={(date) => {
+                        if (date !== selectedDate) {
+                          setSelectedTimeSlot(null);
+                          setAvailability(null);
+                        }
+                        setSelectedDate(date);
+                      }}
+                      selectedDate={selectedDate}
+                      maxAdvanceDays={maxAdvanceDays}
+                    />
+                    {selectedDate && selectedCourt && (
+                      <motion.div
+                        initial={{ opacity: 0, y: 12 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        <TimeSlotSelector
+                          court={selectedCourt}
+                          date={selectedDate}
+                          onSelect={setSelectedTimeSlot}
+                          selectedTimeSlot={selectedTimeSlot}
+                          onAvailabilityChange={setAvailability}
+                        />
+                      </motion.div>
+                    )}
+                  </div>
                 )}
 
                 {currentStep === 4 && (
-                  <TimeSlotSelector
-                    court={selectedCourt}
-                    date={selectedDate}
-                    onSelect={setSelectedTimeSlot}
-                    selectedTimeSlot={selectedTimeSlot}
-                    onAvailabilityChange={setAvailability}
-                  />
-                )}
-
-                {currentStep === 5 && (
                   <PlayerForm
                     formData={bookingFormData}
                     onFormDataChange={handlePlayerFormChange}
@@ -314,7 +325,7 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {currentStep === 6 && (
+                {currentStep === 5 && (
                   <BookingSummary
                     court={selectedCourt}
                     date={selectedDate}
@@ -333,7 +344,7 @@ const Booking: React.FC = () => {
                 )}
 
                 {/* Navigation Buttons */}
-                {currentStep < 6 && (
+                {currentStep < 5 && (
                   <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
                     <button
                       onClick={prevStep}

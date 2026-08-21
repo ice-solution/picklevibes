@@ -71,6 +71,21 @@ export function getMembershipRoleForStore(
   return 'staff';
 }
 
+/** 該店已解析模組（來自登入 payload）；null = 全部 */
+export function getMembershipModulesForStore(
+  user: User | null | undefined,
+  storeSlug: string
+): string[] | null {
+  if (!user || !storeSlug) return [];
+  if (user.isPlatformAdmin || user.role === 'admin') return null;
+  const match = (user.managedStores || []).find((s) => s.slug === storeSlug);
+  if (!match) return [];
+  if (Object.prototype.hasOwnProperty.call(match, 'modules')) {
+    return match.modules ?? null;
+  }
+  return null;
+}
+
 export function storeRoleLabel(role: StoreMembershipRole | null | undefined): string {
   if (role === 'platform') return '平台管理員';
   if (role === 'manager') return '店長';

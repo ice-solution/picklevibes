@@ -524,6 +524,90 @@ router.get('/:id/submissions/export', async (req, res) => {
   }
 });
 
+// @route   POST /api/application-forms/:id/submissions/notify
+// @desc    建立 OpenWA 批量通知（佇列每 2 秒一則）
+router.post(
+  '/:id/submissions/notify',
+  [body('template').trim().notEmpty().withMessage('請輸入訊息內容')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg });
+      }
+      if (!mongoose.isValidObjectId(req.params.id)) {
+        return res.status(400).json({ message: '無效 ID' });
+      }
+
+      const {
+        createNotifyJob,
+        serializeJob,
+      } = require('../services/applicationNotifyService');
+
+      const result = await createNotifyJob({
+        formId: req.params.id,
+        template: req.body.template,
+        submissionIds: Array.isArray(req.body.submissionIds)
+          ? req.body.submissionIds
+          : undefined,
+        createdBy: req.user?.id || req.user?._id,
+        intervalMs: req.body.intervalMs,
+      });
+
+      if (result.error) {
+        return res.status(result.status || 400).json({
+          message: result.error,
+          skippedCount: result.skippedCount,
+        });
+      }
+
+      res.status(201).json({
+        message: `已加入發送佇列（共 ${result.job.total} 則，約每 2 秒一則）`,
+        job: serializeJob(result.job),
+      });
+    } catch (error) {
+      console.error('application form notify:', error);
+      res.status(500).json({ message: '建立通知失敗' });
+    }
+  }
+);
+
+// @route   GET /api/application-forms/notify-jobs/:jobId
+router.get('/notify-jobs/:jobId', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.jobId)) {
+      return res.status(400).json({ message: '無效 ID' });
+    }
+    const { getJob } = require('../services/applicationNotifyService');
+    const result = await getJob(req.params.jobId);
+    if (result.error) {
+      return res.status(result.status || 404).json({ message: result.error });
+    }
+    res.json({ job: result.job });
+  } catch (error) {
+    console.error('get notify job:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   POST /api/application-forms/notify-jobs/:jobId/cancel
+router.post('/notify-jobs/:jobId/cancel', async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.jobId)) {
+      return res.status(400).json({ message: '無效 ID' });
+    }
+    const { cancelJob } = require('../services/applicationNotifyService');
+    const result = await cancelJob(req.params.jobId);
+    if (result.error) {
+      return res.status(result.status || 404).json({ message: result.error });
+    }
+    res.json({ message: '已取消剩餘發送', job: result.job });
+  } catch (error) {
+    console.error('cancel notify job:', error);
+    res.status(500).json({ message: '取消失敗' });
+  }
+});
+
 router.delete('/:id', async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {

@@ -152,6 +152,25 @@ function getOrderRecognizedAmount(order, userRatio) {
   };
 }
 
+function getPosRecognizedAmount(posSale, userRatio) {
+  const total = Number(posSale.total) || 0;
+  if (total <= 0) return { nominal: 0, recognized: 0 };
+  if (posSale.paymentMethod === 'points') {
+    return {
+      nominal: total,
+      recognized: Math.round(total * userRatio * 100) / 100
+    };
+  }
+  return { nominal: total, recognized: total };
+}
+
+function posPaymentMethodLabel(method) {
+  if (method === 'kpay') return 'KPay';
+  if (method === 'cash') return '現金';
+  if (method === 'points') return '積分';
+  return method || '—';
+}
+
 /**
  * 預先載入用戶在 endInstant 前的已完成充值，建立累計有價／派送池
  */
@@ -291,10 +310,25 @@ async function computeIncomeLines(opts) {
     .sort({ 'payment.paidAt': 1 })
     .lean();
 
+  const PosTransaction = require('../models/PosTransaction');
+  const posQuery = {
+    status: 'completed',
+    createdAt: { $gte: start, $lte: end }
+  };
+  applyStoreIdFilter(posQuery, 'store', storeIds);
+
+  const posSales = await PosTransaction.find(posQuery)
+    .select('user store transactionNumber paymentMethod total pointsChargedAmount items createdAt')
+    .populate('store', 'name slug')
+    .populate('user', 'name email')
+    .sort({ createdAt: -1 })
+    .lean();
+
   const userIds = new Set();
   bookings.forEach((b) => b.user && userIds.add(String(b.user._id || b.user)));
   orders.forEach((o) => o.user && userIds.add(String(o.user._id || o.user)));
   manualAdjustments.forEach((r) => r.user && userIds.add(String(r.user._id || r.user)));
+  posSales.forEach((p) => p.user && userIds.add(String(p.user._id || p.user)));
 
   const pools = await buildUserRechargePools([...userIds], end);
   const lines = [];
@@ -404,6 +438,40 @@ async function computeIncomeLines(opts) {
     });
   }
 
+  for (const p of posSales) {
+    const user = p.user;
+    const pool = pools.get(String(user?._id || p.user)) || { economicPoints: 0, giftPoints: 0 };
+    const paidPointsRatio = p.paymentMethod === 'points'
+      ? round4(userPaidPointsRatio(pool.economicPoints, pool.giftPoints))
+      : 1;
+    const { nominal, recognized } = getPosRecognizedAmount(p, paidPointsRatio);
+    const itemSummary = (p.items || [])
+      .map((it) => `${it.name}×${it.quantity}`)
+      .join('、');
+
+    lines.push({
+      id: String(p._id),
+      source: 'pos',
+      lineType: 'recognized',
+      incomeDate: formatHkYmd(p.createdAt),
+      category: 'POS銷售',
+      description: itemSummary || p.transactionNumber,
+      storeId: p.store?._id ? String(p.store._id) : null,
+      store: p.store?.name || '未指定店鋪',
+      court: null,
+      orderNumber: p.transactionNumber,
+      userName: user?.name || (p.paymentMethod === 'points' ? '' : '散客'),
+      userEmail: user?.email || '',
+      paymentMethod: posPaymentMethodLabel(p.paymentMethod),
+      statusLabel: 'completed',
+      nominal: round2(nominal),
+      recognized: round2(recognized),
+      giftExcluded: round2(nominal - recognized),
+      paidPointsRatio: p.paymentMethod === 'points' ? paidPointsRatio : null,
+      excludeReason: null
+    });
+  }
+
   for (const r of manualAdjustments) {
     const user = r.user;
     const userName = user?.name || '';
@@ -488,11 +556,13 @@ function aggregateFromLines(lines) {
   const excluded = lines.filter((l) => l.lineType === 'excluded');
   const venueRecognized = recognized.filter((l) => l.source === 'venue');
   const shopRecognized = recognized.filter((l) => l.source === 'shop');
+  const posRecognized = recognized.filter((l) => l.source === 'pos');
+  const storeAttributed = recognized.filter((l) => l.source === 'venue' || l.source === 'pos');
 
   const sum = (arr, key) => arr.reduce((s, l) => s + (l[key] || 0), 0);
 
   const byStore = new Map();
-  venueRecognized.forEach((l) => {
+  storeAttributed.forEach((l) => {
     const k = l.storeId || l.store || '未指定店鋪';
     if (!byStore.has(k)) {
       byStore.set(k, {
@@ -581,6 +651,12 @@ function aggregateFromLines(lines) {
       nominalTotal: round2(sum(shopRecognized, 'nominal')),
       recognizedTotal: round2(sum(shopRecognized, 'recognized')),
       giftPointsExcluded: round2(sum(shopRecognized, 'giftExcluded'))
+    },
+    pos: {
+      transactionCount: posRecognized.length,
+      nominalTotal: round2(sum(posRecognized, 'nominal')),
+      recognizedTotal: round2(sum(posRecognized, 'recognized')),
+      giftPointsExcluded: round2(sum(posRecognized, 'giftExcluded'))
     },
     totals: {
       revenueNominal: round2(sum(recognized, 'nominal')),

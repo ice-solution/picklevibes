@@ -7,6 +7,8 @@ export interface ManagedStore {
   name: string;
   slug: string;
   membershipRole?: string;
+  /** 已解析的可存取模組；null／省略且為店長 = 全部 */
+  modules?: string[] | null;
 }
 
 export interface User {

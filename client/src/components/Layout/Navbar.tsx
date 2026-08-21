@@ -26,6 +26,7 @@ import {
   TagIcon,
   ShoppingCartIcon,
   ChatBubbleLeftRightIcon,
+  TicketIcon,
 } from '@heroicons/react/24/outline';
 
 const navLinkClass = (active: boolean) =>
@@ -135,6 +136,10 @@ const Navbar: React.FC = () => {
       <Link to="/balance" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
         <CurrencyDollarIcon className="w-4 h-4" />
         <span>{t('nav.balance')}</span>
+      </Link>
+      <Link to="/my-redeem" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+        <TicketIcon className="w-4 h-4" />
+        <span>{t('nav.myRedeem')}</span>
       </Link>
       <Link to="/orders" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
         <ShoppingBagIcon className="w-4 h-4" />
@@ -409,6 +414,10 @@ const Navbar: React.FC = () => {
                     <Link to="/balance" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
                       <CurrencyDollarIcon className="w-5 h-5" />
                       {t('nav.balance')}
+                    </Link>
+                    <Link to="/my-redeem" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
+                      <TicketIcon className="w-5 h-5" />
+                      {t('nav.myRedeem')}
                     </Link>
                     <Link to="/orders" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
                       <ShoppingBagIcon className="w-5 h-5" />

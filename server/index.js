@@ -192,6 +192,7 @@ app.use('/api/stats', require('./routes/stats')); // Added statistics routes
 app.use('/api/products', require('./routes/products')); // Added products routes
 app.use('/api/categories', require('./routes/categories')); // Added categories routes
 app.use('/api/orders', require('./routes/orders'));
+app.use('/api/pos', require('./routes/pos'));
 app.use('/api/config', require('./routes/config'));
 app.use('/api/reports', require('./routes/reports')); // Added orders routes
 app.use('/api/finance', require('./routes/finance'));
@@ -200,6 +201,7 @@ app.use('/api/accounting/pl', require('./routes/accountingPL'));
 app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'));
 app.use('/api/edm', require('./routes/edm'));
 app.use('/api/application-forms', require('./routes/applicationForms'));
+app.use('/api/payment-links', require('./routes/paymentLinks'));
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);
@@ -264,6 +266,13 @@ tuyaScheduler.start();
 
 const overnightDutyScheduler = require('./scheduler/overnightDutyScheduler');
 overnightDutyScheduler.start();
+
+try {
+  const { startApplicationNotifyWorker } = require('./services/applicationNotifyService');
+  startApplicationNotifyWorker();
+} catch (err) {
+  console.error('申請表通知佇列啟動失敗:', err.message);
+}
 
 // 啟動智能Google Calendar同步
 const ScheduledSync = require('./scripts/scheduledSync');

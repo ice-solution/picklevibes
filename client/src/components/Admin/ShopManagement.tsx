@@ -117,7 +117,7 @@ const ShopManagement: React.FC = () => {
     try {
       setLoading(true);
       const [productsRes, categoriesRes] = await Promise.all([
-        axios.get('/products?limit=100'),
+        axios.get('/products/admin/list?limit=100'),
         axios.get('/categories')
       ]);
       setProducts(productsRes.data.products || []);
@@ -202,6 +202,17 @@ const ShopManagement: React.FC = () => {
     try {
       await axios.put(`/categories/${category._id}`, {
         isActive: !category.isActive
+      });
+      fetchData();
+    } catch (error: any) {
+      alert(error.response?.data?.message || '更新失敗');
+    }
+  };
+
+  const handleProductToggleStatus = async (product: Product) => {
+    try {
+      await axios.put(`/products/${product._id}`, {
+        isActive: !product.isActive
       });
       fetchData();
     } catch (error: any) {
@@ -556,6 +567,16 @@ const ShopManagement: React.FC = () => {
                         </p>
                       )}
                       <div className="flex space-x-2 mt-4">
+                        <button
+                          onClick={() => handleProductToggleStatus(product)}
+                          className={`px-3 py-2 rounded text-sm ${
+                            product.isActive
+                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                          }`}
+                        >
+                          {product.isActive ? '啟用' : '停用'}
+                        </button>
                         <button
                           onClick={() => handleProductEdit(product)}
                           className="flex-1 px-3 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"

@@ -17,6 +17,7 @@
     "profile": "個人資料",
     "myBookings": "我的預約",
     "balance": "我的積分",
+    "myRedeem": "我的兌換券",
     "recharge": "積分充值",
     "shop": "商店",
     "cart": "購物車",
@@ -1158,6 +1159,7 @@
       "court": "選擇場地",
       "date": "選擇日期",
       "time": "選擇時間",
+      "dateTime": "日期與時間",
       "info": "填寫信息",
       "confirm": "確認預約"
     },

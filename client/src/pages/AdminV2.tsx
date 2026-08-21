@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 import { canOpenAdminV2, getEffectiveStoreRole } from '../utils/authRedirect';
-import { canAccessAdminV2Tab, isStoreReadOnly } from '../utils/storeAdminPermissions';
+import { canAccessAdminV2TabForUser, isStoreReadOnly } from '../utils/storeAdminPermissions';
 
 import PendingSettleBookings from '../components/Admin/PendingSettleBookings';
 import BookingCalendar from '../components/Admin/BookingCalendar';
@@ -21,6 +21,7 @@ import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
 import ShopManagement from '../components/Admin/ShopManagement';
 import OrderManagement from '../components/Admin/OrderManagement';
+import PosManagement from '../components/Admin/PosManagement';
 import MaintenanceControl from '../components/Admin/MaintenanceControl';
 import ActivityManagement from '../components/Admin/ActivityManagement';
 import RegularActivityManagement from '../components/Admin/RegularActivityManagement';
@@ -31,6 +32,7 @@ import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
 import AccountingManagement from '../components/Admin/AccountingManagement';
 import ApplicationFormManagement from '../components/Admin/ApplicationFormManagement';
+import PaymentLinkManagement from '../components/Admin/PaymentLinkManagement';
 import EdmSend from '../components/Admin/EdmSend';
 import TenantStaffManagement from '../components/Admin/TenantStaffManagement';
 
@@ -56,6 +58,8 @@ import {
   CurrencyDollarIcon,
   DocumentTextIcon,
   UserPlusIcon,
+  BanknotesIcon,
+  LinkIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -91,8 +95,10 @@ const AdminV2: React.FC = () => {
     { id: 'edm', name: 'EDM 發送', icon: EnvelopeIcon, element: <EdmSend /> },
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon, element: <RedeemCodeManagement /> },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
+    { id: 'payment-links', name: '收款連結', icon: LinkIcon, element: <PaymentLinkManagement /> },
     { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement /> },
     { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon, element: <OrderManagement /> },
+    { id: 'pos', name: 'POS 收銀', icon: BanknotesIcon, element: <PosManagement /> },
     { id: 'activities', name: '活動管理', icon: CalendarIcon, element: <ActivityManagement /> },
     { id: 'application-forms', name: '申請表', icon: DocumentTextIcon, element: <ApplicationFormManagement /> },
     { id: 'regular-activities', name: '恆常活動管理', icon: CalendarIcon, element: <RegularActivityManagement /> },
@@ -106,8 +112,8 @@ const AdminV2: React.FC = () => {
   ]), []);
 
   const tabs = useMemo(
-    () => allTabs.filter((t) => canAccessAdminV2Tab(effectiveRole, t.id)),
-    [allTabs, effectiveRole]
+    () => allTabs.filter((t) => canAccessAdminV2TabForUser(user, t.id)),
+    [allTabs, user]
   );
 
   useEffect(() => {

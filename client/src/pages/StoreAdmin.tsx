@@ -6,10 +6,12 @@ import { StoreAdminProvider, useStoreAdmin } from '../contexts/StoreAdminContext
 import Login from './Login';
 import {
   canAccessStoreAdmin,
+  getMembershipModulesForStore,
   getMembershipRoleForStore,
   storeRoleLabel,
 } from '../utils/authRedirect';
 import { canAccessStoreTab } from '../utils/storeAdminPermissions';
+import { getMembershipModulesForStore } from '../utils/authRedirect';
 
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
@@ -24,6 +26,8 @@ import AccountingManagement from '../components/Admin/AccountingManagement';
 import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
 import ShopManagement from '../components/Admin/ShopManagement';
 import OrderManagement from '../components/Admin/OrderManagement';
+import PosManagement from '../components/Admin/PosManagement';
+import PaymentLinkManagement from '../components/Admin/PaymentLinkManagement';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
 
@@ -42,6 +46,8 @@ import {
   ArrowLeftIcon,
   ShoppingBagIcon,
   DocumentChartBarIcon,
+  BanknotesIcon,
+  LinkIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -54,6 +60,7 @@ type Tab = {
 function StoreAdminShell() {
   const { user, logout } = useAuth();
   const { storeSlug = '', store, loading, error, membershipRole, readOnly } = useStoreAdmin();
+  const storeModules = getMembershipModulesForStore(user, storeSlug);
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('calendar');
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -65,6 +72,7 @@ function StoreAdminShell() {
       { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
       { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement /> },
       { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon, element: <OrderManagement /> },
+      { id: 'pos', name: 'POS 收銀', icon: BanknotesIcon, element: <PosManagement /> },
       { id: 'activities', name: '活動管理', icon: CalendarIcon, element: <ActivityManagement /> },
       {
         id: 'regular-activities',
@@ -78,6 +86,12 @@ function StoreAdminShell() {
         name: '充值優惠',
         icon: CreditCardIcon,
         element: <RechargeOfferManagement />,
+      },
+      {
+        id: 'payment-links',
+        name: '收款連結',
+        icon: LinkIcon,
+        element: <PaymentLinkManagement />,
       },
       { id: 'analytics', name: '數據分析', icon: DocumentChartBarIcon, element: <AnalyticsDashboard /> },
       { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement /> },
@@ -95,8 +109,8 @@ function StoreAdminShell() {
   );
 
   const tabs = useMemo(
-    () => allTabs.filter((t) => canAccessStoreTab(membershipRole, t.id)),
-    [allTabs, membershipRole]
+    () => allTabs.filter((t) => canAccessStoreTab(membershipRole, t.id, storeModules)),
+    [allTabs, membershipRole, storeModules]
   );
 
   useEffect(() => {

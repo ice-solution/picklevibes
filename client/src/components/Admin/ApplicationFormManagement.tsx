@@ -10,6 +10,7 @@ import {
   ArrowDownTrayIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  MegaphoneIcon,
 } from '@heroicons/react/24/outline';
 
 type StoreOption = { _id: string; name: string; slug: string };
@@ -75,6 +76,31 @@ function mediaUrl(path: string) {
   return `${apiBase.replace(/\/$/, '')}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+type NotifyJob = {
+  _id: string;
+  status: 'pending' | 'running' | 'completed' | 'cancelled';
+  total: number;
+  sentCount: number;
+  failedCount: number;
+  skippedCount: number;
+  pendingCount: number;
+  intervalMs?: number;
+};
+
+function formHasPhoneField(form: ApplicationFormDoc | null) {
+  if (!form) return false;
+  return (form.fields || []).some((f) => String(f.fieldName || '').toLowerCase() === 'phone');
+}
+
+function renderTemplatePreview(template: string, data: Record<string, string>) {
+  return String(template || '').replace(/\{\{\s*([^}]+?)\s*\}\}/g, (_, rawKey: string) => {
+    const key = String(rawKey || '').trim();
+    if (!key) return '';
+    const val = data[key];
+    return val == null ? '' : String(val);
+  });
+}
+
 const ApplicationFormManagement: React.FC = () => {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [filterStore, setFilterStore] = useState('');
@@ -92,6 +118,14 @@ const ApplicationFormManagement: React.FC = () => {
     pages: 1,
   });
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
+  const [selectedSubmissionIds, setSelectedSubmissionIds] = useState<string[]>([]);
+  const [notifyOpen, setNotifyOpen] = useState(false);
+  const [notifyTemplate, setNotifyTemplate] = useState(
+    '你好 {{name}}，多謝你提交申請。如有查詢請回覆此訊息。'
+  );
+  const [notifyScope, setNotifyScope] = useState<'all' | 'selected'>('all');
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [notifyJob, setNotifyJob] = useState<NotifyJob | null>(null);
   const [exporting, setExporting] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -310,6 +344,7 @@ const ApplicationFormManagement: React.FC = () => {
       setSubmissionsLoading(true);
       setSubmissionsForm(form);
       setSubmissionsPage(page);
+      setSelectedSubmissionIds([]);
       const res = await axios.get(
         `/application-forms/${form._id}/submissions?page=${page}&limit=50`
       );
@@ -333,6 +368,104 @@ const ApplicationFormManagement: React.FC = () => {
     setSubmissions([]);
     setSubmissionsPage(1);
     setSubmissionsPagination({ page: 1, limit: 50, total: 0, pages: 1 });
+    setSelectedSubmissionIds([]);
+    setNotifyOpen(false);
+    setNotifyJob(null);
+  };
+
+  const submissionsHavePhone = useMemo(
+    () => formHasPhoneField(submissionsForm),
+    [submissionsForm]
+  );
+
+  const notifyFieldHints = useMemo(() => {
+    if (!submissionsForm) return [] as string[];
+    return (submissionsForm.fields || []).map((f) => f.fieldName).filter(Boolean);
+  }, [submissionsForm]);
+
+  const notifyPreview = useMemo(() => {
+    const sample = submissions.find((s) => s.data?.phone || s.contactPhone) || submissions[0];
+    if (!sample) return notifyTemplate;
+    const data = { ...(sample.data || {}) };
+    if (sample.contactName && !data.name) data.name = sample.contactName;
+    if (sample.contactPhone && !data.phone) data.phone = sample.contactPhone;
+    return renderTemplatePreview(notifyTemplate, data);
+  }, [notifyTemplate, submissions]);
+
+  const toggleSelectSubmission = (id: string) => {
+    setSelectedSubmissionIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllPage = () => {
+    if (selectedSubmissionIds.length === submissions.length) {
+      setSelectedSubmissionIds([]);
+    } else {
+      setSelectedSubmissionIds(submissions.map((s) => s._id));
+    }
+  };
+
+  const pollNotifyJob = useCallback(async (jobId: string) => {
+    try {
+      const res = await axios.get(`/application-forms/notify-jobs/${jobId}`);
+      const job = res.data.job as NotifyJob;
+      setNotifyJob(job);
+      if (job.status === 'pending' || job.status === 'running') {
+        window.setTimeout(() => void pollNotifyJob(jobId), 1500);
+      }
+    } catch {
+      /* ignore poll errors */
+    }
+  }, []);
+
+  const startNotify = async () => {
+    if (!submissionsForm) return;
+    if (!notifyTemplate.trim()) {
+      alert('請輸入訊息內容');
+      return;
+    }
+    if (notifyScope === 'selected' && selectedSubmissionIds.length === 0) {
+      alert('請先勾選要通知的提交記錄');
+      return;
+    }
+    if (
+      !window.confirm(
+        notifyScope === 'selected'
+          ? `確認以 OpenWA 發送 ${selectedSubmissionIds.length} 筆通知？（每 2 秒一則）`
+          : '確認向所有有 phone 的提交發送 OpenWA 通知？（每 2 秒一則）'
+      )
+    ) {
+      return;
+    }
+
+    setNotifyBusy(true);
+    try {
+      const res = await axios.post(
+        `/application-forms/${submissionsForm._id}/submissions/notify`,
+        {
+          template: notifyTemplate,
+          submissionIds: notifyScope === 'selected' ? selectedSubmissionIds : undefined,
+        }
+      );
+      setNotifyJob(res.data.job);
+      alert(res.data.message || '已加入發送佇列');
+      void pollNotifyJob(res.data.job._id);
+    } catch (e) {
+      alert(errMsg(e));
+    } finally {
+      setNotifyBusy(false);
+    }
+  };
+
+  const cancelNotifyJob = async () => {
+    if (!notifyJob) return;
+    try {
+      const res = await axios.post(`/application-forms/notify-jobs/${notifyJob._id}/cancel`);
+      setNotifyJob(res.data.job);
+    } catch (e) {
+      alert(errMsg(e));
+    }
   };
 
   const submissionColumns = useMemo(() => {
@@ -830,6 +963,20 @@ const ApplicationFormManagement: React.FC = () => {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {submissionsHavePhone && (
+                  <button
+                    type="button"
+                    disabled={submissionsPagination.total === 0}
+                    onClick={() => {
+                      setNotifyOpen(true);
+                      setNotifyJob(null);
+                    }}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    <MegaphoneIcon className="w-4 h-4" />
+                    通知
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={exporting || submissionsPagination.total === 0}
@@ -854,6 +1001,19 @@ const ApplicationFormManagement: React.FC = () => {
                   <table className="min-w-full text-sm divide-y divide-gray-200">
                     <thead className="bg-gray-50 sticky top-0">
                       <tr>
+                        {submissionsHavePhone && (
+                          <th className="px-3 py-2 text-left">
+                            <input
+                              type="checkbox"
+                              checked={
+                                submissions.length > 0 &&
+                                selectedSubmissionIds.length === submissions.length
+                              }
+                              onChange={toggleSelectAllPage}
+                              aria-label="全選本頁"
+                            />
+                          </th>
+                        )}
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-600 whitespace-nowrap">
                           提交時間
                         </th>
@@ -870,6 +1030,16 @@ const ApplicationFormManagement: React.FC = () => {
                     <tbody className="divide-y divide-gray-100 bg-white">
                       {submissions.map((s) => (
                         <tr key={s._id} className="hover:bg-gray-50">
+                          {submissionsHavePhone && (
+                            <td className="px-3 py-2 align-top">
+                              <input
+                                type="checkbox"
+                                checked={selectedSubmissionIds.includes(s._id)}
+                                onChange={() => toggleSelectSubmission(s._id)}
+                                aria-label="選取提交"
+                              />
+                            </td>
+                          )}
                           <td className="px-3 py-2 text-gray-600 whitespace-nowrap align-top">
                             {new Date(s.createdAt).toLocaleString('zh-HK', { hour12: false })}
                           </td>
@@ -915,6 +1085,107 @@ const ApplicationFormManagement: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {notifyOpen && submissionsForm && (
+        <div className="fixed inset-0 z-[60] bg-black/50 flex items-start justify-center overflow-y-auto p-4">
+          <div className="bg-white rounded-xl w-full max-w-xl my-10 shadow-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div>
+                <h3 className="font-semibold">OpenWA 通知 · {submissionsForm.title}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  使用 {'{{fieldName}}'} 插入欄位；後台每 2 秒發送一則
+                </p>
+              </div>
+              <button type="button" onClick={() => setNotifyOpen(false)}>
+                <XMarkIcon className="w-6 h-6 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">發送對象</label>
+                <div className="flex flex-col gap-2 text-sm">
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="notifyScope"
+                      checked={notifyScope === 'all'}
+                      onChange={() => setNotifyScope('all')}
+                    />
+                    全部有 phone 的提交
+                  </label>
+                  <label className="inline-flex items-center gap-2">
+                    <input
+                      type="radio"
+                      name="notifyScope"
+                      checked={notifyScope === 'selected'}
+                      onChange={() => setNotifyScope('selected')}
+                    />
+                    僅勾選（本頁已選 {selectedSubmissionIds.length} 筆）
+                  </label>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">訊息範本</label>
+                <textarea
+                  value={notifyTemplate}
+                  onChange={(e) => setNotifyTemplate(e.target.value)}
+                  rows={6}
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono"
+                  placeholder="你好 {{name}}，你的電話是 {{phone}}"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  可用欄位：{notifyFieldHints.map((n) => `{{${n}}}`).join('、') || '（無）'}
+                </p>
+              </div>
+
+              <div className="bg-gray-50 border rounded-lg p-3">
+                <p className="text-xs font-medium text-gray-600 mb-1">預覽（以第一筆有資料為例）</p>
+                <p className="text-sm text-gray-800 whitespace-pre-wrap">{notifyPreview || '—'}</p>
+              </div>
+
+              {notifyJob && (
+                <div className="border rounded-lg p-3 text-sm space-y-1">
+                  <p>
+                    狀態：<span className="font-medium">{notifyJob.status}</span>
+                    {' · '}已送 {notifyJob.sentCount}/{notifyJob.total}
+                    {notifyJob.failedCount > 0 ? ` · 失敗 ${notifyJob.failedCount}` : ''}
+                    {notifyJob.pendingCount > 0 ? ` · 待發 ${notifyJob.pendingCount}` : ''}
+                  </p>
+                  {(notifyJob.status === 'pending' || notifyJob.status === 'running') && (
+                    <button
+                      type="button"
+                      onClick={() => void cancelNotifyJob()}
+                      className="text-red-600 text-xs underline"
+                    >
+                      取消剩餘發送
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="px-5 py-4 border-t flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setNotifyOpen(false)}
+                className="px-4 py-2 rounded-lg bg-gray-100"
+              >
+                關閉
+              </button>
+              <button
+                type="button"
+                disabled={notifyBusy}
+                onClick={() => void startNotify()}
+                className="px-4 py-2 rounded-lg bg-emerald-600 text-white disabled:opacity-50"
+              >
+                {notifyBusy ? '建立佇列中…' : '開始發送'}
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -1265,7 +1265,9 @@ PickleVibes - 讓匹克球24小時隨時預約！
       minute: '2-digit'
     });
 
-    const subject = `PickleVibes 充值發票 - ${invoiceNumber}`;
+    const subject = rechargeData.description
+      ? `PickleVibes 發票 - ${rechargeData.description} - ${invoiceNumber}`
+      : `PickleVibes 充值發票 - ${invoiceNumber}`;
 
     const html = `
     <!DOCTYPE html>

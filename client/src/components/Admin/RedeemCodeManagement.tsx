@@ -9,10 +9,12 @@ import {
   EyeIcon,
   PencilIcon,
   TrashIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  UserPlusIcon,
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { PRICING_SLOT_NAMES } from '../../constants/courtPricing';
+import AssignRedeemPocketModal from './AssignRedeemPocketModal';
 
 interface RedeemCode {
   _id: string;
@@ -175,6 +177,7 @@ const RedeemCodeManagement: React.FC = () => {
 
   // 使用記錄 modal 狀態
   const [showUsageModal, setShowUsageModal] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<RedeemCode | null>(null);
   const [selectedCode, setSelectedCode] = useState<RedeemCode | null>(null);
   const [usageRecords, setUsageRecords] = useState<RedeemUsage[]>([]);
   const [usageLoading, setUsageLoading] = useState(false);
@@ -1011,6 +1014,13 @@ const RedeemCodeManagement: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     <div className="flex space-x-2">
                       <button
+                        onClick={() => setAssignTarget(code)}
+                        className="text-amber-600 hover:text-amber-800"
+                        title="派發到用戶口袋"
+                      >
+                        <UserPlusIcon className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => handleEdit(code)}
                         className="text-indigo-600 hover:text-indigo-900"
                         title="編輯兌換碼"
@@ -1132,6 +1142,13 @@ const RedeemCodeManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <div className="flex space-x-2">
+                        <button
+                          onClick={() => setAssignTarget(code)}
+                          className="text-amber-600 hover:text-amber-800"
+                          title="派發到用戶口袋"
+                        >
+                          <UserPlusIcon className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => handleEdit(code)}
                           className="text-indigo-600 hover:text-indigo-900"
@@ -1968,6 +1985,14 @@ const RedeemCodeManagement: React.FC = () => {
             )}
           </div>
         </div>
+      )}
+
+      {assignTarget && (
+        <AssignRedeemPocketModal
+          redeemCode={assignTarget}
+          isOpen={!!assignTarget}
+          onClose={() => setAssignTarget(null)}
+        />
       )}
     </div>
   );

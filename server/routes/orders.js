@@ -7,71 +7,11 @@ const RedeemCode = require('../models/RedeemCode');
 const RedeemUsage = require('../models/RedeemUsage');
 const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const emailService = require('../services/emailService');
+const { adjustProductStock, restoreOrderItemStock } = require('../utils/productStock');
 const {
   validateVariantSelection,
   usesVariantStock,
-  normalizeColor,
-  normalizeSize,
-  syncProductStockFromVariants
 } = require('../utils/productVariants');
-
-async function adjustProductStock(productId, quantity, color, size, delta) {
-  const product = await Product.findById(productId);
-  if (!product) return;
-
-  if (usesVariantStock(product)) {
-    const colorNorm = normalizeColor(color);
-    const sizeNorm = normalizeSize(size);
-    const updated = await Product.findOneAndUpdate(
-      {
-        _id: productId,
-        variants: {
-          $elemMatch: {
-            color: colorNorm,
-            size: sizeNorm
-          }
-        }
-      },
-      { $inc: { 'variants.$.stock': delta } },
-      { new: true }
-    );
-    if (updated) {
-      syncProductStockFromVariants(updated);
-      await updated.save();
-    }
-    return;
-  }
-
-  await Product.findByIdAndUpdate(productId, { $inc: { stock: delta } });
-}
-
-async function restoreOrderItemStock(item) {
-  const product = await Product.findById(item.product);
-  if (!product) return;
-
-  if (usesVariantStock(product)) {
-    const updated = await Product.findOneAndUpdate(
-      {
-        _id: item.product,
-        variants: {
-          $elemMatch: {
-            color: normalizeColor(item.color),
-            size: normalizeSize(item.size)
-          }
-        }
-      },
-      { $inc: { 'variants.$.stock': item.quantity } },
-      { new: true }
-    );
-    if (updated) {
-      syncProductStockFromVariants(updated);
-      await updated.save();
-    }
-    return;
-  }
-
-  await Product.findByIdAndUpdate(item.product, { $inc: { stock: item.quantity } });
-}
 const { auth, adminAuth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -268,32 +208,68 @@ router.post('/', [
 });
 
 // @route   GET /api/orders/my-orders
-// @desc    獲取我的訂單列表
+// @desc    獲取我的訂單列表（網店 + POS 店內購買）
 // @access  Private
 router.get('/my-orders', auth, async (req, res) => {
   try {
-    const { page = 1, limit = 10, status } = req.query;
-    
-    const query = { user: req.user.id };
-    if (status) {
-      query.status = status;
+    const { page = 1, limit = 20, status } = req.query;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    const shopStatuses = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+    const includeShop = !status || shopStatuses.includes(status);
+    const includePos = !status || status === 'cancelled' || status === 'completed';
+
+    const shopQuery = { user: req.user.id };
+    if (status && shopStatuses.includes(status)) {
+      shopQuery.status = status;
     }
-    
-    const orders = await Order.find(query)
-      .populate('items.product', 'name images')
-      .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
-    
-    const total = await Order.countDocuments(query);
-    
+
+    const posQuery = { user: req.user.id };
+    if (status === 'cancelled') {
+      posQuery.status = 'cancelled';
+    } else if (status === 'completed') {
+      posQuery.status = 'completed';
+    }
+
+    const { formatPosOrderSummary } = require('../services/posCheckoutService');
+    const PosTransaction = require('../models/PosTransaction');
+
+    const [shopOrders, posTransactions] = await Promise.all([
+      includeShop
+        ? Order.find(shopQuery)
+            .populate('items.product', 'name images')
+            .sort({ createdAt: -1 })
+            .lean()
+        : Promise.resolve([]),
+      includePos
+        ? PosTransaction.find(posQuery)
+            .populate('store', 'name slug')
+            .populate('items.product', 'name images')
+            .sort({ createdAt: -1 })
+            .lean()
+        : Promise.resolve([]),
+    ]);
+
+    const unified = [
+      ...shopOrders.map((o) => ({
+        ...o,
+        orderType: 'shop',
+      })),
+      ...posTransactions.map((tx) => formatPosOrderSummary(tx)),
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+    const total = unified.length;
+    const start = (pageNum - 1) * limitNum;
+    const orders = unified.slice(start, start + limitNum);
+
     res.json({
       orders,
       pagination: {
-        current: parseInt(page),
-        pages: Math.ceil(total / limit),
-        total
-      }
+        current: pageNum,
+        pages: Math.ceil(total / limitNum) || 1,
+        total,
+      },
     });
   } catch (error) {
     console.error('獲取訂單列表錯誤:', error);
@@ -525,17 +501,29 @@ router.put('/:id/cancel', [auth, adminAuth], async (req, res) => {
       order.pointsDeducted = 0;
     }
 
-    // 3. 退還兌換碼使用：刪除使用記錄並更新兌換碼統計
+    // 3. 退還兌換碼使用：刪除使用記錄並更新兌換碼統計，還原口袋狀態
     if (order.redeemCode) {
       const usage = await RedeemUsage.findOne({
         orderType: 'product',
         orderId: order._id
       });
       if (usage) {
+        const usageUserId = usage.user;
         await usage.deleteOne();
         await RedeemCode.findByIdAndUpdate(order.redeemCode, {
           $inc: { totalUsed: -1, totalDiscount: -order.discount }
         });
+        const UserRedeemPocket = require('../models/UserRedeemPocket');
+        const pocket = await UserRedeemPocket.findOne({
+          user: usageUserId,
+          redeemCode: order.redeemCode,
+        });
+        if (pocket && pocket.status !== 'removed') {
+          pocket.status = 'available';
+          pocket.usedAt = null;
+          pocket.lastRedeemUsage = null;
+          await pocket.save();
+        }
       }
     }
 

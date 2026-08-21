@@ -1,11 +1,17 @@
 import React, { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import {
+  MODULE_CATALOG,
+  defaultModulesForRole,
+} from '../../utils/storeAdminPermissions';
 
 interface Membership {
   _id: string;
   role: 'manager' | 'staff' | 'shareholder';
   isActive: boolean;
+  modules?: string[];
   user: { _id: string; name: string; email: string; phone: string; role: string };
   store: { _id: string; name: string; slug: string };
 }
@@ -20,9 +26,9 @@ type AssignMode = 'create' | 'existing';
 type StaffRole = 'manager' | 'staff' | 'shareholder';
 
 const ROLE_OPTIONS: { value: StaffRole; label: string }[] = [
-  { value: 'staff', label: '店員（日曆／商店／訂單／活動）' },
+  { value: 'staff', label: '店員（日曆／商店／訂單／活動／POS／收款連結）' },
   { value: 'manager', label: '店長（本店全部功能）' },
-  { value: 'shareholder', label: '股東（分析／報告／會計／日曆唯讀）' },
+  { value: 'shareholder', label: '股東（分析／報告／會計／日曆／收款連結唯讀）' },
 ];
 
 function roleLabel(role: string) {
@@ -31,20 +37,77 @@ function roleLabel(role: string) {
   return '店員';
 }
 
-const emptyCreateForm = {
-  name: '',
-  email: '',
-  password: '',
-  phone: '',
-  storeIds: [] as string[],
-  role: 'staff' as StaffRole,
-};
+function modulesSummary(role: StaffRole, modules?: string[]) {
+  if (role === 'manager') return '全部功能';
+  const keys =
+    Array.isArray(modules) && modules.length > 0
+      ? modules
+      : defaultModulesForRole(role) || [];
+  const labels = MODULE_CATALOG.filter((m) => keys.includes(m.key)).map((m) => m.label);
+  return labels.length ? labels.join('、') : '—';
+}
 
-const emptyExistingForm = {
-  email: '',
-  storeIds: [] as string[],
-  role: 'staff' as StaffRole,
-};
+function ModuleChecklist({
+  role,
+  selected,
+  onChange,
+}: {
+  role: StaffRole;
+  selected: string[];
+  onChange: (keys: string[]) => void;
+}) {
+  if (role === 'manager') {
+    return (
+      <p className="text-sm text-gray-500 border rounded-md p-3 bg-gray-50">
+        店長預設擁有本店全部功能，無需另外勾選。
+      </p>
+    );
+  }
+
+  const defaults = defaultModulesForRole(role) || [];
+  const usingCustom =
+    selected.length > 0 &&
+    (selected.length !== defaults.length || selected.some((k) => !defaults.includes(k)));
+
+  const toggle = (key: string) => {
+    onChange(
+      selected.includes(key) ? selected.filter((k) => k !== key) : [...selected, key]
+    );
+  };
+
+  const resetDefaults = () => onChange([...defaults]);
+
+  return (
+    <div className="border rounded-md p-3 space-y-2 bg-gray-50">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm font-medium text-gray-800">可存取功能</div>
+        <button
+          type="button"
+          onClick={resetDefaults}
+          className="text-xs text-primary-600 hover:underline"
+        >
+          還原角色預設
+        </button>
+      </div>
+      <p className="text-xs text-gray-500">
+        不勾選額外覆寫時會跟角色預設；若要自訂請勾選需要的模組
+        {usingCustom ? '（目前為自訂）' : '（目前為角色預設）'}。
+      </p>
+      <div className="grid grid-cols-2 gap-1.5 max-h-56 overflow-y-auto">
+        {MODULE_CATALOG.map((m) => (
+          <label key={m.key} className="flex items-center gap-2 text-sm text-gray-800">
+            <input
+              type="checkbox"
+              checked={selected.includes(m.key)}
+              onChange={() => toggle(m.key)}
+            />
+            {m.label}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StoreMultiSelect({
   stores,
@@ -102,6 +165,32 @@ function storeAssignPayload(selectedIds: string[], storeCount: number) {
   return all ? { storeId: '__all__' } : { storeIds: selectedIds };
 }
 
+/** 與角色預設相同則送 []（清覆寫）；否則送自訂清單 */
+function modulesPayload(role: StaffRole, selected: string[]) {
+  if (role === 'manager') return { modules: [] as string[] };
+  const defaults = defaultModulesForRole(role) || [];
+  const same =
+    selected.length === defaults.length && selected.every((k) => defaults.includes(k));
+  return { modules: same ? [] : selected };
+}
+
+const emptyCreateForm = {
+  name: '',
+  email: '',
+  password: '',
+  phone: '',
+  storeIds: [] as string[],
+  role: 'staff' as StaffRole,
+  modules: (defaultModulesForRole('staff') || []) as string[],
+};
+
+const emptyExistingForm = {
+  email: '',
+  storeIds: [] as string[],
+  role: 'staff' as StaffRole,
+  modules: (defaultModulesForRole('staff') || []) as string[],
+};
+
 const TenantStaffManagement: React.FC = () => {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
@@ -110,6 +199,12 @@ const TenantStaffManagement: React.FC = () => {
   const [mode, setMode] = useState<AssignMode>('create');
   const [createForm, setCreateForm] = useState(emptyCreateForm);
   const [existingForm, setExistingForm] = useState(emptyExistingForm);
+  const [editing, setEditing] = useState<Membership | null>(null);
+  const [editRole, setEditRole] = useState<StaffRole>('staff');
+  const [editModules, setEditModules] = useState<string[]>([]);
+  const [editName, setEditName] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editPassword, setEditPassword] = useState('');
 
   const fetchData = async () => {
     try {
@@ -131,6 +226,38 @@ const TenantStaffManagement: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  const setCreateRole = (role: StaffRole) => {
+    setCreateForm({
+      ...createForm,
+      role,
+      modules: role === 'manager' ? [] : [...(defaultModulesForRole(role) || [])],
+    });
+  };
+
+  const setExistingRole = (role: StaffRole) => {
+    setExistingForm({
+      ...existingForm,
+      role,
+      modules: role === 'manager' ? [] : [...(defaultModulesForRole(role) || [])],
+    });
+  };
+
+  const openEdit = (m: Membership) => {
+    setEditing(m);
+    setEditRole(m.role);
+    setEditName(m.user?.name || '');
+    setEditPhone(m.user?.phone || '');
+    setEditPassword('');
+    const custom = Array.isArray(m.modules) && m.modules.length > 0 ? m.modules : null;
+    setEditModules(
+      m.role === 'manager'
+        ? []
+        : custom
+          ? [...custom]
+          : [...(defaultModulesForRole(m.role) || [])]
+    );
+  };
 
   const handleCreateAccount = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -154,6 +281,7 @@ const TenantStaffManagement: React.FC = () => {
         password: createForm.password,
         phone: createForm.phone,
         role: createForm.role,
+        ...modulesPayload(createForm.role, createForm.modules),
         ...storeAssignPayload(createForm.storeIds, stores.length),
       });
       setCreateForm(emptyCreateForm);
@@ -193,6 +321,7 @@ const TenantStaffManagement: React.FC = () => {
       const res = await axios.post('/tenant-memberships', {
         userId: lookup.data.user._id,
         role: existingForm.role,
+        ...modulesPayload(existingForm.role, existingForm.modules),
         ...storeAssignPayload(existingForm.storeIds, stores.length),
       });
       setExistingForm(emptyExistingForm);
@@ -201,6 +330,39 @@ const TenantStaffManagement: React.FC = () => {
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       alert(msg || '指派失敗');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    if (!editName.trim()) {
+      alert('請填寫姓名');
+      return;
+    }
+    if (!editPhone.trim()) {
+      alert('請填寫電話');
+      return;
+    }
+    try {
+      setSaving(true);
+      const payload: Record<string, unknown> = {
+        role: editRole,
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        ...modulesPayload(editRole, editModules),
+      };
+      if (editPassword.trim()) {
+        payload.password = editPassword.trim();
+      }
+      await axios.patch(`/tenant-memberships/${editing._id}`, payload);
+      setEditing(null);
+      fetchData();
+      alert('已更新');
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      alert(msg || '更新失敗');
     } finally {
       setSaving(false);
     }
@@ -225,12 +387,106 @@ const TenantStaffManagement: React.FC = () => {
     );
   }
 
+  const editModal =
+    editing &&
+    createPortal(
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+        <div
+          className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 space-y-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tenant-staff-edit-title"
+        >
+          <h3 id="tenant-staff-edit-title" className="font-semibold text-gray-900 text-lg">
+            編輯店鋪員工
+          </h3>
+          <p className="text-sm text-gray-600">
+            {editing.user?.email} · {editing.store?.name}
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">姓名</label>
+              <input
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">電話</label>
+              <input
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                value={editPhone}
+                onChange={(e) => setEditPhone(e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">
+                新密碼（留空則不更改）
+              </label>
+              <input
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                type="password"
+                placeholder="至少 8 字，含字母與數字"
+                value={editPassword}
+                onChange={(e) => setEditPassword(e.target.value)}
+                autoComplete="new-password"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">店鋪角色</label>
+              <select
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                value={editRole}
+                onChange={(e) => {
+                  const role = e.target.value as StaffRole;
+                  setEditRole(role);
+                  setEditModules(
+                    role === 'manager' ? [] : [...(defaultModulesForRole(role) || [])]
+                  );
+                }}
+              >
+                {ROLE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <ModuleChecklist role={editRole} selected={editModules} onChange={setEditModules} />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              className="px-4 py-2 text-sm rounded-lg bg-gray-100 hover:bg-gray-200"
+              onClick={() => setEditing(null)}
+              disabled={saving}
+            >
+              取消
+            </button>
+            <button
+              type="button"
+              disabled={saving}
+              className="px-4 py-2 text-sm rounded-lg bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50"
+              onClick={handleSaveEdit}
+            >
+              {saving ? '儲存中…' : '儲存'}
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    );
+
   return (
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-gray-900">店鋪員工指派</h2>
         <p className="text-gray-600 mt-1">
-          店長／店員／股東請在此建立或指派。平台超級管理員請到「用戶管理」設定 <code className="text-sm">admin</code>，無需指派店鋪。
+          店長／店員／股東請在此建立、編輯或指派。平台超級管理員請到「用戶管理」設定{' '}
+          <code className="text-sm">admin</code>，無需指派店鋪。
         </p>
       </div>
 
@@ -289,7 +545,7 @@ const TenantStaffManagement: React.FC = () => {
           <select
             className="w-full border rounded-md px-3 py-2 text-sm"
             value={createForm.role}
-            onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as StaffRole })}
+            onChange={(e) => setCreateRole(e.target.value as StaffRole)}
           >
             {ROLE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -297,6 +553,11 @@ const TenantStaffManagement: React.FC = () => {
               </option>
             ))}
           </select>
+          <ModuleChecklist
+            role={createForm.role}
+            selected={createForm.modules}
+            onChange={(modules) => setCreateForm({ ...createForm, modules })}
+          />
           <button
             type="submit"
             disabled={saving}
@@ -327,7 +588,7 @@ const TenantStaffManagement: React.FC = () => {
           <select
             className="w-full border rounded-md px-3 py-2 text-sm"
             value={existingForm.role}
-            onChange={(e) => setExistingForm({ ...existingForm, role: e.target.value as StaffRole })}
+            onChange={(e) => setExistingRole(e.target.value as StaffRole)}
           >
             {ROLE_OPTIONS.map((o) => (
               <option key={o.value} value={o.value}>
@@ -335,6 +596,11 @@ const TenantStaffManagement: React.FC = () => {
               </option>
             ))}
           </select>
+          <ModuleChecklist
+            role={existingForm.role}
+            selected={existingForm.modules}
+            onChange={(modules) => setExistingForm({ ...existingForm, modules })}
+          />
           <button
             type="submit"
             disabled={saving}
@@ -346,13 +612,15 @@ const TenantStaffManagement: React.FC = () => {
         </form>
       )}
 
+      {editModal}
+
       <div className="bg-white rounded-lg shadow overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">帳號</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">店鋪</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">店鋪角色</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">角色／功能</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
             </tr>
           </thead>
@@ -369,21 +637,35 @@ const TenantStaffManagement: React.FC = () => {
                   <td className="px-4 py-3 text-sm">
                     <div className="font-medium text-gray-900">{m.user?.name}</div>
                     <div className="text-gray-500">{m.user?.email}</div>
+                    {m.user?.phone ? (
+                      <div className="text-gray-400 text-xs">{m.user.phone}</div>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3 text-sm text-gray-700">{m.store?.name}</td>
                   <td className="px-4 py-3 text-sm">
                     <span className="inline-flex px-2 py-0.5 rounded bg-slate-100 text-slate-700 text-xs">
                       {roleLabel(m.role)}
                     </span>
+                    <div className="text-xs text-gray-500 mt-1 max-w-xs">
+                      {modulesSummary(m.role, m.modules)}
+                    </div>
                   </td>
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => openEdit(m)}
+                      className="inline-flex items-center gap-1 text-sm text-primary-600 hover:text-primary-800 mr-3"
+                    >
+                      <PencilSquareIcon className="w-4 h-4" />
+                      編輯
+                    </button>
                     <button
                       type="button"
                       onClick={() => handleRemove(m._id)}
-                      className="text-red-600 hover:text-red-800"
-                      title="移除"
+                      className="inline-flex items-center gap-1 text-sm text-red-600 hover:text-red-800"
                     >
-                      <TrashIcon className="w-5 h-5 inline" />
+                      <TrashIcon className="w-4 h-4" />
+                      移除
                     </button>
                   </td>
                 </tr>

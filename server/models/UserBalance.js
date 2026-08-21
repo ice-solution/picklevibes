@@ -39,6 +39,10 @@ const userBalanceSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Order'
     },
+    relatedPosTransaction: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PosTransaction'
+    },
     createdAt: {
       type: Date,
       default: Date.now
@@ -61,7 +65,13 @@ userBalanceSchema.methods.addBalance = function(amount, description = '充值') 
 };
 
 // 扣除餘額
-userBalanceSchema.methods.deductBalance = function(amount, description = '消費', relatedBooking = null, relatedOrder = null) {
+userBalanceSchema.methods.deductBalance = function(
+  amount,
+  description = '消費',
+  relatedBooking = null,
+  relatedOrder = null,
+  relatedPosTransaction = null
+) {
   if (this.balance < amount) {
     throw new Error('餘額不足');
   }
@@ -74,12 +84,19 @@ userBalanceSchema.methods.deductBalance = function(amount, description = '消費
   };
   if (relatedBooking) entry.relatedBooking = relatedBooking;
   if (relatedOrder) entry.relatedOrder = relatedOrder;
+  if (relatedPosTransaction) entry.relatedPosTransaction = relatedPosTransaction;
   this.transactions.push(entry);
   return this.save();
 };
 
 // 退款
-userBalanceSchema.methods.refund = function(amount, description = '退款', relatedBooking = null, relatedOrder = null) {
+userBalanceSchema.methods.refund = function(
+  amount,
+  description = '退款',
+  relatedBooking = null,
+  relatedOrder = null,
+  relatedPosTransaction = null
+) {
   this.balance += amount;
   if (this.totalSpent > 0) {
     this.totalSpent = Math.max(0, this.totalSpent - amount);
@@ -91,6 +108,7 @@ userBalanceSchema.methods.refund = function(amount, description = '退款', rela
   };
   if (relatedBooking) entry.relatedBooking = relatedBooking;
   if (relatedOrder) entry.relatedOrder = relatedOrder;
+  if (relatedPosTransaction) entry.relatedPosTransaction = relatedPosTransaction;
   this.transactions.push(entry);
   return this.save();
 };
