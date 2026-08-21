@@ -87,7 +87,7 @@ const ROLE_MODULES: Record<string, Set<string> | null> = {
 export function defaultModulesForRole(role: StoreMembershipRole | null | undefined): string[] | null {
   if (!role || role === 'platform' || role === 'manager') return null;
   const set = ROLE_MODULES[role];
-  return set ? [...set] : null;
+  return set ? Array.from(set) : null;
 }
 
 /**
@@ -102,7 +102,7 @@ export function resolveModules(
   if (role === 'platform' || role === 'manager') return null;
   if (Array.isArray(customModules) && customModules.length > 0) {
     const allowed = new Set(MODULE_CATALOG.map((m) => m.key));
-    return [...new Set(customModules.filter((k) => allowed.has(k)))];
+    return Array.from(new Set(customModules.filter((k) => allowed.has(k))));
   }
   return defaultModulesForRole(role);
 }

@@ -11,7 +11,6 @@ import {
   storeRoleLabel,
 } from '../utils/authRedirect';
 import { canAccessStoreTab } from '../utils/storeAdminPermissions';
-import { getMembershipModulesForStore } from '../utils/authRedirect';
 
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
