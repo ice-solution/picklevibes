@@ -8,7 +8,8 @@ import {
   PlusIcon,
   XMarkIcon,
   PhotoIcon,
-  PowerIcon
+  PowerIcon,
+  Bars3Icon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import api from '../../services/api';
@@ -27,15 +28,172 @@ import {
 interface ColorOptionForm {
   name: string;
   hex: string;
-  existingImages: string[];
-  newFiles: File[];
+  images: GalleryImage[];
+}
+
+type GalleryImage =
+  | { id: string; kind: 'existing'; path: string }
+  | { id: string; kind: 'new'; file: File; preview: string };
+
+type ImageManifestEntry =
+  | { type: 'existing'; path: string }
+  | { type: 'new'; index: number };
+
+function galleryFromPaths(paths: string[]): GalleryImage[] {
+  return paths.map((path) => ({ id: `existing-${path}`, kind: 'existing', path }));
+}
+
+function appendFilesToGallery(items: GalleryImage[], files: File[]): GalleryImage[] {
+  const added: GalleryImage[] = files.map((file) => ({
+    id: `new-${file.name}-${file.size}-${file.lastModified}-${Math.random()}`,
+    kind: 'new',
+    file,
+    preview: URL.createObjectURL(file),
+  }));
+  return [...items, ...added];
+}
+
+function buildManifestAndFiles(items: GalleryImage[]): {
+  manifest: ImageManifestEntry[];
+  files: File[];
+} {
+  const files: File[] = [];
+  const manifest: ImageManifestEntry[] = [];
+  items.forEach((item) => {
+    if (item.kind === 'existing') {
+      manifest.push({ type: 'existing', path: item.path });
+    } else {
+      manifest.push({ type: 'new', index: files.length });
+      files.push(item.file);
+    }
+  });
+  return { manifest, files };
+}
+
+function reorderArray<T>(arr: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= arr.length || to >= arr.length) {
+    return arr;
+  }
+  const next = [...arr];
+  const [removed] = next.splice(from, 1);
+  next.splice(to, 0, removed);
+  return next;
+}
+
+function revokeGalleryPreviews(items: GalleryImage[]) {
+  items.forEach((item) => {
+    if (item.kind === 'new' && item.preview.startsWith('blob:')) {
+      URL.revokeObjectURL(item.preview);
+    }
+  });
+}
+
+function DraggableImageGallery({
+  items,
+  onChange,
+  getImageUrl,
+  inputId,
+}: {
+  items: GalleryImage[];
+  onChange: (items: GalleryImage[]) => void;
+  getImageUrl: (path: string) => string;
+  inputId: string;
+}) {
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  const move = (from: number, to: number) => {
+    onChange(reorderArray(items, from, to));
+  };
+
+  const removeAt = (index: number) => {
+    const item = items[index];
+    if (item?.kind === 'new' && item.preview.startsWith('blob:')) {
+      URL.revokeObjectURL(item.preview);
+    }
+    onChange(items.filter((_, i) => i !== index));
+  };
+
+  const handleDrop = (targetIndex: number) => {
+    if (dragIndex == null) return;
+    move(dragIndex, targetIndex);
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.length > 0 ? (
+        <div className="flex flex-wrap gap-2">
+          {items.map((item, index) => (
+            <div
+              key={item.id}
+              draggable
+              onDragStart={() => setDragIndex(index)}
+              onDragEnd={() => {
+                setDragIndex(null);
+                setOverIndex(null);
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setOverIndex(index);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                handleDrop(index);
+              }}
+              className={`relative w-20 h-20 rounded-lg border-2 overflow-hidden bg-gray-50 cursor-grab active:cursor-grabbing ${
+                dragIndex === index ? 'opacity-50 border-primary-400' : 'border-gray-200'
+              } ${overIndex === index && dragIndex !== index ? 'ring-2 ring-primary-400 ring-offset-1' : ''}`}
+              title="拖曳以調整順序"
+            >
+              <img
+                src={item.kind === 'existing' ? getImageUrl(item.path) : item.preview}
+                alt=""
+                className="w-full h-full object-cover pointer-events-none"
+                draggable={false}
+              />
+              <span className="absolute top-0.5 left-0.5 min-w-[1.25rem] h-5 px-1 rounded bg-black/60 text-white text-[10px] font-medium flex items-center justify-center">
+                {index + 1}
+              </span>
+              <span className="absolute bottom-0.5 left-0.5 p-0.5 rounded bg-black/50 text-white">
+                <Bars3Icon className="w-3 h-3" />
+              </span>
+              <button
+                type="button"
+                onClick={() => removeAt(index)}
+                className="absolute top-0.5 right-0.5 p-0.5 rounded-full bg-black/60 text-white hover:bg-red-600"
+                title="移除"
+              >
+                <XMarkIcon className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500">尚未上傳圖片</p>
+      )}
+      <p className="text-[10px] text-gray-500">拖曳圖片可調整顯示順序（第 1 張為主圖）</p>
+      <input
+        id={inputId}
+        type="file"
+        multiple
+        accept="image/*"
+        onChange={(e) => {
+          const files = Array.from(e.target.files || []);
+          if (files.length) onChange(appendFilesToGallery(items, files));
+          e.target.value = '';
+        }}
+        className="w-full text-xs"
+      />
+    </div>
+  );
 }
 
 const emptyColorOption = (): ColorOptionForm => ({
   name: '',
   hex: '#cccccc',
-  existingImages: [],
-  newFiles: []
+  images: [],
 });
 
 interface Product {
@@ -96,7 +254,7 @@ const ShopManagement: React.FC = () => {
   const [showProductModal, setShowProductModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [productFormData, setProductFormData] = useState(emptyProductForm);
-  const [productImages, setProductImages] = useState<File[]>([]);
+  const [productGallery, setProductGallery] = useState<GalleryImage[]>([]);
   const [productErrors, setProductErrors] = useState<{[key: string]: string}>({});
 
   // 分類相關狀態
@@ -243,13 +401,13 @@ const ShopManagement: React.FC = () => {
           alert('請為每個顏色填寫名稱');
           return;
         }
-        const totalImages = opt.existingImages.length + opt.newFiles.length;
-        if (!editingProduct && totalImages === 0) {
+        const totalImages = opt.images.length;
+        if (totalImages === 0) {
           alert(`顏色「${opt.name}」請至少上傳一張圖片`);
           return;
         }
       }
-    } else if (!editingProduct && productImages.length === 0) {
+    } else if (productGallery.length === 0) {
       alert('請上傳至少一張產品圖片');
       return;
     }
@@ -291,27 +449,35 @@ const ShopManagement: React.FC = () => {
       formDataToSend.append(
         'colorOptions',
         JSON.stringify(
-          productFormData.colorOptions.map((opt) => ({
-            name: opt.name.trim(),
-            hex: normalizeHex(opt.hex),
-            images: opt.existingImages
-          }))
+          productFormData.colorOptions.map((opt) => {
+            const { manifest } = buildManifestAndFiles(opt.images);
+            return {
+              name: opt.name.trim(),
+              hex: normalizeHex(opt.hex),
+              images: opt.images.flatMap((item) =>
+                item.kind === 'existing' ? [item.path] : []
+              ),
+              imageManifest: manifest,
+            };
+          })
         )
       );
       productFormData.colorOptions.forEach((opt, index) => {
-        opt.newFiles.forEach((file) => {
+        const { files } = buildManifestAndFiles(opt.images);
+        files.forEach((file) => {
           formDataToSend.append(`colorImages_${index}`, file);
         });
       });
     } else {
-      productImages.forEach((image) => {
+      const { manifest, files } = buildManifestAndFiles(productGallery);
+      formDataToSend.append('imageManifest', JSON.stringify(manifest));
+      files.forEach((image) => {
         formDataToSend.append('images', image);
       });
     }
 
     try {
       if (editingProduct) {
-        formDataToSend.append('replaceImages', 'true');
         await axios.put(`/products/${editingProduct._id}`, formDataToSend, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
@@ -324,7 +490,8 @@ const ShopManagement: React.FC = () => {
       setShowProductModal(false);
       setEditingProduct(null);
       setProductFormData(emptyProductForm());
-      setProductImages([]);
+      revokeGalleryPreviews(productGallery);
+      setProductGallery([]);
       setProductErrors({});
       fetchData();
     } catch (error: any) {
@@ -360,12 +527,11 @@ const ShopManagement: React.FC = () => {
       colorOptions: (product.colorOptions || []).map((o) => ({
         name: o.name,
         hex: normalizeHex(o.hex),
-        existingImages: o.images || [],
-        newFiles: []
+        images: galleryFromPaths(o.images || []),
       })),
       variantSizeInput: ''
     });
-    setProductImages([]);
+    setProductGallery(galleryFromPaths(product.images || []));
     setShowProductModal(true);
   };
 
@@ -405,7 +571,9 @@ const ShopManagement: React.FC = () => {
     const colorOptsForBuild: ColorOption[] = productFormData.colorOptions.map((o) => ({
       name: o.name.trim(),
       hex: normalizeHex(o.hex),
-      images: [...o.existingImages]
+      images: o.images.flatMap((item) =>
+        item.kind === 'existing' ? [item.path] : []
+      ),
     }));
     const rows = buildVariantRows(
       productFormData.variantMode,
@@ -429,6 +597,16 @@ const ShopManagement: React.FC = () => {
     } catch (error: any) {
       alert(error.response?.data?.message || '刪除失敗');
     }
+  };
+
+  const closeProductModal = () => {
+    revokeGalleryPreviews(productGallery);
+    productFormData.colorOptions.forEach((opt) => revokeGalleryPreviews(opt.images));
+    setShowProductModal(false);
+    setEditingProduct(null);
+    setProductGallery([]);
+    setProductFormData(emptyProductForm());
+    setProductErrors({});
   };
 
   const handleShopToggle = async () => {
@@ -529,7 +707,7 @@ const ShopManagement: React.FC = () => {
                   onClick={() => {
                     setEditingProduct(null);
                     setProductFormData(emptyProductForm());
-                    setProductImages([]);
+                    setProductGallery([]);
                     setShowProductModal(true);
                   }}
                   className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700"
@@ -689,7 +867,7 @@ const ShopManagement: React.FC = () => {
               <h3 className="text-xl font-bold">
                 {editingProduct ? '編輯產品' : '新增產品'}
               </h3>
-              <button onClick={() => { setShowProductModal(false); setEditingProduct(null); setProductImages([]); }}>
+              <button type="button" onClick={closeProductModal}>
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
@@ -831,28 +1009,14 @@ const ShopManagement: React.FC = () => {
                               className="w-full px-3 py-2 border rounded-lg text-sm"
                             />
                           </div>
-                          {opt.existingImages.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {opt.existingImages.map((img, imgIdx) => (
-                                <div key={imgIdx} className="relative w-14 h-14 rounded border overflow-hidden">
-                                  <img src={getImageUrl(img)} alt="" className="w-full h-full object-cover" />
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          <input
-                            type="file"
-                            multiple
-                            accept="image/*"
-                            onChange={(e) => updateColorOption(index, {
-                              newFiles: Array.from(e.target.files || [])
-                            })}
-                            className="w-full text-xs"
+                          <DraggableImageGallery
+                            items={opt.images}
+                            onChange={(images) => updateColorOption(index, { images })}
+                            getImageUrl={getImageUrl}
+                            inputId={`color-images-${index}`}
                           />
                           <p className="text-[10px] text-gray-500">
-                            {opt.newFiles.length > 0
-                              ? `已選 ${opt.newFiles.length} 張新圖`
-                              : '每個顏色至少一張圖片（新商品必傳；編輯可保留現有圖）'}
+                            每個顏色至少一張圖片（新商品必傳；編輯可保留現有圖）
                           </p>
                         </div>
                       ))}
@@ -972,12 +1136,11 @@ const ShopManagement: React.FC = () => {
               {!usesColorMode(productFormData.variantMode) ? (
                 <div>
                   <label className="block text-sm font-medium mb-1">產品圖片 *</label>
-                  <input
-                    type="file"
-                    multiple
-                    accept="image/*"
-                    onChange={(e) => setProductImages(Array.from(e.target.files || []))}
-                    className="w-full px-3 py-2 border rounded-lg"
+                  <DraggableImageGallery
+                    items={productGallery}
+                    onChange={setProductGallery}
+                    getImageUrl={getImageUrl}
+                    inputId="product-images"
                   />
                 </div>
               ) : (
@@ -988,7 +1151,7 @@ const ShopManagement: React.FC = () => {
               <div className="flex justify-end space-x-3">
                 <button
                   type="button"
-                  onClick={() => { setShowProductModal(false); setEditingProduct(null); setProductImages([]); }}
+                  onClick={closeProductModal}
                   className="px-4 py-2 border rounded-lg"
                 >
                   取消

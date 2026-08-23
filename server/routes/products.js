@@ -36,13 +36,59 @@ function groupUploadedFiles(files = []) {
   return { mainImages, colorImagesByIndex };
 }
 
+function parseImageManifest(raw) {
+  if (raw == null || raw === '') return null;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function buildImagesFromManifest(manifest, uploadedPaths = []) {
+  if (!Array.isArray(manifest)) return null;
+  const result = [];
+  for (const entry of manifest) {
+    if (!entry || typeof entry !== 'object') continue;
+    if (entry.type === 'existing' && entry.path) {
+      result.push(String(entry.path));
+    } else if (entry.type === 'new') {
+      const idx = Number(entry.index);
+      if (Number.isInteger(idx) && uploadedPaths[idx]) {
+        result.push(uploadedPaths[idx]);
+      }
+    }
+  }
+  return result;
+}
+
+function deleteRemovedImages(previousPaths, nextPaths) {
+  const keep = new Set(nextPaths || []);
+  (previousPaths || []).forEach((imagePath) => {
+    if (!keep.has(imagePath)) {
+      deleteFile(path.join(__dirname, '../../uploads', imagePath));
+    }
+  });
+}
+
+function stripImageManifestFromColorOptions(colorOptions = []) {
+  return colorOptions.map(({ imageManifest, ...opt }) => opt);
+}
+
 function mergeColorOptionsWithUploads(colorOptions, colorImagesByIndex, { replace = false } = {}) {
   return (colorOptions || []).map((opt, index) => {
     const uploaded = colorImagesByIndex[index] || [];
-    const kept = replace ? (opt.images || []) : (opt.images || []);
+    const manifest = parseImageManifest(opt.imageManifest);
+    if (manifest) {
+      const images = buildImagesFromManifest(manifest, uploaded) || [];
+      const { imageManifest, ...rest } = opt;
+      return { ...rest, images };
+    }
+    const kept = opt.images || [];
     return {
       ...opt,
-      images: [...kept, ...uploaded],
+      images: replace ? [...kept, ...uploaded] : [...kept, ...uploaded],
     };
   });
 }
@@ -269,9 +315,16 @@ router.post('/', [
     }
 
     const needsColor = ['color', 'color_size'].includes(variantApply.productFields.variantMode);
-    const images = needsColor
-      ? getPrimaryProductImages({ colorOptions: variantApply.productFields.colorOptions, images: mainImages })
+    const manifestMain = parseImageManifest(req.body.imageManifest);
+    const resolvedMain = manifestMain
+      ? buildImagesFromManifest(manifestMain, mainImages)
       : mainImages;
+    const images = needsColor
+      ? getPrimaryProductImages({
+          colorOptions: stripImageManifestFromColorOptions(variantApply.productFields.colorOptions),
+          images: resolvedMain,
+        })
+      : resolvedMain;
 
     if (!images.length) {
       if (req.files?.length) req.files.forEach((file) => deleteFile(file.path));
@@ -292,7 +345,7 @@ router.post('/', [
       sortOrder: req.body.sortOrder ? parseInt(req.body.sortOrder) : 0,
       variantMode: variantApply.productFields.variantMode,
       variants: variantApply.productFields.variants,
-      colorOptions: variantApply.productFields.colorOptions,
+      colorOptions: stripImageManifestFromColorOptions(variantApply.productFields.colorOptions),
       isClothing: variantApply.productFields.isClothing
     };
 
@@ -439,7 +492,11 @@ router.put('/:id', [
       }
       updateData.variantMode = variantApply.productFields.variantMode;
       updateData.variants = variantApply.productFields.variants;
-      updateData.colorOptions = variantApply.productFields.colorOptions;
+      updateData.colorOptions = stripImageManifestFromColorOptions(variantApply.productFields.colorOptions);
+      const oldColorPaths = [];
+      (product.colorOptions || []).forEach((opt) => oldColorPaths.push(...(opt.images || [])));
+      const newColorPaths = (updateData.colorOptions || []).flatMap((opt) => opt.images || []);
+      deleteRemovedImages(oldColorPaths, newColorPaths);
       updateData.isClothing = variantApply.productFields.isClothing;
 
       const needsColor = ['color', 'color_size'].includes(variantApply.productFields.variantMode);
@@ -453,7 +510,12 @@ router.put('/:id', [
       updateData.isClothing = updateData.isClothing === true || updateData.isClothing === 'true';
     }
 
-    if (mainImages.length > 0) {
+    const manifestMain = parseImageManifest(req.body.imageManifest);
+    if (manifestMain) {
+      const finalImages = buildImagesFromManifest(manifestMain, mainImages) || [];
+      deleteRemovedImages(product.images || [], finalImages);
+      updateData.images = finalImages;
+    } else if (mainImages.length > 0) {
       if (req.body.replaceImages === 'true') {
         product.images.forEach((imagePath) => {
           deleteFile(path.join(__dirname, '../../uploads', imagePath));
