@@ -309,12 +309,12 @@ const Shop: React.FC = () => {
                     <Link to={`/shop/${product._id}`}>
                       <motion.div
                         whileHover={{ scale: 1.02 }}
-                        className="relative aspect-square overflow-hidden bg-gray-100"
+                        className="relative aspect-[3/4] overflow-hidden bg-gray-50"
                       >
                         <img
                           src={getImageUrl(product.images[0])}
                           alt={product.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                         {product.discountPrice && (
                           <span className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded text-sm font-semibold">

@@ -183,7 +183,7 @@ const Cart: React.FC = () => {
                         <img
                           src={getImageUrl(item.image)}
                           alt={item.name}
-                          className="w-24 h-24 object-cover rounded-lg mr-4"
+                          className="w-24 aspect-[3/4] object-contain rounded-lg mr-4 bg-gray-50"
                         />
                         <div className="flex-1">
                           <h3 className="font-semibold text-lg mb-1">{item.name}</h3>

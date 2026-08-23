@@ -288,25 +288,27 @@ const ProductDetail: React.FC = () => {
           <div className="bg-white rounded-lg shadow-md overflow-hidden">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8">
               <div>
-                <img
-                  src={getImageUrl(displayImages[selectedImageIndex] || product.images[0])}
-                  alt={product.name}
-                  className="w-full h-96 object-cover rounded-lg"
-                />
+                <div className="rounded-lg bg-gray-50 border border-gray-100 overflow-hidden flex items-center justify-center min-h-[320px] max-h-[min(70vh,720px)]">
+                  <img
+                    src={getImageUrl(displayImages[selectedImageIndex] || product.images[0])}
+                    alt={product.name}
+                    className="w-full h-full max-h-[min(70vh,720px)] object-contain"
+                  />
+                </div>
                 {displayImages.length > 1 && (
-                  <div className="flex gap-2 mt-4 overflow-x-auto">
+                  <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
                     {displayImages.map((img, index) => (
                       <button
                         key={index}
                         onClick={() => setSelectedImageIndex(index)}
-                        className={`flex-shrink-0 w-20 h-20 rounded-lg overflow-hidden border-2 ${
-                          selectedImageIndex === index ? 'border-primary-600' : 'border-transparent'
+                        className={`flex-shrink-0 w-16 aspect-[3/4] rounded-lg overflow-hidden border-2 bg-gray-50 ${
+                          selectedImageIndex === index ? 'border-primary-600' : 'border-gray-200'
                         }`}
                       >
                         <img
                           src={getImageUrl(img)}
                           alt=""
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                       </button>
                     ))}
