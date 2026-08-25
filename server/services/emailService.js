@@ -153,18 +153,34 @@ class EmailService {
   }
 
   /**
-   * 加載 Logo
+   * 加載 Logo（預設 PickCourt；見 server/utils/emailBrand.js）
    */
   async loadLogo() {
     try {
-      const logoPath = path.join(__dirname, '../../uploads/static/logo192.png');
-      const logoBuffer = await fs.readFile(logoPath);
-      this.logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
-      console.log('✅ Logo 加載成功');
+      const brand = getEmailBrand();
+      const logoBuffer = await fs.readFile(brand.logoPath);
+      this.logoBase64 = `data:${brand.logoMime};base64,${logoBuffer.toString('base64')}`;
+      console.log('✅ Logo 加載成功:', brand.logoPath);
     } catch (error) {
       console.error('❌ Logo 加載失敗:', error.message);
       this.logoBase64 = null;
     }
+  }
+
+  /** 建立 inline logo 附件（cid:logo） */
+  buildLogoAttachment() {
+    if (!this.logoBase64) return null;
+    const brand = getEmailBrand();
+    const prefix = `data:${brand.logoMime};base64,`;
+    const content = this.logoBase64.startsWith(prefix)
+      ? this.logoBase64.slice(prefix.length)
+      : this.logoBase64.replace(/^data:image\/[^;]+;base64,/, '');
+    return {
+      filename: brand.logoFilename || 'pickcourt_logo.jpg',
+      content,
+      encoding: 'base64',
+      cid: 'logo',
+    };
   }
 
   /**
@@ -684,16 +700,9 @@ class EmailService {
       // 準備附件
       const attachments = [];
       
-      // 添加 Logo 作為附件
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo' // Content ID for referencing in HTML
-        });
-      }
-      
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
+
       // 添加二維碼作為附件
       if (qrCodeData) {
         attachments.push({
@@ -797,14 +806,8 @@ class EmailService {
         store
       );
       const attachments = [];
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo',
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
       const mailOptions = {
         from: getEmailBrand().fromHeader,
         to: visitorData.email,
@@ -826,6 +829,7 @@ class EmailService {
    * 生成歡迎郵件模板
    */
   async generateWelcomeEmailTemplate(userData) {
+    await this.ensureLogoLoaded();
     const { name, email, password, role, membershipLevel, membershipExpiry } = userData;
     const brand = getEmailBrand();
     
@@ -865,19 +869,10 @@ class EmailService {
                 margin-bottom: 30px;
             }
             .logo {
-                width: 80px;
-                height: 80px;
-                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                border-radius: 20px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                margin-bottom: 20px;
-            }
-            .logo-text {
-                color: white;
-                font-size: 32px;
-                font-weight: bold;
+                max-width: 120px;
+                height: auto;
+                display: block;
+                margin: 0 auto 20px;
             }
             .title {
                 color: #2d3748;
@@ -986,9 +981,7 @@ class EmailService {
     <body>
         <div class="container">
             <div class="header">
-                <div class="logo">
-                    <span class="logo-text">P</span>
-                </div>
+                ${this.logoBase64 ? `<img src="cid:logo" alt="${brand.name} Logo" class="logo">` : `<h1 class="title">${brand.name}</h1>`}
                 <h1 class="title">歡迎加入 ${brand.name}！</h1>
                 <p class="subtitle">您的帳戶已成功創建</p>
             </div>
@@ -1144,15 +1137,8 @@ ${brand.name} - 聯盟場地隨時預約！
       // 準備附件
       const attachments = [];
       
-      // 添加 Logo 作為附件
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo' // Content ID for referencing in HTML
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
       
       const mailOptions = {
         from: `"${getEmailBrand().fromName}" <${process.env.GMAIL_USER}>`,
@@ -1198,15 +1184,8 @@ ${brand.name} - 聯盟場地隨時預約！
       // 準備附件
       const attachments = [];
       
-      // 添加 Logo 作為附件
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo' // Content ID for referencing in HTML
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
       
       const mailOptions = {
         from: getEmailBrand().fromHeader,
@@ -1640,14 +1619,8 @@ ${getEmailBrand().teamName}
       const attachments = [];
       let activityImageCid = null;
 
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo'
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
 
       if (activityData.poster) {
         const posterCid = `activity-banner-${registrationData?._id || Date.now()}`;
@@ -1694,14 +1667,8 @@ ${getEmailBrand().teamName}
       await this.ensureLogoLoaded();
 
       const attachments = [];
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo'
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
 
       let activityImageCid = null;
       if (activityData.poster) {
@@ -1787,15 +1754,8 @@ ${getEmailBrand().teamName}
         contentType: 'application/pdf'
       });
       
-      // 添加 Logo 作為附件 (用於 PDF 中的顯示)
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo' // Content ID for referencing in PDF
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
       
       // 創建簡單的電郵內容
       const currentDate = new Date().toLocaleDateString('zh-TW', {
@@ -2028,14 +1988,8 @@ ${getEmailBrand().teamName}
       `;
 
       const attachments = [];
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo'
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
 
       const mailOptions = {
         from: getEmailBrand().fromHeader,
@@ -2241,14 +2195,8 @@ ${getEmailBrand().teamName}
       `;
 
       const attachments = [];
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo'
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
 
       const mailOptions = {
         from: getEmailBrand().fromHeader,
@@ -2351,14 +2299,8 @@ ${getEmailBrand().teamName}
       `;
 
       const attachments = [];
-      if (this.logoBase64) {
-        attachments.push({
-          filename: 'picklevibes-logo.png',
-          content: this.logoBase64.replace('data:image/png;base64,', ''),
-          encoding: 'base64',
-          cid: 'logo'
-        });
-      }
+      const logoAttachment = this.buildLogoAttachment();
+      if (logoAttachment) attachments.push(logoAttachment);
 
       const mailOptions = {
         from: getEmailBrand().fromHeader,

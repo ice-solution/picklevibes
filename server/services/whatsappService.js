@@ -1,27 +1,32 @@
-const twilio = require('twilio');
+let twilio = null;
+try {
+  twilio = require('twilio');
+} catch (err) {
+  console.warn('⚠️ Twilio 套件未安裝，已略過（預約通知請用 OpenWA／Meta）');
+}
 
 class WhatsAppService {
   constructor() {
-    // 檢查必要的環境變量
-    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-      console.error('❌ Twilio 環境變量未設置：');
-      console.error('TWILIO_ACCOUNT_SID:', process.env.TWILIO_ACCOUNT_SID ? '已設置' : '未設置');
-      console.error('TWILIO_AUTH_TOKEN:', process.env.TWILIO_AUTH_TOKEN ? '已設置' : '未設置');
-      this.client = null;
-    } else {
-      this.client = twilio(
-        process.env.TWILIO_ACCOUNT_SID,
-        process.env.TWILIO_AUTH_TOKEN
-      );
-      console.log('✅ Twilio 客戶端初始化成功');
-    }
-    // WhatsApp Sandbox 默認號碼
+    this.client = null;
     this.fromNumber = process.env.TWILIO_WHATSAPP_FROM || 'whatsapp:+14155238886';
-    
-    // 檢查 From 號碼格式
     if (!this.fromNumber.startsWith('whatsapp:')) {
       this.fromNumber = `whatsapp:${this.fromNumber}`;
     }
+
+    if (!twilio) {
+      return;
+    }
+
+    if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
+      console.warn('⚠️ Twilio 環境變量未設置，legacy WhatsApp fallback 停用');
+      return;
+    }
+
+    this.client = twilio(
+      process.env.TWILIO_ACCOUNT_SID,
+      process.env.TWILIO_AUTH_TOKEN
+    );
+    console.log('✅ Twilio 客戶端初始化成功');
   }
 
   /**
@@ -202,4 +207,5 @@ class WhatsAppService {
   }
 }
 
-module.exports = WhatsAppService;
+module.exports = new WhatsAppService();
+module.exports.WhatsAppService = WhatsAppService;
