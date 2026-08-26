@@ -72,7 +72,14 @@ const AssignRedeemPocketModal: React.FC<AssignRedeemPocketModalProps> = ({
         userIds: selectedUsers.map((u) => u._id),
         note,
       });
-      alert(res.data.message || '派發成功');
+      const names = selectedUsers.map((u) => u.name).join('、');
+      alert(
+        [
+          res.data.message || '派發成功',
+          `已放入以下用戶的「我的兌換券」口袋：${names}`,
+          '用戶可於導覽選單 → 我的兌換券 查看。',
+        ].join('\n')
+      );
       setSelectedUsers([]);
       setNote('');
       const holdersRes = await axios.get(`/redeem/admin/${redeemCode._id}/pocket-holders`);

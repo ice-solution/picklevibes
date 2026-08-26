@@ -114,7 +114,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   const [showFullVenueConfirm, setShowFullVenueConfirm] = useState(false);
   const [fullVenueStep, setFullVenueStep] = useState('price'); // 'price', 'confirm', 'points'
   const [fullVenueDeduction, setFullVenueDeduction] = useState(0);
-  
+  /** 包場要 hold 的場地（預設全選） */
+  const [fullVenueCourtIds, setFullVenueCourtIds] = useState<string[]>([]);
 
   // 數據選項
   const [stores, setStores] = useState<{ _id: string; name: string; slug?: string; isActive?: boolean; fullVenueHourlyRate?: number }[]>([]);
@@ -123,6 +124,10 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
 
   const selectedStore = stores.find((s) => s._id === storeId);
   const fullVenueEnabled = isFullVenueEnabledForStoreSlug(selectedStore?.slug);
+  const fullVenueCourts = courts.filter((c) => c.type !== 'full_venue');
+  const allFullVenueSelected =
+    fullVenueCourts.length > 0 &&
+    fullVenueCourts.every((c) => fullVenueCourtIds.includes(c._id));
 
   const calcBookingHours = (startTime: string, endTime: string) => {
     const toMin = (t: string) => {
@@ -198,10 +203,33 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   const fetchCourts = async (sid: string) => {
     try {
       const response = await axios.get(`/courts?all=true&store=${sid}`);
-      setCourts(response.data.courts || []);
+      const list: Court[] = response.data.courts || [];
+      setCourts(list);
+      // 切換店鋪時預設全選可包場場地
+      setFullVenueCourtIds(
+        list.filter((c) => c.type !== 'full_venue').map((c) => c._id)
+      );
     } catch (error) {
       console.error('載入場地失敗:', error);
     }
+  };
+
+  const toggleFullVenueCourt = (courtId: string) => {
+    setFullVenueCourtIds((prev) =>
+      prev.includes(courtId) ? prev.filter((id) => id !== courtId) : [...prev, courtId]
+    );
+    setConflictDetails([]);
+    setError(null);
+  };
+
+  const toggleSelectAllFullVenueCourts = () => {
+    if (allFullVenueSelected) {
+      setFullVenueCourtIds([]);
+    } else {
+      setFullVenueCourtIds(fullVenueCourts.map((c) => c._id));
+    }
+    setConflictDetails([]);
+    setError(null);
   };
 
 
@@ -221,12 +249,17 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       setError('請先選擇日期與時段');
       return false;
     }
+    if (fullVenueCourtIds.length === 0) {
+      setError('請至少勾選一個要 hold 的場地');
+      return false;
+    }
     try {
       const res = await axios.post('/full-venue/check-availability', {
         storeId,
         date: formData.date,
         startTime: formData.startTime,
-        endTime: formData.endTime
+        endTime: formData.endTime,
+        courtIds: fullVenueCourtIds,
       });
       const conflicts: BookingConflictDetail[] = res.data?.data?.conflicts || [];
       if (!res.data?.data?.available) {
@@ -292,6 +325,9 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       if (!storeId) {
         throw new Error('請先選擇店鋪');
       }
+      if (fullVenueCourtIds.length === 0) {
+        throw new Error('請至少勾選一個要 hold 的場地');
+      }
 
       // 包場扣款由 API 統一處理（含自訂議價；避免重複扣款）
       const hours = calcBookingHours(formData.startTime, formData.endTime);
@@ -310,7 +346,8 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         specialRequests: formData.specialRequests.trim() || undefined,
         userId: formData.userId, // 管理員為指定用戶創建
         pointsDeduction: fullVenueDeduction, // 傳遞積分扣除數量（可改店鋪預設）
-        bypassRestrictions: formData.bypassRestrictions
+        bypassRestrictions: formData.bypassRestrictions,
+        courtIds: fullVenueCourtIds,
       };
 
       console.log('🔍 創建包場預約:', fullVenueData);
@@ -318,13 +355,20 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       console.log('✅ 包場預約成功:', response.data);
       
       const createdBookings = response.data.data.bookings;
+      const heldNames: string[] = response.data.data.courtNames || [];
 
       setShowFullVenueConfirm(false);
       setFullVenueStep('price');
       onBookingCreated();
       onClose();
       
-      const successMessage = `包場預約創建成功！\n已創建 ${createdBookings.length} 個預約記錄。${fullVenueDeduction > 0 ? `\n已扣除 ${fullVenueDeduction} 積分。` : ''}`;
+      const successMessage = [
+        '包場預約創建成功！',
+        `已 hold ${createdBookings.length} 個場地${heldNames.length ? `：${heldNames.join('、')}` : ''}。`,
+        fullVenueDeduction > 0 ? `已扣除 ${fullVenueDeduction} 積分。` : '',
+      ]
+        .filter(Boolean)
+        .join('\n');
       alert(successMessage);
       
     } catch (error: any) {
@@ -356,6 +400,9 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
 
       if (formData.courtId === 'full_venue' && !fullVenueEnabled) {
         throw new Error('此店鋪暫不開放包場預約');
+      }
+      if (formData.courtId === 'full_venue' && fullVenueCourtIds.length === 0) {
+        throw new Error('請至少勾選一個要 hold 的場地');
       }
 
       // 如果選擇了包場，顯示確認對話框
@@ -522,7 +569,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                   </option>
                 ))}
               {fullVenueEnabled && (
-                <option value="full_venue">🏢 包場 (所有場地)</option>
+                <option value="full_venue">🏢 包場（可選場地）</option>
               )}
             </select>
             {storeId && !fullVenueEnabled && (
@@ -530,12 +577,65 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
             )}
             {storeId &&
               formData.courtId === 'full_venue' &&
-              courts.filter((c) => c.type !== 'full_venue').length === 0 && (
+              fullVenueCourts.length === 0 && (
               <p className="mt-1 text-xs text-red-600">
                 此店鋪目前沒有可包場的場地資料，請先在「場地管理」為該店建立／啟用場地。
               </p>
             )}
           </div>
+
+          {/* 包場：選擇要 hold 的場地 */}
+          {formData.courtId === 'full_venue' && fullVenueEnabled && fullVenueCourts.length > 0 && (
+            <div className="rounded-lg border border-indigo-200 bg-indigo-50/60 p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-indigo-900">要 hold 的場地 *</p>
+                  <p className="text-xs text-indigo-700/80 mt-0.5">
+                    已選 {fullVenueCourtIds.length}／{fullVenueCourts.length} 個場
+                  </p>
+                </div>
+                <label className="inline-flex items-center gap-2 text-sm text-indigo-900 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={allFullVenueSelected}
+                    onChange={toggleSelectAllFullVenueCourts}
+                    className="h-4 w-4 rounded border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  全選
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {fullVenueCourts.map((court) => {
+                  const checked = fullVenueCourtIds.includes(court._id);
+                  return (
+                    <label
+                      key={court._id}
+                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer ${
+                        checked
+                          ? 'border-indigo-400 bg-white text-indigo-950'
+                          : 'border-indigo-100 bg-white/50 text-gray-600'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleFullVenueCourt(court._id)}
+                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <span>
+                        {court.name}
+                        {court.number != null && court.number !== '' ? `（${court.number}號）` : ''}
+                        {court.isActive === false ? ' [停用]' : ''}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              {fullVenueCourtIds.length === 0 && (
+                <p className="text-xs text-red-600">請至少勾選一個場地</p>
+              )}
+            </div>
+          )}
 
           {/* 日期選擇 */}
           <div>
@@ -777,7 +877,13 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                       </div>
                       
                       <p className="text-sm text-gray-500 mb-4">
-                        包場將同時 hold 店鋪內所有場地（含停用），該時段不可再被預約
+                        將 hold 已選 {fullVenueCourtIds.length} 個場地，該時段不可再被預約
+                      </p>
+                      <p className="text-xs text-gray-600 mb-2 text-left">
+                        {fullVenueCourts
+                          .filter((c) => fullVenueCourtIds.includes(c._id))
+                          .map((c) => c.name)
+                          .join('、') || '（未選場地）'}
                       </p>
                     </div>
                   )}
@@ -788,10 +894,16 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                         確認包場
                       </h3>
                       <p className="text-sm text-gray-500 mb-4">
-                        您確定要包場嗎？這將為該店所有場地建立預約。
+                        確定為以下 {fullVenueCourtIds.length} 個場地建立包場預約？
                       </p>
-                      <p className="text-xs text-gray-600 mb-4">
+                      <p className="text-xs text-gray-600 mb-2">
                         {formData.date} {formData.startTime}–{formData.endTime}
+                      </p>
+                      <p className="text-xs text-gray-700 mb-4 text-left">
+                        {fullVenueCourts
+                          .filter((c) => fullVenueCourtIds.includes(c._id))
+                          .map((c) => c.name)
+                          .join('、')}
                       </p>
                     </div>
                   )}

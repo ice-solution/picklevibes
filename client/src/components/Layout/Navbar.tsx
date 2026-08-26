@@ -25,7 +25,6 @@ import {
   ShoppingBagIcon,
   TagIcon,
   ShoppingCartIcon,
-  ChatBubbleLeftRightIcon,
   TicketIcon,
 } from '@heroicons/react/24/outline';
 
@@ -146,11 +145,7 @@ const Navbar: React.FC = () => {
           </Link>
           <Link to="/coach-courses" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
             <AcademicCapIcon className="w-4 h-4" />
-            <span>我的課程預約</span>
-          </Link>
-          <Link to="/coach/school-request" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-            <ChatBubbleLeftRightIcon className="w-4 h-4" />
-            <span>教練學校要請</span>
+            <span>我的課堂</span>
           </Link>
         </>
       )}

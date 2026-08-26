@@ -70,7 +70,9 @@ function buildConflictError(conflictCheck) {
   return err;
 }
 
-/** 包場 = 店鋪內所有可預約場地（不限類型；排除 full_venue 虛擬類型） */
+/** 包場 = 店鋪內可預約場地（不限類型；排除 full_venue 虛擬類型）
+ *  options.courtIds：若提供非空陣列，只 hold 指定場地
+ */
 async function resolveStoreCourtsForFullVenue(storeId, options = {}) {
   if (!storeId) {
     throw new Error('請選擇店鋪');
@@ -82,6 +84,14 @@ async function resolveStoreCourtsForFullVenue(storeId, options = {}) {
   if (!options.includeInactive) {
     courtQuery.isActive = true;
   }
+
+  const requestedIds = Array.isArray(options.courtIds)
+    ? [...new Set(options.courtIds.map((id) => String(id)).filter(Boolean))]
+    : [];
+  if (requestedIds.length) {
+    courtQuery._id = { $in: requestedIds };
+  }
+
   // includeInactive: true（後台包場）→ 含停用／未 public 場地
   const courts = await Court.find(courtQuery).sort({ number: 1, name: 1 });
   if (!courts.length) {
@@ -89,9 +99,18 @@ async function resolveStoreCourtsForFullVenue(storeId, options = {}) {
     const store = await Store.findById(storeId).select('name slug isActive').lean();
     const storeLabel = store?.name || String(storeId);
     throw new Error(
-      `此店鋪沒有可包場的場地（${storeLabel} 尚未建立任何場地資料）。請先在「場地管理」為該店建立場地並綁定此店鋪。`
+      requestedIds.length
+        ? '找不到所選場地，或場地不屬於此店鋪。請重新選擇要 hold 的場地。'
+        : `此店鋪沒有可包場的場地（${storeLabel} 尚未建立任何場地資料）。請先在「場地管理」為該店建立場地並綁定此店鋪。`
     );
   }
+
+  if (requestedIds.length && courts.length !== requestedIds.length) {
+    const found = new Set(courts.map((c) => String(c._id)));
+    const missing = requestedIds.filter((id) => !found.has(id));
+    throw new Error(`部分場地無效或不屬於此店：${missing.join(', ')}`);
+  }
+
   return courts;
 }
 
@@ -349,6 +368,7 @@ class FullVenueService {
         bookings: savedBookings,
         totalPrice: chargeTotal,
         listTotalPrice,
+        courtNames: courts.map((c) => c.name),
         message: `包場預約創建成功，共 ${savedBookings.length} 個場地，總價 ${chargeTotal} 積分`
       };
 

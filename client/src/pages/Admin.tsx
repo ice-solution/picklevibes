@@ -21,7 +21,7 @@ import ShopManagement from '../components/Admin/ShopManagement';
 import OrderManagement from '../components/Admin/OrderManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import ReportManagement from '../components/Admin/ReportManagement';
-import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
+import CoachAdminHub from '../components/Admin/CoachAdminHub';
 import TierManagement from '../components/Admin/TierManagement';
 import VlogManagement from '../components/Admin/VlogManagement';
 import HotNewsManagement from '../components/Admin/HotNewsManagement';
@@ -46,7 +46,7 @@ import {
   TagIcon,
   Cog6ToothIcon,
   DocumentChartBarIcon,
-  ChatBubbleLeftRightIcon,
+  AcademicCapIcon,
   EnvelopeIcon,
 } from '@heroicons/react/24/outline';
 
@@ -77,7 +77,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'coach-requests', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'game-leaderboard', 'edm', 'redeem', 'stores', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'coaches', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'game-leaderboard', 'edm', 'redeem', 'stores', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -122,7 +122,7 @@ const Admin: React.FC = () => {
   const tabs = [
     { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon },
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon },
-    { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon },
+    { id: 'coaches', name: '教練管理', icon: AcademicCapIcon },
     { id: 'users', name: '用戶管理', icon: UsersIcon },
     { id: 'tiers', name: 'Tier 管理', icon: TagIcon },
     { id: 'vlogs', name: 'Vlog 管理', icon: DocumentChartBarIcon },
@@ -286,13 +286,13 @@ const Admin: React.FC = () => {
               </motion.div>
             )}
 
-            {activeTab === 'coach-requests' && (
+            {activeTab === 'coaches' && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3 }}
               >
-                <CoachScheduleRequestManagement />
+                <CoachAdminHub />
               </motion.div>
             )}
 

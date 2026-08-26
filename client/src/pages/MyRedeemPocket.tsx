@@ -74,10 +74,31 @@ const MyRedeemPocket: React.FC = () => {
     setClaiming(true);
     try {
       const res = await axios.post('/redeem/pocket/claim', { code: claimCode.trim() });
-      alert(res.data.message || '已入袋');
+      const item = res.data?.item;
+      const rc = item?.redeemCode;
+      const types = (rc?.applicableTypes || [])
+        .map((t: string) => TYPE_LABEL[t] || t)
+        .join('、');
+      const whereHint = types
+        ? `可用於：${types}`
+        : '可於預約／購物結帳時選用';
+      alert(
+        [
+          res.data.message || '已放入兌換券口袋',
+          rc?.name ? `券名：${rc.name}` : '',
+          rc?.code ? `兌換碼：${rc.code}` : '',
+          '位置：帳戶「我的兌換券」口袋（全站共用，唔綁定單一店鋪）',
+          whereHint,
+        ]
+          .filter(Boolean)
+          .join('\n')
+      );
       setClaimCode('');
-      setFilter('all');
-      await fetchPocket();
+      if (filter !== 'all') {
+        setFilter('all');
+      } else {
+        await fetchPocket();
+      }
     } catch (err: any) {
       alert(err.response?.data?.message || '入袋失敗');
     } finally {
@@ -96,7 +117,9 @@ const MyRedeemPocket: React.FC = () => {
           </Link>
 
           <h1 className="text-3xl font-bold text-gray-900 mb-2">我的兌換券</h1>
-          <p className="text-gray-600 mb-6">後台派發或自行輸入的兌換券會放在這裡，預約／購物時可直接選用。</p>
+          <p className="text-gray-600 mb-6">
+            後台派發或自行輸入的兌換券會放入此帳戶口袋（全站共用）。預約／購物結帳時可直接選用；每張券的「用途」會標明可用範圍。
+          </p>
 
           <div className="bg-white rounded-lg shadow p-4 mb-6 space-y-3">
             <label className="block text-sm font-medium text-gray-700">輸入兌換碼放入口袋</label>

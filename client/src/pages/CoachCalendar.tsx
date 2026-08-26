@@ -1,5 +1,5 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import FullCalendar from '@fullcalendar/react';
 import dayGridPlugin from '@fullcalendar/daygrid';
 import timeGridPlugin from '@fullcalendar/timegrid';
@@ -8,83 +8,64 @@ import type { EventInput, DatesSetArg, EventClickArg } from '@fullcalendar/core'
 import { motion } from 'framer-motion';
 import { CalendarDaysIcon, MapPinIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import api from '../services/api';
+import {
+  formatCoachEventDateLabel,
+  formatCoachEventTimeRange24,
+  coachEventStatusLabel,
+  coachEventStatusBadgeClass,
+} from '../utils/coachEventFormat';
 
-interface CalendarActivity {
-  _id: string;
+interface CalendarEvent {
+  id: string;
+  sourceId: string;
+  type: 'coach_class';
   title: string;
-  startDate: string;
-  endDate: string;
+  start: string;
+  end: string;
   location: string;
   status: string;
-  poster?: string | null;
-}
-
-function statusColor(status: string): { bg: string; border: string } {
-  switch (status) {
-    case 'ongoing':
-      return { bg: '#10B981', border: '#059669' };
-    case 'completed':
-      return { bg: '#9CA3AF', border: '#6B7280' };
-    case 'cancelled':
-      return { bg: '#EF4444', border: '#DC2626' };
-    case 'upcoming':
-    default:
-      return { bg: '#3B82F6', border: '#2563EB' };
-  }
-}
-
-function statusLabel(status: string): string {
-  switch (status) {
-    case 'upcoming':
-      return '即將開始';
-    case 'ongoing':
-      return '進行中';
-    case 'completed':
-      return '已完結';
-    case 'cancelled':
-      return '已取消';
-    default:
-      return status;
-  }
+  notes?: string;
+  storeName?: string;
+  activityTitle?: string;
+  regularActivityTitle?: string;
+  coachNames?: string[];
+  court?: { id: string; name: string; number?: number } | null;
 }
 
 const CoachCalendar: React.FC = () => {
   const calendarRef = useRef<FullCalendar>(null);
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const deepLinkClassId = searchParams.get('class');
   const [events, setEvents] = useState<EventInput[]>([]);
+  const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<CalendarActivity | null>(null);
+  const [selected, setSelected] = useState<CalendarEvent | null>(null);
+  const deepLinkHandledRef = useRef(false);
 
   const loadRange = useCallback(async (start: Date, end: Date) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await api.get('/activities/coach-calendar', {
+      const res = await api.get('/coach-classes/calendar', {
         params: {
           start: start.toISOString(),
           end: end.toISOString(),
         },
       });
-      const list: CalendarActivity[] = res.data?.activities || [];
-      const mapped: EventInput[] = list.map((a) => {
-        const { bg, border } = statusColor(a.status);
-        return {
-          id: a._id,
-          title: a.title,
-          start: a.startDate,
-          end: a.endDate,
-          backgroundColor: bg,
-          borderColor: border,
-          extendedProps: {
-            location: a.location,
-            status: a.status,
-            poster: a.poster,
-            raw: a,
-          },
-        };
-      });
-      setEvents(mapped);
+      const list: CalendarEvent[] = res.data?.events || [];
+      setCalendarEvents(list);
+      setEvents(
+        list.map((ev) => ({
+          id: ev.id,
+          title: ev.title,
+          start: ev.start,
+          end: ev.end,
+          backgroundColor: '#7C3AED',
+          borderColor: '#6D28D9',
+          extendedProps: { raw: ev },
+        }))
+      );
     } catch (e: unknown) {
       console.error(e);
       setError('無法載入課表，請確認已以教練身分登入');
@@ -94,6 +75,16 @@ const CoachCalendar: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (!deepLinkClassId || deepLinkHandledRef.current || calendarEvents.length === 0) return;
+    const match = calendarEvents.find((ev) => ev.sourceId === deepLinkClassId);
+    if (match) {
+      deepLinkHandledRef.current = true;
+      setSelected(match);
+      calendarRef.current?.getApi()?.gotoDate(new Date(match.start));
+    }
+  }, [calendarEvents, deepLinkClassId]);
+
   const handleDatesSet = useCallback(
     (info: DatesSetArg) => {
       loadRange(info.start, info.end);
@@ -102,7 +93,7 @@ const CoachCalendar: React.FC = () => {
   );
 
   const handleEventClick = useCallback((info: EventClickArg) => {
-    const raw = info.event.extendedProps.raw as CalendarActivity;
+    const raw = info.event.extendedProps.raw as CalendarEvent;
     if (raw) setSelected(raw);
   }, []);
 
@@ -120,9 +111,7 @@ const CoachCalendar: React.FC = () => {
                 <CalendarDaysIcon className="w-9 h-9 text-primary-600" />
                 教練課表
               </h1>
-              <p className="text-gray-600 mt-1">
-                顯示活動中心已指派您為教練的課程（與「我的課程」相同資料來源，以日曆檢視）
-              </p>
+              <p className="text-gray-600 mt-1">管理員指派給您的課堂</p>
             </div>
             <Link
               to="/coach-courses"
@@ -132,21 +121,6 @@ const CoachCalendar: React.FC = () => {
             </Link>
           </div>
         </motion.div>
-
-        <div className="flex flex-wrap gap-4 mb-4 text-sm">
-          {(['upcoming', 'ongoing', 'completed', 'cancelled'] as const).map((s) => {
-            const c = statusColor(s);
-            return (
-              <div key={s} className="flex items-center gap-2">
-                <span
-                  className="inline-block w-3 h-3 rounded"
-                  style={{ backgroundColor: c.bg }}
-                />
-                <span className="text-gray-600">{statusLabel(s)}</span>
-              </div>
-            );
-          })}
-        </div>
 
         {error && (
           <div className="mb-4 rounded-lg bg-red-50 text-red-800 px-4 py-3 text-sm">{error}</div>
@@ -200,7 +174,10 @@ const CoachCalendar: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <div className="flex justify-between items-start mb-4">
-              <h3 className="text-lg font-semibold text-gray-900 pr-4">{selected.title}</h3>
+              <div>
+                <p className="text-xs font-medium text-gray-500 mb-1">教練課堂</p>
+                <h3 className="text-lg font-semibold text-gray-900 pr-4">{selected.title}</h3>
+              </div>
               <button
                 type="button"
                 onClick={() => setSelected(null)}
@@ -210,36 +187,57 @@ const CoachCalendar: React.FC = () => {
                 <XMarkIcon className="w-6 h-6" />
               </button>
             </div>
-            <p className="text-sm text-gray-500 mb-2">
-              {statusLabel(selected.status)}
-            </p>
-            <p className="text-sm text-gray-700 mb-2">
-              {new Date(selected.startDate).toLocaleString('zh-TW')} —{' '}
-              {new Date(selected.endDate).toLocaleString('zh-TW')}
-            </p>
-            <div className="flex items-start gap-2 text-sm text-gray-600 mb-6">
-              <MapPinIcon className="w-5 h-5 shrink-0 text-gray-400" />
-              <span>{selected.location}</span>
+            <span
+              className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset mb-3 ${coachEventStatusBadgeClass(selected.status, 'coach_class')}`}
+            >
+              {coachEventStatusLabel(selected.status, 'coach_class')}
+            </span>
+            <div className="space-y-1 text-sm text-gray-700 mb-3">
+              <p>
+                <span className="text-gray-500">日期：</span>
+                {formatCoachEventDateLabel(selected.start, selected.end)}
+              </p>
+              <p>
+                <span className="text-gray-500">時間：</span>
+                {formatCoachEventTimeRange24(selected.start, selected.end)}
+              </p>
+              {selected.storeName && (
+                <p>
+                  <span className="text-gray-500">店鋪：</span>
+                  {selected.storeName}
+                </p>
+              )}
+              {selected.coachNames && selected.coachNames.length > 0 && (
+                <p>
+                  <span className="text-gray-500">教練：</span>
+                  {selected.coachNames.join('、')}
+                </p>
+              )}
+              {(selected.activityTitle || selected.regularActivityTitle) && (
+                <p>
+                  <span className="text-gray-500">連結：</span>
+                  {[selected.activityTitle, selected.regularActivityTitle]
+                    .filter(Boolean)
+                    .join(' · ')}
+                </p>
+              )}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelected(null);
-                  navigate(`/activities/${selected._id}`);
-                }}
-                className="flex-1 min-w-[8rem] px-4 py-2 rounded-lg bg-primary-600 text-white hover:bg-primary-700 text-sm font-medium"
-              >
-                活動詳情
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelected(null)}
-                className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm"
-              >
-                關閉
-              </button>
-            </div>
+            {selected.location && (
+              <div className="flex items-start gap-2 text-sm text-gray-600 mb-4">
+                <MapPinIcon className="w-5 h-5 shrink-0 text-gray-400" />
+                <span>{selected.location}</span>
+              </div>
+            )}
+            {selected.notes && (
+              <p className="text-sm text-gray-600 mb-4 border-t pt-3">{selected.notes}</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 text-sm"
+            >
+              關閉
+            </button>
           </div>
         </div>
       )}

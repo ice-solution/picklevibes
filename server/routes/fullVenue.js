@@ -15,7 +15,7 @@ const { isFullVenueEnabledForStore } = require('../utils/storeFeatures');
 // 創建包場預約
 router.post('/create', auth, async (req, res) => {
   try {
-    const { date, startTime, endTime, duration, players, totalPlayers, notes, specialRequests, userId, bypassRestrictions, storeId } = req.body;
+    const { date, startTime, endTime, duration, players, totalPlayers, notes, specialRequests, userId, bypassRestrictions, storeId, courtIds } = req.body;
     // 如果是管理員創建，使用指定的userId，否則使用當前用戶
     const targetUserId = userId || req.user.id;
 
@@ -61,6 +61,16 @@ router.post('/create', auth, async (req, res) => {
     const allowBypass =
       (req.user.role === 'admin' || req.user.role === 'staff') && bypassFlag;
 
+    const selectedCourtIds = Array.isArray(courtIds)
+      ? [...new Set(courtIds.map((id) => String(id)).filter(Boolean))]
+      : null;
+    if (selectedCourtIds && selectedCourtIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '請至少選擇一個要 hold 的場地',
+      });
+    }
+
     const result = await fullVenueService.createFullVenueBooking({
       date: normalizeBookingDateInput(date),
       startTime,
@@ -74,18 +84,23 @@ router.post('/create', auth, async (req, res) => {
       pointsDeduction: req.body.pointsDeduction || 0,
       bypassRestrictions: allowBypass,
       storeId: resolvedStoreId,
-      // 後台預先包場：未上線／停用場地亦一併 hold
+      // 後台預先包場：未上線／停用場地亦一併 hold（若有指定 courtIds 則只 hold 所選）
       includeInactive: true,
+      courtIds: selectedCourtIds || undefined,
     });
 
     try {
       const firstBooking = result.bookings[0];
       const courtDoc = await Court.findById(firstBooking.court);
+      const courtLabel =
+        Array.isArray(result.courtNames) && result.courtNames.length
+          ? `包場預約 - ${result.courtNames.join('、')}`
+          : `包場預約 - ${result.bookings.length} 個場地`;
       const notifyResult = await sendBookingNotification({
         booking: firstBooking,
         courtDoc,
         userFallback: user,
-        emailOverrides: { courtName: '包場預約 - 所有場地' },
+        emailOverrides: { courtName: courtLabel },
       });
       if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
         const Booking = require('../models/Booking');
@@ -204,7 +219,7 @@ router.put('/:id/cancel', auth, async (req, res) => {
 // 檢查包場時間可用性
 router.post('/check-availability', auth, async (req, res) => {
   try {
-    const { date, startTime, endTime, storeId } = req.body;
+    const { date, startTime, endTime, storeId, courtIds } = req.body;
     const resolvedStoreId = storeId || req.body.store;
 
     if (!resolvedStoreId) {
@@ -229,13 +244,23 @@ router.post('/check-availability', auth, async (req, res) => {
       });
     }
 
+    if (Array.isArray(courtIds) && courtIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: '請至少選擇一個要 hold 的場地'
+      });
+    }
+
     const conflictCheck = await fullVenueService.checkTimeConflicts(
       normalizeBookingDateInput(date),
       startTime,
       endTime,
       resolvedStoreId,
       // 後台預先包場：不檢查場地 isActive
-      { includeInactive: true }
+      {
+        includeInactive: true,
+        courtIds: Array.isArray(courtIds) ? courtIds : undefined,
+      }
     );
 
     res.json({

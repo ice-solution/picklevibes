@@ -35,7 +35,6 @@ import ActivityRegister from './pages/ActivityRegister';
 import MyActivities from './pages/MyActivities';
 import CoachCourses from './pages/CoachCourses';
 import CoachCalendar from './pages/CoachCalendar';
-import CoachSchoolRequest from './pages/CoachSchoolRequest';
 import CoachRoute from './components/Auth/CoachRoute';
 import Shop from './pages/Shop';
 import ProductDetail from './pages/ProductDetail';
@@ -182,18 +181,10 @@ function App() {
                   }
                 />
                 <Route
-                  path="/coach-courses" 
+                  path="/coach-courses"
                   element={
                     <CoachRoute>
                       <CoachCourses />
-                    </CoachRoute>
-                  } 
-                />
-                <Route
-                  path="/coach/school-request"
-                  element={
-                    <CoachRoute>
-                      <CoachSchoolRequest />
                     </CoachRoute>
                   }
                 />

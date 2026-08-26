@@ -7,7 +7,7 @@ import { canAccessAdminV2TabForUser, isStoreReadOnly } from '../utils/storeAdmin
 
 import PendingSettleBookings from '../components/Admin/PendingSettleBookings';
 import BookingCalendar from '../components/Admin/BookingCalendar';
-import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
+import CoachAdminHub from '../components/Admin/CoachAdminHub';
 import CourtManagement from '../components/Admin/CourtManagement';
 import StoreManagement from '../components/Admin/StoreManagement';
 import UserManagement from '../components/Admin/UserManagement';
@@ -52,7 +52,6 @@ import {
   TagIcon,
   Cog6ToothIcon,
   DocumentChartBarIcon,
-  ChatBubbleLeftRightIcon,
   EnvelopeIcon,
   BuildingStorefrontIcon,
   CurrencyDollarIcon,
@@ -60,6 +59,7 @@ import {
   UserPlusIcon,
   BanknotesIcon,
   LinkIcon,
+  AcademicCapIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -81,7 +81,7 @@ const AdminV2: React.FC = () => {
   const allTabs: Tab[] = useMemo(() => ([
     { id: 'pending-settle', name: '待結算', icon: CalendarDaysIcon, element: <PendingSettleBookings /> },
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
-    { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
+    { id: 'coaches', name: '教練管理', icon: AcademicCapIcon, element: <CoachAdminHub /> },
     { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: <StoreManagement /> },
     { id: 'tenant-staff', name: '店鋪員工', icon: UserPlusIcon, element: <TenantStaffManagement /> },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },

@@ -1641,7 +1641,7 @@ const ActivityManagement: React.FC = () => {
                     />
                   </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    選擇負責此活動的教練，教練將在「我的課程預約」頁面看到此活動
+                    選擇負責此活動的教練（選填；教練課堂請改用「教練管理」派課）
                   </p>
                 </div>
 

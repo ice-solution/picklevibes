@@ -198,7 +198,7 @@ app.use('/api/reports', require('./routes/reports')); // Added orders routes
 app.use('/api/finance', require('./routes/finance'));
 app.use('/api/accounting/ledger', require('./routes/accountingLedger'));
 app.use('/api/accounting/pl', require('./routes/accountingPL'));
-app.use('/api/coach-schedule-requests', require('./routes/coachScheduleRequests'));
+app.use('/api/coach-classes', require('./routes/coachClasses'));
 app.use('/api/edm', require('./routes/edm'));
 app.use('/api/application-forms', require('./routes/applicationForms'));
 app.use('/api/payment-links', require('./routes/paymentLinks'));
@@ -266,6 +266,9 @@ tuyaScheduler.start();
 
 const overnightDutyScheduler = require('./scheduler/overnightDutyScheduler');
 overnightDutyScheduler.start();
+
+const coachClassReminderScheduler = require('./scheduler/coachClassReminderScheduler');
+coachClassReminderScheduler.start();
 
 try {
   const { startApplicationNotifyWorker } = require('./services/applicationNotifyService');

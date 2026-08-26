@@ -22,7 +22,7 @@ import RegularActivityManagement from '../components/Admin/RegularActivityManage
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import AccountingManagement from '../components/Admin/AccountingManagement';
-import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
+import CoachAdminHub from '../components/Admin/CoachAdminHub';
 import ShopManagement from '../components/Admin/ShopManagement';
 import OrderManagement from '../components/Admin/OrderManagement';
 import PosManagement from '../components/Admin/PosManagement';
@@ -41,7 +41,7 @@ import {
   ClockIcon,
   Cog6ToothIcon,
   CurrencyDollarIcon,
-  ChatBubbleLeftRightIcon,
+  AcademicCapIcon,
   ArrowLeftIcon,
   ShoppingBagIcon,
   DocumentChartBarIcon,
@@ -96,10 +96,10 @@ function StoreAdminShell() {
       { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement /> },
       { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> },
       {
-        id: 'coach-requests',
-        name: '教練要請',
-        icon: ChatBubbleLeftRightIcon,
-        element: <CoachScheduleRequestManagement />,
+        id: 'coaches',
+        name: '教練管理',
+        icon: AcademicCapIcon,
+        element: <CoachAdminHub />,
       },
       { id: 'weekend', name: '假期管理', icon: ClockIcon, element: <HolidayManagement /> },
       { id: 'booking-config', name: '預約設定', icon: Cog6ToothIcon, element: <BookingConfig /> },

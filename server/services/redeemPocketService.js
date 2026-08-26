@@ -2,14 +2,30 @@ const RedeemCode = require('../models/RedeemCode');
 const UserRedeemPocket = require('../models/UserRedeemPocket');
 const User = require('../models/User');
 
+/** 支援 mongoose document 或 lean object */
+function isRedeemCodeCurrentlyValid(redeemCode) {
+  if (!redeemCode) return false;
+  if (typeof redeemCode.isValid === 'function') {
+    return redeemCode.isValid();
+  }
+  const now = new Date();
+  const effectiveUsageLimit = redeemCode.isIndependentCode ? 1 : redeemCode.usageLimit;
+  return (
+    redeemCode.isActive !== false &&
+    (!redeemCode.validFrom || now >= new Date(redeemCode.validFrom)) &&
+    (!redeemCode.validUntil || now <= new Date(redeemCode.validUntil)) &&
+    (effectiveUsageLimit == null || Number(redeemCode.totalUsed || 0) < effectiveUsageLimit)
+  );
+}
+
 function pocketDisplayStatus(pocket, redeemCode, canUse) {
   if (pocket.status === 'removed') return 'removed';
-  if (!redeemCode || !redeemCode.isActive) return 'expired';
+  if (!redeemCode || redeemCode.isActive === false) return 'expired';
   const now = new Date();
   if (redeemCode.validUntil && new Date(redeemCode.validUntil) < now) return 'expired';
   if (redeemCode.validFrom && new Date(redeemCode.validFrom) > now) return 'upcoming';
   if (!canUse || pocket.status === 'used') return 'used';
-  if (!redeemCode.isValid()) return 'unavailable';
+  if (!isRedeemCodeCurrentlyValid(redeemCode)) return 'unavailable';
   return 'available';
 }
 
@@ -90,7 +106,7 @@ async function claimCodeToPocket(userId, codeRaw) {
   if (!redeemCode) {
     return { error: '兌換碼不存在或已失效', status: 404 };
   }
-  if (!redeemCode.isValid()) {
+  if (!isRedeemCodeCurrentlyValid(redeemCode)) {
     return { error: '兌換碼已過期或使用次數已滿', status: 400 };
   }
 
@@ -184,11 +200,13 @@ async function listUserPocket(userId, { statusFilter } = {}) {
 
   const items = [];
   for (const pocket of pockets) {
-    const redeemCode = pocket.redeemCode;
-    if (!redeemCode) continue;
-    const doc = await RedeemCode.findById(redeemCode._id);
-    const canUse = doc ? await doc.canUserUse(userId) : false;
-    const item = serializePocketItem(pocket, redeemCode, canUse);
+    const leanCode = pocket.redeemCode;
+    if (!leanCode) continue;
+    // 用 mongoose document 做 canUserUse；serialize 則可安全處理 lean／document
+    const doc = await RedeemCode.findById(leanCode._id);
+    if (!doc) continue;
+    const canUse = await doc.canUserUse(userId);
+    const item = serializePocketItem(pocket, doc, canUse);
     if (statusFilter && statusFilter !== 'all' && item.status !== statusFilter) {
       continue;
     }

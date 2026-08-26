@@ -25,6 +25,19 @@ const userSchema = new mongoose.Schema({
     required: [true, '電話號碼為必填項目'],
     match: [/^[0-9+\-\s()]+$/, '請輸入有效的電話號碼']
   },
+  /** 教練預設時薪（積分／小時）；開課堂時帶入，admin 可再改該堂價 */
+  coachHourlyRate: {
+    type: Number,
+    default: 0,
+    min: [0, '時薪不能為負數'],
+  },
+  /** 教練過數資料（銀行／FPS／戶口等） */
+  coachPaymentInfo: {
+    type: String,
+    trim: true,
+    maxlength: [500, '過數資料過長'],
+    default: '',
+  },
   role: {
     type: String,
     enum: ['user', 'admin', 'coach', 'staff'],
