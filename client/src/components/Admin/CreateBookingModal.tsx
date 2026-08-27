@@ -823,7 +823,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
                   min="0"
                 />
                 <p className="mt-1 text-xs text-blue-700">
-                  💡 系統將使用此積分數量進行扣除，而非根據場地和時段計算的標準價格
+                  💡 勾選後會按此數量檢查餘額並扣款（唔再用系統時段價）。例如用戶只有 240 分、系統價較高時，填 240 即可成功。
                 </p>
               </div>
             )}

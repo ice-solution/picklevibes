@@ -114,6 +114,13 @@ router.post('/', [
       req.body.bypassRestrictions === 1 ||
       req.body.bypassRestrictions === '1';
     const bypassRestrictions = isBackendOperator(req.user) && bypassFlag;
+    /** 自訂積分：兼容字串／布林；真正扣款與餘額檢查都必須用此數量 */
+    const customPointsFlag =
+      isCustomPoints === true ||
+      isCustomPoints === 'true' ||
+      isCustomPoints === 1 ||
+      isCustomPoints === '1';
+    const customPointsNum = Math.max(0, parseInt(String(customPoints ?? '0'), 10) || 0);
     /**
      * 後台建單且未勾選「管理員權限」時：放寬可預約天數、營業時段，以及停用／未上線場地。
      * 仍檢查維護中、時段衝突；時長 1～2 小時；照常扣積分。
@@ -356,23 +363,27 @@ router.post('/', [
     if (!userBalance) {
       userBalance = new UserBalance({ user: bookingUserId });
     }
+
+    // 實際應付：自訂積分優先，否則用系統計價（含 VIP／兌換碼）
+    const chargePoints = customPointsFlag ? customPointsNum : pointsToDeduct;
     
-    // 如果不是管理員 bypass，檢查積分餘額
-    if (!bypassRestrictions && userBalance.balance < pointsToDeduct) {
+    // 如果不是管理員 bypass，檢查積分餘額（必須用 chargePoints，唔好用未覆寫嘅系統價）
+    if (!bypassRestrictions && userBalance.balance < chargePoints) {
       return res.status(400).json({ 
         message: '積分餘額不足',
-        required: pointsToDeduct,
+        required: chargePoints,
         available: userBalance.balance,
-        discount: isVip ? 'VIP會員8折' : '無折扣'
+        discount: customPointsFlag
+          ? '自訂積分'
+          : (isVip ? 'VIP會員8折' : '無折扣')
       });
     }
     
     // 如果不是管理員 bypass，扣除積分
     if (!bypassRestrictions) {
-      const finalPointsToDeduct = isCustomPoints ? customPoints : pointsToDeduct;
       await userBalance.deductBalance(
-        finalPointsToDeduct, 
-        `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}${isCustomPoints ? ' (自訂積分)' : ''}`,
+        chargePoints, 
+        `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}${customPointsFlag ? ' (自訂積分)' : ''}`,
         null // 稍後會更新為實際的預約ID
       );
     }
@@ -406,7 +417,7 @@ router.post('/', [
         paidAt: new Date(),
         // 管理員繞過限制：未扣積分，標記 admin_waived 並記 pointsDeducted=0，避免取消時誤退
         method: bypassRestrictions ? 'admin_waived' : 'points',
-        pointsDeducted: bypassRestrictions ? 0 : pointsToDeduct,
+        pointsDeducted: bypassRestrictions ? 0 : chargePoints,
         originalPrice: tempBooking.pricing.totalPrice,
         discount: isVip ? 20 : 0 // VIP折扣百分比
       },
@@ -414,13 +425,13 @@ router.post('/', [
         basePrice: tempBooking.pricing.basePrice,
         memberDiscount: tempBooking.pricing.memberDiscount,
         // 仍保存「參考應付」金額供列表顯示；實際扣款以 pointsDeducted / noUserBalanceDebited 為準
-        totalPrice: isCustomPoints ? customPoints : pointsToDeduct,
+        totalPrice: chargePoints,
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
-        pointsDeducted: bypassRestrictions ? 0 : (isCustomPoints ? customPoints : pointsToDeduct),
+        pointsDeducted: bypassRestrictions ? 0 : chargePoints,
         vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
         soloCourtFee: includeSoloCourt ? 100 : 0, // 單人場費用
-        customPoints: isCustomPoints ? customPoints : undefined, // 自訂積分
-        isCustomPoints: isCustomPoints // 是否使用自訂積分
+        customPoints: customPointsFlag ? customPointsNum : undefined, // 自訂積分
+        isCustomPoints: customPointsFlag // 是否使用自訂積分
       },
       createdAt: new Date(),
       updatedAt: new Date()
