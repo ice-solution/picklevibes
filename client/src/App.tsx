@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
 import { BookingProvider } from './contexts/BookingContext';
@@ -53,18 +53,26 @@ import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
 import ShopDisabled from './pages/ShopDisabled';
 
-function App() {
+/** 後台全螢幕殼（僅 admin-v2）：隱藏 footer、鎖外層 document scroll */
+function isFullscreenAdminPath(pathname: string): boolean {
+  return pathname === '/admin-v2' || pathname.startsWith('/admin-v2/');
+}
+
+function AppLayout() {
+  const { pathname } = useLocation();
+  const fullscreenAdmin = isFullscreenAdminPath(pathname);
+
   return (
-    <HelmetProvider>
-      <AuthProvider>
-        <ShopConfigProvider>
-        <BookingProvider>
-          <Router>
-            <MaintenanceCheck>
-            <div className="min-h-screen bg-gray-50">
-              <Navbar />
-              <main>
-                <Routes>
+    <div
+      className={
+        fullscreenAdmin
+          ? 'h-dvh max-h-dvh overflow-hidden bg-gray-50 flex flex-col'
+          : 'min-h-screen bg-gray-50'
+      }
+    >
+      <Navbar />
+      <main className={fullscreenAdmin ? 'flex-1 min-h-0 overflow-hidden' : undefined}>
+        <Routes>
                 <Route path="/" element={<Home />} />
                 <Route path="/about" element={<About />} />
                 <Route path="/courts" element={<Courts />} />
@@ -246,10 +254,22 @@ function App() {
                 {/* 申請表公開頁：/:slug（須放在固定路由之後、catch-all 之前） */}
                 <Route path="/:slug" element={<PublicApplicationForm />} />
                 <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </main>
-              <Footer />
-            </div>
+        </Routes>
+      </main>
+      {!fullscreenAdmin && <Footer />}
+    </div>
+  );
+}
+
+function App() {
+  return (
+    <HelmetProvider>
+      <AuthProvider>
+        <ShopConfigProvider>
+        <BookingProvider>
+          <Router>
+            <MaintenanceCheck>
+              <AppLayout />
             </MaintenanceCheck>
           </Router>
         </BookingProvider>

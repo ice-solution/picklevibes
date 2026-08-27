@@ -1157,8 +1157,17 @@
   "redeem": {
     "title": "兌換碼",
     "placeholder": "輸入兌換碼",
+    "apply": "套用",
     "validate": "驗證",
     "validating": "驗證中…",
+    "discount": "折扣",
+    "use": "使用",
+    "pocketTitle": "口袋可使用兌換券",
+    "pocketEmpty": "口袋暫無可用於此項目的兌換券",
+    "pocketViewAll": "查看我的口袋",
+    "selectPocket": "選擇袋內兌換券…",
+    "claimOnly": "只放入口袋（稍後再用）",
+    "inputLabel": "輸入兌換碼",
     "errors": {
       "codeRequired": "請輸入兌換碼",
       "validationFailed": "兌換碼驗證失敗"

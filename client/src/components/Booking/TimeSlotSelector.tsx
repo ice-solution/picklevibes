@@ -261,25 +261,28 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
 
   return (
     <div>
-      <h2 className="text-2xl font-bold text-gray-900 mb-3">{t('bookingPage.timeSlotSelector.title')}</h2>
-      <div className="mb-6 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2 sm:mb-3">
+        {t('bookingPage.timeSlotSelector.title')}
+      </h2>
+      <div className="hidden sm:block mb-6 px-4 py-3 bg-yellow-50 border border-yellow-200 rounded-lg text-center">
         <p className="text-lg font-semibold text-yellow-800">
           {t('bookingPage.timeSlotSelector.ampmNotice')}
         </p>
       </div>
-      <p className="text-gray-600 mb-8">{t('bookingPage.timeSlotSelector.subtitle')}</p>
+      <p className="hidden sm:block text-gray-600 mb-8">{t('bookingPage.timeSlotSelector.subtitle')}</p>
 
       {/* 時長選擇 */}
-      <div className="mb-8">
-        <label className="block text-sm font-medium text-gray-700 mb-3">
+      <div className="mb-4 sm:mb-8">
+        <label className="block text-sm font-medium text-gray-700 mb-2 sm:mb-3">
           {t('bookingPage.timeSlotSelector.duration')}
         </label>
         <div className="flex gap-2">
           {durations.map((duration) => (
             <button
               key={duration.value}
+              type="button"
               onClick={() => setSelectedDuration(duration.value)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
+              className={`flex-1 sm:flex-none min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
                 selectedDuration === duration.value
                   ? 'bg-primary-600 text-white'
                   : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
@@ -289,42 +292,26 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
             </button>
           ))}
         </div>
-        
-        {/* 調試按鈕 */}
-        <div className="mt-4">
-          <button
-            onClick={() => {
-              setCurrentTime(new Date());
-              setForceUpdate(prev => prev + 1);
-              console.log('🔄 手動更新時間:', new Date().toLocaleTimeString());
-            }}
-            className="px-3 py-1 text-xs bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
-          >
-            {t('bookingPage.timeSlotSelector.refreshTime')}
-          </button>
-          <span className="ml-2 text-xs text-gray-500">
-            {t('common.currentTime')}: {currentTime.toLocaleTimeString()}
-          </span>
-        </div>
       </div>
 
-      {/* 時間段選擇 */}
+      {/* 時間段選擇：每格顯示該時段收費 */}
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
           <p className="mt-4 text-gray-600">{t('bookingPage.timeSlotSelector.checking')}</p>
         </div>
       ) : (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
           {timeSlots.map((slot, index) => (
             <motion.button
               key={index}
+              type="button"
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.2, delay: index * 0.02 }}
+              transition={{ duration: 0.2, delay: Math.min(index * 0.02, 0.3) }}
               onClick={() => handleSlotSelect(slot)}
               disabled={!slot.available}
-              className={`relative p-4 rounded-lg text-center transition-all duration-200 ${
+              className={`relative p-3 sm:p-4 rounded-lg text-center transition-all duration-200 min-h-[72px] sm:min-h-0 ${
                 slot.available
                   ? isSelected(slot)
                     ? 'bg-primary-600 text-white shadow-lg'
@@ -337,19 +324,20 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               }`}
             >
               {isSelected(slot) && (
-                <CheckCircleIcon className="absolute top-2 right-2 w-5 h-5 text-white" />
+                <CheckCircleIcon className="absolute top-1.5 right-1.5 w-4 h-4 sm:w-5 sm:h-5 text-white" />
               )}
               
-              <div className="text-sm font-medium">
+              <div className="text-sm font-semibold sm:font-medium">
                 {formatTime(slot.start)}
               </div>
-              <div className="text-xs opacity-75">
-                - {formatTime(slot.end)}
+              <div className="text-[11px] sm:text-xs opacity-75">
+                – {formatTime(slot.end)}
               </div>
               
               {slot.available && slot.price > 0 && (
-                <div className="text-xs font-semibold mt-1">
-                  {slot.price} {t('common.currency')}{slot.slotName === '貓頭鷹時間' ? ' 🦉' : ''}
+                <div className="text-xs sm:text-xs font-bold sm:font-semibold mt-1">
+                  {slot.price} {t('common.currency')}
+                  <span className="hidden sm:inline">{slot.slotName === '貓頭鷹時間' ? ' 🦉' : ''}</span>
                 </div>
               )}
               
@@ -360,7 +348,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               )}
               
               {!slot.available && (
-                <div className="text-xs mt-1">
+                <div className="text-[11px] sm:text-xs mt-1">
                   {(slot as any).isPast ? t('bookingPage.timeSlotSelector.expired') : t('bookingPage.timeSlotSelector.booked')}
                 </div>
               )}
@@ -374,19 +362,34 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mt-6 p-4 bg-primary-50 rounded-lg"
+          className="mt-4 sm:mt-6 p-3 sm:p-4 bg-primary-50 rounded-lg"
         >
-          <div className="flex items-center gap-2">
-            <ClockIcon className="w-5 h-5 text-primary-600" />
-            <span className="text-primary-800 font-medium">
-              {t('bookingPage.timeSlotSelector.selected', { start: formatTime(selectedTimeSlot.start), end: formatTime(selectedTimeSlot.end) })}
-            </span>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <ClockIcon className="w-5 h-5 text-primary-600 shrink-0" />
+              <span className="text-primary-800 font-medium text-sm sm:text-base truncate">
+                {t('bookingPage.timeSlotSelector.selected', {
+                  start: formatTime(selectedTimeSlot.start),
+                  end: formatTime(selectedTimeSlot.end),
+                })}
+              </span>
+            </div>
+            {(() => {
+              const p = timeSlots.find(
+                (s) => s.start === selectedTimeSlot.start && s.end === selectedTimeSlot.end
+              )?.price;
+              return p != null && p > 0 ? (
+                <span className="shrink-0 font-bold text-primary-700">
+                  {p} {t('common.currency')}
+                </span>
+              ) : null;
+            })()}
           </div>
         </motion.div>
       )}
 
-      {/* 說明文字 */}
-      <div className="mt-6 text-sm text-gray-500">
+      {/* 說明：僅 desktop */}
+      <div className="hidden sm:block mt-6 text-sm text-gray-500">
         <p>• {t('bookingPage.timeSlotSelector.expiredHint')}</p>
         <p>• {t('bookingPage.timeSlotSelector.bookedHint')}</p>
         <p>• {t('bookingPage.timeSlotSelector.priceHint')}</p>

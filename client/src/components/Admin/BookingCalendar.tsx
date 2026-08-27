@@ -32,19 +32,19 @@ interface StoreRef {
 /** 日曆列表（精簡 API） */
 interface CalendarBooking {
   _id: string;
-  store?: StoreRef | string;
+  store?: StoreRef | string | null;
   user: {
     _id: string;
     name: string;
     email: string;
-  };
+  } | null;
   court: {
     _id: string;
     name: string;
     number: string;
     type: string;
-    store?: StoreRef | string;
-  };
+    store?: StoreRef | string | null;
+  } | null;
   date: string;
   startTime: string;
   endTime: string;
@@ -66,7 +66,8 @@ interface Booking extends CalendarBooking {
     name: string;
     email: string;
     phone?: string;
-  };
+  } | null;
+  court: CalendarBooking['court'];
   players: Array<{
     name: string;
     email: string;
@@ -337,9 +338,14 @@ const BookingCalendar: React.FC = () => {
   // 將預約數據轉換為FullCalendar事件格式（必須 memo，否則每次父層 render 新陣列會觸發 FC 內部 datesSet → 無限 refetch、無法換月）
   const events = useMemo(
     () =>
-      collapseFullVenueCalendarBookings(bookings).map((booking) => {
+      collapseFullVenueCalendarBookings(bookings)
+        .filter((booking) => booking && booking.date && booking.startTime && booking.endTime)
+        .map((booking) => {
     const collapsedCount = (booking as CalendarBooking & { _collapsedFullVenueCount?: number })._collapsedFullVenueCount;
     const isCollapsedFullVenue = collapsedCount && collapsedCount > 1;
+    const courtName = booking.court?.name || '已刪除場地';
+    const courtType = booking.court?.type || 'unknown';
+    const userName = booking.user?.name || '未知用戶';
     const ymdHk = getHongKongCalendarYmd(booking.date);
     const startMs = hkWallTimeToUtcMs(ymdHk, booking.startTime);
     const endMs = hkBookingEndToUtcMs(ymdHk, booking.endTime, startMs);
@@ -357,7 +363,7 @@ const BookingCalendar: React.FC = () => {
     // 如果有多個狀態，使用漸變色
     let borderColor = isCollapsedFullVenue
       ? '#6366F1'
-      : getCourtTypeColor(booking.court.type, booking.status);
+      : getCourtTypeColor(courtType, booking.status);
     let classNames: string[] = [];
     
     // 構建狀態數組
@@ -443,18 +449,18 @@ const BookingCalendar: React.FC = () => {
     const storeLabel = resolveBookingStoreName(booking);
     const title = isCollapsedFullVenue
       ? (storeFilterId
-          ? `🏢 包場 (${collapsedCount}場) - ${booking.user.name}`
-          : `[${storeLabel}] 🏢 包場 (${collapsedCount}場) - ${booking.user.name}`)
+          ? `🏢 包場 (${collapsedCount}場) - ${userName}`
+          : `[${storeLabel}] 🏢 包場 (${collapsedCount}場) - ${userName}`)
       : (storeFilterId
-          ? `${booking.court.name} - ${booking.user.name}`
-          : `[${storeLabel}] ${booking.court.name} - ${booking.user.name}`);
+          ? `${courtName} - ${userName}`
+          : `[${storeLabel}] ${courtName} - ${userName}`);
 
     return {
       id: booking._id,
       title,
       start: startDate,
       end: endDate,
-      backgroundColor: isCollapsedFullVenue ? 'transparent' : getCourtTypeColor(booking.court.type, booking.status),
+      backgroundColor: isCollapsedFullVenue ? 'transparent' : getCourtTypeColor(courtType, booking.status),
       borderColor: finalBorderColor,
       borderWidth: finalBorderWidth,
       textColor: 'white',
@@ -1002,7 +1008,11 @@ const BookingCalendar: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700">場地</label>
-                  <p className="text-sm text-gray-900">{selectedBooking.court.name} ({selectedBooking.court.number}號場)</p>
+                  <p className="text-sm text-gray-900">
+                    {selectedBooking.court
+                      ? `${selectedBooking.court.name}${selectedBooking.court.number != null ? ` (${selectedBooking.court.number}號場)` : ''}`
+                      : '已刪除場地'}
+                  </p>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">狀態</label>
@@ -1020,9 +1030,15 @@ const BookingCalendar: React.FC = () => {
               <div>
                 <label className="block text-sm font-medium text-gray-700">用戶信息</label>
                 <div className="mt-1 text-sm text-gray-900">
-                  <p>{selectedBooking.user.name}</p>
-                  <p>{selectedBooking.user.email}</p>
-                  {selectedBooking.user.phone && <p>{selectedBooking.user.phone}</p>}
+                  {selectedBooking.user ? (
+                    <>
+                      <p>{selectedBooking.user.name || '未知用戶'}</p>
+                      <p>{selectedBooking.user.email || '—'}</p>
+                      {selectedBooking.user.phone && <p>{selectedBooking.user.phone}</p>}
+                    </>
+                  ) : (
+                    <p className="text-gray-500">用戶已刪除或不存在</p>
+                  )}
                 </div>
               </div>
               

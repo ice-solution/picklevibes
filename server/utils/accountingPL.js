@@ -3,16 +3,48 @@ const AccountingTransaction = require('../models/AccountingTransaction');
 const Store = require('../models/Store');
 const { computeFinanceSummary } = require('./financeRevenue');
 
+/** 日期區間一律香港牆鐘 */
 function buildDateRange(from, to) {
   if (!from && !to) return null;
   const range = {};
-  if (from) range.$gte = new Date(from);
+  if (from) {
+    if (typeof from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      range.$gte = new Date(`${from}T00:00:00+08:00`);
+    } else {
+      range.$gte = new Date(from);
+    }
+  }
   if (to) {
-    const end = new Date(to);
-    end.setHours(23, 59, 59, 999);
-    range.$lte = end;
+    if (typeof to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      range.$lte = new Date(`${to}T23:59:59.999+08:00`);
+    } else {
+      const end = new Date(to);
+      end.setHours(23, 59, 59, 999);
+      range.$lte = end;
+    }
   }
   return range;
+}
+
+function toObjectId(id) {
+  if (id == null || id === '') return id;
+  if (id instanceof mongoose.Types.ObjectId) return id;
+  const s = String(id);
+  if (mongoose.Types.ObjectId.isValid(s)) return new mongoose.Types.ObjectId(s);
+  return id;
+}
+
+function normalizeMatchForAggregate(match) {
+  if (!match || typeof match !== 'object') return match;
+  const m = { ...match };
+  if (m.store != null) {
+    if (m.store.$in && Array.isArray(m.store.$in)) {
+      m.store = { $in: m.store.$in.map(toObjectId) };
+    } else {
+      m.store = toObjectId(m.store);
+    }
+  }
+  return m;
 }
 
 function round2(n) {
@@ -21,7 +53,7 @@ function round2(n) {
 
 async function aggregateLedgerByCategory(match) {
   const rows = await AccountingTransaction.aggregate([
-    { $match: match },
+    { $match: normalizeMatchForAggregate(match) },
     {
       $group: {
         _id: { type: '$type', category: '$category' },
@@ -63,7 +95,7 @@ async function aggregateLedgerByCategory(match) {
 
 async function aggregateLedgerByStore(match) {
   const rows = await AccountingTransaction.aggregate([
-    { $match: match },
+    { $match: normalizeMatchForAggregate(match) },
     {
       $group: {
         _id: { store: '$store', type: '$type' },

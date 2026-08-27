@@ -1,6 +1,7 @@
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const mongoose = require('mongoose');
 const { body, validationResult } = require('express-validator');
 const AccountingTransaction = require('../models/AccountingTransaction');
 const Store = require('../models/Store');
@@ -23,20 +24,59 @@ function parseAmount(input) {
 
 function parseLedgerDate(input) {
   if (!input) return null;
+  if (typeof input === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(input)) {
+    return new Date(`${input}T00:00:00+08:00`);
+  }
   const d = new Date(input);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
+/** 日期區間一律香港牆鐘，避免 UTC / server TZ 令合計漏數 */
 function buildDateRange(from, to) {
   if (!from && !to) return null;
   const range = {};
-  if (from) range.$gte = new Date(from);
+  if (from) {
+    if (typeof from === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(from)) {
+      range.$gte = new Date(`${from}T00:00:00+08:00`);
+    } else {
+      range.$gte = new Date(from);
+    }
+  }
   if (to) {
-    const end = new Date(to);
-    end.setHours(23, 59, 59, 999);
-    range.$lte = end;
+    if (typeof to === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(to)) {
+      range.$lte = new Date(`${to}T23:59:59.999+08:00`);
+    } else {
+      const end = new Date(to);
+      end.setHours(23, 59, 59, 999);
+      range.$lte = end;
+    }
   }
   return range;
+}
+
+function toObjectId(id) {
+  if (id == null || id === '') return id;
+  if (id instanceof mongoose.Types.ObjectId) return id;
+  const s = String(id);
+  if (mongoose.Types.ObjectId.isValid(s)) return new mongoose.Types.ObjectId(s);
+  return id;
+}
+
+/**
+ * aggregate 的 $match 唔會自動 cast string→ObjectId；find 會。
+ * 選店鋪後若唔轉，列表有資料、合計永遠 0。
+ */
+function normalizeMatchForAggregate(match) {
+  if (!match || typeof match !== 'object') return match;
+  const m = { ...match };
+  if (m.store != null) {
+    if (m.store.$in && Array.isArray(m.store.$in)) {
+      m.store = { $in: m.store.$in.map(toObjectId) };
+    } else {
+      m.store = toObjectId(m.store);
+    }
+  }
+  return m;
 }
 
 function formatRow(row) {
@@ -61,13 +101,14 @@ function canModifyTransaction(req, tx) {
 }
 
 async function aggregateTotals(match) {
+  const aggMatch = normalizeMatchForAggregate(match);
   const [incomeRows, expenseRows] = await Promise.all([
     AccountingTransaction.aggregate([
-      { $match: { ...match, type: 'income' } },
+      { $match: { ...aggMatch, type: 'income' } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
     AccountingTransaction.aggregate([
-      { $match: { ...match, type: 'expense' } },
+      { $match: { ...aggMatch, type: 'expense' } },
       { $group: { _id: null, total: { $sum: '$amount' } } },
     ]),
   ]);

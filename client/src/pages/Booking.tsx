@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useBooking } from '../contexts/BookingContext';
@@ -49,6 +49,8 @@ const Booking: React.FC = () => {
     contactEmail: '',
     contactPhone: ''
   });
+  const stepSectionRef = useRef<HTMLDivElement>(null);
+  const skipInitialFocusRef = useRef(true);
 
   // 調試：監控 bookingFormData 變化
   useEffect(() => {
@@ -61,6 +63,33 @@ const Booking: React.FC = () => {
   // 使用 useMemo 來穩定 availability 對象，避免 BookingSummary 重新創建
   const stableAvailability = useMemo(() => availability, [availability]);
 
+  /** 轉步驟後捲到對應 section 並 focus，避免停在舊內容位置 */
+  const focusStepSection = useCallback(() => {
+    const el = stepSectionRef.current;
+    if (!el) return;
+    // 等 DOM 換咗新步驟再捲
+    window.requestAnimationFrame(() => {
+      const navOffset = 72; // sticky Navbar 高度緩衝
+      const top = el.getBoundingClientRect().top + window.scrollY - navOffset;
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      // 令鍵盤／讀屏都對準新區塊
+      if (typeof el.focus === 'function') {
+        try {
+          el.focus({ preventScroll: true });
+        } catch {
+          el.focus();
+        }
+      }
+    });
+  }, []);
+
+  useEffect(() => {
+    if (skipInitialFocusRef.current) {
+      skipInitialFocusRef.current = false;
+      return;
+    }
+    focusStepSection();
+  }, [currentStep, focusStepSection]);
   useEffect(() => {
     fetchStores();
   }, [fetchStores]);
@@ -129,22 +158,12 @@ const Booking: React.FC = () => {
   const nextStep = () => {
     if (canProceed() && currentStep < 5) {
       setCurrentStep(currentStep + 1);
-      // 滾動到頂部
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
     }
   };
 
   const prevStep = () => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
-      // 滾動到頂部
-      window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-      });
     }
   };
 
@@ -184,19 +203,19 @@ const Booking: React.FC = () => {
 
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-gray-50 py-4 sm:py-8 overflow-x-hidden">
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full min-w-0">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
-          className="text-center mb-12"
+          className="text-center mb-6 sm:mb-12 px-1"
         >
-          <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-6">
+          <h1 className="text-2xl sm:text-4xl md:text-5xl font-bold text-gray-900 mb-2 sm:mb-6">
             {t('bookingPage.title')}
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-sm sm:text-xl text-gray-600 max-w-3xl mx-auto">
             {t('bookingPage.subtitle')}
           </p>
         </motion.div>
@@ -206,28 +225,66 @@ const Booking: React.FC = () => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.2 }}
-          className="mb-12"
+          className="mb-6 sm:mb-12 w-full min-w-0"
         >
-          <div className="flex items-center justify-center">
-            <div className="flex items-center space-x-4">
+          {/* Mobile：只顯示圓點＋當前步驟名稱，避免橫向穿出 */}
+          <div className="sm:hidden">
+            <div className="flex items-center justify-between gap-1 px-1">
               {steps.map((step, index) => (
-                <div key={step.id} className="flex items-center">
-                  <div className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
-                    currentStep >= step.id
-                      ? 'bg-primary-600 border-primary-600 text-white'
-                      : 'bg-white border-gray-300 text-gray-400'
-                  }`}>
+                <React.Fragment key={step.id}>
+                  <div
+                    className={`flex items-center justify-center w-8 h-8 rounded-full border-2 shrink-0 ${
+                      currentStep >= step.id
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : 'bg-white border-gray-300 text-gray-400'
+                    }`}
+                    aria-current={currentStep === step.id ? 'step' : undefined}
+                    title={step.name}
+                  >
+                    <step.icon className="w-4 h-4" />
+                  </div>
+                  {index < steps.length - 1 && (
+                    <div
+                      className={`flex-1 h-0.5 min-w-[6px] ${
+                        currentStep > step.id ? 'bg-primary-600' : 'bg-gray-300'
+                      }`}
+                    />
+                  )}
+                </React.Fragment>
+              ))}
+            </div>
+            <p className="mt-3 text-center text-sm font-medium text-primary-700">
+              {currentStep}/{steps.length} · {steps.find((s) => s.id === currentStep)?.name}
+            </p>
+          </div>
+
+          {/* Desktop：完整文字步驟 */}
+          <div className="hidden sm:flex items-center justify-center overflow-x-auto">
+            <div className="flex items-center gap-2 md:gap-4">
+              {steps.map((step, index) => (
+                <div key={step.id} className="flex items-center shrink-0">
+                  <div
+                    className={`flex items-center justify-center w-10 h-10 rounded-full border-2 ${
+                      currentStep >= step.id
+                        ? 'bg-primary-600 border-primary-600 text-white'
+                        : 'bg-white border-gray-300 text-gray-400'
+                    }`}
+                  >
                     <step.icon className="w-5 h-5" />
                   </div>
-                  <span className={`ml-2 text-sm font-medium ${
-                    currentStep >= step.id ? 'text-primary-600' : 'text-gray-400'
-                  }`}>
+                  <span
+                    className={`ml-2 text-sm font-medium whitespace-nowrap ${
+                      currentStep >= step.id ? 'text-primary-600' : 'text-gray-400'
+                    }`}
+                  >
                     {step.name}
                   </span>
                   {index < steps.length - 1 && (
-                    <div className={`w-8 h-0.5 mx-4 ${
-                      currentStep > step.id ? 'bg-primary-600' : 'bg-gray-300'
-                    }`} />
+                    <div
+                      className={`w-6 md:w-8 h-0.5 mx-2 md:mx-4 ${
+                        currentStep > step.id ? 'bg-primary-600' : 'bg-gray-300'
+                      }`}
+                    />
                   )}
                 </div>
               ))}
@@ -263,10 +320,15 @@ const Booking: React.FC = () => {
 
         {/* Booking Form */}
         {!loading && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8 min-w-0">
             {/* Main Content */}
-            <div className="lg:col-span-2">
-              <div className="bg-white rounded-2xl shadow-lg p-8">
+            <div className="lg:col-span-2 min-w-0">
+              <div
+                ref={stepSectionRef}
+                id={`booking-step-${currentStep}`}
+                tabIndex={-1}
+                className="bg-white rounded-2xl shadow-lg p-4 sm:p-8 overflow-hidden outline-none scroll-mt-20"
+              >
                 {currentStep === 1 && (
                   <StoreSelector
                     stores={stores}
@@ -274,6 +336,7 @@ const Booking: React.FC = () => {
                     onSelect={(s: StoreSummary) => {
                       setSelectedStore(s);
                       fetchCourts(s._id);
+                      setCurrentStep(2);
                     }}
                     loading={loading && stores.length === 0}
                   />
@@ -281,7 +344,10 @@ const Booking: React.FC = () => {
 
                 {currentStep === 2 && (
                   <CourtSelector
-                    onSelect={setSelectedCourt}
+                    onSelect={(court) => {
+                      setSelectedCourt(court);
+                      setCurrentStep(3);
+                    }}
                     selectedCourt={selectedCourt}
                   />
                 )}
@@ -343,25 +409,22 @@ const Booking: React.FC = () => {
                   />
                 )}
 
-                {/* Navigation Buttons */}
-                {currentStep < 5 && (
-                  <div className="flex justify-between mt-8 pt-6 border-t border-gray-200">
+                {/* Navigation：選店／選場已點擊即前進，這兩步唔顯示「下一步」 */}
+                {currentStep < 5 && currentStep !== 1 && currentStep !== 2 && (
+                  <div className="flex justify-between gap-3 mt-8 pt-6 border-t border-gray-200 sticky bottom-0 bg-white/95 backdrop-blur-sm py-3 -mx-4 px-4 sm:static sm:bg-transparent sm:backdrop-blur-none sm:py-0 sm:mx-0 sm:px-0 z-10">
                     <button
+                      type="button"
                       onClick={prevStep}
-                      disabled={currentStep === 1}
-                      className={`px-6 py-3 rounded-lg font-medium transition-colors duration-200 ${
-                        currentStep === 1
-                          ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                          : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      }`}
+                      className="flex-1 sm:flex-none min-h-[48px] px-6 py-3 rounded-lg font-medium transition-colors duration-200 bg-gray-200 text-gray-700 hover:bg-gray-300"
                     >
                       {t('bookingPage.nav.prev')}
                     </button>
 
                     <button
+                      type="button"
                       onClick={nextStep}
                       disabled={!canProceed()}
-                      className={`px-6 py-3 rounded-lg font-medium transition-colors duration-200 ${
+                      className={`flex-1 sm:flex-none min-h-[48px] px-6 py-3 rounded-lg font-medium transition-colors duration-200 ${
                         canProceed()
                           ? 'bg-primary-600 text-white hover:bg-primary-700'
                           : 'bg-gray-100 text-gray-400 cursor-not-allowed'
@@ -371,49 +434,70 @@ const Booking: React.FC = () => {
                     </button>
                   </div>
                 )}
+                {(currentStep === 1 || currentStep === 2) && (
+                  <div className="mt-6 pt-4 border-t border-gray-100">
+                    {currentStep === 2 && (
+                      <button
+                        type="button"
+                        onClick={prevStep}
+                        className="min-h-[44px] px-4 py-2 rounded-lg text-sm font-medium bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      >
+                        {t('bookingPage.nav.prev')}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Sidebar */}
-            <div className="lg:col-span-1">
-              <div className="bg-white rounded-2xl shadow-lg p-6 sticky top-8">
-                <h3 className="text-lg font-bold text-gray-900 mb-4">{t('bookingPage.sidebar.title')}</h3>
+            {/* Sidebar：desktop 詳情；mobile 精簡只顯示已選＋價錢 */}
+            <div className="lg:col-span-1 min-w-0">
+              <div className="bg-white rounded-2xl shadow-lg p-4 sm:p-6 sticky top-8">
+                <h3 className="text-base sm:text-lg font-bold text-gray-900 mb-3 sm:mb-4">
+                  {t('bookingPage.sidebar.title')}
+                </h3>
                 
-                <div className="space-y-4">
+                <div className="space-y-3 sm:space-y-4">
+                  {selectedStore && (
+                    <div>
+                      <span className="text-sm text-gray-500">{t('bookingPage.steps.store')}</span>
+                      <p className="font-medium text-sm sm:text-base truncate">{selectedStore.name}</p>
+                    </div>
+                  )}
                   <div>
                     <span className="text-sm text-gray-500">{t('bookingPage.sidebar.court')}</span>
-                    <p className="font-medium">
+                    <p className="font-medium text-sm sm:text-base">
                       {selectedCourt ? selectedCourt.name : t('common.notSelected')}
                     </p>
                   </div>
                   
                   <div>
                     <span className="text-sm text-gray-500">{t('bookingPage.sidebar.date')}</span>
-                    <p className="font-medium">
+                    <p className="font-medium text-sm sm:text-base">
                       {selectedDate ? new Date(selectedDate).toLocaleDateString(i18n.language?.startsWith('en') ? 'en-US' : 'zh-TW') : t('common.notSelected')}
                     </p>
                   </div>
                   
                   <div>
                     <span className="text-sm text-gray-500">{t('bookingPage.sidebar.time')}</span>
-                    <p className="font-medium">
+                    <p className="font-medium text-sm sm:text-base">
                       {selectedTimeSlot ? `${selectedTimeSlot.start} - ${selectedTimeSlot.end}` : t('common.notSelected')}
                     </p>
                   </div>
                   
-                  <div>
+                  <div className="hidden sm:block">
                     <span className="text-sm text-gray-500">{t('bookingPage.sidebar.players')}</span>
                     <p className="font-medium">
                       {bookingFormData.totalPlayers} {t('common.people')}
                     </p>
                   </div>
 
-                  {availability && (
-                    <div className="pt-4 border-t border-gray-200">
-                      <div className="flex justify-between">
+                  {(availability?.pricing?.totalPrice != null) && (
+                    <div className="pt-3 border-t border-gray-200">
+                      <div className="flex justify-between items-baseline">
                         <span className="text-sm text-gray-500">{t('bookingPage.sidebar.total')}</span>
                         <span className="font-bold text-lg text-primary-600">
-                          {availability.pricing?.totalPrice || 0} {t('common.currency')}
+                          {availability.pricing.totalPrice} {t('common.currency')}
                         </span>
                       </div>
                     </div>
@@ -421,7 +505,7 @@ const Booking: React.FC = () => {
                 </div>
 
                 {!user && (
-                  <div className="mt-6 p-4 bg-yellow-50 rounded-lg">
+                  <div className="mt-4 sm:mt-6 p-3 sm:p-4 bg-yellow-50 rounded-lg hidden sm:block">
                     <p className="text-sm text-yellow-800">
                       {t('bookingPage.sidebar.loginNotice')}
                     </p>

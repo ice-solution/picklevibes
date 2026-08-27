@@ -127,7 +127,42 @@ const AdminV2: React.FC = () => {
     }
   }, [searchParams, tabs, activeTab]);
 
+  // 鎖住 document／html scroll，只讓 main／drawer 內層滾
+  useEffect(() => {
+    const html = document.documentElement;
+    const body = document.body;
+    const prevHtmlOverflow = html.style.overflow;
+    const prevBodyOverflow = body.style.overflow;
+    const prevBodyOverscroll = body.style.overscrollBehavior;
+    html.style.overflow = 'hidden';
+    body.style.overflow = 'hidden';
+    body.style.overscrollBehavior = 'none';
+    return () => {
+      html.style.overflow = prevHtmlOverflow;
+      body.style.overflow = prevBodyOverflow;
+      body.style.overscrollBehavior = prevBodyOverscroll;
+    };
+  }, []);
+
+  // 開 mobile menu 時額外鎖 touch 傳透到背後
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const preventTouch = (e: TouchEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-admin-drawer-scroll]')) return;
+      e.preventDefault();
+    };
+    document.addEventListener('touchmove', preventTouch, { passive: false });
+    return () => document.removeEventListener('touchmove', preventTouch);
+  }, [mobileOpen]);
+
   const current = useMemo(() => tabs.find((t) => t.id === activeTab) || tabs[0], [tabs, activeTab]);
+
+  // 轉 tab 時把內容區捲回頂，避免殘留 scroll 造成錯覺
+  useEffect(() => {
+    const el = document.querySelector('[data-admin-main-scroll]');
+    if (el instanceof HTMLElement) el.scrollTop = 0;
+  }, [current?.id]);
 
   if (!canOpenAdminV2(user)) {
     return (
@@ -178,19 +213,26 @@ const AdminV2: React.FC = () => {
   );
 
   return (
-    <div className="bg-gray-50 h-[calc(100dvh-4rem)] flex flex-col overflow-hidden">
-      {/* Mobile drawer */}
+    <div className="bg-gray-50 h-full min-h-0 flex flex-col overflow-hidden">
+      {/* Mobile drawer：高於 Navbar(z-50)，backdrop 唔傳 scroll 到後面 */}
       {mobileOpen ? (
-        <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} aria-hidden />
-          <div className="absolute inset-y-0 left-0 w-[18rem] max-w-[85vw] bg-white shadow-xl border-r border-gray-200 flex flex-col">
+        <div className="fixed inset-0 z-[60] lg:hidden" role="dialog" aria-modal="true">
+          <div
+            className="absolute inset-0 bg-black/40 overscroll-none"
+            onClick={() => setMobileOpen(false)}
+            aria-hidden
+          />
+          <div className="absolute inset-y-0 left-0 w-[18rem] max-w-[85vw] bg-white shadow-xl border-r border-gray-200 flex flex-col overscroll-contain">
             <div className="flex-shrink-0 flex items-center justify-between px-4 h-14 border-b border-gray-200">
               <div className="font-bold text-gray-900">Admin</div>
               <button type="button" className="p-2 rounded-md hover:bg-gray-50" onClick={() => setMobileOpen(false)}>
                 <XMarkIcon className="w-6 h-6 text-gray-700" />
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+            <div
+              data-admin-drawer-scroll
+              className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+            >
               <Nav onSelect={() => setMobileOpen(false)} />
             </div>
           </div>
@@ -230,7 +272,10 @@ const AdminV2: React.FC = () => {
             </div>
           </header>
 
-          <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <main
+            data-admin-main-scroll
+            className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6"
+          >
             {effectiveRole === 'staff' && (
               <p className="mb-4 text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
                 店員權限：預約日曆、商店、訂單、活動與恆常活動。店鋪停用後仍可在此管理內容。
@@ -241,10 +286,13 @@ const AdminV2: React.FC = () => {
                 股東帳號為唯讀：可查看數據分析、報告、會計與預約日曆，無法新增或修改資料。
               </p>
             )}
+            {/* 只用 opacity，避免 y 位移＋卸載時高度塌縮令版面跳動 */}
             <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.2 }}
+              key={current.id}
+              className="min-h-full"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.15 }}
             >
               {current.element}
             </motion.div>

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
@@ -67,10 +68,11 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
   const { t } = useTranslation();
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pocketLoading, setPocketLoading] = useState(false);
   const [redeemData, setRedeemData] = useState<RedeemData | null>(null);
   const [error, setError] = useState('');
   const [pocketItems, setPocketItems] = useState<PocketItem[]>([]);
-  const [selectedPocketId, setSelectedPocketId] = useState('');
+  const [applyingPocketId, setApplyingPocketId] = useState<string | null>(null);
 
   const isProxyMode = forUserId !== undefined;
   const canUsePocket = forUserId !== null;
@@ -80,6 +82,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
       setPocketItems([]);
       return;
     }
+    setPocketLoading(true);
     try {
       const res = forUserId
         ? await axios.get(`/redeem/admin/user-pocket/${forUserId}?status=available`)
@@ -97,14 +100,16 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
       setPocketItems(items);
     } catch {
       setPocketItems([]);
+    } finally {
+      setPocketLoading(false);
     }
   };
 
   useEffect(() => {
     setRedeemData(null);
-    setSelectedPocketId('');
     setCode('');
     setError('');
+    setApplyingPocketId(null);
     if (isProxyMode) {
       onRedeemRemoved();
     }
@@ -138,6 +143,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
       setError(err.response?.data?.message || t('redeem.errors.validationFailed'));
     } finally {
       setLoading(false);
+      setApplyingPocketId(null);
     }
   };
 
@@ -153,12 +159,11 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
     await applyValidatePayload({ code: code.trim() });
   };
 
-  const handleSelectPocket = async () => {
-    if (!selectedPocketId) {
-      setError('請選擇口袋中的兌換券');
-      return;
-    }
-    await applyValidatePayload({ pocketItemId: selectedPocketId });
+  /** 點擊口袋兌換券即套用 */
+  const handleUsePocketItem = async (pocketItemId: string) => {
+    if (loading) return;
+    setApplyingPocketId(pocketItemId);
+    await applyValidatePayload({ pocketItemId });
   };
 
   const handleClaimOnly = async () => {
@@ -194,9 +199,9 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
 
   const handleRemove = () => {
     setCode('');
-    setSelectedPocketId('');
     setRedeemData(null);
     setError('');
+    setApplyingPocketId(null);
     onRedeemRemoved();
   };
 
@@ -210,6 +215,13 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
     const rc = item.redeemCode;
     if (!rc) return '';
     return rc.type === 'fixed' ? `HK$${rc.value}` : `${rc.value}%`;
+  };
+
+  const formatValidUntil = (iso?: string) => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' });
   };
 
   return (
@@ -244,6 +256,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
               type="button"
               onClick={handleRemove}
               className="text-green-600 hover:text-green-800"
+              aria-label={t('redeem.remove')}
             >
               <XCircleIcon className="w-5 h-5" />
             </button>
@@ -251,55 +264,91 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
         </motion.div>
       ) : (
         <div className="space-y-4">
-          {pocketItems.length > 0 && (
-            <div className="space-y-2">
+          {/* 口袋可使用兌換券：點擊即用 */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
               <label className="block text-xs font-medium text-gray-600">
-                {forUserId ? '客戶口袋兌換券' : '我的兌換券口袋'}
+                {forUserId ? '客戶口袋兌換券' : t('redeem.pocketTitle')}
               </label>
-              <div className="flex gap-2">
-                <select
-                  value={selectedPocketId}
-                  onChange={(e) => setSelectedPocketId(e.target.value)}
-                  className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm"
+              {!forUserId && (
+                <Link
+                  to="/my-redeem"
+                  className="text-xs text-primary-600 hover:text-primary-800 shrink-0"
                 >
-                  <option value="">選擇袋內兌換券…</option>
-                  {pocketItems.map((item) => (
-                    <option key={item._id} value={item._id}>
-                      {item.redeemCode?.name}（{item.redeemCode?.code}）· {formatDiscount(item)}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={handleSelectPocket}
-                  disabled={loading || !selectedPocketId}
-                  className="px-3 py-2 bg-primary-600 text-white rounded-lg text-sm disabled:opacity-50"
-                >
-                  使用
-                </button>
-              </div>
+                  {t('redeem.pocketViewAll')}
+                </Link>
+              )}
             </div>
-          )}
+
+            {pocketLoading ? (
+              <p className="text-xs text-gray-500 py-2">{t('common.loading')}</p>
+            ) : pocketItems.length > 0 ? (
+              <ul className="space-y-2 max-h-48 overflow-y-auto overscroll-contain">
+                {pocketItems.map((item) => {
+                  const rc = item.redeemCode;
+                  const busy = applyingPocketId === item._id;
+                  return (
+                    <li key={item._id}>
+                      <button
+                        type="button"
+                        onClick={() => handleUsePocketItem(item._id)}
+                        disabled={loading}
+                        className="w-full text-left rounded-lg border border-primary-200 bg-white px-3 py-2.5 hover:border-primary-400 hover:bg-primary-50 transition-colors disabled:opacity-50"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate">
+                              {rc?.name || '兌換券'}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              {rc?.code}
+                              {rc?.validUntil
+                                ? ` · 有效至 ${formatValidUntil(rc.validUntil)}`
+                                : ''}
+                            </p>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <p className="text-sm font-bold text-primary-700">
+                              {formatDiscount(item)}
+                            </p>
+                            <p className="text-[11px] text-primary-600 mt-0.5">
+                              {busy ? t('common.loading') : t('redeem.use')}
+                            </p>
+                          </div>
+                        </div>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-xs text-gray-500 bg-white border border-dashed border-gray-200 rounded-lg px-3 py-2">
+                {t('redeem.pocketEmpty')}
+              </p>
+            )}
+          </div>
 
           <div className="space-y-2">
-            <label className="block text-xs font-medium text-gray-600">輸入兌換碼</label>
-            <div className="flex space-x-2">
+            <label className="block text-xs font-medium text-gray-600">
+              {t('redeem.inputLabel')}
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2">
               <input
                 type="text"
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
                 onKeyPress={handleKeyPress}
                 placeholder={t('redeem.placeholder')}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                className="flex-1 min-w-0 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                 disabled={loading}
               />
               <button
                 type="button"
                 onClick={handleValidate}
                 disabled={loading || !code.trim()}
-                className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+                className="shrink-0 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium min-h-[40px]"
               >
-                {loading ? t('common.loading') : t('redeem.apply')}
+                {loading && !applyingPocketId ? t('common.loading') : t('redeem.apply')}
               </button>
             </div>
             <button
@@ -308,7 +357,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
               disabled={loading || !code.trim()}
               className="text-xs text-primary-600 hover:text-primary-800 disabled:opacity-50"
             >
-              {forUserId ? '只放入客戶口袋（稍後再用）' : '只放入口袋（稍後再用）'}
+              {forUserId ? '只放入客戶口袋（稍後再用）' : t('redeem.claimOnly')}
             </button>
           </div>
 
@@ -318,7 +367,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
               animate={{ opacity: 1, y: 0 }}
               className="flex items-center space-x-2 text-red-600 text-sm"
             >
-              <ExclamationTriangleIcon className="w-4 h-4" />
+              <ExclamationTriangleIcon className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </motion.div>
           )}

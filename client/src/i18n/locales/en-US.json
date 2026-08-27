@@ -1159,8 +1159,17 @@
   "redeem": {
     "title": "Redeem code",
     "placeholder": "Enter redeem code",
+    "apply": "Apply",
     "validate": "Validate",
     "validating": "Validating…",
+    "discount": "Discount",
+    "use": "Use",
+    "pocketTitle": "Available pocket vouchers",
+    "pocketEmpty": "No pocket vouchers available for this order",
+    "pocketViewAll": "View my pocket",
+    "selectPocket": "Select a pocket voucher…",
+    "claimOnly": "Add to pocket only (use later)",
+    "inputLabel": "Enter redeem code",
     "errors": {
       "codeRequired": "Please enter a redeem code",
       "validationFailed": "Redeem code validation failed"
