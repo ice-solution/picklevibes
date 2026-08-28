@@ -64,6 +64,14 @@ function bookingStoreId(booking) {
   );
 }
 
+function bookingUserId(booking) {
+  if (!booking?.user) return null;
+  if (typeof booking.user === 'object' && booking.user._id) {
+    return booking.user._id.toString();
+  }
+  return booking.user.toString();
+}
+
 async function getStoreOperatorAccess(user, booking) {
   if (!user) return { ok: false, role: null };
   if (user.role === 'admin') return { ok: true, role: 'platform' };
@@ -1148,7 +1156,7 @@ router.get('/:id', [auth], async (req, res) => {
       return res.status(404).json({ message: '預約不存在' });
     }
 
-    const isOwner = booking.user._id.toString() === req.user.id;
+    const isOwner = bookingUserId(booking) === req.user.id;
     const operator = await getStoreOperatorAccess(req.user, booking);
     if (!isOwner && !operator.ok) {
       return res.status(403).json({ message: '無權限查看此預約' });
@@ -1185,7 +1193,8 @@ router.put('/:id/cancel', [
       return res.status(404).json({ message: '預約不存在' });
     }
 
-    const isOwner = booking.user.toString() === req.user.id;
+    const ownerId = bookingUserId(booking);
+    const isOwner = ownerId === req.user.id;
     const operator = await getStoreOperatorAccess(req.user, booking);
     if (!isOwner && !operator.ok) {
       return res.status(403).json({ message: '無權限取消此預約' });
@@ -1201,7 +1210,7 @@ router.put('/:id/cancel', [
         : [booking];
 
     if (!operator.ok) {
-      const foreign = bundleBookings.find((b) => b.user.toString() !== req.user.id);
+      const foreign = bundleBookings.find((b) => bookingUserId(b) !== req.user.id);
       if (foreign) {
         return res.status(403).json({ message: '無權限取消此預約' });
       }
@@ -1219,7 +1228,7 @@ router.put('/:id/cancel', [
 
     const cancellation = {
       cancelledAt: new Date(),
-      cancelledBy: booking.user.toString() === req.user.id ? 'user' : 'admin',
+      cancelledBy: ownerId === req.user.id ? 'user' : 'admin',
       reason
     };
 
