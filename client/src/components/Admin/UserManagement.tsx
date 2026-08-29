@@ -16,10 +16,12 @@ import {
   ChevronRightIcon,
   MagnifyingGlassIcon,
   UserCircleIcon,
-  ArrowDownTrayIcon
+  ArrowDownTrayIcon,
+  TicketIcon,
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import { downloadRechargeInvoicePdf } from '../../utils/downloadRechargeInvoice';
+import AssignRedeemToUserModal from './AssignRedeemToUserModal';
 
 interface User {
   _id: string;
@@ -96,6 +98,7 @@ const UserManagement: React.FC = () => {
   const [editingField, setEditingField] = useState<'role' | 'membership' | 'status' | null>(null);
   const [newValue, setNewValue] = useState('');
   const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [showAssignRedeemModal, setShowAssignRedeemModal] = useState(false);
   const [rechargePoints, setRechargePoints] = useState('');
   const [rechargeReason, setRechargeReason] = useState('');
   const [rechargeStoreId, setRechargeStoreId] = useState('');
@@ -321,6 +324,11 @@ const UserManagement: React.FC = () => {
     setRechargeCourtId('');
     setRechargeCourts([]);
     setShowRechargeModal(true);
+  };
+
+  const handleAssignRedeemUser = (user: User) => {
+    setSelectedUser(user);
+    setShowAssignRedeemModal(true);
   };
 
   const handleDeductUser = (user: User) => {
@@ -1068,6 +1076,13 @@ const UserManagement: React.FC = () => {
                         <PlusIcon className="w-4 h-4" />
                       </button>
                       <button
+                        onClick={() => handleAssignRedeemUser(user)}
+                        className="text-amber-600 hover:text-amber-900"
+                        title="派發兌換券到用戶口袋"
+                      >
+                        <TicketIcon className="w-4 h-4" />
+                      </button>
+                      <button
                         onClick={() => handleDeductUser(user)}
                         className="text-red-600 hover:text-red-900"
                         title="扣除積分"
@@ -1195,6 +1210,14 @@ const UserManagement: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showAssignRedeemModal && selectedUser && (
+        <AssignRedeemToUserModal
+          user={selectedUser}
+          isOpen={showAssignRedeemModal}
+          onClose={() => setShowAssignRedeemModal(false)}
+        />
       )}
 
       {/* 充值模態框 */}

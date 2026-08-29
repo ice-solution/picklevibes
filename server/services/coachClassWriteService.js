@@ -173,6 +173,13 @@ async function buildCoachClassPayload(body, { existing = null } = {}) {
   };
 }
 
+/** 連結恆常班時不主動 hold 場地；一般店內場地課堂仍 hold */
+function shouldHoldCourtsForCoachClass(payload) {
+  if (payload.locationType !== 'court') return false;
+  if (payload.regularActivityId) return false;
+  return true;
+}
+
 async function createHoldBookings({ coachIds, courtIds, dateObj, startTime, endTime, title, notes }) {
   const bookingIds = [];
   const primaryCoach = coachIds[0];
@@ -297,6 +304,7 @@ module.exports = {
   uniqueIds,
   cancelBookings,
   buildCoachClassPayload,
+  shouldHoldCourtsForCoachClass,
   createHoldBookings,
   syncLinkedActivity,
   totalPay,

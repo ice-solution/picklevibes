@@ -683,7 +683,9 @@ const RedeemCodeManagement: React.FC = () => {
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-900">兌換碼管理</h2>
-          <p className="text-gray-600">管理所有兌換碼和促銷活動</p>
+          <p className="text-gray-600">
+            管理所有兌換碼和促銷活動；列表「派發」可派到用戶口袋，或於用戶管理為指定用戶派發
+          </p>
         </div>
         <div className="flex items-center space-x-3">
           <button
@@ -1019,10 +1021,11 @@ const RedeemCodeManagement: React.FC = () => {
                     <div className="flex space-x-2">
                       <button
                         onClick={() => setAssignTarget(code)}
-                        className="text-amber-600 hover:text-amber-800"
+                        className="inline-flex items-center text-amber-600 hover:text-amber-800 hover:underline"
                         title="派發到用戶口袋"
                       >
-                        <UserPlusIcon className="w-4 h-4" />
+                        <UserPlusIcon className="w-4 h-4 mr-0.5" />
+                        派發
                       </button>
                       <button
                         onClick={() => handleEdit(code)}
@@ -1148,10 +1151,11 @@ const RedeemCodeManagement: React.FC = () => {
                       <div className="flex space-x-2">
                         <button
                           onClick={() => setAssignTarget(code)}
-                          className="text-amber-600 hover:text-amber-800"
+                          className="inline-flex items-center text-amber-600 hover:text-amber-800 hover:underline"
                           title="派發到用戶口袋"
                         >
-                          <UserPlusIcon className="w-4 h-4" />
+                          <UserPlusIcon className="w-4 h-4 mr-0.5" />
+                          派發
                         </button>
                         <button
                           onClick={() => handleEdit(code)}

@@ -507,7 +507,7 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
         <div>
           <h2 className="text-xl font-semibold text-gray-900">教練課堂</h2>
           <p className="text-sm text-gray-600">
-            多教練／多場 hold、連結活動／恆常班、計糧與已付款入會計
+            多教練／多場 hold（恆常班除外）、連結活動／恆常班、計糧與已付款入會計
           </p>
         </div>
         <button
@@ -907,6 +907,7 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">連結恆常班時不會自動 hold 場地</p>
                 </div>
               </div>
 

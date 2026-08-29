@@ -15,6 +15,7 @@ const {
   cancelBookings,
   buildCoachClassPayload,
   createHoldBookings,
+  shouldHoldCourtsForCoachClass,
   syncLinkedActivity,
   markClassPaid,
   totalPay,
@@ -269,7 +270,7 @@ router.post('/', writeValidators, async (req, res) => {
 
     const payload = await buildCoachClassPayload(req.body);
     let bookingIds = [];
-    if (payload.locationType === 'court') {
+    if (shouldHoldCourtsForCoachClass(payload)) {
       bookingIds = await createHoldBookings({
         coachIds: payload.coachIds,
         courtIds: payload.courtIds,
@@ -320,9 +321,10 @@ router.post('/', writeValidators, async (req, res) => {
     }
 
     res.status(201).json({
-      message:
-        payload.locationType === 'court'
-          ? `教練課堂已建立，並已 hold ${bookingIds.length} 個場地`
+      message: bookingIds.length
+        ? `教練課堂已建立，並已 hold ${bookingIds.length} 個場地`
+        : payload.regularActivityId && payload.locationType === 'court'
+          ? '恆常班課堂已建立（不 hold 場地）'
           : '教練課堂已建立',
       coachClass: populated,
       notify,
@@ -367,7 +369,7 @@ router.put('/:id', writeValidators, async (req, res) => {
     await cancelBookings(oldBookingIds);
 
     let bookingIds = [];
-    if (payload.locationType === 'court') {
+    if (shouldHoldCourtsForCoachClass(payload)) {
       bookingIds = await createHoldBookings({
         coachIds: payload.coachIds,
         courtIds: payload.courtIds,
