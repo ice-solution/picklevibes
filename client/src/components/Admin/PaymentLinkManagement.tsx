@@ -36,6 +36,7 @@ type PaymentRow = {
   payerNote?: string;
   user?: { name?: string; email?: string; phone?: string } | null;
   payment?: { paidAt?: string; transactionId?: string };
+  refundedAt?: string | null;
   createdAt: string;
 };
 
@@ -78,6 +79,7 @@ const PaymentLinkManagement: React.FC = () => {
   const [paymentsLink, setPaymentsLink] = useState<PaymentLinkDoc | null>(null);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [refundingId, setRefundingId] = useState<string | null>(null);
 
   const loadStores = useCallback(async () => {
     const res = await axios.get('/stores/admin/all');
@@ -200,12 +202,57 @@ const PaymentLinkManagement: React.FC = () => {
     }
   };
 
+  const refreshPayments = async () => {
+    if (!paymentsLink) return;
+    const res = await axios.get(`/payment-links/${paymentsLink._id}/payments?limit=100`);
+    setPayments(res.data.payments || []);
+  };
+
+  const handleRefundPayment = async (payment: PaymentRow) => {
+    if (!paymentsLink) return;
+    if (payment.status !== 'completed') return;
+    const reason = window.prompt('退款原因（可選）：') ?? '';
+    const refundHint =
+      payment.method === 'wonder'
+        ? '此操作會呼叫 Wonder 退款並沖銷會計收入。'
+        : payment.method === 'stripe'
+          ? '此操作會呼叫 Stripe 退款。'
+          : '此操作會退回積分。';
+    if (!window.confirm(`確定退款 HK$${Number(payment.amount).toFixed(2)}？${refundHint}`)) {
+      return;
+    }
+    setRefundingId(payment._id);
+    try {
+      await axios.post(`/payment-links/${paymentsLink._id}/payments/${payment._id}/refund`, {
+        reason,
+      });
+      alert('退款成功');
+      await refreshPayments();
+      await loadLinks();
+    } catch (e) {
+      alert(errMsg(e));
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
   const methodLabel = (m: string) => {
     if (m === 'points') return '積分';
-    if (m === 'wonder') return '線上（充值再付款）';
-    if (m === 'stripe') return '線上（充值再付款）';
+    if (m === 'wonder') return 'Wonder 線上';
+    if (m === 'stripe') return 'Stripe 線上';
     return m;
   };
+
+  const statusLabel = (p: PaymentRow) => {
+    if (p.refundedAt || p.status === 'cancelled') return '已退款';
+    if (p.status === 'completed') return '已完成';
+    if (p.status === 'pending') return '待付款';
+    if (p.status === 'failed') return '失敗';
+    return p.status;
+  };
+
+  const canRefundPayment = (p: PaymentRow) =>
+    p.status === 'completed' && !p.refundedAt && ['wonder', 'stripe', 'points'].includes(p.method);
 
   const storeName = useMemo(() => {
     const map = new Map(stores.map((s) => [s._id, s.name]));
@@ -498,6 +545,7 @@ const PaymentLinkManagement: React.FC = () => {
                       <th className="px-3 py-2 text-left">狀態</th>
                       <th className="px-3 py-2 text-right">金額</th>
                       <th className="px-3 py-2 text-left">付款人</th>
+                      <th className="px-3 py-2 text-right">操作</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
@@ -509,13 +557,39 @@ const PaymentLinkManagement: React.FC = () => {
                           })}
                         </td>
                         <td className="px-3 py-2">{methodLabel(p.method)}</td>
-                        <td className="px-3 py-2">{p.status}</td>
+                        <td className="px-3 py-2">
+                          <span
+                            className={
+                              p.refundedAt || p.status === 'cancelled'
+                                ? 'text-red-600'
+                                : p.status === 'completed'
+                                  ? 'text-green-700'
+                                  : 'text-gray-700'
+                            }
+                          >
+                            {statusLabel(p)}
+                          </span>
+                        </td>
                         <td className="px-3 py-2 text-right">HK${Number(p.amount).toFixed(2)}</td>
                         <td className="px-3 py-2">
                           {p.user?.name || p.contactEmail || p.contactPhone || '訪客'}
                           {p.payerNote ? (
                             <span className="block text-xs text-gray-500">{p.payerNote}</span>
                           ) : null}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          {canRefundPayment(p) ? (
+                            <button
+                              type="button"
+                              disabled={refundingId === p._id}
+                              onClick={() => void handleRefundPayment(p)}
+                              className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+                            >
+                              {refundingId === p._id ? '退款中…' : '退款'}
+                            </button>
+                          ) : (
+                            <span className="text-xs text-gray-400">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}

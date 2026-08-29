@@ -59,6 +59,18 @@ const paymentLinkPaymentSchema = new mongoose.Schema(
       ref: 'AccountingTransaction',
       default: null,
     },
+    refundAccountingTransaction: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AccountingTransaction',
+      default: null,
+    },
+    refundedAt: { type: Date, default: null },
+    refundedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    refundReason: { type: String, default: '', trim: true },
   },
   { timestamps: true }
 );

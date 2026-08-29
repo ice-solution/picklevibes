@@ -84,6 +84,10 @@ interface RedeemCodeGroup {
 const SYNC_MAX_QUANTITY = 100;
 const BULK_MAX_QUANTITY = 10000;
 
+function formatRedeemDiscountValue(type: 'fixed' | 'percentage', value: number) {
+  return type === 'fixed' ? `減 HK$${value}` : `${value}%`;
+}
+
 function ApplicablePricingSlotsPicker({
   applicableTypes,
   value,
@@ -864,7 +868,7 @@ const RedeemCodeManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {g.type === 'fixed' ? `減 HK$${g.value}` : `${g.value}折`}
+                        {formatRedeemDiscountValue(g.type, g.value)}
                       </div>
                       {g.minAmount > 0 && (
                         <div className="text-xs text-gray-500">最低消費 HK${g.minAmount}</div>
@@ -981,7 +985,7 @@ const RedeemCodeManagement: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {code.type === 'fixed' ? `減 HK$${code.value}` : `${code.value}折`}
+                      {formatRedeemDiscountValue(code.type, code.value)}
                     </div>
                     {code.minAmount > 0 && (
                       <div className="text-xs text-gray-500">最低消費 HK${code.minAmount}</div>
@@ -1115,7 +1119,7 @@ const RedeemCodeManagement: React.FC = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        {code.type === 'fixed' ? `減 HK$${code.value}` : `${code.value}折`}
+                        {formatRedeemDiscountValue(code.type, code.value)}
                       </div>
                       {code.minAmount > 0 && (
                         <div className="text-xs text-gray-500">最低消費 HK${code.minAmount}</div>

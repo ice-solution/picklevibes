@@ -16,6 +16,7 @@ const {
   createGatewayCheckout,
   serializePublicLink,
   completeGatewayPayment,
+  refundPaymentLinkPayment,
 } = require('../services/paymentLinkPaymentService');
 const { getPaymentProvider } = require('../config/paymentProvider');
 
@@ -433,5 +434,48 @@ router.get('/:id/payments', async (req, res) => {
     res.status(500).json({ message: '服務器錯誤' });
   }
 });
+
+router.post(
+  '/:id/payments/:paymentId/refund',
+  [body('reason').optional().trim().isLength({ max: 200 }).withMessage('退款原因不能超過200個字符')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg });
+      }
+      if (!mongoose.isValidObjectId(req.params.id) || !mongoose.isValidObjectId(req.params.paymentId)) {
+        return res.status(400).json({ message: '無效 ID' });
+      }
+
+      const link = await PaymentLink.findById(req.params.id).select('store').lean();
+      if (!link) return res.status(404).json({ message: '收款連結不存在' });
+      const denied = requirePaymentLinksAccess(req, res, link.store);
+      if (denied) return denied;
+      const writeGuard = assertNotShareholderWrite(req.tenantAccess, link.store);
+      if (!writeGuard.ok) {
+        return res.status(writeGuard.status).json({ message: writeGuard.message });
+      }
+
+      const result = await refundPaymentLinkPayment({
+        linkId: req.params.id,
+        paymentId: req.params.paymentId,
+        cancelledBy: req.user.id || req.user._id,
+        reason: req.body.reason || '',
+      });
+      if (result.error) {
+        return res.status(result.status || 400).json({ message: result.error });
+      }
+
+      res.json({
+        message: '退款成功，會計已記錄取消',
+        payment: result.payment,
+      });
+    } catch (error) {
+      console.error('refund payment link payment:', error);
+      res.status(500).json({ message: error.message || '退款失敗' });
+    }
+  }
+);
 
 module.exports = router;

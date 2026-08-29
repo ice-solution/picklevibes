@@ -11,6 +11,9 @@ process.env.TZ = 'UTC';
 
 const WONDER_ECHO_URI = '/svc/payment/api/v1/openapi/echo';
 const WONDER_ORDER_API_PATH = '/svc/payment/api/v1/openapi/orders';
+const WONDER_ORDER_CHECK_URI = '/svc/payment/api/v1/openapi/orders/check';
+const WONDER_TRANSACTION_VOID_URI = '/svc/payment/api/v1/openapi/transactions/void';
+const WONDER_ORDER_REFUND_URI = '/svc/payment/api/v1/openapi/orders/refund';
 
 function getPaymentBaseUrl() {
   const dev = (process.env.PAYMENT_DEV || process.env.payment_dev || '').toString().trim().toLowerCase();
@@ -188,6 +191,122 @@ function isOrderPaid(body) {
   return state === 'completed' || correspondenceState === 'paid';
 }
 
+function normalizeWonderOrder(data) {
+  if (!data) return null;
+  return data.order || data.data?.order || data;
+}
+
+function findRefundableSalesTransaction(orderData) {
+  const transactions = orderData?.transactions || [];
+  const sales = transactions.filter((tx) => {
+    const type = String(tx.type || '').toLowerCase();
+    return type === 'sales' && tx.success === true && !tx.voided;
+  });
+  if (!sales.length) return null;
+  return sales.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))[0];
+}
+
+async function signedWonderPost(uri, bodyObj) {
+  const baseUrl = getPaymentBaseUrl();
+  const { appId, apiKey, privateKey } = getWonderConfig();
+  if (!appId) {
+    throw new Error('WONDER_APP_ID is required in .env');
+  }
+  if (!privateKey || !privateKey.includes('BEGIN')) {
+    throw new Error('WONDER_PRIVATE_KEY is required for Wonder API signature');
+  }
+
+  await wonderAuthenticate();
+
+  const body = { app_id: appId, ...bodyObj };
+  const plainText = JSON.stringify(body);
+  const authHeaders = getWonderAuthHeaders(privateKey, appId, 'POST', uri, plainText);
+  const headers = {
+    'Content-Type': 'application/json',
+    Credential: authHeaders.Credential,
+    Nonce: authHeaders.Nonce,
+    Signature: authHeaders.Signature,
+  };
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`;
+    headers['X-API-Key'] = apiKey;
+  }
+
+  const response = await axios.post(`${baseUrl}${uri}`, plainText, {
+    headers,
+    timeout: 20000,
+    validateStatus: () => true,
+  });
+
+  if (response.status !== 200 && response.status !== 201) {
+    const msg =
+      response.data?.message || response.data?.error || response.statusText || JSON.stringify(response.data);
+    throw new Error(`Wonder API failed (${uri}): ${response.status} - ${JSON.stringify(msg)}`);
+  }
+
+  return response.data;
+}
+
+/**
+ * 查詢 Wonder 訂單（reference_number / order number / transaction uuid 三選一）
+ */
+async function getOrder({ referenceNumber, orderNumber, transactionUuid } = {}) {
+  const order = {};
+  if (referenceNumber) order.reference_number = String(referenceNumber);
+  if (orderNumber) order.number = String(orderNumber);
+  if (!order.reference_number && !order.number && !transactionUuid) {
+    throw new Error('請提供 reference_number、order number 或 transaction uuid');
+  }
+
+  const payload = { order };
+  if (transactionUuid) {
+    payload.transaction = { uuid: String(transactionUuid) };
+  }
+
+  const data = await signedWonderPost(WONDER_ORDER_CHECK_URI, payload);
+  return normalizeWonderOrder(data);
+}
+
+/**
+ * Wonder 退款：settlement 前 void，settlement 後 refund
+ */
+async function refundOrderPayment({ referenceNumber, orderNumber, amount, transactionUuid } = {}) {
+  const orderPayload = {};
+  if (referenceNumber) orderPayload.reference_number = String(referenceNumber);
+  if (orderNumber) orderPayload.number = String(orderNumber);
+
+  const orderData = await getOrder({ referenceNumber, orderNumber, transactionUuid });
+  const salesTx = findRefundableSalesTransaction(orderData);
+  const uuid = transactionUuid || salesTx?.uuid;
+  if (!uuid) {
+    throw new Error('找不到可退款的 Wonder 交易');
+  }
+
+  const amountStr =
+    typeof amount === 'number' ? amount.toFixed(2) : String(amount || salesTx?.amount || '0.00');
+
+  if (salesTx?.allow_void === true) {
+    const data = await signedWonderPost(WONDER_TRANSACTION_VOID_URI, {
+      order: orderPayload,
+      transaction: { uuid: String(uuid) },
+    });
+    return { action: 'void', data, transactionUuid: uuid };
+  }
+
+  if (salesTx?.allow_refund === true) {
+    const data = await signedWonderPost(WONDER_ORDER_REFUND_URI, {
+      order: orderPayload,
+      transaction: {
+        uuid: String(uuid),
+        amount: amountStr,
+      },
+    });
+    return { action: 'refund', data, transactionUuid: uuid };
+  }
+
+  throw new Error('此 Wonder 交易目前不可 void 或 refund');
+}
+
 module.exports = {
   getPaymentBaseUrl,
   getWonderConfig,
@@ -195,4 +314,7 @@ module.exports = {
   createOrder,
   echoTest,
   isOrderPaid,
+  getOrder,
+  refundOrderPayment,
+  findRefundableSalesTransaction,
 };
