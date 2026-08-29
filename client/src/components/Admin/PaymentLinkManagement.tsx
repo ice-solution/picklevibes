@@ -37,6 +37,8 @@ type PaymentRow = {
   user?: { name?: string; email?: string; phone?: string } | null;
   payment?: { paidAt?: string; transactionId?: string };
   refundedAt?: string | null;
+  wonderRefundVerified?: boolean;
+  wonderRefundLastError?: string;
   createdAt: string;
 };
 
@@ -236,6 +238,30 @@ const PaymentLinkManagement: React.FC = () => {
     }
   };
 
+  const handleRetryWonderRefund = async (payment: PaymentRow) => {
+    if (!paymentsLink) return;
+    if (
+      !window.confirm(
+        `此筆已標記退款，但 Wonder 可能未完成。確定重試 Wonder 退款 HK$${Number(payment.amount).toFixed(2)}？`
+      )
+    ) {
+      return;
+    }
+    setRefundingId(payment._id);
+    try {
+      await axios.post(
+        `/payment-links/${paymentsLink._id}/payments/${payment._id}/retry-wonder-refund`,
+        {}
+      );
+      alert('Wonder 退款已確認');
+      await refreshPayments();
+    } catch (e) {
+      alert(errMsg(e));
+    } finally {
+      setRefundingId(null);
+    }
+  };
+
   const methodLabel = (m: string) => {
     if (m === 'points') return '積分';
     if (m === 'wonder') return 'Wonder 線上';
@@ -244,7 +270,12 @@ const PaymentLinkManagement: React.FC = () => {
   };
 
   const statusLabel = (p: PaymentRow) => {
-    if (p.refundedAt || p.status === 'cancelled') return '已退款';
+    if (p.refundedAt || p.status === 'cancelled') {
+      if (p.method === 'wonder' && p.wonderRefundVerified !== true) {
+        return '已退款（Wonder 未確認）';
+      }
+      return '已退款';
+    }
     if (p.status === 'completed') return '已完成';
     if (p.status === 'pending') return '待付款';
     if (p.status === 'failed') return '失敗';
@@ -253,6 +284,11 @@ const PaymentLinkManagement: React.FC = () => {
 
   const canRefundPayment = (p: PaymentRow) =>
     p.status === 'completed' && !p.refundedAt && ['wonder', 'stripe', 'points'].includes(p.method);
+
+  const canRetryWonderRefund = (p: PaymentRow) =>
+    p.method === 'wonder' &&
+    (p.refundedAt || p.status === 'cancelled') &&
+    p.wonderRefundVerified !== true;
 
   const storeName = useMemo(() => {
     const map = new Map(stores.map((s) => [s._id, s.name]));
@@ -586,6 +622,16 @@ const PaymentLinkManagement: React.FC = () => {
                               className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
                             >
                               {refundingId === p._id ? '退款中…' : '退款'}
+                            </button>
+                          ) : canRetryWonderRefund(p) ? (
+                            <button
+                              type="button"
+                              disabled={refundingId === p._id}
+                              onClick={() => void handleRetryWonderRefund(p)}
+                              className="text-sm text-amber-700 hover:text-amber-900 disabled:opacity-50"
+                              title={p.wonderRefundLastError || 'Wonder 尚未確認退款'}
+                            >
+                              {refundingId === p._id ? '重試中…' : '重試 Wonder'}
                             </button>
                           ) : (
                             <span className="text-xs text-gray-400">—</span>

@@ -71,6 +71,14 @@ const paymentLinkPaymentSchema = new mongoose.Schema(
       default: null,
     },
     refundReason: { type: String, default: '', trim: true },
+    wonderRefundAction: {
+      type: String,
+      enum: ['', 'void', 'refund'],
+      default: '',
+    },
+    wonderRefundVerified: { type: Boolean, default: false },
+    wonderRefundAttemptAt: { type: Date, default: null },
+    wonderRefundLastError: { type: String, default: '', trim: true },
   },
   { timestamps: true }
 );

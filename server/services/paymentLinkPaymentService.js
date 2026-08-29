@@ -524,11 +524,34 @@ async function createRefundAccountingEntry(payment, link, cancelledBy, reason) {
 async function refundWonderGatewayPayment(payment) {
   const referenceNumber = buildPaylinkReference(payment._id);
   const orderNumber = payment.payment?.transactionId || '';
-  return wonderPaymentService.refundOrderPayment({
+  const result = await wonderPaymentService.refundOrderPayment({
     referenceNumber,
     orderNumber: orderNumber.startsWith('paylink_') ? undefined : orderNumber,
     amount: payment.amount,
   });
+  payment.wonderRefundAction = result.action === 'already_refunded' ? 'refund' : result.action;
+  payment.wonderRefundVerified = true;
+  payment.wonderRefundAttemptAt = new Date();
+  payment.wonderRefundLastError = '';
+  return result;
+}
+
+async function applyLocalRefundSideEffects(payment, link, cancelledBy, trimmedReason) {
+  if (payment.user && payment.method !== 'points') {
+    await refundMemberPoints(payment, link, trimmedReason);
+  }
+
+  await createRefundAccountingEntry(payment, link, cancelledBy, trimmedReason);
+
+  if (payment.status === 'completed') {
+    await reverseLinkStats(payment.link?._id || payment.link, payment.amount);
+  }
+
+  payment.status = 'cancelled';
+  payment.refundedAt = payment.refundedAt || new Date();
+  payment.refundedBy = payment.refundedBy || cancelledBy;
+  payment.refundReason = trimmedReason || payment.refundReason || '';
+  await payment.save();
 }
 
 async function refundStripeGatewayPayment(payment) {
@@ -579,44 +602,86 @@ async function refundPaymentLinkPayment({
   const link = payment.link;
   const trimmedReason = String(reason || '').trim();
 
-  if (payment.method === 'wonder') {
+  try {
+    if (payment.method === 'wonder') {
+      await refundWonderGatewayPayment(payment);
+    } else if (payment.method === 'stripe') {
+      await refundStripeGatewayPayment(payment);
+    } else if (payment.method === 'points') {
+      if (!payment.user) {
+        return { error: '積分付款缺少用戶，無法退款', status: 400 };
+      }
+      const linkTitle = link?.title || '收款連結';
+      const debitPoints = resolvePointsPrice(link, payment.amount);
+      let userBalance = await UserBalance.findOne({ user: payment.user });
+      if (!userBalance) {
+        userBalance = new UserBalance({ user: payment.user, balance: 0 });
+      }
+      await userBalance.refund(
+        debitPoints,
+        `收款連結退款：${linkTitle}${trimmedReason ? ` · ${trimmedReason}` : ''}`
+      );
+      payment.pointsDebited = false;
+    } else {
+      return { error: '不支援此付款方式的退款', status: 400 };
+    }
+
+    await applyLocalRefundSideEffects(payment, link, cancelledBy, trimmedReason);
+    return { payment };
+  } catch (error) {
+    if (payment.method === 'wonder') {
+      payment.wonderRefundVerified = false;
+      payment.wonderRefundAttemptAt = new Date();
+      payment.wonderRefundLastError = error.message || 'Wonder 退款失敗';
+      await payment.save();
+    }
+    throw error;
+  }
+}
+
+async function retryWonderRefundPayment({
+  linkId,
+  paymentId,
+  cancelledBy,
+  reason = '',
+}) {
+  const payment = await PaymentLinkPayment.findById(paymentId).populate(
+    'link',
+    'title code pointsAmount amount store createdBy'
+  );
+  if (!payment) {
+    return { error: '付款記錄不存在', status: 404 };
+  }
+  if (String(payment.link?._id || payment.link) !== String(linkId)) {
+    return { error: '付款記錄不屬於此收款連結', status: 400 };
+  }
+  if (payment.method !== 'wonder') {
+    return { error: '只有 Wonder 付款可重試 Gateway 退款', status: 400 };
+  }
+  if (payment.status !== 'cancelled' && payment.status !== 'completed') {
+    return { error: '此付款狀態不可重試 Wonder 退款', status: 400 };
+  }
+  if (payment.wonderRefundVerified) {
+    return { error: 'Wonder 退款已確認，無需重試', status: 400 };
+  }
+
+  const trimmedReason = String(reason || '').trim();
+
+  try {
     await refundWonderGatewayPayment(payment);
-  } else if (payment.method === 'stripe') {
-    await refundStripeGatewayPayment(payment);
-  } else if (payment.method === 'points') {
-    if (!payment.user) {
-      return { error: '積分付款缺少用戶，無法退款', status: 400 };
+    if (payment.status === 'completed') {
+      await applyLocalRefundSideEffects(payment, payment.link, cancelledBy, trimmedReason);
+    } else {
+      await payment.save();
     }
-    const linkTitle = link?.title || '收款連結';
-    const debitPoints = resolvePointsPrice(link, payment.amount);
-    let userBalance = await UserBalance.findOne({ user: payment.user });
-    if (!userBalance) {
-      userBalance = new UserBalance({ user: payment.user, balance: 0 });
-    }
-    await userBalance.refund(
-      debitPoints,
-      `收款連結退款：${linkTitle}${trimmedReason ? ` · ${trimmedReason}` : ''}`
-    );
-    payment.pointsDebited = false;
-  } else {
-    return { error: '不支援此付款方式的退款', status: 400 };
+    return { payment };
+  } catch (error) {
+    payment.wonderRefundVerified = false;
+    payment.wonderRefundAttemptAt = new Date();
+    payment.wonderRefundLastError = error.message || 'Wonder 退款失敗';
+    await payment.save();
+    throw error;
   }
-
-  if (payment.user && payment.method !== 'points') {
-    await refundMemberPoints(payment, link, trimmedReason);
-  }
-
-  await createRefundAccountingEntry(payment, link, cancelledBy, trimmedReason);
-
-  payment.status = 'cancelled';
-  payment.refundedAt = new Date();
-  payment.refundedBy = cancelledBy;
-  payment.refundReason = trimmedReason;
-  await payment.save();
-
-  await reverseLinkStats(payment.link?._id || payment.link, payment.amount);
-
-  return { payment };
 }
 
 module.exports = {
@@ -629,4 +694,5 @@ module.exports = {
   serializePublicLink,
   getApiBaseUrl,
   refundPaymentLinkPayment,
+  retryWonderRefundPayment,
 };

@@ -196,6 +196,26 @@ function normalizeWonderOrder(data) {
   return data.order || data.data?.order || data;
 }
 
+function isWonderTruthyFlag(value) {
+  return value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
+}
+
+function extractWonderError(data) {
+  if (!data || typeof data !== 'object') return null;
+  const code = data.error_code || data.errorCode;
+  if (code) return String(code);
+  return null;
+}
+
+function assertWonderApiSuccess(data, uri) {
+  const errorCode = extractWonderError(data);
+  if (errorCode) {
+    const message = data?.message || data?.error || errorCode;
+    throw new Error(`Wonder API 錯誤 (${uri}): ${message}`);
+  }
+  return data;
+}
+
 function findRefundableSalesTransaction(orderData) {
   const transactions = orderData?.transactions || [];
   const sales = transactions.filter((tx) => {
@@ -204,6 +224,28 @@ function findRefundableSalesTransaction(orderData) {
   });
   if (!sales.length) return null;
   return sales.sort((a, b) => Number(b.amount || 0) - Number(a.amount || 0))[0];
+}
+
+function isWonderOrderRefunded(orderData) {
+  if (!orderData) return false;
+  const correspondenceState = String(orderData.correspondence_state || '').toLowerCase();
+  if (correspondenceState === 'refunded') return true;
+
+  const transactions = orderData.transactions || [];
+  if (
+    transactions.some(
+      (tx) => String(tx.type || '').toLowerCase() === 'refund' && tx.success === true
+    )
+  ) {
+    return true;
+  }
+
+  return transactions.some(
+    (tx) =>
+      String(tx.type || '').toLowerCase() === 'sales' &&
+      tx.success === true &&
+      tx.voided === true
+  );
 }
 
 async function signedWonderPost(uri, bodyObj) {
@@ -244,7 +286,7 @@ async function signedWonderPost(uri, bodyObj) {
     throw new Error(`Wonder API failed (${uri}): ${response.status} - ${JSON.stringify(msg)}`);
   }
 
-  return response.data;
+  return assertWonderApiSuccess(response.data, uri);
 }
 
 /**
@@ -271,40 +313,94 @@ async function getOrder({ referenceNumber, orderNumber, transactionUuid } = {}) 
  * Wonder 退款：settlement 前 void，settlement 後 refund
  */
 async function refundOrderPayment({ referenceNumber, orderNumber, amount, transactionUuid } = {}) {
-  const orderPayload = {};
-  if (referenceNumber) orderPayload.reference_number = String(referenceNumber);
-  if (orderNumber) orderPayload.number = String(orderNumber);
-
   const orderData = await getOrder({ referenceNumber, orderNumber, transactionUuid });
+  if (!orderData) {
+    throw new Error('Wonder 查不到此訂單');
+  }
+
+  if (isWonderOrderRefunded(orderData)) {
+    return {
+      action: 'already_refunded',
+      alreadyRefunded: true,
+      orderNumber: orderData.number || orderNumber || null,
+      transactionUuid: transactionUuid || null,
+    };
+  }
+
+  const orderPayload = {};
+  if (orderData.number) orderPayload.number = String(orderData.number);
+  if (orderData.reference_number || referenceNumber) {
+    orderPayload.reference_number = String(orderData.reference_number || referenceNumber);
+  }
+  if (!orderPayload.number && !orderPayload.reference_number) {
+    throw new Error('Wonder 訂單缺少 number / reference_number，無法退款');
+  }
+
   const salesTx = findRefundableSalesTransaction(orderData);
   const uuid = transactionUuid || salesTx?.uuid;
   if (!uuid) {
     throw new Error('找不到可退款的 Wonder 交易');
   }
 
+  const expectedAmount = Number(amount);
+  const wonderAmount = Number(salesTx.amount);
+  if (Number.isFinite(expectedAmount) && Number.isFinite(wonderAmount)) {
+    if (Math.abs(expectedAmount - wonderAmount) > 0.01) {
+      throw new Error(
+        `Wonder 交易金額 HK$${wonderAmount.toFixed(2)} 與系統記錄 HK$${expectedAmount.toFixed(2)} 不符，已中止退款`
+      );
+    }
+  }
+
   const amountStr =
     typeof amount === 'number' ? amount.toFixed(2) : String(amount || salesTx?.amount || '0.00');
 
-  if (salesTx?.allow_void === true) {
-    const data = await signedWonderPost(WONDER_TRANSACTION_VOID_URI, {
+  let action;
+  let data;
+  if (isWonderTruthyFlag(salesTx.allow_void)) {
+    action = 'void';
+    data = await signedWonderPost(WONDER_TRANSACTION_VOID_URI, {
       order: orderPayload,
       transaction: { uuid: String(uuid) },
     });
-    return { action: 'void', data, transactionUuid: uuid };
-  }
-
-  if (salesTx?.allow_refund === true) {
-    const data = await signedWonderPost(WONDER_ORDER_REFUND_URI, {
+  } else if (isWonderTruthyFlag(salesTx.allow_refund)) {
+    action = 'refund';
+    data = await signedWonderPost(WONDER_ORDER_REFUND_URI, {
       order: orderPayload,
       transaction: {
         uuid: String(uuid),
         amount: amountStr,
       },
     });
-    return { action: 'refund', data, transactionUuid: uuid };
+  } else {
+    throw new Error('此 Wonder 交易目前不可 void 或 refund');
   }
 
-  throw new Error('此 Wonder 交易目前不可 void 或 refund');
+  const verifiedOrder = await getOrder({
+    referenceNumber: orderPayload.reference_number,
+    orderNumber: orderPayload.number,
+    transactionUuid: uuid,
+  });
+  if (!isWonderOrderRefunded(verifiedOrder)) {
+    throw new Error('Wonder 退款 API 已回應，但查單仍未確認 void/refund 成功，已中止更新系統狀態');
+  }
+
+  console.log('✅ Wonder 退款已確認:', {
+    action,
+    referenceNumber: orderPayload.reference_number,
+    orderNumber: orderPayload.number,
+    transactionUuid: uuid,
+    amount: amountStr,
+    gateway: getPaymentBaseUrl(),
+  });
+
+  return {
+    action,
+    data,
+    transactionUuid: uuid,
+    orderNumber: orderPayload.number || null,
+    alreadyRefunded: false,
+  };
 }
 
 module.exports = {
@@ -317,4 +413,5 @@ module.exports = {
   getOrder,
   refundOrderPayment,
   findRefundableSalesTransaction,
+  isWonderOrderRefunded,
 };
