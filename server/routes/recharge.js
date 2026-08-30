@@ -1,8 +1,20 @@
 const express = require('express');
+const XLSX = require('xlsx');
 const { body, validationResult } = require('express-validator');
 const Recharge = require('../models/Recharge');
 const UserBalance = require('../models/UserBalance');
-const { auth } = require('../middleware/auth');
+const { auth, adminAuth } = require('../middleware/auth');
+const { requireInternalAdminAccess } = require('../middleware/tenantAccess');
+const { resolveAccountingStoreScope } = require('../utils/tenantAccess');
+const {
+  formatHkYmd,
+  defaultFinanceFromYmd,
+} = require('../utils/financeRevenue');
+const {
+  listRechargesInPeriod,
+  exportRechargesInPeriod,
+  parseYmd,
+} = require('../services/rechargePeriodReportService');
 const { getPaymentProvider } = require('../config/paymentProvider');
 const wonderPaymentService = require('../services/wonderPaymentService');
 const { completeRechargePayment } = require('../services/rechargePaymentService');
@@ -301,6 +313,84 @@ router.get('/balance', auth, async (req, res) => {
   } catch (error) {
     console.error('獲取用戶餘額錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+function resolvePeriodReportScope(req) {
+  return resolveAccountingStoreScope(
+    req.tenantAccess,
+    req.query.store || req.query.storeId || null
+  );
+}
+
+function periodReportOptsFromScope(scope, query) {
+  const today = formatHkYmd();
+  const fromYmd = parseYmd(query.from, defaultFinanceFromYmd(today));
+  const toYmd = parseYmd(query.to, today);
+  return {
+    fromYmd,
+    toYmd,
+    page: query.page,
+    limit: query.limit,
+    status: query.status,
+    method: query.method,
+    ...(scope.unrestricted
+      ? {}
+      : scope.storeId
+        ? { storeId: scope.storeId }
+        : { storeIds: scope.storeIds }),
+  };
+}
+
+// @route   GET /api/recharge/admin/period-report
+// @desc    期間充值明細（數據分析／全平台或店鋪範圍）
+// @access  Private (Admin / 店長 / 股東)
+router.get('/admin/period-report', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
+  try {
+    const scope = resolvePeriodReportScope(req);
+    if (!scope.ok) {
+      return res.status(scope.status).json({ message: scope.message });
+    }
+
+    const result = await listRechargesInPeriod(periodReportOptsFromScope(scope, req.query));
+    if (result.error) {
+      return res.status(result.status || 400).json({ message: result.error });
+    }
+
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('期間充值報告錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   GET /api/recharge/admin/period-report/export
+// @desc    匯出期間充值 XLSX
+// @access  Private (Admin / 店長 / 股東)
+router.get('/admin/period-report/export', [auth, adminAuth, requireInternalAdminAccess], async (req, res) => {
+  try {
+    const scope = resolvePeriodReportScope(req);
+    if (!scope.ok) {
+      return res.status(scope.status).json({ message: scope.message });
+    }
+
+    const result = await exportRechargesInPeriod(periodReportOptsFromScope(scope, req.query));
+    if (result.error) {
+      return res.status(result.status || 400).json({ message: result.error });
+    }
+
+    const ws = XLSX.utils.json_to_sheet(result.rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '期間充值');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const { fromYmd, toYmd } = result.period;
+    const filename = `期間充值_${fromYmd}_${toYmd}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(buf);
+  } catch (error) {
+    console.error('匯出期間充值錯誤:', error);
+    res.status(500).json({ message: '匯出失敗，請稍後再試' });
   }
 });
 

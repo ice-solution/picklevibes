@@ -6,7 +6,8 @@ const Court = require('../models/Court');
 const User = require('../models/User');
 const UserBalance = require('../models/UserBalance');
 const { auth, adminAuth } = require('../middleware/auth');
-const { applyStoreScope, loadTenantAccess, canAccessStore, getMembershipRoleForStore } = require('../utils/tenantAccess');
+const { loadTenantAccess, canAccessStore, getMembershipRoleForStore } = require('../utils/tenantAccess');
+const { applyAdminBookingStoreScope } = require('../utils/bookingStoreQuery');
 const {
   sendBookingNotification,
   applyTempAuthToBooking,
@@ -862,10 +863,11 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
 
     const dateQuery = buildAdminBookingDateQuery({ dateFrom, dateTo });
     let query = { ...dateQuery };
-    if (store && String(store).trim() !== '') {
-      query.store = String(store).trim();
+    const scope = await applyAdminBookingStoreScope(query, req.tenantAccess, store);
+    if (scope.denied) {
+      return res.status(scope.status || 403).json({ message: scope.message });
     }
-    query = applyStoreScope(query, req.tenantAccess, 'store');
+    query = scope.query;
 
     const bookings = await Booking.find(query)
       .select(
@@ -931,14 +933,15 @@ router.get('/admin/all', [
 
     if (status) query.status = status;
     if (court) query.court = court;
-    if (store && String(store).trim() !== '') {
-      query.store = String(store).trim();
-    }
     const dateQuery = buildAdminBookingDateQuery({ date, dateFrom, dateTo });
     if (dateQuery) {
       Object.assign(query, dateQuery);
     }
-    query = applyStoreScope(query, req.tenantAccess, 'store');
+    const scope = await applyAdminBookingStoreScope(query, req.tenantAccess, store);
+    if (scope.denied) {
+      return res.status(scope.status || 403).json({ message: scope.message });
+    }
+    query = scope.query;
 
     const sortDir = sortParam === 'asc' ? 1 : -1;
     const limitNum = Math.min(10000, Math.max(1, parseInt(limit, 10) || 20));
@@ -994,10 +997,11 @@ router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
         { 'payment.method': 'admin_waived' },
       ],
     };
-    if (store && String(store).trim() !== '') {
-      query.store = String(store).trim();
+    const scope = await applyAdminBookingStoreScope(query, req.tenantAccess, store);
+    if (scope.denied) {
+      return res.status(scope.status || 403).json({ message: scope.message });
     }
-    query = applyStoreScope(query, req.tenantAccess, 'store');
+    query = scope.query;
 
     const bookings = await Booking.find(query)
       .select(

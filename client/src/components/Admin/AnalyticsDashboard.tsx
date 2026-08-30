@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import api from '../../services/api';
+import RechargePeriodPanel from './RechargePeriodPanel';
 import {
   ResponsiveContainer,
   LineChart,
@@ -92,6 +93,7 @@ function DeltaTag({ cur, prev }: { cur: number; prev: number }) {
 }
 
 const AnalyticsDashboard: React.FC = () => {
+  const [view, setView] = useState<'overview' | 'recharge'>('overview');
   const [year, setYear] = useState<number>(new Date().getFullYear());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -195,26 +197,55 @@ const AnalyticsDashboard: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h2 className="text-xl font-semibold text-gray-900">數據分析</h2>
-        <div className="flex items-center space-x-2">
-          <button
-            type="button"
-            onClick={() => handleYearChange(-1)}
-            className="px-2 py-1 text-sm border rounded-md text-gray-700 hover:bg-gray-50"
-          >
-            ← {year - 1}
-          </button>
-          <span className="text-sm font-medium text-gray-900">{year} 年</span>
-          <button
-            type="button"
-            onClick={() => handleYearChange(1)}
-            className="px-2 py-1 text-sm border rounded-md text-gray-700 hover:bg-gray-50"
-          >
-            {year + 1} →
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
+            <button
+              type="button"
+              onClick={() => setView('overview')}
+              className={`px-3 py-1.5 text-sm rounded-md ${
+                view === 'overview' ? 'bg-primary-600 text-white' : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              營運概覽
+            </button>
+            <button
+              type="button"
+              onClick={() => setView('recharge')}
+              className={`px-3 py-1.5 text-sm rounded-md ${
+                view === 'recharge' ? 'bg-primary-600 text-white' : 'text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              期間充值
+            </button>
+          </div>
+          {view === 'overview' && (
+            <>
+              <button
+                type="button"
+                onClick={() => handleYearChange(-1)}
+                className="px-2 py-1 text-sm border rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                ← {year - 1}
+              </button>
+              <span className="text-sm font-medium text-gray-900">{year} 年</span>
+              <button
+                type="button"
+                onClick={() => handleYearChange(1)}
+                className="px-2 py-1 text-sm border rounded-md text-gray-700 hover:bg-gray-50"
+              >
+                {year + 1} →
+              </button>
+            </>
+          )}
         </div>
       </div>
+
+      {view === 'recharge' ? (
+        <RechargePeriodPanel />
+      ) : (
+        <>
 
       {error && (
         <div className="p-3 rounded-md bg-red-50 border border-red-200 text-sm text-red-700">{error}</div>
@@ -465,6 +496,8 @@ const AnalyticsDashboard: React.FC = () => {
               </div>
             </div>
           </div>
+        </>
+      )}
         </>
       )}
     </div>

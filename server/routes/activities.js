@@ -306,7 +306,14 @@ async function syncActivityVenueBookings({ activity, previousTitle }) {
   const venueBundleId = existingBundle?.venueBundleId || new mongoose.Types.ObjectId();
 
   const now = new Date();
+  const activityStoreId = activity.store || null;
   for (const row of bookingIds) {
+    const existing = await Booking.findById(row._id).select('court').lean();
+    let storeId = activityStoreId;
+    if (existing?.court) {
+      const court = await Court.findById(existing.court).select('store').lean();
+      storeId = court?.store || activityStoreId;
+    }
     await Booking.collection.updateOne(
       { _id: row._id },
       {
@@ -320,6 +327,7 @@ async function syncActivityVenueBookings({ activity, previousTitle }) {
           relatedActivity: activity._id,
           venueBundleId,
           venueBundleKind: 'activity_hold',
+          store: storeId,
           updatedAt: now
         }
       }
@@ -392,6 +400,7 @@ async function reconcileActivityVenueBookings(activity, adminUserId, previousTit
     if (!has) {
       await Booking.collection.insertOne({
         user: adminUser._id,
+        store: court.store || activity.store || null,
         court: court._id,
         relatedActivity: activity._id,
         venueBundleId,
