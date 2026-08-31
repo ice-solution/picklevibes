@@ -61,6 +61,7 @@ jobs:
 
       - name: 通知部署結果
         if: always()
+        continue-on-error: true
         uses: 8398a7/action-slack@v3
         with:
           status: ${{ job.status }}
