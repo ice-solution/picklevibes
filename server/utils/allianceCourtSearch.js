@@ -9,6 +9,12 @@ const {
 } = require('./bookingDeepLink');
 const { buildDistrictAddressFilter } = require('./hkDistricts');
 const { typeCountsForCourts, effectiveCourtSlug } = require('./courtSlug');
+const { getPickleVibesApiConfig, isPickleVibesRemoteEnabled } = require('../config/picklevibesApi');
+const {
+  PickleVibesApiError,
+  fetchStoreAvailabilityMap,
+  mapWithConcurrency,
+} = require('../services/picklevibesAvailabilityClient');
 
 function addMinutesToTime(startTime, minutes) {
   const [h, m] = startTime.split(':').map(Number);
@@ -18,10 +24,6 @@ function addMinutesToTime(startTime, minutes) {
   if (endH > 24 || (endH === 24 && endM > 0)) return null;
   if (endH === 24 && endM === 0) return '24:00';
   return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
-}
-
-function escapeRegex(str) {
-  return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /** 單人／特色場包含 solo 與 dink */
@@ -63,7 +65,33 @@ async function findStoresForDistrict(district) {
   );
 }
 
-async function checkCourtSlot(court, store, { date, startTime, duration }, courtSlug) {
+function serializeStore(store) {
+  return {
+    id: String(store._id),
+    name: store.branding?.displayName || store.name,
+    slug: store.slug,
+    address: store.address,
+    district: store.district || null,
+    allianceEnabled: Boolean(store.allianceEnabled),
+  };
+}
+
+function buildSearchResult(store, court, effectiveSlug, check, { date, startTime, durationNum }) {
+  const courtId = String(court._id || court.id);
+  return {
+    store: serializeStore(store),
+    court: {
+      id: courtId,
+      name: court.name,
+      slug: effectiveSlug,
+      number: court.number,
+      type: court.type,
+    },
+    ...check,
+  };
+}
+
+async function checkCourtSlotLocal(court, store, { date, startTime, duration }, courtSlug) {
   const endTime = addMinutesToTime(startTime, duration);
   if (!endTime) {
     return { available: false, reason: '超出可預約時段' };
@@ -78,12 +106,7 @@ async function checkCourtSlot(court, store, { date, startTime, duration }, court
     return { available: false, reason: '非營業時段' };
   }
 
-  const hasConflict = await Booking.checkTimeConflict(
-    court._id,
-    date,
-    startTime,
-    endTime
-  );
+  const hasConflict = await Booking.checkTimeConflict(court._id, date, startTime, endTime);
   if (hasConflict) {
     return { available: false, reason: '已預約' };
   }
@@ -108,56 +131,36 @@ async function checkCourtSlot(court, store, { date, startTime, duration }, court
   };
 }
 
-/**
- * 聯盟跨店搜尋：地區 + 日期 + 開始時間 + 時長
- */
-async function searchAllianceCourtAvailability({
-  district = '',
-  region = '',
-  date,
-  startTime,
-  duration = 60,
-  courtType = '',
-}) {
-  if (!isValidBookingDateYmd(date)) {
-    const err = new Error('請提供有效日期 (YYYY-MM-DD)');
-    err.status = 400;
-    throw err;
-  }
-  if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(startTime)) {
-    const err = new Error('請提供有效開始時間 (HH:mm)');
-    err.status = 400;
-    throw err;
-  }
-  const durationNum = Number(duration);
-  if (![60, 120].includes(durationNum)) {
-    const err = new Error('時長僅支援 60 或 120 分鐘');
-    err.status = 400;
-    throw err;
-  }
+function buildCheckFromRemoteAvailability(availability, { date, startTime, durationNum, storeSlug, courtSlug }) {
+  const endTime = addMinutesToTime(startTime, durationNum);
+  const urls = buildBookingUrls(storeSlug, courtSlug, date);
 
-  const maxAdvanceDays = await getMaxAdvanceDaysForRole('user');
-  const window = evaluateBookingDateWindow(date, maxAdvanceDays);
-  if (!window.bookable) {
-    const err = new Error(window.reason || '日期不可預約');
-    err.status = 400;
-    err.code = window.code;
-    throw err;
-  }
-
-  const districtKey = String(district || region || '').trim();
-  const stores = await findStoresForDistrict(districtKey);
-
-  if (stores.length === 0) {
+  if (!availability?.available) {
     return {
-      query: { district: districtKey, region: districtKey, date, startTime, duration: durationNum, courtType },
-      results: [],
-      available: [],
-      unavailable: [],
-      meta: { storeCount: 0, courtCount: 0, availableCount: 0 },
+      available: false,
+      reason: availability?.reason || '不可用',
     };
   }
 
+  return {
+    available: true,
+    startTime,
+    endTime,
+    duration: durationNum,
+    pricing: availability.pricing || undefined,
+    bookingUrl: urls.booking,
+    deepLink: urls.deepLink,
+  };
+}
+
+async function searchViaLocalDb({
+  stores,
+  districtKey,
+  date,
+  startTime,
+  durationNum,
+  courtType,
+}) {
   const storeIds = stores.map((s) => s._id);
   const storeMap = Object.fromEntries(stores.map((s) => [String(s._id), s]));
 
@@ -187,31 +190,169 @@ async function searchAllianceCourtAvailability({
     const storeCourts = courtsByStore.get(String(court.store)) || [court];
     const typeCounts = typeCountsForCourts(storeCourts);
     const effectiveSlug = effectiveCourtSlug(court, typeCounts);
-    const check = await checkCourtSlot(court, store, {
-      date,
-      startTime,
-      duration: durationNum,
-    }, effectiveSlug);
-    results.push({
-      store: {
-        id: String(store._id),
-        name: store.branding?.displayName || store.name,
-        slug: store.slug,
-        address: store.address,
-        district: store.district || null,
-        allianceEnabled: Boolean(store.allianceEnabled),
-      },
-      court: {
-        id: String(court._id),
-        name: court.name,
-        slug: effectiveSlug,
-        number: court.number,
-        type: court.type,
-      },
-      ...check,
-    });
+    const check = await checkCourtSlotLocal(
+      court,
+      store,
+      { date, startTime, duration: durationNum },
+      effectiveSlug
+    );
+    results.push(
+      buildSearchResult(store, court, effectiveSlug, check, {
+        date,
+        startTime,
+        durationNum,
+      })
+    );
   }
 
+  return finalizeSearchResponse({
+    districtKey,
+    date,
+    startTime,
+    durationNum,
+    courtType,
+    stores,
+    courtCount: courts.length,
+    results,
+    availabilitySource: 'local',
+  });
+}
+
+async function searchViaPickleVibesApi({
+  stores,
+  districtKey,
+  date,
+  startTime,
+  durationNum,
+  courtType,
+}) {
+  const config = getPickleVibesApiConfig();
+  const endTime = addMinutesToTime(startTime, durationNum);
+  if (!endTime) {
+    const err = new Error('超出可預約時段');
+    err.status = 400;
+    throw err;
+  }
+
+  const types = resolveCourtTypes(courtType);
+  const storeResults = await mapWithConcurrency(
+    stores,
+    config.maxConcurrentStores,
+    async (store) => {
+      try {
+        const { courts, availabilityByCourtId } = await fetchStoreAvailabilityMap(store, {
+          date,
+          startTime,
+          endTime,
+          courtTypeFilter: types,
+        });
+
+        const typeCounts = typeCountsForCourts(courts);
+        const rows = [];
+
+        for (const court of courts) {
+          const courtId = String(court._id || court.id);
+          const effectiveSlug = effectiveCourtSlug(court, typeCounts);
+          const availability = availabilityByCourtId.get(courtId) || {
+            available: false,
+            reason: 'PickleVibes 未返回此場地',
+          };
+          const check = buildCheckFromRemoteAvailability(availability, {
+            date,
+            startTime,
+            durationNum,
+            storeSlug: store.slug,
+            courtSlug: effectiveSlug,
+          });
+          rows.push(
+            buildSearchResult(store, court, effectiveSlug, check, {
+              date,
+              startTime,
+              durationNum,
+            })
+          );
+        }
+
+        return rows;
+      } catch (error) {
+        if (config.fallbackLocal) {
+          console.warn(
+            `[allianceCourtSearch] PickleVibes API 失敗，fallback 本地查詢 store=${store.slug}:`,
+            error.message
+          );
+          return searchLocalStore(store, {
+            date,
+            startTime,
+            durationNum,
+            courtType,
+          });
+        }
+        throw error;
+      }
+    }
+  );
+
+  const results = storeResults.flat();
+
+  return finalizeSearchResponse({
+    districtKey,
+    date,
+    startTime,
+    durationNum,
+    courtType,
+    stores,
+    courtCount: results.length,
+    results,
+    availabilitySource: config.botEnabled ? 'picklevibes-bot' : 'picklevibes-courts',
+  });
+}
+
+async function searchLocalStore(store, { date, startTime, durationNum, courtType }) {
+  const courtFilter = {
+    store: store._id,
+    isActive: true,
+    type: { $ne: 'full_venue' },
+  };
+  const types = resolveCourtTypes(courtType);
+  if (types) {
+    courtFilter.type = { $in: types };
+  }
+
+  const courts = await Court.find(courtFilter).sort({ number: 1 });
+  const typeCounts = typeCountsForCourts(courts);
+  const rows = [];
+
+  for (const court of courts) {
+    const effectiveSlug = effectiveCourtSlug(court, typeCounts);
+    const check = await checkCourtSlotLocal(
+      court,
+      store,
+      { date, startTime, duration: durationNum },
+      effectiveSlug
+    );
+    rows.push(
+      buildSearchResult(store, court, effectiveSlug, check, {
+        date,
+        startTime,
+        durationNum,
+      })
+    );
+  }
+
+  return rows;
+}
+
+function finalizeSearchResponse({
+  districtKey,
+  date,
+  startTime,
+  durationNum,
+  courtType,
+  stores,
+  courtCount,
+  results,
+  availabilitySource,
+}) {
   const available = results.filter((r) => r.available);
   const unavailable = results.filter((r) => !r.available);
 
@@ -222,16 +363,135 @@ async function searchAllianceCourtAvailability({
   });
 
   return {
-    query: { district: districtKey, region: districtKey, date, startTime, duration: durationNum, courtType },
+    query: {
+      district: districtKey,
+      region: districtKey,
+      date,
+      startTime,
+      duration: durationNum,
+      courtType,
+    },
     results,
     available,
     unavailable,
     meta: {
       storeCount: stores.length,
-      courtCount: courts.length,
+      courtCount,
       availableCount: available.length,
+      availabilitySource,
     },
   };
+}
+
+function validateSearchParams({ date, startTime, duration }) {
+  if (!isValidBookingDateYmd(date)) {
+    const err = new Error('請提供有效日期 (YYYY-MM-DD)');
+    err.status = 400;
+    throw err;
+  }
+  if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(startTime)) {
+    const err = new Error('請提供有效開始時間 (HH:mm)');
+    err.status = 400;
+    throw err;
+  }
+  const durationNum = Number(duration);
+  if (![60, 120].includes(durationNum)) {
+    const err = new Error('時長僅支援 60 或 120 分鐘');
+    err.status = 400;
+    throw err;
+  }
+  return durationNum;
+}
+
+/**
+ * 聯盟跨店搜尋：地區 + 日期 + 開始時間 + 時長
+ * - PickCourt 負責跨店組合
+ * - 空缺資料優先向 PickleVibes API 查詢（PICKLEVIBES_API_BASE_URL）
+ */
+async function searchAllianceCourtAvailability({
+  district = '',
+  region = '',
+  date,
+  startTime,
+  duration = 60,
+  courtType = '',
+}) {
+  const durationNum = validateSearchParams({ date, startTime, duration });
+
+  const maxAdvanceDays = await getMaxAdvanceDaysForRole('user');
+  const window = evaluateBookingDateWindow(date, maxAdvanceDays);
+  if (!window.bookable) {
+    const err = new Error(window.reason || '日期不可預約');
+    err.status = 400;
+    err.code = window.code;
+    throw err;
+  }
+
+  const districtKey = String(district || region || '').trim();
+  const stores = await findStoresForDistrict(districtKey);
+
+  if (stores.length === 0) {
+    return {
+      query: {
+        district: districtKey,
+        region: districtKey,
+        date,
+        startTime,
+        duration: durationNum,
+        courtType,
+      },
+      results: [],
+      available: [],
+      unavailable: [],
+      meta: {
+        storeCount: 0,
+        courtCount: 0,
+        availableCount: 0,
+        availabilitySource: isPickleVibesRemoteEnabled() ? 'picklevibes-remote' : 'local',
+      },
+    };
+  }
+
+  if (isPickleVibesRemoteEnabled()) {
+    try {
+      return await searchViaPickleVibesApi({
+        stores,
+        districtKey,
+        date,
+        startTime,
+        durationNum,
+        courtType,
+      });
+    } catch (error) {
+      const config = getPickleVibesApiConfig();
+      if (config.fallbackLocal) {
+        console.warn('[allianceCourtSearch] PickleVibes API 失敗，fallback 本地查詢:', error.message);
+        return searchViaLocalDb({
+          stores,
+          districtKey,
+          date,
+          startTime,
+          durationNum,
+          courtType,
+        });
+      }
+      if (error instanceof PickleVibesApiError) {
+        const err = new Error(error.message || 'PickleVibes 場地查詢失敗');
+        err.status = error.status && error.status >= 400 ? error.status : 502;
+        throw err;
+      }
+      throw error;
+    }
+  }
+
+  return searchViaLocalDb({
+    stores,
+    districtKey,
+    date,
+    startTime,
+    durationNum,
+    courtType,
+  });
 }
 
 module.exports = {
