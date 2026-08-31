@@ -52,11 +52,11 @@ success "備份完成"
 echo "📥 拉取最新代碼..."
 git fetch origin
 CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "uat" ]; then
-    warning "當前不在 uat 分支，切換中..."
-    git checkout uat
+if [ "$CURRENT_BRANCH" != "uat-picklevibes" ]; then
+    warning "當前不在 uat-picklevibes 分支，切換中..."
+    git checkout uat-picklevibes
 fi
-git pull origin uat
+git pull origin uat-picklevibes
 success "代碼更新完成"
 
 # 3. 安裝後端依賴
