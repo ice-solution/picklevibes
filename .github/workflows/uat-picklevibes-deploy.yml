@@ -23,12 +23,12 @@ jobs:
           cache: 'npm'
 
       - name: 安裝後端依賴
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: 安裝前端依賴
         run: |
           cd client
-          npm ci
+          npm ci --legacy-peer-deps
 
       - name: 構建前端
         env:
