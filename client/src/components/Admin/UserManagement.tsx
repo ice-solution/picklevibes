@@ -157,6 +157,7 @@ const UserManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<'name' | 'email' | 'phone'>('name');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [membershipLevelFilter, setMembershipLevelFilter] = useState<'' | 'basic' | 'vip'>('');
 
   // 防抖搜索查詢
   useEffect(() => {
@@ -220,7 +221,7 @@ const UserManagement: React.FC = () => {
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [currentPage, pageSize, debouncedSearchQuery, searchType]);
+  }, [currentPage, pageSize, debouncedSearchQuery, searchType, membershipLevelFilter]);
 
   const fetchUsers = async () => {
     try {
@@ -236,6 +237,10 @@ const UserManagement: React.FC = () => {
       if (debouncedSearchQuery.trim()) {
         params.append('search', debouncedSearchQuery.trim());
         params.append('searchType', searchType);
+      }
+
+      if (membershipLevelFilter) {
+        params.append('membershipLevel', membershipLevelFilter);
       }
       
       const response = await axios.get(`/users?${params.toString()}`);
@@ -717,8 +722,19 @@ const UserManagement: React.FC = () => {
     setCurrentPage(1); // 切換搜索類型時重置到第一頁
   };
 
+  const handleMembershipLevelFilterChange = (level: '' | 'basic' | 'vip') => {
+    setMembershipLevelFilter(level);
+    setCurrentPage(1);
+  };
+
   const clearSearch = () => {
     setSearchQuery('');
+    setCurrentPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setMembershipLevelFilter('');
     setCurrentPage(1);
   };
 
@@ -946,12 +962,46 @@ const UserManagement: React.FC = () => {
                 <option value="phone">電話</option>
               </select>
             </div>
+
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-700">會員等級:</label>
+              <select
+                value={membershipLevelFilter}
+                onChange={(e) => handleMembershipLevelFilterChange(e.target.value as '' | 'basic' | 'vip')}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">全部</option>
+                <option value="basic">普通會員</option>
+                <option value="vip">VIP會員</option>
+              </select>
+            </div>
+
+            {(searchQuery || membershipLevelFilter) && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                清除篩選
+              </button>
+            )}
           </div>
           
           {/* 搜索結果提示 */}
-          {searchQuery && (
+          {(searchQuery || membershipLevelFilter) && (
             <div className="mt-3 text-sm text-gray-600">
-              搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : searchType === 'email' ? '郵箱' : '電話'}) - 找到 {totalUsers} 個結果
+              {searchQuery && (
+                <span>
+                  搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : searchType === 'email' ? '郵箱' : '電話'})
+                </span>
+              )}
+              {searchQuery && membershipLevelFilter && ' · '}
+              {membershipLevelFilter && (
+                <span>
+                  會員等級：{membershipLevelFilter === 'vip' ? 'VIP會員' : '普通會員'}
+                </span>
+              )}
+              {' — 找到 '}{totalUsers} 個結果
             </div>
           )}
         </div>

@@ -14,6 +14,7 @@ const { normalizeHkPhone } = require('../utils/phoneUtils');
 const { findUserByPhone } = require('./botUserService');
 const { calculateDuration } = require('./botAvailabilityService');
 const { hasBookingVipDiscount, applyBookingVipDiscount } = require('../utils/memberBenefits');
+const { calculateSoloCourtFee } = require('../utils/soloCourtFee');
 
 function normalizeDateTime(date, time) {
   const normalizedDate = new Date(date);
@@ -169,9 +170,10 @@ async function createBookingViaBot(params) {
   });
   tempBooking.calculatePrice(courtDoc, isMember);
 
+  const soloCourtFee = includeSoloCourt ? calculateSoloCourtFee(duration) : 0;
   let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
-  if (includeSoloCourt) pointsToDeduct += 100;
   if (isVip) pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
+  pointsToDeduct += soloCourtFee;
 
   let redeemCodeData = null;
   if (redeemCodeId) {
@@ -194,7 +196,7 @@ async function createBookingViaBot(params) {
       const canUse = await redeemCode.canUserUse(user._id);
       if (canUse) {
         let discountAmount = 0;
-        const originalPrice = tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0);
+        const originalPrice = tempBooking.pricing.totalPrice + soloCourtFee;
 
         if (originalPrice < redeemCode.minAmount) {
           const err = new Error(`此兌換碼需要最低消費 HK$${redeemCode.minAmount}`);
@@ -276,8 +278,8 @@ async function createBookingViaBot(params) {
       totalPrice: pointsToDeduct,
       originalPrice: tempBooking.pricing.totalPrice,
       pointsDeducted: pointsToDeduct,
-      vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
-      soloCourtFee: includeSoloCourt ? 100 : 0,
+      vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice * 0.2) : 0,
+      soloCourtFee,
     },
     createdAt: new Date(),
     updatedAt: new Date(),
@@ -293,7 +295,7 @@ async function createBookingViaBot(params) {
         userId: user._id,
         orderType: 'booking',
         orderId: booking._id,
-        originalAmount: tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0),
+        originalAmount: tempBooking.pricing.totalPrice + soloCourtFee,
         discountAmount: redeemCodeData.discountAmount,
         finalAmount: pointsToDeduct,
         ipAddress,
