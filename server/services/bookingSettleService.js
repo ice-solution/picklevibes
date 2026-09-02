@@ -4,6 +4,11 @@ const UserBalance = require('../models/UserBalance');
 const Recharge = require('../models/Recharge');
 const Store = require('../models/Store');
 const { collectBundledBookingIds } = require('../utils/bookingBundle');
+const {
+  BOOKING_EXTERNAL_PAYMENT_METHODS,
+  bookingPaymentMethodLabel,
+  isExternalPaymentMethod,
+} = require('../constants/bookingPaymentMethods');
 
 function isBookingEligibleForSettle(booking) {
   if (!booking || ['cancelled', 'no_show'].includes(booking.status)) return false;
@@ -12,7 +17,12 @@ function isBookingEligibleForSettle(booking) {
   const pts = Number(booking.payment?.pointsDeducted) || 0;
   if (method === 'points' && pts > 0 && !booking.noUserBalanceDebited) return false;
 
-  if (['cash', 'bank_transfer', 'stripe'].includes(method) && booking.payment?.status === 'paid') {
+  if (
+    (['stripe', ...BOOKING_EXTERNAL_PAYMENT_METHODS].includes(method) ||
+      isExternalPaymentMethod(method)) &&
+    booking.payment?.status === 'paid' &&
+    method !== 'admin_waived'
+  ) {
     return false;
   }
   return true;
@@ -295,9 +305,146 @@ async function settleBookingWithPoints({
   };
 }
 
+/**
+ * 現場／外部收款結算（現金、KPay、FPS 等，不扣積分）
+ */
+async function settleBookingWithExternalPayment({
+  bookingId,
+  method,
+  targetUserId,
+  amount,
+  note = '',
+  adminUser,
+  allowReassign = true,
+}) {
+  if (!isExternalPaymentMethod(method)) {
+    const err = new Error('無效的付款方式');
+    err.status = 400;
+    throw err;
+  }
+
+  const booking = await Booking.findById(bookingId)
+    .populate('store', 'name slug')
+    .populate({
+      path: 'court',
+      select: 'name store',
+      populate: { path: 'store', select: 'name slug' },
+    });
+
+  if (!booking) {
+    const err = new Error('預約不存在');
+    err.status = 404;
+    throw err;
+  }
+
+  if (await bundleAlreadySettled(booking)) {
+    const err = new Error('此預約（或包場組）已完成積分結算');
+    err.status = 400;
+    throw err;
+  }
+
+  if (!isBookingEligibleForSettle(booking)) {
+    const err = new Error('此預約不可結算（可能已付款或已取消）');
+    err.status = 400;
+    throw err;
+  }
+
+  let targetUser = null;
+  if (targetUserId) {
+    targetUser = await User.findById(targetUserId);
+    if (!targetUser) {
+      const err = new Error('用戶不存在');
+      err.status = 404;
+      throw err;
+    }
+  }
+
+  const bundle = await loadBundledBookings(booking);
+  const defaultTotal = bundle.reduce((sum, b) => sum + suggestedSettlePoints(b), 0);
+  const totalAmount =
+    amount != null && Number(amount) >= 0 ? Number(amount) : defaultTotal;
+
+  const isFullVenue =
+    bundle.length > 1 &&
+    (booking.venueBundleKind === 'full_venue' ||
+      booking.isFullVenue ||
+      String(booking.specialRequests || '').includes('包場'));
+
+  const perBookingAmounts = allocateBundlePoints(bundle, totalAmount, { isFullVenue });
+  const paidAt = new Date();
+  const methodLabel = bookingPaymentMethodLabel(method);
+  const noteTrim = String(note || '').trim();
+  const adminNoteContent = `外部收款結算 · ${methodLabel}${noteTrim ? ` · ${noteTrim}` : ''} · $${totalAmount}`;
+
+  let reassigned = false;
+  if (targetUser) {
+    const isSameUser = bundle.every((b) => String(b.user) === String(targetUser._id));
+    if (!isSameUser && !allowReassign) {
+      const err = new Error('預約不屬於此用戶');
+      err.status = 400;
+      throw err;
+    }
+    if (!isSameUser) {
+      reassigned = true;
+      const player = buildPlayerFromUser(targetUser);
+      for (const b of bundle) {
+        b.user = targetUser._id;
+        b.players = [player];
+        b.totalPlayers = Math.max(1, b.totalPlayers || 1);
+      }
+    }
+  }
+
+  for (let i = 0; i < bundle.length; i += 1) {
+    const b = bundle[i];
+    const courtAmount = perBookingAmounts[i] || 0;
+    b.payment.method = method;
+    b.payment.status = 'paid';
+    b.payment.paidAt = paidAt;
+    b.payment.pointsDeducted = 0;
+    b.payment.originalPrice = b.pricing?.totalPrice || courtAmount;
+    b.payment.externalNote = noteTrim || undefined;
+    b.noUserBalanceDebited = false;
+    b.pricing.totalPrice = courtAmount;
+    if (totalAmount !== defaultTotal) {
+      b.pricing.isCustomPoints = true;
+      b.pricing.customPoints = courtAmount;
+    }
+    if (adminUser?._id) {
+      b.adminNotes = b.adminNotes || [];
+      b.adminNotes.push({
+        content: adminNoteContent,
+        createdBy: adminUser._id,
+        createdAt: paidAt,
+      });
+    }
+    await b.save();
+  }
+
+  await booking.populate('user', 'name email phone');
+  await booking.populate('store', 'name slug');
+  await booking.populate({
+    path: 'court',
+    select: 'name number type store',
+    populate: { path: 'store', select: 'name slug' },
+  });
+
+  return {
+    booking,
+    method,
+    methodLabel,
+    totalAmount,
+    reassigned,
+    bundleCount: bundle.length,
+  };
+}
+
 module.exports = {
   isBookingEligibleForSettle,
   suggestedSettlePoints,
   getSettlePreview,
   settleBookingWithPoints,
+  settleBookingWithExternalPayment,
+  BOOKING_EXTERNAL_PAYMENT_METHODS,
+  bookingPaymentMethodLabel,
 };

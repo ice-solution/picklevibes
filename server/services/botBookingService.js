@@ -13,6 +13,7 @@ const { scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 const { normalizeHkPhone } = require('../utils/phoneUtils');
 const { findUserByPhone } = require('./botUserService');
 const { calculateDuration } = require('./botAvailabilityService');
+const { hasBookingVipDiscount, applyBookingVipDiscount } = require('../utils/memberBenefits');
 
 function normalizeDateTime(date, time) {
   const normalizedDate = new Date(date);
@@ -152,7 +153,7 @@ async function createBookingViaBot(params) {
 
   const bookingUser = user;
   const isMember = bookingUser.membershipLevel !== 'basic';
-  const isVip = bookingUser.membershipLevel === 'vip';
+  const isVip = hasBookingVipDiscount(bookingUser);
 
   const tempBooking = new Booking({
     user: user._id,
@@ -170,7 +171,7 @@ async function createBookingViaBot(params) {
 
   let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
   if (includeSoloCourt) pointsToDeduct += 100;
-  if (isVip) pointsToDeduct = Math.round(pointsToDeduct * 0.8);
+  if (isVip) pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
 
   let redeemCodeData = null;
   if (redeemCodeId) {

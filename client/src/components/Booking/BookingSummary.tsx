@@ -5,6 +5,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
 import apiConfig from '../../config/api';
 import { BOOKING_CANCELLATION_POLICY_LINES } from '../../constants/bookingCancellationPolicy';
+import { hasBookingVipDiscount, applyBookingVipDiscount } from '../../utils/memberBenefits';
 import { 
   CalendarDaysIcon, 
   ClockIcon, 
@@ -471,7 +472,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               )}
               
               {/* VIP 會員折扣 */}
-              {user?.membershipLevel === 'vip' && (
+              {hasBookingVipDiscount(user) && (
                 <div className="flex justify-between text-green-600">
                   <span className="flex items-center gap-2">
                     <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">VIP</span>
@@ -509,8 +510,8 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                       let totalPrice = (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0);
                       
                       // 應用 VIP 折扣
-                      if (user?.membershipLevel === 'vip') {
-                        totalPrice = Math.round(totalPrice * 0.8);
+                      if (hasBookingVipDiscount(user)) {
+                        totalPrice = applyBookingVipDiscount(totalPrice, user);
                       }
                       
                       // 應用兌換碼折扣
@@ -523,7 +524,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   </span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1 text-right">
-                  {user?.membershipLevel === 'vip' && t('bookingPage.bookingSummary.vipApplied')}
+                  {hasBookingVipDiscount(user) && t('bookingPage.bookingSummary.vipApplied')}
                   {redeemData && t('bookingPage.bookingSummary.plusRedeem')}
                 </div>
               </div>

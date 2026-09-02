@@ -7,17 +7,20 @@ interface MaxAdvanceDaysByRole {
   user?: number;
   coach?: number;
   admin?: number;
+  athlete?: number;
+  [key: string]: number | undefined;
 }
 
 const ROLE_LABELS: Record<string, string> = {
   user: '一般用戶',
   coach: '教練',
-  admin: '管理員'
+  admin: '管理員',
+  athlete: '選手',
 };
 
 const BookingConfig: React.FC = () => {
-  const [config, setConfig] = useState<MaxAdvanceDaysByRole>({ user: 7, coach: 14, admin: 30 });
-  const [formValues, setFormValues] = useState<MaxAdvanceDaysByRole>({ user: 7, coach: 14, admin: 30 });
+  const [config, setConfig] = useState<MaxAdvanceDaysByRole>({ user: 7, coach: 14, admin: 30, athlete: 21 });
+  const [formValues, setFormValues] = useState<MaxAdvanceDaysByRole>({ user: 7, coach: 14, admin: 30, athlete: 21 });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -26,12 +29,16 @@ const BookingConfig: React.FC = () => {
     try {
       setLoading(true);
       const res = await api.get('/config/booking');
-      const data = res.data?.data?.maxAdvanceDaysByRole || { user: 7, coach: 14, admin: 30 };
+      const data = res.data?.data?.maxAdvanceDaysByRole || { user: 7, coach: 14, admin: 30, athlete: 21 };
       setConfig(data);
       setFormValues({
         user: data.user ?? 7,
         coach: data.coach ?? 14,
-        admin: data.admin ?? 30
+        admin: data.admin ?? 30,
+        athlete: data.athlete ?? 21,
+        ...Object.fromEntries(
+          Object.entries(data).filter(([key]) => !['user', 'coach', 'admin', 'athlete'].includes(key))
+        ),
       });
     } catch (error) {
       console.error('載入預約設定失敗:', error);
@@ -45,7 +52,7 @@ const BookingConfig: React.FC = () => {
     fetchConfig();
   }, []);
 
-  const handleChange = (role: keyof MaxAdvanceDaysByRole, value: number) => {
+  const handleChange = (role: string, value: number) => {
     const num = Math.min(365, Math.max(1, value));
     setFormValues((prev) => ({ ...prev, [role]: num }));
   };
@@ -104,9 +111,9 @@ const BookingConfig: React.FC = () => {
         )}
 
         <div className="space-y-4">
-          {(Object.keys(ROLE_LABELS) as Array<keyof MaxAdvanceDaysByRole>).map((role) => (
+          {Object.keys(formValues).map((role) => (
             <div key={role} className="flex items-center gap-4">
-              <label className="w-28 text-sm font-medium text-gray-700">{ROLE_LABELS[role]}</label>
+              <label className="w-28 text-sm font-medium text-gray-700">{ROLE_LABELS[role] || role}</label>
               <div className="flex items-center gap-2">
                 <input
                   type="number"

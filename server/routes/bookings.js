@@ -21,10 +21,17 @@ const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 const {
+  hasBookingVipDiscount,
+  bookingVipDiscountLabel,
+  applyBookingVipDiscount,
+} = require('../utils/memberBenefits');
+const {
   settleBookingWithPoints,
+  settleBookingWithExternalPayment,
   getSettlePreview,
   isBookingEligibleForSettle,
   suggestedSettlePoints,
+  BOOKING_EXTERNAL_PAYMENT_METHODS,
 } = require('../services/bookingSettleService');
 
 const router = express.Router();
@@ -275,7 +282,7 @@ router.post('/', [
     }
     
     const isMember = bookingUser.membershipLevel !== 'basic';
-    const isVip = bookingUser.membershipLevel === 'vip';
+    const isVip = hasBookingVipDiscount(bookingUser);
     
     // 創建預約對象來計算價格
     const tempBooking = new Booking({
@@ -303,7 +310,7 @@ router.post('/', [
     }
     
     if (isVip) {
-      pointsToDeduct = Math.round(pointsToDeduct * 0.8); // VIP會員8折
+      pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
     }
     
     // 處理兌換碼折扣
@@ -384,7 +391,7 @@ router.post('/', [
         available: userBalance.balance,
         discount: customPointsFlag
           ? '自訂積分'
-          : (isVip ? 'VIP會員8折' : '無折扣')
+          : bookingVipDiscountLabel(bookingUser)
       });
     }
     
@@ -1137,6 +1144,62 @@ router.post('/:id/settle', [
       return res.status(error.status).json({ message: error.message });
     }
     console.error('預約結算錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/bookings/:id/mark-paid
+// @desc    標記外部收款已付（現金、KPay、FPS 等，不扣積分）
+// @access  Private (Admin)
+router.post('/:id/mark-paid', [
+  auth,
+  adminAuth,
+  body('method')
+    .isIn(BOOKING_EXTERNAL_PAYMENT_METHODS)
+    .withMessage(`付款方式必須為：${BOOKING_EXTERNAL_PAYMENT_METHODS.join('、')}`),
+  body('userId').optional().notEmpty().withMessage('請選擇有效用戶'),
+  body('amount').optional().isFloat({ min: 0 }).withMessage('金額必須是非負數'),
+  body('note').optional().trim().isLength({ max: 200 }).withMessage('備註不能超過200字'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const { method, userId, amount, note = '' } = req.body;
+
+    const result = await settleBookingWithExternalPayment({
+      bookingId: req.params.id,
+      method,
+      targetUserId: userId || null,
+      amount: amount != null ? Number(amount) : undefined,
+      note,
+      adminUser: req.user,
+      allowReassign: true,
+    });
+
+    res.json({
+      message: result.reassigned
+        ? `已指派用戶並標記${result.methodLabel}收款`
+        : `已標記${result.methodLabel}收款`,
+      booking: result.booking,
+      payment: {
+        method: result.method,
+        methodLabel: result.methodLabel,
+        totalAmount: result.totalAmount,
+      },
+      reassigned: result.reassigned,
+      bundleCount: result.bundleCount || 1,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error('預約 mark-paid 錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

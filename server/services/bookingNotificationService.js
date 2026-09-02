@@ -2,7 +2,7 @@ const Store = require('../models/Store');
 const accessControlService = require('./accessControlService');
 const emailService = require('./emailService');
 const { getStoreHikConfig } = require('../utils/storeHikConfig');
-const openWaService = require('./openWaService');
+const whatsappMessaging = require('./whatsappMessagingService');
 
 function buildVisitorData(booking, userFallback) {
   return {
@@ -110,53 +110,102 @@ function buildBookingCancellationMessage(booking, store) {
 }
 
 /**
- * OpenWA 文字通知（預約確認／進場）
+ * WhatsApp 文字通知（預約確認／進場）
  */
 async function sendOpenWaForBooking({ phone, store, bookingData, withAccess, password }) {
-  if (!openWaService.isOpenWaConfigured()) {
-    return { skipped: true, reason: 'not_configured', provider: 'openwa' };
+  if (!whatsappMessaging.isWhatsAppConfigured()) {
+    return { skipped: true, reason: 'not_configured', provider: whatsappMessaging.resolveProvider() };
   }
   if (!phone) {
-    return { skipped: true, reason: 'no_phone', provider: 'openwa' };
+    return { skipped: true, reason: 'no_phone', provider: whatsappMessaging.resolveProvider() };
   }
-  if (!openWaService.isValidPhoneNumber(phone)) {
-    return { skipped: true, reason: 'invalid_phone', provider: 'openwa' };
+  if (!whatsappMessaging.isValidPhoneNumber(phone)) {
+    return { skipped: true, reason: 'invalid_phone', provider: whatsappMessaging.resolveProvider() };
   }
 
+  const storeName = store?.name || bookingData.storeName || 'PickleVibes';
+  const courtName = bookingData.courtName || '場地';
+  const dateLabel = formatBookingDate(bookingData.date);
+  const timeRange = `${bookingData.startTime || ''} - ${bookingData.endTime || ''}`.trim();
+  const address = store?.address || bookingData.storeAddress || '—';
+  const bookingId = bookingData.bookingId || '—';
+  const message = buildBookingConfirmMessage({ store, bookingData, withAccess, password });
+  const provider = whatsappMessaging.resolveProvider();
+
   try {
-    const message = buildBookingConfirmMessage({ store, bookingData, withAccess, password });
-    const result = await openWaService.sendTextMessage(phone, message);
-    console.log('✅ OpenWA 預約通知已發送:', { to: result.to, withAccess: !!withAccess });
-    return { success: true, provider: 'openwa', ...result };
+    let result;
+    if (provider === 'cloud') {
+      if (withAccess && password) {
+        result = await whatsappMessaging.sendBookingAccess(phone, {
+          storeName,
+          courtName,
+          dateLabel,
+          timeRange,
+          address,
+          password,
+          bookingId,
+        });
+      } else {
+        result = await whatsappMessaging.sendBookingConfirmed(phone, {
+          storeName,
+          courtName,
+          dateLabel,
+          timeRange,
+          address,
+          bookingId,
+        });
+      }
+    } else {
+      result = await whatsappMessaging.sendTextMessage(phone, message);
+    }
+
+    if (result.success) {
+      console.log('✅ WhatsApp 預約通知已發送:', {
+        to: phone,
+        withAccess: !!withAccess,
+        provider: result.provider,
+      });
+    }
+    return result;
   } catch (err) {
-    console.error('❌ OpenWA 預約通知發送失敗:', err.message, err.response?.data || '');
-    return { success: false, provider: 'openwa', error: err.message };
+    console.error('❌ WhatsApp 預約通知發送失敗:', err.message, err.response?.data || '');
+    return { success: false, provider: provider || 'unknown', error: err.message };
   }
 }
 
 /**
- * 預約取消 WhatsApp 通知（OpenWA）
+ * 預約取消 WhatsApp 通知
  */
 async function sendBookingCancellationWhatsApp(booking, phone, storeInput) {
   if (!phone) return { skipped: true, reason: 'no_phone' };
 
   const store = storeInput || (await resolveStore(booking, booking.court));
   const message = buildBookingCancellationMessage(booking, store);
+  const storeName = store?.name || 'PickleVibes';
+  const courtName = booking.court?.name || '場地';
+  const dateLabel = formatBookingDate(booking.date);
+  const timeRange = `${booking.startTime || ''} - ${booking.endTime || ''}`.trim();
 
-  if (!openWaService.isOpenWaConfigured()) {
-    return { skipped: true, reason: 'openwa_not_configured' };
+  if (!whatsappMessaging.isWhatsAppConfigured()) {
+    return { skipped: true, reason: 'not_configured', provider: whatsappMessaging.resolveProvider() };
   }
-  if (!openWaService.isValidPhoneNumber(phone)) {
-    return { skipped: true, reason: 'invalid_phone' };
+  if (!whatsappMessaging.isValidPhoneNumber(phone)) {
+    return { skipped: true, reason: 'invalid_phone', provider: whatsappMessaging.resolveProvider() };
   }
 
   try {
-    const result = await openWaService.sendTextMessage(phone, message);
-    console.log('✅ OpenWA 取消通知已發送:', result.to);
-    return { success: true, provider: 'openwa', ...result };
+    const result = await whatsappMessaging.sendBookingCancelled(
+      phone,
+      { storeName, courtName, dateLabel, timeRange },
+      message
+    );
+    if (result.success) {
+      console.log('✅ WhatsApp 取消通知已發送:', phone);
+    }
+    return result;
   } catch (err) {
-    console.error('❌ OpenWA 取消通知發送失敗:', err.message);
-    return { success: false, provider: 'openwa', error: err.message };
+    console.error('❌ WhatsApp 取消通知發送失敗:', err.message);
+    return { success: false, provider: whatsappMessaging.resolveProvider(), error: err.message };
   }
 }
 

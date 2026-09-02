@@ -283,7 +283,8 @@ router.put('/:id/profile', [
 router.put('/:id/role', [
   auth,
   adminAuth,
-  body('role').isIn(['user', 'admin', 'coach']).withMessage('角色必須是 user、admin 或 coach')
+  body('role').isIn(['user', 'admin', 'coach', 'athlete']).withMessage('角色必須是 user、admin、coach 或 athlete'),
+  body('athleteDays').optional().isInt({ min: 1, max: 365 }).withMessage('選手期限須為 1–365 日'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -294,7 +295,7 @@ router.put('/:id/role', [
       });
     }
     
-    const { role } = req.body;
+    const { role, athleteDays } = req.body;
     const userId = req.params.id;
     
     // 不能修改自己的角色
@@ -306,18 +307,26 @@ router.put('/:id/role', [
     if (!user) {
       return res.status(404).json({ message: '用戶不存在' });
     }
+
+    if (role === 'athlete') {
+      const days = Number(athleteDays) || 30;
+      user.role = 'athlete';
+      user.roleExpiry = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+    } else {
+      user.role = role;
+      user.roleExpiry = null;
+    }
     
-    // 更新角色
-    user.role = role;
     await user.save();
     
     res.json({
-      message: '用戶角色更新成功',
+      message: role === 'athlete' ? `已設為選手（${Number(athleteDays) || 30} 日）` : '用戶角色更新成功',
       user: {
         id: user._id,
         name: user.name,
         email: user.email,
         role: user.role,
+        roleExpiry: user.roleExpiry,
         membershipLevel: user.membershipLevel
       }
     });
@@ -1106,7 +1115,7 @@ router.post('/create', [
     .isLength({ min: 8 }).withMessage('密碼至少需要8個字符')
     .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼必須包含至少一個字母和一個數字'),
   body('phone').matches(/^[0-9]+$/).withMessage('電話號碼只能包含數字'),
-  body('role').optional().isIn(['user', 'admin', 'coach']).withMessage('無效的角色'),
+  body('role').optional().isIn(['user', 'admin', 'coach', 'athlete']).withMessage('無效的角色'),
   body('membershipLevel').optional().isIn(['basic', 'vip']).withMessage('無效的會員等級'),
   body('vipDays').optional().isInt({ min: 1, max: 365 }).withMessage('VIP 期限必須在 1-365 天之間')
 ], async (req, res) => {

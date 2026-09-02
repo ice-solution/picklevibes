@@ -1,11 +1,7 @@
 const ApplicationForm = require('../models/ApplicationForm');
 const ApplicationSubmission = require('../models/ApplicationSubmission');
 const ApplicationNotifyJob = require('../models/ApplicationNotifyJob');
-const {
-  isOpenWaConfigured,
-  isValidPhoneNumber,
-  sendTextMessage,
-} = require('./openWaService');
+const whatsappMessaging = require('./whatsappMessagingService');
 
 /** 預設間隔範圍（毫秒）：隨機，降低被 WhatsApp 判定為 bot 的風險 */
 const DEFAULT_INTERVAL_MIN_MS = 20000;
@@ -90,8 +86,8 @@ async function createNotifyJob({
   intervalMinMs,
   intervalMaxMs,
 }) {
-  if (!isOpenWaConfigured()) {
-    return { error: 'OpenWA 未設定，無法發送通知', status: 503 };
+  if (!whatsappMessaging.isWhatsAppConfigured()) {
+    return { error: 'WhatsApp 未設定，無法發送通知', status: 503 };
   }
 
   const tpl = String(template || '').trim();
@@ -126,7 +122,7 @@ async function createNotifyJob({
   let skippedCount = 0;
   for (const sub of submissions) {
     const phone = resolvePhone(sub);
-    if (!phone || !isValidPhoneNumber(phone)) {
+    if (!phone || !whatsappMessaging.isValidPhoneNumber(phone)) {
       skippedCount += 1;
       continue;
     }
@@ -258,7 +254,23 @@ async function processOneItem() {
   }
 
   try {
-    await sendTextMessage(item.phone, item.message);
+    const submissionId = String(item.submission || '').trim();
+    const msgText = String(item.message || '');
+    const nl = msgText.indexOf('\n');
+    const body = nl >= 0 ? msgText.slice(nl + 1).trim() : msgText;
+
+    const result = await whatsappMessaging.sendApplicationNotify(
+      item.phone,
+      { submissionId, body },
+      msgText
+    );
+    if (result.skipped) {
+      throw new Error(result.reason || 'skipped');
+    }
+    if (!result.success) {
+      throw new Error(result.error || '發送失敗');
+    }
+
     item.status = 'sent';
     item.sentAt = new Date();
     item.error = '';
@@ -267,7 +279,7 @@ async function processOneItem() {
     item.status = 'failed';
     item.error = err.response?.data?.message || err.message || '發送失敗';
     job.failedCount = (job.failedCount || 0) + 1;
-    console.error('❌ 申請表 OpenWA 通知失敗:', item.phone, item.error);
+    console.error('❌ 申請表 WhatsApp 通知失敗:', item.phone, item.error);
   }
 
   const stillPending = job.items.some((i) => i.status === 'pending');
@@ -316,7 +328,7 @@ function kickWorker() {
 function startApplicationNotifyWorker() {
   kickWorker();
   console.log(
-    `📲 申請表 OpenWA 通知佇列已啟動（隨機間隔 ${DEFAULT_INTERVAL_MIN_MS / 1000}–${DEFAULT_INTERVAL_MAX_MS / 1000} 秒／則）`
+    `📲 申請表 WhatsApp 通知佇列已啟動（provider=${whatsappMessaging.resolveProvider() || 'none'}；隨機間隔 ${DEFAULT_INTERVAL_MIN_MS / 1000}–${DEFAULT_INTERVAL_MAX_MS / 1000} 秒／則）`
   );
 }
 

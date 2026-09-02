@@ -27,7 +27,8 @@ router.put('/booking', [
   body('maxAdvanceDaysByRole').isObject().withMessage('必須提供依角色設定的可預約天數'),
   body('maxAdvanceDaysByRole.user').optional().isInt({ min: 1, max: 365 }).withMessage('一般用戶可預約天數須為 1–365'),
   body('maxAdvanceDaysByRole.coach').optional().isInt({ min: 1, max: 365 }).withMessage('教練可預約天數須為 1–365'),
-  body('maxAdvanceDaysByRole.admin').optional().isInt({ min: 1, max: 365 }).withMessage('管理員可預約天數須為 1–365')
+  body('maxAdvanceDaysByRole.admin').optional().isInt({ min: 1, max: 365 }).withMessage('管理員可預約天數須為 1–365'),
+  body('maxAdvanceDaysByRole.athlete').optional().isInt({ min: 1, max: 365 }).withMessage('選手可預約天數須為 1–365')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
