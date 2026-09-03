@@ -1,5 +1,5 @@
 const CoachClass = require('../models/CoachClass');
-const openWaService = require('./openWaService');
+const whatsappMessaging = require('./whatsappMessagingService');
 const { coachClassLocationLabel, sessionStartEnd, HK_TZ } = require('./coachScheduleService');
 const {
   getHKCalendarYMD,
@@ -151,14 +151,22 @@ async function loadPopulatedForNotify(coachClassDoc) {
  */
 async function notifyCoachClassAssigned(coachClassDoc) {
   const populated = await loadPopulatedForNotify(coachClassDoc);
-  if (!openWaService.isOpenWaConfigured()) {
-    return { success: false, skipped: true, reason: 'openwa_not_configured', sent: 0 };
+  if (!whatsappMessaging.isWhatsAppConfigured()) {
+    return {
+      success: false,
+      skipped: true,
+      reason: 'whatsapp_not_configured',
+      sent: 0,
+    };
   }
 
   const coaches = resolveCoachUsers(populated);
   if (!coaches.length) {
     return { success: false, skipped: true, reason: 'no_coach', sent: 0 };
   }
+
+  const provider = whatsappMessaging.resolveProvider();
+  const useGap = provider === 'openwa';
 
   let sent = 0;
   const errors = [];
@@ -168,21 +176,37 @@ async function notifyCoachClassAssigned(coachClassDoc) {
     const phone = coach.phone;
     if (!phone || coach.isActive === false) continue;
     try {
-      if (!isFirstOutbound) {
+      if (useGap && !isFirstOutbound) {
         await sleep(randomGapMs());
       }
       isFirstOutbound = false;
 
-      const text = buildClassMessage({
+      const dateLabel = formatDateLabel(populated.sessionDate);
+      const timeRange = `${populated.startTime} – ${populated.endTime}`;
+      const location = coachClassLocationLabel(populated);
+      const openWaText = buildClassMessage({
         greeting: `${coach.name || '教練'}，您好：管理員已為您安排課堂。`,
         title: populated.title,
-        dateLabel: formatDateLabel(populated.sessionDate),
-        timeRange: `${populated.startTime} – ${populated.endTime}`,
-        location: coachClassLocationLabel(populated),
+        dateLabel,
+        timeRange,
+        location,
         notes: populated.notes,
       });
-      await openWaService.sendTextMessage(phone, text);
-      sent += 1;
+
+      const result = await whatsappMessaging.sendCoachClassAssigned(
+        phone,
+        {
+          coachName: coach.name || '教練',
+          title: populated.title,
+          dateLabel,
+          timeRange,
+          location,
+          notes: populated.notes,
+        },
+        openWaText
+      );
+      if (result.success) sent += 1;
+      else if (result.error) errors.push({ coachId: String(coach._id), error: result.error });
     } catch (err) {
       errors.push({ coachId: String(coach._id), error: err.message });
     }
@@ -204,9 +228,12 @@ async function notifyCoachClassAssigned(coachClassDoc) {
  * - 每則實際送出後，下一則前隨機等 20–60 秒（可用 env 調）
  */
 async function sendDayBeforeReminders(now = new Date()) {
-  if (!openWaService.isOpenWaConfigured()) {
-    return { sent: 0, skipped: 0, reason: 'openwa_not_configured' };
+  if (!whatsappMessaging.isWhatsAppConfigured()) {
+    return { sent: 0, skipped: 0, reason: 'whatsapp_not_configured' };
   }
+
+  const provider = whatsappMessaging.resolveProvider();
+  const useGap = provider === 'openwa';
 
   const todayStr = hkDateString(now);
   const tomorrowStr = addDaysToHkDateString(todayStr, 1);
@@ -254,24 +281,42 @@ async function sendDayBeforeReminders(now = new Date()) {
       }
       classAttempted += 1;
       try {
-        if (!isFirstOutbound) {
+        if (useGap && !isFirstOutbound) {
           const gap = randomGapMs();
           console.log(`⏳ 教練課堂提醒間隔 ${Math.round(gap / 1000)}s 後發送…`);
           await sleep(gap);
         }
         isFirstOutbound = false;
 
-        const text = buildDayBeforeReminderMessage({
+        const dateLabel = formatDateLabel(cc.sessionDate);
+        const timeRange = `${cc.startTime} – ${cc.endTime}`;
+        const location = coachClassLocationLabel(cc);
+        const openWaText = buildDayBeforeReminderMessage({
           coachName: coach.name,
           title: cc.title,
-          dateLabel: formatDateLabel(cc.sessionDate),
-          timeRange: `${cc.startTime} – ${cc.endTime}`,
-          location: coachClassLocationLabel(cc),
+          dateLabel,
+          timeRange,
+          location,
           notes: cc.notes,
         });
-        await openWaService.sendTextMessage(phone, text);
-        sent += 1;
-        classSent += 1;
+        const result = await whatsappMessaging.sendCoachClassReminder(
+          phone,
+          {
+            coachName: coach.name,
+            title: cc.title,
+            dateLabel,
+            timeRange,
+            location,
+            notes: cc.notes,
+          },
+          openWaText
+        );
+        if (result.success) {
+          sent += 1;
+          classSent += 1;
+        } else if (result.error) {
+          errors.push({ id: String(cc._id), coachId: String(coach._id), error: result.error });
+        }
       } catch (err) {
         errors.push({ id: String(cc._id), coachId: String(coach._id), error: err.message });
       }

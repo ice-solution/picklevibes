@@ -186,7 +186,7 @@ X-Bot-Key: <BOT_API_KEY>
 | `endTime` | ✅ | `HH:MM` 或 `24:00` |
 | `totalPlayers` | ✅ | 打球人數（1–8），**唔需要逐個玩家姓名** |
 | `specialRequests` | ❌ | 特殊要求，最多 500 字 |
-| `includeSoloCourt` | ❌ | 是否加租單人場（+100 積分），預設 `false` |
+| `includeSoloCourt` | ❌ | 是否加租單人場（每小時 +100 積分，不享 VIP 8 折；2 小時 = +200），預設 `false` |
 | `redeemCodeId` | ❌ | 兌換碼 ID |
 
 ### 關於 `players`（聯絡人）

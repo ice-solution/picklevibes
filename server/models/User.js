@@ -40,8 +40,13 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin', 'coach', 'staff'],
+    enum: ['user', 'admin', 'coach', 'staff', 'athlete'],
     default: 'user'
+  },
+  /** 選手 role 到期日；過期後自動改回 user 並保持／恢復 VIP 會籍 */
+  roleExpiry: {
+    type: Date,
+    default: null,
   },
   membershipLevel: {
     type: String,

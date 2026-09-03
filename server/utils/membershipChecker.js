@@ -42,9 +42,9 @@ async function checkExpiredMemberships() {
   try {
     console.log('🕐 開始檢查過期的VIP會員...');
 
-    // 獲取所有VIP會員
-    const vipUsers = await User.find({ membershipLevel: 'vip' });
-    console.log(`📋 找到 ${vipUsers.length} 個VIP會員`);
+    // 獲取所有VIP會員（選手 role 進行中時不因 VIP 到期日降級，由選手到期 job 處理）
+    const vipUsers = await User.find({ membershipLevel: 'vip', role: { $ne: 'athlete' } });
+    console.log(`📋 找到 ${vipUsers.length} 個VIP會員（不含進行中選手）`);
 
     let expiredCount = 0;
     const now = new Date();
@@ -84,15 +84,50 @@ async function checkExpiredMemberships() {
   }
 }
 
-/** 每日任務：先續期（餘 1 整日），再降級已過期 */
+/** 選手 role 到期 → 改回 user，並恢復／保持 VIP 會籍 */
+async function checkExpiredAthleteRoles() {
+  try {
+    console.log('🏸 開始檢查過期選手 role...');
+    const now = new Date();
+    const expiredAthletes = await User.find({
+      role: 'athlete',
+      roleExpiry: { $ne: null, $lte: now },
+    });
+
+    let revertedCount = 0;
+    for (const user of expiredAthletes) {
+      user.role = 'user';
+      user.roleExpiry = null;
+      user.membershipLevel = 'vip';
+      if (!user.membershipExpiry || user.membershipExpiry <= now) {
+        user.membershipExpiry = new Date(now.getTime() + VIP_PERIOD_MS);
+      }
+      await user.save();
+      revertedCount += 1;
+      console.log(
+        `🏸 選手到期: ${user.name} (${user.email}) → 角色 user，VIP 至 ${user.membershipExpiry.toLocaleDateString('zh-TW')}`
+      );
+    }
+
+    console.log(`✅ 選手 role 檢查完成，共 ${revertedCount} 位已改回 VIP 會員`);
+    return { revertedAthleteCount: revertedCount };
+  } catch (error) {
+    console.error('❌ 檢查過期選手失敗:', error);
+    throw error;
+  }
+}
+
+/** 每日任務：先續期（餘 1 整日），再降級已過期 VIP，再處理選手 role 到期 */
 async function runDailyMembershipJobs() {
   const renew = await renewVipMembershipsOneDayLeft();
   const expire = await checkExpiredMemberships();
-  return { ...renew, ...expire };
+  const athletes = await checkExpiredAthleteRoles();
+  return { ...renew, ...expire, ...athletes };
 }
 
 module.exports = {
   checkExpiredMemberships,
   renewVipMembershipsOneDayLeft,
+  checkExpiredAthleteRoles,
   runDailyMembershipJobs
 };

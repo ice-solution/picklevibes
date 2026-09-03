@@ -1,7 +1,7 @@
 const Store = require('../models/Store');
 const Booking = require('../models/Booking');
 const weekendService = require('./weekendService');
-const openWaService = require('./openWaService');
+const whatsappMessaging = require('./whatsappMessagingService');
 
 const TZ = 'Asia/Hong_Kong';
 
@@ -206,16 +206,50 @@ async function loadStoreBookingsForDate(storeId, dateStr) {
     .lean();
 }
 
-async function sendToStorePhones(store, message) {
+async function sendToStorePhones(store, message, templatePayload = null) {
   const cfg = normalizeNotifyConfig(store.overnightDutyNotify);
   if (!cfg.enabled || !cfg.notifyPhones.length) {
     return { skipped: true, reason: 'not_enabled_or_no_phones' };
   }
-  if (!openWaService.isOpenWaConfigured()) {
-    console.warn('⚠️ OpenWA 未設定，略過夜間值班通知');
-    return { skipped: true, reason: 'openwa_not_configured' };
+  if (!whatsappMessaging.isWhatsAppConfigured()) {
+    console.warn('⚠️ WhatsApp 未設定，略過夜間值班通知');
+    return { skipped: true, reason: 'whatsapp_not_configured' };
   }
-  const results = await openWaService.sendTextToMany(cfg.notifyPhones, message);
+
+  const provider = whatsappMessaging.resolveProvider();
+  if (provider === 'cloud' && templatePayload) {
+    const results = [];
+    for (const phone of cfg.notifyPhones) {
+      try {
+        let r;
+        if (templatePayload.kind === 'new') {
+          r = await whatsappMessaging.sendOvernightNewBooking(
+            phone,
+            {
+              storeName: templatePayload.storeName,
+              dateTimeLine: templatePayload.dateTimeLine,
+            },
+            message
+          );
+        } else {
+          r = await whatsappMessaging.sendOvernightAcSummary(
+            phone,
+            {
+              storeName: templatePayload.storeName,
+              timeLinesBlock: templatePayload.timeLinesBlock,
+            },
+            message
+          );
+        }
+        results.push({ phone, ok: !!r.success, ...r });
+      } catch (error) {
+        results.push({ phone, ok: false, error: error.message });
+      }
+    }
+    return { skipped: false, results };
+  }
+
+  const results = await whatsappMessaging.sendTextToMany(cfg.notifyPhones, message);
   return { skipped: false, results };
 }
 
@@ -255,7 +289,11 @@ async function notifyOnBookingCreated(booking) {
     if (!line) return { skipped: true, reason: 'missing_times' };
 
     const msg = [buildAcHeader(store.name), line].join('\n');
-    return sendToStorePhones(store, msg);
+    return sendToStorePhones(store, msg, {
+      kind: 'new',
+      storeName: store.name,
+      dateTimeLine: line,
+    });
   } catch (error) {
     console.error('❌ 夜間值班即時通知失敗:', error);
     return { skipped: true, error: error.message };
@@ -280,7 +318,11 @@ async function runEveningDigestForStore(store, now = new Date()) {
   }
   const msg = [buildAcHeader(store.name), ...timeLines].join('\n');
 
-  return sendToStorePhones(store, msg);
+  return sendToStorePhones(store, msg, {
+    kind: 'summary',
+    storeName: store.name,
+    timeLinesBlock: timeLines.join('\n'),
+  });
 }
 
 /**
@@ -308,7 +350,11 @@ async function runHolidayMorningDigestForStore(store, now = new Date()) {
   }
   const msg = [buildAcHeader(store.name), ...timeLines].join('\n');
 
-  return sendToStorePhones(store, msg);
+  return sendToStorePhones(store, msg, {
+    kind: 'summary',
+    storeName: store.name,
+    timeLinesBlock: timeLines.join('\n'),
+  });
 }
 
 /** 防止同一分鐘重複發送 */

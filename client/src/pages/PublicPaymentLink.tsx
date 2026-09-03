@@ -10,6 +10,9 @@ type PublicLink = {
   description: string;
   amount: number;
   pointsAmount: number;
+  listAmount?: number;
+  listPointsAmount?: number;
+  athleteDiscountApplied?: boolean;
   store?: { name: string; slug: string };
   expiresAt?: string | null;
   isActive: boolean;
@@ -50,8 +53,8 @@ const PublicPaymentLink: React.FC = () => {
         setLoading(false);
       }
     };
-    if (code) void load();
-  }, [code]);
+    if (code && !authLoading) void load();
+  }, [code, user?.id, authLoading]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -189,6 +192,17 @@ const PublicPaymentLink: React.FC = () => {
                 </div>
               )}
 
+              {link.athleteDiscountApplied && (
+                <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">
+                  選手優惠：此連結已套用半價
+                  {link.listAmount != null && link.listAmount !== link.amount && (
+                    <span className="ml-2 text-emerald-700">
+                      （原價 HK${Number(link.listAmount).toFixed(2)}）
+                    </span>
+                  )}
+                </div>
+              )}
+
               {isAuthenticated ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -200,7 +214,7 @@ const PublicPaymentLink: React.FC = () => {
                     className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white"
                   >
                     <option value="gateway">
-                      線上付款（正價 HK${Number(link.amount).toFixed(2)}）
+                      線上付款（HK${Number(link.amount).toFixed(2)}）
                     </option>
                     <option value="points">
                       積分付款（{Number(link.pointsAmount)} 積分）

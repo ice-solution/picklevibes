@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const Booking = require('../models/Booking');
 const Court = require('../models/Court');
 const User = require('../models/User');
+const { hasBookingVipDiscount, applyBookingVipDiscount } = require('../utils/memberBenefits');
 
 function normalizeDateTime(date, time) {
   const normalizedDate = new Date(date);
@@ -70,7 +71,7 @@ async function createAdminBypassBooking({
   }
 
   const isMember = bookingUser.membershipLevel !== 'basic';
-  const isVip = bookingUser.membershipLevel === 'vip';
+  const isVip = hasBookingVipDiscount(bookingUser);
   const phoneRaw = bookingUser.phone ? String(bookingUser.phone).replace(/\D/g, '') : '';
   const players = [
     {
@@ -96,7 +97,7 @@ async function createAdminBypassBooking({
   tempBooking.calculatePrice(courtDoc, isMember);
   let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
   if (isVip) {
-    pointsToDeduct = Math.round(pointsToDeduct * 0.8);
+    pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
   }
 
   const bypassRestrictions = true;

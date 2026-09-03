@@ -21,10 +21,18 @@ const { consumeRedeemCodeOnce } = require('../services/redeemUsageService');
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { scheduleTuyaCourtSync, scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 const {
+  hasBookingVipDiscount,
+  bookingVipDiscountLabel,
+  applyBookingVipDiscount,
+} = require('../utils/memberBenefits');
+const { calculateSoloCourtFee } = require('../utils/soloCourtFee');
+const {
   settleBookingWithPoints,
+  settleBookingWithExternalPayment,
   getSettlePreview,
   isBookingEligibleForSettle,
   suggestedSettlePoints,
+  BOOKING_EXTERNAL_PAYMENT_METHODS,
 } = require('../services/bookingSettleService');
 
 const router = express.Router();
@@ -275,7 +283,7 @@ router.post('/', [
     }
     
     const isMember = bookingUser.membershipLevel !== 'basic';
-    const isVip = bookingUser.membershipLevel === 'vip';
+    const isVip = hasBookingVipDiscount(bookingUser);
     
     // 創建預約對象來計算價格
     const tempBooking = new Booking({
@@ -294,17 +302,15 @@ router.post('/', [
     // 計算價格
     tempBooking.calculatePrice(courtDoc, isMember);
     
-    // 計算實際需要扣除的積分（VIP會員8折）
+    // 計算實際需要扣除的積分（主場 VIP 8 折；單人場加租另計且不折扣）
+    const soloCourtFee = includeSoloCourt ? calculateSoloCourtFee(duration) : 0;
     let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
-    
-    // 如果包含單人場租用，添加100積分
-    if (includeSoloCourt) {
-      pointsToDeduct += 100;
-    }
-    
+
     if (isVip) {
-      pointsToDeduct = Math.round(pointsToDeduct * 0.8); // VIP會員8折
+      pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
     }
+
+    pointsToDeduct += soloCourtFee;
     
     // 處理兌換碼折扣
     let redeemCodeData = null;
@@ -333,7 +339,7 @@ router.post('/', [
           if (canUse) {
             // 計算兌換碼折扣 - 基於原價計算，不是基於已應用 VIP 折扣的價格
             let discountAmount = 0;
-            const originalPrice = tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0);
+            const originalPrice = tempBooking.pricing.totalPrice + soloCourtFee;
             
             // 檢查最低消費金額
             if (originalPrice < redeemCode.minAmount) {
@@ -384,7 +390,7 @@ router.post('/', [
         available: userBalance.balance,
         discount: customPointsFlag
           ? '自訂積分'
-          : (isVip ? 'VIP會員8折' : '無折扣')
+          : bookingVipDiscountLabel(bookingUser)
       });
     }
     
@@ -437,8 +443,8 @@ router.post('/', [
         totalPrice: chargePoints,
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
         pointsDeducted: bypassRestrictions ? 0 : chargePoints,
-        vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
-        soloCourtFee: includeSoloCourt ? 100 : 0, // 單人場費用
+        vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice * 0.2) : 0,
+        soloCourtFee,
         customPoints: customPointsFlag ? customPointsNum : undefined, // 自訂積分
         isCustomPoints: customPointsFlag // 是否使用自訂積分
       },
@@ -464,7 +470,7 @@ router.post('/', [
           userId: bookingUserId,
           orderType: 'booking',
           orderId: booking._id,
-          originalAmount: tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0),
+          originalAmount: tempBooking.pricing.totalPrice + soloCourtFee,
           discountAmount: redeemCodeData.discountAmount,
           finalAmount: pointsToDeduct,
           ipAddress: req.ip,
@@ -1137,6 +1143,62 @@ router.post('/:id/settle', [
       return res.status(error.status).json({ message: error.message });
     }
     console.error('預約結算錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/bookings/:id/mark-paid
+// @desc    標記外部收款已付（現金、KPay、FPS 等，不扣積分）
+// @access  Private (Admin)
+router.post('/:id/mark-paid', [
+  auth,
+  adminAuth,
+  body('method')
+    .isIn(BOOKING_EXTERNAL_PAYMENT_METHODS)
+    .withMessage(`付款方式必須為：${BOOKING_EXTERNAL_PAYMENT_METHODS.join('、')}`),
+  body('userId').optional().notEmpty().withMessage('請選擇有效用戶'),
+  body('amount').optional().isFloat({ min: 0 }).withMessage('金額必須是非負數'),
+  body('note').optional().trim().isLength({ max: 200 }).withMessage('備註不能超過200字'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const { method, userId, amount, note = '' } = req.body;
+
+    const result = await settleBookingWithExternalPayment({
+      bookingId: req.params.id,
+      method,
+      targetUserId: userId || null,
+      amount: amount != null ? Number(amount) : undefined,
+      note,
+      adminUser: req.user,
+      allowReassign: true,
+    });
+
+    res.json({
+      message: result.reassigned
+        ? `已指派用戶並標記${result.methodLabel}收款`
+        : `已標記${result.methodLabel}收款`,
+      booking: result.booking,
+      payment: {
+        method: result.method,
+        methodLabel: result.methodLabel,
+        totalAmount: result.totalAmount,
+      },
+      reassigned: result.reassigned,
+      bundleCount: result.bundleCount || 1,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error('預約 mark-paid 錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

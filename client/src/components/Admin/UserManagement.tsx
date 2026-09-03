@@ -28,9 +28,10 @@ interface User {
   name: string;
   email: string;
   phone: string;
-  role: 'user' | 'admin' | 'coach';
+  role: 'user' | 'admin' | 'coach' | 'athlete';
   membershipLevel: 'basic' | 'vip';
   membershipExpiry?: string;
+  roleExpiry?: string;
   isActive: boolean;
   createdAt: string;
   lastLogin: string;
@@ -128,6 +129,7 @@ const UserManagement: React.FC = () => {
   const [statusReason, setStatusReason] = useState('');
   const [showMembershipModal, setShowMembershipModal] = useState(false);
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
+  const [athleteRoleDays, setAthleteRoleDays] = useState(30);
   const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
   const [showProfileEditModal, setShowProfileEditModal] = useState(false);
   const [profileEditForm, setProfileEditForm] = useState({ name: '', phone: '' });
@@ -155,6 +157,7 @@ const UserManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<'name' | 'email' | 'phone'>('name');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
+  const [membershipLevelFilter, setMembershipLevelFilter] = useState<'' | 'basic' | 'vip'>('');
 
   // 防抖搜索查詢
   useEffect(() => {
@@ -218,7 +221,7 @@ const UserManagement: React.FC = () => {
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [currentPage, pageSize, debouncedSearchQuery, searchType]);
+  }, [currentPage, pageSize, debouncedSearchQuery, searchType, membershipLevelFilter]);
 
   const fetchUsers = async () => {
     try {
@@ -234,6 +237,10 @@ const UserManagement: React.FC = () => {
       if (debouncedSearchQuery.trim()) {
         params.append('search', debouncedSearchQuery.trim());
         params.append('searchType', searchType);
+      }
+
+      if (membershipLevelFilter) {
+        params.append('membershipLevel', membershipLevelFilter);
       }
       
       const response = await axios.get(`/users?${params.toString()}`);
@@ -263,6 +270,7 @@ const UserManagement: React.FC = () => {
     let value = '';
     if (field === 'role') {
       value = user.role;
+      setAthleteRoleDays(30);
     } else if (field === 'membership') {
       value = user.membershipLevel;
     } else if (field === 'status') {
@@ -283,7 +291,10 @@ const UserManagement: React.FC = () => {
       switch (editingField) {
         case 'role':
           endpoint = `/users/${selectedUser._id}/role`;
-          data = { role: newValue };
+          data =
+            newValue === 'athlete'
+              ? { role: newValue, athleteDays: athleteRoleDays }
+              : { role: newValue };
           break;
         case 'membership':
           endpoint = `/users/${selectedUser._id}/membership`;
@@ -547,6 +558,7 @@ const UserManagement: React.FC = () => {
     switch (role) {
       case 'admin': return 'bg-red-100 text-red-800';
       case 'coach': return 'bg-blue-100 text-blue-800';
+      case 'athlete': return 'bg-emerald-100 text-emerald-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -710,8 +722,19 @@ const UserManagement: React.FC = () => {
     setCurrentPage(1); // 切換搜索類型時重置到第一頁
   };
 
+  const handleMembershipLevelFilterChange = (level: '' | 'basic' | 'vip') => {
+    setMembershipLevelFilter(level);
+    setCurrentPage(1);
+  };
+
   const clearSearch = () => {
     setSearchQuery('');
+    setCurrentPage(1);
+  };
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setMembershipLevelFilter('');
     setCurrentPage(1);
   };
 
@@ -939,12 +962,46 @@ const UserManagement: React.FC = () => {
                 <option value="phone">電話</option>
               </select>
             </div>
+
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-700">會員等級:</label>
+              <select
+                value={membershipLevelFilter}
+                onChange={(e) => handleMembershipLevelFilterChange(e.target.value as '' | 'basic' | 'vip')}
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">全部</option>
+                <option value="basic">普通會員</option>
+                <option value="vip">VIP會員</option>
+              </select>
+            </div>
+
+            {(searchQuery || membershipLevelFilter) && (
+              <button
+                type="button"
+                onClick={clearFilters}
+                className="px-3 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                清除篩選
+              </button>
+            )}
           </div>
           
           {/* 搜索結果提示 */}
-          {searchQuery && (
+          {(searchQuery || membershipLevelFilter) && (
             <div className="mt-3 text-sm text-gray-600">
-              搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : searchType === 'email' ? '郵箱' : '電話'}) - 找到 {totalUsers} 個結果
+              {searchQuery && (
+                <span>
+                  搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : searchType === 'email' ? '郵箱' : '電話'})
+                </span>
+              )}
+              {searchQuery && membershipLevelFilter && ' · '}
+              {membershipLevelFilter && (
+                <span>
+                  會員等級：{membershipLevelFilter === 'vip' ? 'VIP會員' : '普通會員'}
+                </span>
+              )}
+              {' — 找到 '}{totalUsers} 個結果
             </div>
           )}
         </div>
@@ -1006,7 +1063,7 @@ const UserManagement: React.FC = () => {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(user.role)}`}>
-                      {user.role === 'admin' ? '管理員' : user.role === 'coach' ? '教練' : '用戶'}
+                      {user.role === 'admin' ? '管理員' : user.role === 'coach' ? '教練' : user.role === 'athlete' ? '選手' : '用戶'}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -1014,6 +1071,11 @@ const UserManagement: React.FC = () => {
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getMembershipColor(user.membershipLevel)}`}>
                         {user.membershipLevel === 'vip' ? 'VIP會員' : '普通會員'}
                       </span>
+                      {user.role === 'athlete' && user.roleExpiry && (
+                        <div className="text-xs text-emerald-600 mt-0.5">
+                          選手至 {formatMembershipExpiry(user.roleExpiry)}
+                        </div>
+                      )}
                       {user.membershipLevel === 'vip' && user.membershipExpiry && (
                         <span className="text-xs text-gray-500 mt-1">
                           {formatMembershipExpiry(user.membershipExpiry)}
@@ -1165,8 +1227,24 @@ const UserManagement: React.FC = () => {
                   >
                     <option value="user">用戶</option>
                     <option value="coach">教練</option>
+                    <option value="athlete">選手</option>
                     <option value="admin">管理員</option>
                   </select>
+                )}
+
+                {editingField === 'role' && newValue === 'athlete' && (
+                  <div className="mt-3">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">選手期限（日）</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={365}
+                      value={athleteRoleDays}
+                      onChange={(e) => setAthleteRoleDays(parseInt(e.target.value, 10) || 30)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">到期後自動改回一般用戶並保持 VIP 會籍</p>
+                  </div>
                 )}
 
                 {editingField === 'membership' && (

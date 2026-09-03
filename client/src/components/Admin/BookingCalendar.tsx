@@ -22,6 +22,13 @@ import {
   TrashIcon
 } from '@heroicons/react/24/outline';
 import { useLockedStoreId } from '../../contexts/StoreAdminContext';
+import {
+  BOOKING_EXTERNAL_PAYMENT_METHODS,
+  bookingPaymentMethodLabel,
+  type BookingExternalPaymentMethod,
+} from '../../constants/bookingPaymentMethods';
+
+type SettleMode = 'points' | 'external';
 
 interface StoreRef {
   _id: string;
@@ -229,6 +236,10 @@ const BookingCalendar: React.FC = () => {
     bundleBreakdown?: Array<{ id: string; courtName: string; pointsDeducted: number }>;
   } | null>(null);
   const [settling, setSettling] = useState(false);
+  const [settleMode, setSettleMode] = useState<SettleMode>('points');
+  const [externalMethod, setExternalMethod] = useState<BookingExternalPaymentMethod>('cash');
+  const [externalAmount, setExternalAmount] = useState('');
+  const [externalNote, setExternalNote] = useState('');
   const calendarRangeRef = useRef<{ start: string; end: string } | null>(null);
   /** 避免 datesSet 與 events 更新連鎖造成重複請求／loading 卡死 */
   const lastFetchedRangeKeyRef = useRef<string>('');
@@ -502,7 +513,7 @@ const BookingCalendar: React.FC = () => {
     const method = booking.payment?.method;
     const pts = Number(booking.payment?.pointsDeducted) || 0;
     if (method === 'points' && pts > 0 && !booking.noUserBalanceDebited) return false;
-    if (['cash', 'bank_transfer', 'stripe'].includes(method) && booking.payment?.status === 'paid') {
+    if (['cash', 'bank_transfer', 'stripe', 'kpay', 'fps', 'other'].includes(method) && booking.payment?.status === 'paid') {
       return false;
     }
     return (
@@ -550,6 +561,18 @@ const BookingCalendar: React.FC = () => {
       }
       return { amount: paid, suffix: '已結算', courtShare: null, bundleCount: 0 };
     }
+    if (
+      ['cash', 'bank_transfer', 'stripe', 'kpay', 'fps', 'other'].includes(booking.payment?.method || '') &&
+      booking.payment?.status === 'paid' &&
+      !booking.noUserBalanceDebited
+    ) {
+      return {
+        amount: booking.pricing?.totalPrice || 0,
+        suffix: `已收款 · ${bookingPaymentMethodLabel(booking.payment?.method)}`,
+        courtShare: null,
+        bundleCount: isFV ? bundleCount : 0,
+      };
+    }
     if (isBookingPendingSettle(booking, info)) {
       return {
         amount: getSuggestedSettlePoints(booking, info),
@@ -568,14 +591,23 @@ const BookingCalendar: React.FC = () => {
     setSettleUserBalance(null);
     setSettleInfo(null);
     setSettling(false);
+    setSettleMode('points');
+    setExternalMethod('cash');
+    setExternalAmount('');
+    setExternalNote('');
   };
 
   const initSettleForm = (booking: Booking, info?: typeof settleInfo) => {
     setSettleUser(null);
-    setSettlePoints(String(getSuggestedSettlePoints(booking, info) || ''));
+    const suggested = getSuggestedSettlePoints(booking, info) || 0;
+    setSettlePoints(String(suggested));
     setSettleReason('預約結算');
     setSettleUserBalance(null);
     setSettling(false);
+    setSettleMode('points');
+    setExternalMethod('cash');
+    setExternalAmount(String(suggested));
+    setExternalNote('');
   };
 
   const handleSettleUserChange = async (user: { _id: string; name: string; email: string; phone?: string } | null) => {
@@ -630,6 +662,53 @@ const BookingCalendar: React.FC = () => {
       refetchBookings();
     } catch (error: any) {
       alert(error.response?.data?.message || '結算失敗');
+    } finally {
+      setSettling(false);
+    }
+  };
+
+  const handleMarkPaidBooking = async () => {
+    if (!selectedBooking) return;
+    if (externalMethod === 'other' && !externalNote.trim()) {
+      alert('選擇「其他」時請填寫付款備註');
+      return;
+    }
+    const amount = externalAmount.trim() ? parseFloat(externalAmount) : undefined;
+    if (amount != null && (Number.isNaN(amount) || amount < 0)) {
+      alert('請輸入有效金額');
+      return;
+    }
+    const methodLabel =
+      BOOKING_EXTERNAL_PAYMENT_METHODS.find((m) => m.value === externalMethod)?.label || externalMethod;
+    const courtLabel = settleInfo?.isFullVenue
+      ? `包場（${settleInfo.bundleCount || 3} 個場地）`
+      : selectedBooking.court?.name || '場地';
+    const dateLabel = formatDate(selectedBooking.date);
+    const userLine = settleUser ? `\n指派用戶：${settleUser.name}` : '';
+    if (
+      !window.confirm(
+        `確認標記${settleInfo?.isFullVenue ? '包場' : '此預約'}為已付款？\n付款方式：${methodLabel}${amount != null ? `\n金額：$${amount}` : ''}${userLine}\n${dateLabel} ${selectedBooking.startTime}–${selectedBooking.endTime} ${courtLabel}`
+      )
+    ) {
+      return;
+    }
+    try {
+      setSettling(true);
+      const payload: Record<string, unknown> = {
+        method: externalMethod,
+        note: externalNote.trim() || undefined,
+      };
+      if (settleUser) payload.userId = settleUser._id;
+      if (amount != null) payload.amount = amount;
+      const response = await axios.post(`/bookings/${selectedBooking._id}/mark-paid`, payload);
+      alert(response.data.message || '已標記付款');
+      const refresh = await axios.get(`/bookings/${selectedBooking._id}`);
+      setSelectedBooking(refresh.data.booking);
+      setSettleInfo(refresh.data.settleInfo || null);
+      resetSettleForm();
+      refetchBookings();
+    } catch (error: any) {
+      alert(error.response?.data?.message || '標記付款失敗');
     } finally {
       setSettling(false);
     }
@@ -1244,9 +1323,7 @@ const BookingCalendar: React.FC = () => {
                   <p className="text-sm text-gray-900">
                   {selectedBooking.payment.method === 'admin_waived'
                     ? '管理員留場（未扣積分）'
-                    : selectedBooking.payment.method === 'points'
-                      ? '積分'
-                      : selectedBooking.payment.method}
+                    : bookingPaymentMethodLabel(selectedBooking.payment.method)}
                 </p>
                 </div>
               </div>
@@ -1254,63 +1331,138 @@ const BookingCalendar: React.FC = () => {
               {isBookingPendingSettle(selectedBooking, settleInfo || undefined) && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-4">
                   <div>
-                    <h4 className="text-sm font-semibold text-amber-900">
-                      {settleInfo?.isFullVenue ? '包場指派用戶並結算' : '指派用戶並結算'}
-                    </h4>
+                    <h4 className="text-sm font-semibold text-amber-900">結算 Hold 場</h4>
                     <p className="text-xs text-amber-800 mt-1">
                       {settleInfo?.isFullVenue
-                        ? `此為包場預約（共 ${settleInfo.bundleCount || 3} 個場地），結算一次會整組轉至用戶並扣總價，T&L 按各場地認列。`
-                        : '客戶充值後，選擇用戶並扣積分。預約會轉至該用戶名下，收入計入 T&L（按預約日期／場地）。'}
+                        ? `包場（共 ${settleInfo.bundleCount || 3} 個場地）一次結算整組。`
+                        : '可扣用戶積分，或標記現場／外部收款（現金、KPay、FPS 等）。'}
                     </p>
+                  </div>
+
+                  <div className="flex rounded-lg border border-amber-200 p-1 bg-amber-100/50">
+                    <button
+                      type="button"
+                      onClick={() => setSettleMode('points')}
+                      className={`flex-1 py-2 text-sm rounded-md font-medium ${
+                        settleMode === 'points' ? 'bg-white shadow text-amber-900' : 'text-amber-800'
+                      }`}
+                    >
+                      扣積分
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSettleMode('external')}
+                      className={`flex-1 py-2 text-sm rounded-md font-medium ${
+                        settleMode === 'external' ? 'bg-white shadow text-amber-900' : 'text-amber-800'
+                      }`}
+                    >
+                      現場收款
+                    </button>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      指派用戶 <span className="text-red-500">*</span>
+                      指派用戶 {settleMode === 'points' ? <span className="text-red-500">*</span> : null}
+                      {settleMode === 'external' && (
+                        <span className="text-gray-400 font-normal text-xs">（可選）</span>
+                      )}
                     </label>
                     <UserAutocomplete
                       value={settleUser?._id || ''}
                       onChange={handleSettleUserChange}
                       placeholder="搜索姓名、電郵或電話…"
                     />
-                    {settleUserBalance !== null && (
+                    {settleMode === 'points' && settleUserBalance !== null && (
                       <p className="mt-1 text-xs text-gray-600">
                         用戶餘額：<span className={settleUserBalance < parseInt(settlePoints || '0', 10) ? 'text-red-600 font-medium' : 'text-green-700 font-medium'}>{settleUserBalance}</span> 積分
                       </p>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">扣款積分</label>
-                      <input
-                        type="number"
-                        min={1}
-                        value={settlePoints}
-                        onChange={(e) => setSettlePoints(e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">備註</label>
-                      <input
-                        type="text"
-                        value={settleReason}
-                        onChange={(e) => setSettleReason(e.target.value)}
-                        placeholder="預約結算"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                      />
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={handleSettleBooking}
-                    disabled={settling || !settleUser || !settlePoints}
-                    className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
-                  >
-                    {settling ? '結算中…' : settleInfo?.isFullVenue ? '包場指派並扣積分結算' : '指派用戶並扣積分結算'}
-                  </button>
+                  {settleMode === 'points' ? (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">扣款積分</label>
+                          <input
+                            type="number"
+                            min={1}
+                            value={settlePoints}
+                            onChange={(e) => setSettlePoints(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">備註</label>
+                          <input
+                            type="text"
+                            value={settleReason}
+                            onChange={(e) => setSettleReason(e.target.value)}
+                            placeholder="預約結算"
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleSettleBooking}
+                        disabled={settling || !settleUser || !settlePoints}
+                        className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                      >
+                        {settling ? '結算中…' : settleInfo?.isFullVenue ? '包場扣積分結算' : '扣積分結算'}
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">付款方式</label>
+                          <select
+                            value={externalMethod}
+                            onChange={(e) => setExternalMethod(e.target.value as BookingExternalPaymentMethod)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          >
+                            {BOOKING_EXTERNAL_PAYMENT_METHODS.map((m) => (
+                              <option key={m.value} value={m.value}>
+                                {m.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">金額（HKD）</label>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={externalAmount}
+                            onChange={(e) => setExternalAmount(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          備註{externalMethod === 'other' ? <span className="text-red-500"> *</span> : null}
+                        </label>
+                        <input
+                          type="text"
+                          value={externalNote}
+                          onChange={(e) => setExternalNote(e.target.value)}
+                          placeholder={externalMethod === 'other' ? '請說明付款方式' : '可選'}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleMarkPaidBooking}
+                        disabled={settling}
+                        className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
+                      >
+                        {settling ? '處理中…' : '確認已付款'}
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
 

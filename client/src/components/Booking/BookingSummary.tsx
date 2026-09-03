@@ -5,6 +5,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
 import apiConfig from '../../config/api';
 import { BOOKING_CANCELLATION_POLICY_LINES } from '../../constants/bookingCancellationPolicy';
+import { hasBookingVipDiscount, applyBookingVipDiscount } from '../../utils/memberBenefits';
+import { calculateSoloCourtFee, SOLO_COURT_FEE_PER_HOUR, soloCourtFeeHours } from '../../utils/soloCourtFee';
 import { 
   CalendarDaysIcon, 
   ClockIcon, 
@@ -139,6 +141,11 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
     
     return endMinutes - startMinutes;
   };
+
+  const durationMinutes = calculateDuration();
+  const soloCourtFee = includeSoloCourt ? calculateSoloCourtFee(durationMinutes) : 0;
+  const courtListPrice = availability?.pricing?.totalPrice || 0;
+  const bookingDurationHours = soloCourtFeeHours(durationMinutes);
 
   // 將 24:00 轉換為 00:00
   const normalizeTime = (time: string) => {
@@ -406,13 +413,28 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               </div>
               <div className="text-right">
                 <div className="text-sm text-gray-500">{t('bookingPage.bookingSummary.extraFee')}</div>
-                <div className="text-lg font-semibold text-primary-600">100 {t('common.currency')}</div>
+                <div className="text-lg font-semibold text-primary-600">
+                  {includeSoloCourt
+                    ? `${soloCourtFee} ${t('common.currency')}`
+                    : t('bookingPage.bookingSummary.soloCourtFeePerHour', { n: SOLO_COURT_FEE_PER_HOUR })}
+                </div>
               </div>
             </div>
-            
+
             <p className="text-xs text-gray-500 mt-2">
               {t('bookingPage.bookingSummary.soloCourtNote')}
             </p>
+            <p className="text-xs text-amber-700 mt-1">
+              {t('bookingPage.bookingSummary.soloCourtNoVip')}
+            </p>
+            {includeSoloCourt && durationMinutes > 0 && (
+              <p className="text-xs text-gray-600 mt-1">
+                {t('bookingPage.bookingSummary.soloCourtFeeDuration', {
+                  hours: bookingDurationHours,
+                  fee: soloCourtFee,
+                })}
+              </p>
+            )}
           </div>
         )}
 
@@ -421,7 +443,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.redeemTitle')}</h3>
             <RedeemCodeInput
-              amount={(availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)}
+              amount={courtListPrice + soloCourtFee}
               orderType="booking"
               onRedeemApplied={handleRedeemApplied}
               onRedeemRemoved={handleRedeemRemoved}
@@ -466,19 +488,19 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               {includeSoloCourt && (
                 <div className="flex justify-between">
                   <span className="text-gray-600">{t('bookingPage.bookingSummary.soloCourtFee')}</span>
-                  <span className="font-medium">100 {t('common.currency')}</span>
+                  <span className="font-medium">{soloCourtFee} {t('common.currency')}</span>
                 </div>
               )}
               
-              {/* VIP 會員折扣 */}
-              {user?.membershipLevel === 'vip' && (
+              {/* VIP 會員折扣（僅主場地，不含單人場加租） */}
+              {hasBookingVipDiscount(user) && (
                 <div className="flex justify-between text-green-600">
                   <span className="flex items-center gap-2">
                     <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">VIP</span>
                     {t('bookingPage.bookingSummary.vipDiscount')}
                   </span>
                   <span className="font-medium">
-                    -{Math.round(((availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)) * 0.2)} {t('common.currency')}
+                    -{Math.round(courtListPrice * 0.2)} {t('common.currency')}
                   </span>
                 </div>
               )}
@@ -506,24 +528,20 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   <span>{t('bookingPage.bookingSummary.total')}</span>
                   <span className="text-primary-600">
                     {(() => {
-                      let totalPrice = (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0);
-                      
-                      // 應用 VIP 折扣
-                      if (user?.membershipLevel === 'vip') {
-                        totalPrice = Math.round(totalPrice * 0.8);
+                      let totalPrice = courtListPrice;
+                      if (hasBookingVipDiscount(user)) {
+                        totalPrice = applyBookingVipDiscount(totalPrice, user);
                       }
-                      
-                      // 應用兌換碼折扣
+                      totalPrice += soloCourtFee;
                       if (redeemData) {
                         totalPrice = totalPrice - redeemData.discountAmount;
                       }
-                      
                       return Math.max(0, totalPrice);
                     })()} {t('common.currency')}
                   </span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1 text-right">
-                  {user?.membershipLevel === 'vip' && t('bookingPage.bookingSummary.vipApplied')}
+                  {hasBookingVipDiscount(user) && t('bookingPage.bookingSummary.vipApplied')}
                   {redeemData && t('bookingPage.bookingSummary.plusRedeem')}
                 </div>
               </div>

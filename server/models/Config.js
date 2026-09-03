@@ -22,7 +22,8 @@ const DEFAULT_BOOKING_CONFIG = {
   maxAdvanceDaysByRole: {
     user: 7,
     coach: 14,
-    admin: 30
+    admin: 30,
+    athlete: 21,
   }
 };
 

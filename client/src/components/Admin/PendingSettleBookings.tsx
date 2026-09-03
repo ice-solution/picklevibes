@@ -6,6 +6,12 @@ import {
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
 import { useLockedStoreId } from '../../contexts/StoreAdminContext';
+import {
+  BOOKING_EXTERNAL_PAYMENT_METHODS,
+  type BookingExternalPaymentMethod,
+} from '../../constants/bookingPaymentMethods';
+
+type SettleMode = 'points' | 'external';
 
 type StoreRef = { _id: string; name: string; slug?: string };
 
@@ -78,6 +84,10 @@ const PendingSettleBookings: React.FC = () => {
   const [settleReason, setSettleReason] = useState('預約結算');
   const [settleUserBalance, setSettleUserBalance] = useState<number | null>(null);
   const [settling, setSettling] = useState(false);
+  const [settleMode, setSettleMode] = useState<SettleMode>('points');
+  const [externalMethod, setExternalMethod] = useState<BookingExternalPaymentMethod>('cash');
+  const [externalAmount, setExternalAmount] = useState('');
+  const [externalNote, setExternalNote] = useState('');
 
   useEffect(() => {
     if (lockedStoreId) {
@@ -118,6 +128,10 @@ const PendingSettleBookings: React.FC = () => {
     setSettleUserBalance(null);
     setSettlePoints(String(b.suggestedPoints || 0));
     setSettleReason('預約結算');
+    setSettleMode('points');
+    setExternalMethod('cash');
+    setExternalAmount(String(b.suggestedPoints || 0));
+    setExternalNote('');
   };
 
   const handleSettleUserChange = async (
@@ -169,6 +183,51 @@ const PendingSettleBookings: React.FC = () => {
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
       alert(msg || '結算失敗');
+    } finally {
+      setSettling(false);
+    }
+  };
+
+  const handleMarkPaid = async () => {
+    if (!selected) return;
+    if (externalMethod === 'other' && !externalNote.trim()) {
+      alert('選擇「其他」時請填寫付款備註');
+      return;
+    }
+    const amount = externalAmount.trim() ? parseFloat(externalAmount) : undefined;
+    if (amount != null && (Number.isNaN(amount) || amount < 0)) {
+      alert('請輸入有效金額');
+      return;
+    }
+    const methodLabel =
+      BOOKING_EXTERNAL_PAYMENT_METHODS.find((m) => m.value === externalMethod)?.label || externalMethod;
+    const isBundle = (selected.bundleCount || 1) > 1;
+    const courtLabel = isBundle
+      ? `包場（${selected.bundleCount} 個場地）`
+      : selected.court?.name || '場地';
+    const userLine = settleUser ? `\n指派用戶：${settleUser.name}` : '';
+    if (
+      !window.confirm(
+        `確認標記${isBundle ? '包場' : '此預約'}為已付款？\n付款方式：${methodLabel}${amount != null ? `\n金額：$${amount}` : ''}${userLine}\n${formatDate(selected.date)} ${selected.startTime}–${selected.endTime} ${courtLabel}`
+      )
+    ) {
+      return;
+    }
+    try {
+      setSettling(true);
+      const payload: Record<string, unknown> = {
+        method: externalMethod,
+        note: externalNote.trim() || undefined,
+      };
+      if (settleUser) payload.userId = settleUser._id;
+      if (amount != null) payload.amount = amount;
+      const response = await axios.post(`/bookings/${selected._id}/mark-paid`, payload);
+      alert(response.data.message || '已標記付款');
+      setSelected(null);
+      await fetchList();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      alert(msg || '標記付款失敗');
     } finally {
       setSettling(false);
     }
@@ -312,7 +371,7 @@ const PendingSettleBookings: React.FC = () => {
           <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">指派用戶並結算</h3>
+                <h3 className="text-lg font-semibold text-gray-900">結算 Hold 場</h3>
                 <p className="text-sm text-gray-600 mt-1">
                   {formatDate(selected.date)} {selected.startTime}–{selected.endTime} · {storeName(selected)}
                 </p>
@@ -326,17 +385,40 @@ const PendingSettleBookings: React.FC = () => {
                 <XMarkIcon className="h-6 w-6" />
               </button>
             </div>
+            <div className="flex rounded-lg border border-gray-200 p-1 mb-4 bg-gray-50">
+              <button
+                type="button"
+                onClick={() => setSettleMode('points')}
+                className={`flex-1 py-2 text-sm rounded-md font-medium ${
+                  settleMode === 'points' ? 'bg-white shadow text-primary-700' : 'text-gray-600'
+                }`}
+              >
+                扣積分結算
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettleMode('external')}
+                className={`flex-1 py-2 text-sm rounded-md font-medium ${
+                  settleMode === 'external' ? 'bg-white shadow text-primary-700' : 'text-gray-600'
+                }`}
+              >
+                現場收款
+              </button>
+            </div>
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  指派用戶 <span className="text-red-500">*</span>
+                  指派用戶 {settleMode === 'points' ? <span className="text-red-500">*</span> : null}
+                  {settleMode === 'external' && (
+                    <span className="text-gray-400 font-normal">（可選，留空則保持現時戶口）</span>
+                  )}
                 </label>
                 <UserAutocomplete
                   value={settleUser?._id || ''}
                   onChange={handleSettleUserChange}
                   placeholder="搜索姓名、電郵或電話…"
                 />
-                {settleUserBalance !== null && (
+                {settleMode === 'points' && settleUserBalance !== null && (
                   <p className="text-xs mt-1">
                     用戶餘額：
                     <span
@@ -352,32 +434,86 @@ const PendingSettleBookings: React.FC = () => {
                   </p>
                 )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">扣款積分</label>
-                <input
-                  type="number"
-                  min={1}
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  value={settlePoints}
-                  onChange={(e) => setSettlePoints(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">原因</label>
-                <input
-                  className="w-full border rounded-md px-3 py-2 text-sm"
-                  value={settleReason}
-                  onChange={(e) => setSettleReason(e.target.value)}
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => void handleSettle()}
-                disabled={settling || !settleUser || !settlePoints}
-                className="w-full py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
-              >
-                {settling ? '結算中…' : '確認結算'}
-              </button>
+              {settleMode === 'points' ? (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">扣款積分</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      value={settlePoints}
+                      onChange={(e) => setSettlePoints(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">原因</label>
+                    <input
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      value={settleReason}
+                      onChange={(e) => setSettleReason(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleSettle()}
+                    disabled={settling || !settleUser || !settlePoints}
+                    className="w-full py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {settling ? '結算中…' : '確認扣積分結算'}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      付款方式 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      value={externalMethod}
+                      onChange={(e) => setExternalMethod(e.target.value as BookingExternalPaymentMethod)}
+                    >
+                      {BOOKING_EXTERNAL_PAYMENT_METHODS.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">收款金額（HKD）</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      value={externalAmount}
+                      onChange={(e) => setExternalAmount(e.target.value)}
+                      placeholder={`建議 $${selected.suggestedPoints ?? 0}`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      備註{externalMethod === 'other' ? <span className="text-red-500"> *</span> : null}
+                    </label>
+                    <input
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      value={externalNote}
+                      onChange={(e) => setExternalNote(e.target.value)}
+                      placeholder={externalMethod === 'other' ? '請說明付款方式' : '可選'}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleMarkPaid()}
+                    disabled={settling}
+                    className="w-full py-2 rounded-md bg-emerald-600 text-white text-sm font-medium hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {settling ? '處理中…' : '確認已付款'}
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

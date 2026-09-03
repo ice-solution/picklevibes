@@ -127,7 +127,7 @@ function getBookingNominalCharge(booking) {
     0;
   const listPrice = Number(booking.pricing?.totalPrice) || 0;
 
-  if (method === 'cash' || method === 'bank_transfer' || method === 'stripe') {
+  if (method === 'cash' || method === 'bank_transfer' || method === 'stripe' || method === 'kpay' || method === 'fps' || method === 'other') {
     return listPrice || pts;
   }
 
@@ -233,7 +233,10 @@ function paymentMethodLabel(method) {
   if (method === 'points') return '積分';
   if (method === 'admin_waived') return '管理員免扣款';
   if (method === 'cash') return '現金';
+  if (method === 'kpay') return 'KPay';
+  if (method === 'fps') return 'FPS 轉數快';
   if (method === 'bank_transfer') return '銀行轉帳';
+  if (method === 'other') return '其他';
   if (method === 'stripe') return 'Stripe';
   if (method === 'wonder') return 'Wonder';
   return method || '積分';

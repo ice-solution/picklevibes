@@ -99,7 +99,7 @@ router.get('/public/payments/:paymentId', async (req, res) => {
   }
 });
 
-router.get('/public/:code', async (req, res) => {
+router.get('/public/:code', optionalAuth, async (req, res) => {
   try {
     const code = String(req.params.code || '')
       .trim()
@@ -114,11 +114,11 @@ router.get('/public/:code', async (req, res) => {
         message: check.error,
         closed: check.error.includes('關閉'),
         expired: check.error.includes('過期'),
-        link: serializePublicLink(link, link.store),
+        link: serializePublicLink(link, link.store, req.user || null),
       });
     }
     res.json({
-      link: serializePublicLink(link, link.store),
+      link: serializePublicLink(link, link.store, req.user || null),
       paymentProvider: getPaymentProvider(),
     });
   } catch (error) {

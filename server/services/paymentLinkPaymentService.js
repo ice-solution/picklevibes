@@ -7,6 +7,7 @@ const AccountingTransaction = require('../models/AccountingTransaction');
 const emailService = require('./emailService');
 const { getPaymentProvider } = require('../config/paymentProvider');
 const wonderPaymentService = require('./wonderPaymentService');
+const { isAthleteRole, applyAthletePaymentLinkPrice } = require('../utils/memberBenefits');
 
 function getApiBaseUrl() {
   if (process.env.WONDER_CALLBACK_URL) {
@@ -63,11 +64,16 @@ async function reverseLinkStats(linkId, amount) {
   });
 }
 
-function resolvePointsPrice(link, gatewayAmount) {
+function resolvePointsPrice(link, gatewayAmount, user = null) {
+  const baseGateway = gatewayAmount != null ? Number(gatewayAmount) : Number(link.amount);
   if (link?.pointsAmount != null && Number(link.pointsAmount) > 0) {
-    return Number(link.pointsAmount);
+    return applyAthletePaymentLinkPrice(Number(link.pointsAmount), user);
   }
-  return Number(gatewayAmount);
+  return applyAthletePaymentLinkPrice(baseGateway, user);
+}
+
+function resolveGatewayAmount(link, user = null) {
+  return applyAthletePaymentLinkPrice(Number(link.amount) || 0, user);
 }
 
 async function sendPaymentInvoiceEmail(payment, linkTitle) {
@@ -275,7 +281,7 @@ async function payWithPoints({ link, userId, payerNote = '', user = null }) {
   const check = await assertLinkPayable(link);
   if (check.error) return check;
 
-  const pointsAmount = resolvePointsPrice(link, link.amount);
+  const pointsAmount = resolvePointsPrice(link, link.amount, user);
   let userBalance = await UserBalance.findOne({ user: userId });
   if (!userBalance) {
     userBalance = new UserBalance({ user: userId, balance: 0 });
@@ -343,7 +349,7 @@ async function createGatewayCheckout({
 
   const provider = getPaymentProvider();
   const method = provider === 'wonder' ? 'wonder' : 'stripe';
-  const amount = Number(link.amount);
+  const amount = resolveGatewayAmount(link, user);
 
   const payment = await PaymentLinkPayment.create({
     link: link._id,
@@ -433,14 +439,22 @@ async function createGatewayCheckout({
   }
 }
 
-function serializePublicLink(link, store) {
-  const pointsAmount = resolvePointsPrice(link, link.amount);
+function serializePublicLink(link, store, user = null) {
+  const listAmount = Number(link.amount) || 0;
+  const listPoints =
+    link?.pointsAmount != null && Number(link.pointsAmount) > 0
+      ? Number(link.pointsAmount)
+      : listAmount;
+  const athleteDiscountApplied = isAthleteRole(user);
   return {
     code: link.code,
     title: link.title,
     description: link.description || '',
-    amount: link.amount,
-    pointsAmount,
+    amount: applyAthletePaymentLinkPrice(listAmount, user),
+    pointsAmount: applyAthletePaymentLinkPrice(listPoints, user),
+    listAmount,
+    listPointsAmount: listPoints,
+    athleteDiscountApplied,
     store: store
       ? { name: store.name, slug: store.slug }
       : undefined,

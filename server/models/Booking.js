@@ -150,10 +150,15 @@ const bookingSchema = new mongoose.Schema({
     },
     method: {
       type: String,
-      enum: ['stripe', 'cash', 'bank_transfer', 'points', 'admin_waived'],
+      enum: ['stripe', 'cash', 'kpay', 'fps', 'bank_transfer', 'other', 'points', 'admin_waived'],
       default: 'stripe',
       description:
         'admin_waived = 管理員繞過限制建單，未從用戶扣積分',
+    },
+    externalNote: {
+      type: String,
+      maxlength: [200, '付款備註不能超過200個字符'],
+      description: '現金／FPS 等外部收款備註（尤其 method=other）',
     },
     transactionId: String,
     paidAt: Date,
