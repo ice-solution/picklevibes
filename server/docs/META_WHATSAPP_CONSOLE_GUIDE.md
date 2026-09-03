@@ -150,15 +150,54 @@ App Status = **Live / 已發佈** 之後，按下面順序填。
 
 ---
 
+### 模板 3：預約取消
+
+| 欄位 | 填寫 |
+|------|------|
+| 範本名稱 | `pickcourt_booking_cancel` |
+| 類別 | **Utility** |
+| 語言 | 同模板 1 |
+| Header | **無** |
+| Footer | 可選：`PickCourt` |
+| Buttons | 無 |
+
+**Body（完整複製）：**
+
+```
+您好，您的預約已取消。
+
+店鋪：{{1}}
+日期：{{2}}
+時段：{{3}}
+場地：{{4}}
+
+如有疑問請回覆此訊息。
+```
+
+範例值：
+
+| 變數 | 範例 |
+|------|------|
+| {{1}} | 荔枝角 PickleVibes |
+| {{2}} | 2026年7月30日（四） |
+| {{3}} | 19:00–20:00 |
+| {{4}} | 1號場 |
+
+提交 → 等 **Approved**。
+
+---
+
 ## C. `.env` 對照（核准後）
 
 ```bash
+BOOKING_WA_PROVIDER=meta
 META_WA_ENABLED=1
 META_WA_TOKEN=（System User 永久 token）
 META_WA_PHONE_NUMBER_ID=（API Setup 的 Phone number ID）
 META_WA_API_VERSION=v21.0
 META_WA_TEMPLATE_BOOKING=pickcourt_booking_confirm
 META_WA_TEMPLATE_ACCESS=pickcourt_access_code
+META_WA_TEMPLATE_CANCEL=pickcourt_booking_cancel
 META_WA_TEMPLATE_LANG=zh_HK
 ```
 

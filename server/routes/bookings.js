@@ -611,7 +611,7 @@ router.post('/', [
     // 填充場地信息
     await booking.populate('court', 'name number type amenities');
 
-    // OpenWA／Meta 由 sendBookingNotification 統一發送；否則才用 Twilio（避免雙重）
+    // Meta／OpenWA 由 sendBookingNotification 統一發送；否則才用 Twilio（避免雙重）
     const unifiedWa = isUnifiedBookingWhatsAppEnabled();
     if (!unifiedWa) {
       try {
@@ -1274,20 +1274,26 @@ router.put('/:id/cancel', [
       );
     }
 
-    // 發送 WhatsApp 取消通知（OpenWA 優先；否則 Twilio）
+    // 發送 WhatsApp 取消通知（Meta Cloud API 優先；否則 OpenWA／Twilio）
     try {
       const phoneNumber = booking.players[0]?.phone || req.user.phone;
       if (isUnifiedBookingWhatsAppEnabled()) {
         const cancelWa = await sendBookingCancellationWhatsApp(booking, phoneNumber, booking.store);
-        if (cancelWa?.skipped && cancelWa.reason === 'use_legacy_provider') {
+        if (cancelWa?.success) {
+          console.log(`✅ WhatsApp 預約取消通知已發送（${cancelWa.provider || 'meta'}）`);
+        } else if (cancelWa?.skipped && cancelWa.reason === 'use_legacy_provider') {
           if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
             await whatsappService.sendBookingCancellation(booking, phoneNumber);
-            console.log('✅ WhatsApp 預約取消通知已發送');
+            console.log('✅ WhatsApp 預約取消通知已發送（twilio）');
           }
+        } else if (cancelWa?.skipped) {
+          console.log('⚠️ WhatsApp 預約取消通知略過:', cancelWa.reason);
+        } else if (cancelWa && cancelWa.success === false) {
+          console.error('❌ WhatsApp 預約取消通知失敗:', cancelWa.error || cancelWa);
         }
       } else if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
         await whatsappService.sendBookingCancellation(booking, phoneNumber);
-        console.log('✅ WhatsApp 預約取消通知已發送');
+        console.log('✅ WhatsApp 預約取消通知已發送（twilio）');
       } else {
         console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
       }

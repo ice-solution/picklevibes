@@ -37,14 +37,15 @@ async function resolveStore(booking, courtDoc) {
 }
 
 /**
- * BOOKING_WA_PROVIDER=openwa|meta（預設：有 OpenWA 就用 OpenWA，否則 Meta）
+ * BOOKING_WA_PROVIDER=meta|openwa
+ * 預設：有 Meta Cloud API 就用 Meta；否則才退回 OpenWA（legacy）
  */
 function getBookingWaProvider() {
   const p = String(process.env.BOOKING_WA_PROVIDER || '').trim().toLowerCase();
   if (p === 'openwa' || p === 'open-wa') return 'openwa';
-  if (p === 'meta') return 'meta';
-  if (openWaService.isOpenWaConfigured()) return 'openwa';
+  if (p === 'meta' || p === 'cloud' || p === 'whatsapp_cloud') return 'meta';
   if (metaWhatsAppService.isConfigured()) return 'meta';
+  if (openWaService.isOpenWaConfigured()) return 'openwa';
   return 'none';
 }
 
@@ -279,6 +280,31 @@ async function sendBookingCancellationWhatsApp(booking, phone, storeInput) {
   const store = storeInput || (await resolveStore(booking, booking.court));
   const provider = getBookingWaProvider();
 
+  if (provider === 'meta') {
+    if (!metaWhatsAppService.isConfigured()) {
+      return { skipped: true, reason: 'meta_not_configured', provider: 'meta' };
+    }
+    try {
+      const result = await metaWhatsAppService.sendBookingCancellation({
+        phone,
+        storeName: storeDisplayName(store, null),
+        date: booking.date,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
+        courtName: booking.court?.name || '場地',
+      });
+      if (result.success) {
+        console.log('✅ Meta WhatsApp 取消通知已發送:', { to: result.to, messageId: result.messageId });
+      } else if (result.skipped) {
+        console.log('⚠️ Meta WhatsApp 取消通知略過:', result.reason);
+      }
+      return { provider: 'meta', ...result };
+    } catch (err) {
+      console.error('❌ Meta WhatsApp 取消通知發送失敗:', err.message, err.details || '');
+      return { success: false, provider: 'meta', error: err.message, details: err.details };
+    }
+  }
+
   if (provider === 'openwa') {
     if (!openWaService.isOpenWaConfigured()) {
       return { skipped: true, reason: 'openwa_not_configured' };
@@ -297,7 +323,7 @@ async function sendBookingCancellationWhatsApp(booking, phone, storeInput) {
     }
   }
 
-  // 非 OpenWA：交俾 routes 既有 Twilio 路徑處理
+  // 未設定 Meta／OpenWA：交俾 routes 既有 Twilio 路徑處理
   return { skipped: true, reason: 'use_legacy_provider', provider };
 }
 

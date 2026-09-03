@@ -24,6 +24,7 @@ class MetaWhatsAppService {
     this.apiVersion = process.env.META_WA_API_VERSION || 'v21.0';
     this.templateBooking = process.env.META_WA_TEMPLATE_BOOKING || 'pickcourt_booking_confirm';
     this.templateAccess = process.env.META_WA_TEMPLATE_ACCESS || 'pickcourt_access_code';
+    this.templateCancel = process.env.META_WA_TEMPLATE_CANCEL || 'pickcourt_booking_cancel';
     this.templateLang = process.env.META_WA_TEMPLATE_LANG || 'zh_HK';
     this._phoneResolved = false;
   }
@@ -290,6 +291,26 @@ class MetaWhatsAppService {
       to: phone,
       templateName: this.templateAccess,
       components,
+    });
+  }
+
+  /**
+   * 預約取消
+   * Template pickcourt_booking_cancel:
+   *   {{1}} 店名 {{2}} 日期 {{3}} 時段 {{4}} 場地
+   */
+  async sendBookingCancellation({ phone, storeName, date, startTime, endTime, courtName }) {
+    return this.sendTemplate({
+      to: phone,
+      templateName: this.templateCancel,
+      components: [
+        this.bodyParams([
+          storeName || 'PickCourt',
+          this.formatDate(date),
+          this.formatTimeRange(startTime, endTime),
+          courtName || '場地',
+        ]),
+      ],
     });
   }
 

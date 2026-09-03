@@ -14,16 +14,19 @@ PickCourt 使用 **一個** Meta WhatsApp Business 號碼，代全部聯盟店�
 ## 環境變數
 
 ```bash
+BOOKING_WA_PROVIDER=meta         # meta = WhatsApp Cloud API（預設）；openwa = legacy
 META_WA_ENABLED=1
 META_WA_TOKEN=...                 # System User 永久 token
 META_WA_PHONE_NUMBER_ID=...      # 發送號碼的 Phone number ID
 META_WA_API_VERSION=v21.0
 META_WA_TEMPLATE_BOOKING=pickcourt_booking_confirm
 META_WA_TEMPLATE_ACCESS=pickcourt_access_code
+META_WA_TEMPLATE_CANCEL=pickcourt_booking_cancel
 META_WA_TEMPLATE_LANG=zh_HK      # 或 zh_TW / en 等，須與模板語言一致
 ```
 
-啟用 `META_WA_ENABLED=1` 後，預約建立時 **不會再走 Twilio** 預約確認（避免雙重發送）。
+啟用 `META_WA_ENABLED=1`（或 `BOOKING_WA_PROVIDER=meta`）後，預約建立／取消會走 **Meta Cloud API**，唔會再走 OpenWA／Twilio（避免雙重發送）。
+若仍要暫用 OpenWA，設 `BOOKING_WA_PROVIDER=openwa`。
 
 ## 請在 Meta 申請的模板
 
@@ -75,6 +78,29 @@ Body 變數：
 進場密碼：{{5}}
 
 請用上方 QR Code 或密碼於時段內進場。
+— PickCourt
+```
+
+### 3) `pickcourt_booking_cancel`（Utility）
+
+Body 變數：
+
+1. 店鋪名稱  
+2. 日期  
+3. 時段  
+4. 場地名稱  
+
+範例：
+
+```
+您好，您的預約已取消。
+
+店鋪：{{1}}
+日期：{{2}}
+時段：{{3}}
+場地：{{4}}
+
+如有疑問請回覆此訊息。
 — PickCourt
 ```
 
