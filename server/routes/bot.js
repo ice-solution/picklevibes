@@ -98,7 +98,7 @@ router.get(
 router.get(
   '/availability',
   [
-    query('store').notEmpty().withMessage('請提供 store（店鋪 ID）'),
+    query('store').notEmpty().withMessage('請提供 store（店鋪 ID 或 slug）'),
     query('date').isISO8601().withMessage('請提供有效的 date（YYYY-MM-DD）'),
     query('startTime').matches(timePattern).withMessage('請提供有效的 startTime'),
     query('endTime').matches(timePattern).withMessage('請提供有效的 endTime'),

@@ -103,14 +103,14 @@ GET /api/bot/balance?phone={電話}
 一次查詢指定店鋪、日期、時段內**所有場地**嘅可否預約狀態。
 
 ```http
-GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endTime={結束}
+GET /api/bot/availability?store={店鋪ID或slug}&date={日期}&startTime={開始}&endTime={結束}
 ```
 
 ### Query
 
 | 參數 | 必填 | 說明 |
 |------|------|------|
-| `store` | ✅ | 店鋪 MongoDB `_id`（可先 call `GET /api/stores`） |
+| `store` | ✅ | 店鋪 **slug**（建議，跨系統用）或 MongoDB `_id` |
 | `date` | ✅ | `YYYY-MM-DD` |
 | `startTime` | ✅ | `HH:MM`，例如 `18:00` |
 | `endTime` | ✅ | `HH:MM` 或 `24:00` |
@@ -279,8 +279,8 @@ WhatsApp 收到訊息
     │
     ├─ 查積分 → GET /api/bot/balance?phone=...
     │
-    ├─ 查空缺 → GET /api/stores（拎 storeId）
-    │           → GET /api/bot/availability?store=...&date=...&startTime=...&endTime=...
+    ├─ 查空缺 → GET /api/bot/availability?store={slug}&date=...&startTime=...&endTime=...
+    │           （store 建議用 slug；亦支援 ObjectId）
     │
     └─ 預約   → POST /api/bot/booking（用 availability 返嘅 courtId）
 ```
@@ -290,7 +290,7 @@ WhatsApp 收到訊息
 | API | 用途 |
 |-----|------|
 | `GET /api/stores` | 店鋪列表 |
-| `GET /api/courts?store={id}` | 場地列表 |
+| `GET /api/courts?store={id或slug}` | 場地列表 |
 | `GET /api/config/booking` | 可預約天數等設定 |
 
 ---
@@ -301,6 +301,7 @@ WhatsApp 收到訊息
 |------|------|
 | `server/routes/bot.js` | 路由 |
 | `server/middleware/botAuth.js` | API Key 驗證 |
+| `server/utils/resolveStoreRef.js` | 以 ObjectId 或 slug 解析店鋪 |
 | `server/services/botUserService.js` | 電話查用戶／積分 |
 | `server/services/botAvailabilityService.js` | 空缺查詢 |
 | `server/services/botBookingService.js` | 預約建立 |

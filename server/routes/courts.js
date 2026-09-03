@@ -20,6 +20,7 @@ const {
   assertCourtNumberUnique,
   formatCourtDuplicateKeyError,
 } = require('../utils/courtSlug');
+const { resolveStoreRef } = require('../utils/resolveStoreRef');
 
 function handleCourtWriteError(res, error) {
   if (error.code === 'DUPLICATE_NUMBER' || error.code === 'DUPLICATE_SLUG') {
@@ -98,7 +99,13 @@ router.get('/', optionalAuth, async (req, res) => {
     }
 
     if (storeId && String(storeId).trim() !== '') {
-      query.store = String(storeId).trim();
+      const storeDoc = await resolveStoreRef(String(storeId).trim(), {
+        select: '_id name slug isActive',
+      });
+      if (!storeDoc) {
+        return res.json({ courts: [] });
+      }
+      query.store = storeDoc._id;
     }
 
     // 僅店鋪員工（staff）限制只能看自己管理的店；一般登入用戶／訪客不受此限

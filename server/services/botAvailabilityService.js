@@ -1,6 +1,6 @@
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
-const Store = require('../models/Store');
+const { resolveStoreRef } = require('../utils/resolveStoreRef');
 
 function calculateDuration(startTime, endTime) {
   const [startHour, startMin] = startTime.split(':').map(Number);
@@ -78,9 +78,11 @@ async function checkCourtSlotAvailability(court, date, startTime, endTime) {
 
 /**
  * 查詢指定店鋪、日期、時段內所有場地空缺
+ * @param {{ storeId: string, date: string, startTime: string, endTime: string, courtType?: string }} params
+ *   storeId 可為 MongoDB ObjectId 或店鋪 slug
  */
 async function searchAvailability({ storeId, date, startTime, endTime, courtType }) {
-  const store = await Store.findById(storeId).select('name slug isActive');
+  const store = await resolveStoreRef(storeId, { select: 'name slug isActive' });
   if (!store) {
     const err = new Error('店鋪不存在');
     err.code = 'STORE_NOT_FOUND';
@@ -92,7 +94,7 @@ async function searchAvailability({ storeId, date, startTime, endTime, courtType
     throw err;
   }
 
-  const query = { store: storeId, isActive: true };
+  const query = { store: store._id, isActive: true };
   if (courtType) {
     query.type = courtType;
   }
