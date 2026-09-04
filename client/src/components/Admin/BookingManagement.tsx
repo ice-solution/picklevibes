@@ -340,7 +340,9 @@ const BookingManagement: React.FC = () => {
                   <p className="text-sm text-gray-900">
                     {selectedBooking.payment.method === 'admin_waived'
                       ? '管理員免扣積分'
-                      : selectedBooking.payment.method}
+                      : selectedBooking.payment.method === 'pickcourt_waived'
+                        ? `PickCourt 已結算（${Number(selectedBooking.payment?.pointsDeducted) || Number(selectedBooking.pricing?.totalPrice) || 0} 積分）`
+                        : selectedBooking.payment.method}
                   </p>
                 </div>
               </div>
