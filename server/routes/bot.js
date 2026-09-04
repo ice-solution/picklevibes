@@ -146,6 +146,8 @@ router.post(
     body('specialRequests').optional().trim().isLength({ max: 500 }),
     body('includeSoloCourt').optional().isBoolean(),
     body('redeemCodeId').optional().isMongoId(),
+    body('externalSettlement').optional().isBoolean(),
+    body('externalNote').optional().trim().isLength({ max: 200 }),
   ],
   async (req, res) => {
     try {

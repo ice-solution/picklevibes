@@ -52,7 +52,26 @@ async function createBookingViaBot(params) {
     redeemCodeId,
     ipAddress,
     userAgent,
+    /** PickCourt 等外部平台已收款：只占場、唔扣 PickleVibes 積分 */
+    externalSettlement = false,
+    externalNote = '',
   } = params;
+
+  const isExternalSettlement =
+    externalSettlement === true ||
+    externalSettlement === 'true' ||
+    externalSettlement === 1 ||
+    externalSettlement === '1';
+
+  let resolvedSpecialRequests = String(specialRequests || '').trim();
+  if (isExternalSettlement) {
+    const tag = 'PickCourt 預約';
+    if (!resolvedSpecialRequests.includes(tag)) {
+      resolvedSpecialRequests = resolvedSpecialRequests
+        ? `${tag} | ${resolvedSpecialRequests}`
+        : tag;
+    }
+  }
 
   const user = await findUserByPhone(phone);
   if (!user) {
@@ -166,7 +185,7 @@ async function createBookingViaBot(params) {
     duration,
     players,
     totalPlayers,
-    specialRequests,
+    specialRequests: resolvedSpecialRequests,
   });
   tempBooking.calculatePrice(courtDoc, isMember);
 
@@ -176,7 +195,7 @@ async function createBookingViaBot(params) {
   pointsToDeduct += soloCourtFee;
 
   let redeemCodeData = null;
-  if (redeemCodeId) {
+  if (!isExternalSettlement && redeemCodeId) {
     const RedeemCode = require('../models/RedeemCode');
     const redeemCode = await RedeemCode.findById(redeemCodeId);
     if (redeemCode && redeemCode.isValid()) {
@@ -229,22 +248,31 @@ async function createBookingViaBot(params) {
     userBalance = new UserBalance({ user: user._id });
   }
 
-  if (userBalance.balance < pointsToDeduct) {
-    const err = new Error('積分餘額不足');
-    err.code = 'INSUFFICIENT_BALANCE';
-    err.details = {
-      required: pointsToDeduct,
-      available: userBalance.balance,
-      discount: isVip ? 'VIP會員8折' : '無折扣',
-    };
-    throw err;
+  if (!isExternalSettlement) {
+    if (userBalance.balance < pointsToDeduct) {
+      const err = new Error('積分餘額不足');
+      err.code = 'INSUFFICIENT_BALANCE';
+      err.details = {
+        required: pointsToDeduct,
+        available: userBalance.balance,
+        discount: isVip ? 'VIP會員8折' : '無折扣',
+      };
+      throw err;
+    }
+
+    await userBalance.deductBalance(
+      pointsToDeduct,
+      `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}`,
+      null
+    );
   }
 
-  await userBalance.deductBalance(
-    pointsToDeduct,
-    `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}`,
-    null
-  );
+  const chargePoints = isExternalSettlement ? 0 : pointsToDeduct;
+  const settlementNote = String(
+    externalNote || (isExternalSettlement ? 'PickCourt 平台已結算' : '')
+  )
+    .trim()
+    .slice(0, 200);
 
   const bookingData = {
     user: user._id,
@@ -257,27 +285,28 @@ async function createBookingViaBot(params) {
     duration,
     players,
     totalPlayers,
-    specialRequests,
+    specialRequests: resolvedSpecialRequests,
     includeSoloCourt,
-    bypassRestrictions: false,
-    noUserBalanceDebited: false,
+    bypassRestrictions: isExternalSettlement,
+    noUserBalanceDebited: isExternalSettlement,
     status: 'confirmed',
     redeemCode: redeemCodeData ? redeemCodeData.id : undefined,
     redeemDiscount: redeemCodeData ? redeemCodeData.discountAmount : 0,
     payment: {
       status: 'paid',
       paidAt: new Date(),
-      method: 'points',
-      pointsDeducted: pointsToDeduct,
+      method: isExternalSettlement ? 'admin_waived' : 'points',
+      pointsDeducted: chargePoints,
       originalPrice: tempBooking.pricing.totalPrice,
       discount: isVip ? 20 : 0,
+      ...(isExternalSettlement && settlementNote ? { externalNote: settlementNote } : {}),
     },
     pricing: {
       basePrice: tempBooking.pricing.basePrice,
       memberDiscount: tempBooking.pricing.memberDiscount,
-      totalPrice: pointsToDeduct,
+      totalPrice: isExternalSettlement ? tempBooking.pricing.totalPrice + soloCourtFee : chargePoints,
       originalPrice: tempBooking.pricing.totalPrice,
-      pointsDeducted: pointsToDeduct,
+      pointsDeducted: chargePoints,
       vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice * 0.2) : 0,
       soloCourtFee,
     },
@@ -348,16 +377,17 @@ async function createBookingViaBot(params) {
       totalPlayers,
       specialRequests: '單人場租用 - 與主場地同時段使用',
       includeSoloCourt: false,
-      bypassRestrictions: false,
-      noUserBalanceDebited: false,
+      bypassRestrictions: isExternalSettlement,
+      noUserBalanceDebited: isExternalSettlement,
       status: 'confirmed',
       payment: {
         status: 'paid',
-        method: 'points',
+        method: isExternalSettlement ? 'admin_waived' : 'points',
         paidAt: new Date(),
         pointsDeducted: 0,
         originalPrice: tempSoloBooking.pricing.totalPrice,
         discount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.2) : 0,
+        ...(isExternalSettlement && settlementNote ? { externalNote: settlementNote } : {}),
       },
       pricing: {
         basePrice: tempSoloBooking.pricing.basePrice,
@@ -372,10 +402,12 @@ async function createBookingViaBot(params) {
     await soloCourtBooking.save();
   }
 
-  const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
-  if (latestTransaction) {
-    latestTransaction.relatedBooking = booking._id;
-    await userBalance.save();
+  if (!isExternalSettlement) {
+    const latestTransaction = userBalance.transactions[userBalance.transactions.length - 1];
+    if (latestTransaction) {
+      latestTransaction.relatedBooking = booking._id;
+      await userBalance.save();
+    }
   }
 
   await booking.populate('court', 'name number type amenities store');
@@ -421,10 +453,11 @@ async function createBookingViaBot(params) {
       phone: user.phone,
       membershipLevel: user.membershipLevel,
     },
-    pointsDeducted: pointsToDeduct,
+    pointsDeducted: chargePoints,
     remainingBalance: userBalance.balance,
     discount: isVip ? 'VIP會員8折' : '無折扣',
     redeemCode: redeemCodeData,
+    externalSettlement: isExternalSettlement,
   };
 }
 
