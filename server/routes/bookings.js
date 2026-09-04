@@ -412,6 +412,54 @@ router.post('/', [
             localBooking._id
           );
         }
+
+        // PickCourt 品牌郵件 + WhatsApp（唔靠 PickleVibes 發顧客通知）
+        try {
+          const storeDocForNotify = await Store.findById(storeId).lean();
+          const courtDocForNotify =
+            (localBooking.court && typeof localBooking.court === 'object' && localBooking.court.name
+              ? localBooking.court
+              : null) ||
+            (await Court.findById(localBooking.court)) ||
+            stubCourt;
+
+          const unifiedWa = isUnifiedBookingWhatsAppEnabled();
+          if (!unifiedWa) {
+            try {
+              const phoneNumber =
+                localBooking.players?.[0]?.phone || phone || bookingUserDoc.phone;
+              if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+                await whatsappService.sendBookingConfirmation(localBooking, phoneNumber);
+                console.log('✅ 連鎖店 Twilio WhatsApp 已發送');
+              }
+            } catch (whatsappError) {
+              console.error('❌ 連鎖店 Twilio WhatsApp 發送失敗:', whatsappError);
+            }
+          }
+
+          const notifyResult = await sendBookingNotification({
+            booking: localBooking,
+            courtDoc: courtDocForNotify,
+            store: storeDocForNotify,
+            userFallback: bookingUserDoc,
+          });
+          if (['hik', 'dahua'].includes(notifyResult.mode) && notifyResult.accessControlResult) {
+            await applyTempAuthToBooking(localBooking, notifyResult.accessControlResult);
+            console.log('✅ 連鎖店門禁／開門郵件流程完成', {
+              whatsapp: notifyResult.whatsapp?.success ?? notifyResult.whatsapp,
+            });
+          } else {
+            console.log('✅ 連鎖店 PickCourt 預約確認郵件／WhatsApp 已處理', {
+              mode: notifyResult.mode,
+              whatsapp: notifyResult.whatsapp,
+            });
+          }
+          if (!unifiedWa) {
+            await sendWhatsAppBookingConfirmationStub(localBooking, storeDocForNotify);
+          }
+        } catch (notifyError) {
+          console.error('❌ 連鎖店 PickCourt 通知發送失敗:', notifyError);
+        }
       } catch (localErr) {
         console.error('⚠️ 連鎖店本機預約紀錄建立失敗（遠端已占場、積分已扣）:', localErr);
       }
