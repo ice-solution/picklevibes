@@ -417,18 +417,23 @@ async function createBookingViaBot(params) {
 
   const storeDoc = await Store.findById(courtDoc.store).lean();
 
-  try {
-    const notifyResult = await sendBookingNotification({
-      booking,
-      courtDoc,
-      store: storeDoc,
-      userFallback: bookingUser,
-    });
-    if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
-      await applyTempAuthToBooking(booking, notifyResult.accessControlResult);
+  // PickCourt 等外部結算：顧客郵件／WhatsApp 由外部平台發送，避免出現 PickleVibes 品牌通知
+  if (!isExternalSettlement) {
+    try {
+      const notifyResult = await sendBookingNotification({
+        booking,
+        courtDoc,
+        store: storeDoc,
+        userFallback: bookingUser,
+      });
+      if (notifyResult.mode === 'hik' && notifyResult.accessControlResult) {
+        await applyTempAuthToBooking(booking, notifyResult.accessControlResult);
+      }
+    } catch (notifyError) {
+      console.error('❌ Bot 預約通知發送失敗:', notifyError);
     }
-  } catch (notifyError) {
-    console.error('❌ Bot 預約通知發送失敗:', notifyError);
+  } else {
+    console.log('ℹ️ externalSettlement：略過 PickleVibes 顧客通知（由 PickCourt 發送）');
   }
 
   try {
