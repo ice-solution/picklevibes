@@ -158,10 +158,302 @@ router.post('/', [
     endTime = normalizedEndTime.time;
     const endDate = normalizedEndTime.date;
 
-    // 檢查場地是否存在且可用
-    const courtDoc = await Court.findById(court);
-    if (!courtDoc) {
-      return res.status(404).json({ message: '場地不存在' });
+    // 連鎖店（isChainStore）：扣 PickCourt 積分，再喺 PickleVibes 占場（含本機 stub court）
+    let courtDoc = await Court.findById(court);
+    {
+      const {
+        shouldProxyChainStore,
+        findLocalStoreByRef,
+        tryResolveRemoteCourtForProxy,
+        ensureLocalCourtStubFromRemote,
+        fetchCourtAvailability,
+        PickleVibesApiError,
+      } = require('../services/chainCourtProxy');
+      const {
+        createPickleVibesBotBooking,
+        withPickCourtRemark,
+      } = require('../services/picklevibesBookingClient');
+
+      let chainLocalStore = null;
+      if (courtDoc?.store) {
+        chainLocalStore = await Store.findById(courtDoc.store).select(
+          'name slug address isActive isChainStore'
+        );
+      }
+
+      const maybeChain =
+        (chainLocalStore && shouldProxyChainStore(chainLocalStore)) || !courtDoc;
+
+      if (maybeChain) {
+        let remoteCourt = null;
+        try {
+          remoteCourt = await tryResolveRemoteCourtForProxy(court);
+        } catch (error) {
+          console.error('解析遠端場地失敗:', error.message);
+        }
+
+        if (remoteCourt) {
+          const remoteStoreSlug = remoteCourt.store?.slug || remoteCourt.storeSlug;
+          const localStore =
+            chainLocalStore && shouldProxyChainStore(chainLocalStore)
+              ? chainLocalStore
+              : remoteStoreSlug
+                ? await findLocalStoreByRef(remoteStoreSlug)
+                : null;
+
+          if (localStore && shouldProxyChainStore(localStore)) {
+      const bookingUserDoc = await User.findById(bookingUserId);
+      if (!bookingUserDoc) {
+        return res.status(404).json({ message: '用戶不存在' });
+      }
+      const phone =
+        bookingUserDoc.phone ||
+        players?.[0]?.phone ||
+        req.user?.phone;
+      if (!phone) {
+        return res.status(400).json({
+          message: '無法完成連鎖店預約：請先在帳戶設定電話號碼',
+          code: 'PHONE_REQUIRED',
+        });
+      }
+
+      const endTimeForApi = req.body.endTime === '24:00' ? '24:00' : endTime;
+      const bookingDate = new Date(date);
+
+      let availability;
+      try {
+        availability = await fetchCourtAvailability(court, {
+          date,
+          startTime,
+          endTime: endTimeForApi,
+        });
+      } catch (error) {
+        console.error('查詢遠端時段失敗:', error.message);
+        return res.status(502).json({ message: '無法查詢場地時段，請稍後再試' });
+      }
+
+      if (!availability?.available) {
+        return res.status(400).json({
+          message: availability?.reason || '該時間段不可用或已被預約',
+          code: 'REMOTE_SLOT_UNAVAILABLE',
+        });
+      }
+
+      const membership = await resolveMembership(bookingUserDoc);
+      const isVip = membership.isVipActive;
+
+      let pointsToDeduct = Math.round(Number(availability.pricing?.totalPrice) || 0);
+      if (includeSoloCourt) pointsToDeduct += 100;
+      if (isVip) pointsToDeduct = Math.round(pointsToDeduct * 0.8);
+
+      if (pointsToDeduct <= 0) {
+        return res.status(400).json({ message: '無法計算預約積分，請稍後再試' });
+      }
+
+      const storeId = localStore._id;
+      const availableBalance = await getAvailableBalanceForStore(bookingUserId, storeId);
+      if (availableBalance.total < pointsToDeduct) {
+        return res.status(400).json({
+          message: '積分餘額不足',
+          code: 'INSUFFICIENT_STORE_BALANCE',
+          required: pointsToDeduct,
+          available: availableBalance.total,
+          availableStore: availableBalance.store,
+          availablePlatform: availableBalance.platform,
+          discount: isVip ? 'VIP會員8折' : '無折扣',
+          storeId: String(storeId),
+          storeSlug: localStore.slug || null,
+          storeName: localStore.name || null,
+        });
+      }
+
+      let deductionSplit = { storeUsed: 0, platformUsed: 0, total: 0 };
+      try {
+        deductionSplit = await deductForStoreBooking(
+          bookingUserId,
+          storeId,
+          pointsToDeduct,
+          `連鎖店預約 - ${remoteCourt.name || court} ${bookingDate.toDateString()} ${startTime}-${endTimeForApi}`,
+          null
+        );
+      } catch (error) {
+        return res.status(400).json({
+          message: error.message || '積分餘額不足',
+          code: 'INSUFFICIENT_STORE_BALANCE',
+          required: pointsToDeduct,
+          available: availableBalance.total,
+        });
+      }
+
+      let remoteResult;
+      try {
+        remoteResult = await createPickleVibesBotBooking({
+          phone,
+          court,
+          date,
+          startTime,
+          endTime: endTimeForApi,
+          totalPlayers: totalPlayers || players?.length || 1,
+          specialRequests,
+          includeSoloCourt,
+          externalSettlement: true,
+          externalNote: 'PickCourt 平台已結算',
+        });
+      } catch (error) {
+        try {
+          await refundForStoreBooking(
+            bookingUserId,
+            storeId,
+            deductionSplit.storeUsed,
+            deductionSplit.platformUsed,
+            `連鎖店預約失敗退回 - ${remoteCourt.name || court}`,
+            null
+          );
+        } catch (refundErr) {
+          console.error('❌ 連鎖店預約失敗後退分失敗:', refundErr);
+        }
+
+        if (error instanceof PickleVibesApiError) {
+          const status =
+            error.status === 404
+              ? 404
+              : error.status && error.status >= 400 && error.status < 500
+                ? error.status
+                : 502;
+          return res.status(status).json({
+            message: error.message || 'PickleVibes 占場失敗',
+            code: error.code || 'PICKLEVIBES_BOOKING_FAILED',
+          });
+        }
+        console.error('轉發 PickleVibes 占場錯誤:', error);
+        return res.status(502).json({ message: '無法完成連鎖店預約，請稍後再試' });
+      }
+
+      const remoteBooking = remoteResult?.booking || remoteResult;
+      const remark = withPickCourtRemark(specialRequests);
+
+      // 本機 stub court + 預約紀錄，方便「我的預約」同積分關聯
+      let localBooking = null;
+      try {
+        const stubCourt = await ensureLocalCourtStubFromRemote(remoteCourt, localStore);
+        const startMinutes =
+          parseInt(startTime.split(':')[0], 10) * 60 + parseInt(startTime.split(':')[1], 10);
+        let endMinutes =
+          parseInt(String(endTimeForApi).split(':')[0], 10) * 60 +
+          parseInt(String(endTimeForApi).split(':')[1], 10);
+        if (endTimeForApi === '24:00') endMinutes = 24 * 60;
+        const isOvernight = endMinutes <= startMinutes;
+        if (isOvernight) endMinutes += 24 * 60;
+        const duration = endMinutes - startMinutes;
+        const calculatedEndDate = new Date(bookingDate);
+        if (isOvernight) {
+          calculatedEndDate.setDate(calculatedEndDate.getDate() + 1);
+        }
+
+        const remoteBookingId = remoteBooking?._id || remoteBooking?.id;
+        localBooking = new Booking({
+          user: bookingUserId,
+          store: storeId,
+          court: stubCourt?._id || court,
+          date: bookingDate,
+          endDate: calculatedEndDate,
+          startTime,
+          endTime: endTimeForApi === '24:00' ? '00:00' : endTime,
+          duration,
+          players: players?.length
+            ? players
+            : [
+                {
+                  name: bookingUserDoc.name,
+                  email: bookingUserDoc.email,
+                  phone,
+                },
+              ],
+          totalPlayers: totalPlayers || players?.length || 1,
+          specialRequests: remark,
+          includeSoloCourt: Boolean(includeSoloCourt),
+          bypassRestrictions: false,
+          noUserBalanceDebited: false,
+          status: 'confirmed',
+          payment: {
+            status: 'paid',
+            paidAt: new Date(),
+            method: 'points',
+            pointsDeducted: pointsToDeduct,
+            storePointsDeducted: deductionSplit.storeUsed,
+            platformPointsDeducted: deductionSplit.platformUsed,
+            originalPrice: Number(availability.pricing?.totalPrice) || pointsToDeduct,
+            discount: isVip ? 20 : 0,
+            transactionId: remoteBookingId ? `pv:${remoteBookingId}` : undefined,
+          },
+          pricing: {
+            basePrice: Number(availability.pricing?.basePrice) || 0,
+            memberDiscount: 0,
+            totalPrice: pointsToDeduct,
+            originalPrice: Number(availability.pricing?.totalPrice) || 0,
+            pointsDeducted: pointsToDeduct,
+            vipDiscount: isVip
+              ? Math.round(
+                  ((Number(availability.pricing?.totalPrice) || 0) + (includeSoloCourt ? 100 : 0)) *
+                    0.2
+                )
+              : 0,
+            soloCourtFee: includeSoloCourt ? 100 : 0,
+          },
+        });
+        await localBooking.save();
+        await localBooking.populate('court', 'name number type amenities store');
+
+        if (localBooking._id) {
+          await attachRelatedBookingToSpend(
+            bookingUserId,
+            storeId,
+            deductionSplit,
+            localBooking._id
+          );
+        }
+      } catch (localErr) {
+        console.error('⚠️ 連鎖店本機預約紀錄建立失敗（遠端已占場、積分已扣）:', localErr);
+      }
+
+      const availableAfter = await getAvailableBalanceForStore(bookingUserId, storeId);
+      console.log('✅ 連鎖店預約完成（PickCourt 扣分 + PickleVibes 占場）:', {
+        store: localStore.slug,
+        remoteBookingId: remoteBooking?._id,
+        localBookingId: localBooking?._id,
+        pointsDeducted: pointsToDeduct,
+        storeUsed: deductionSplit.storeUsed,
+        platformUsed: deductionSplit.platformUsed,
+      });
+
+      return res.status(201).json({
+        message: '預約創建成功',
+        booking: localBooking || remoteBooking,
+        remoteBooking,
+        soloCourtBooking: remoteResult?.soloCourtBooking || null,
+        source: 'pickcourt_chain',
+        store: {
+          id: localStore._id,
+          slug: localStore.slug,
+          name: localStore.name,
+        },
+        pointsDeducted: pointsToDeduct,
+        storePointsDeducted: deductionSplit.storeUsed,
+        platformPointsDeducted: deductionSplit.platformUsed,
+        remainingBalance: availableAfter.total,
+        remainingStoreBalance: availableAfter.store,
+        remainingPlatformBalance: availableAfter.platform,
+        discount: isVip ? 'VIP會員8折' : '無折扣',
+        remark: 'PickCourt 預約',
+      });
+          }
+        }
+
+        // 本地無 court，又唔係可代理連鎖店 → 404
+        if (!courtDoc) {
+          return res.status(404).json({ message: '場地不存在' });
+        }
+      }
     }
 
     const isAdminBooking = req.user.role === 'admin';

@@ -275,19 +275,17 @@ async function searchViaPickleVibesApi({
 
         return rows;
       } catch (error) {
-        if (config.fallbackLocal) {
-          console.warn(
-            `[allianceCourtSearch] PickleVibes API 失敗，fallback 本地查詢 store=${store.slug}:`,
-            error.message
-          );
-          return searchLocalStore(store, {
-            date,
-            startTime,
-            durationNum,
-            courtType,
-          });
-        }
-        throw error;
+        // 連鎖店遠端失敗：預設改查本地，避免整次搜尋全滅（UAT 未 deploy slug／暫斷線）
+        console.warn(
+          `[allianceCourtSearch] PickleVibes API 失敗，fallback 本地查詢 store=${store.slug}:`,
+          error.message
+        );
+        return searchLocalStore(store, {
+          date,
+          startTime,
+          durationNum,
+          courtType,
+        });
       }
     }
   );
@@ -403,10 +401,15 @@ function validateSearchParams({ date, startTime, duration }) {
   return durationNum;
 }
 
+function isChainStoreForRemote(store) {
+  return Boolean(store?.isChainStore);
+}
+
 /**
  * 聯盟跨店搜尋：地區 + 日期 + 開始時間 + 時長
  * - PickCourt 負責跨店組合
- * - 空缺資料優先向 PickleVibes API 查詢（PICKLEVIBES_API_BASE_URL）
+ * - 僅連鎖店（Store.isChainStore）打 PickleVibes API（PICKLEVIBES_API_BASE_URL）
+ * - 其餘聯盟店一律查本地 store／court
  */
 async function searchAllianceCourtAvailability({
   district = '',
@@ -447,51 +450,88 @@ async function searchAllianceCourtAvailability({
         storeCount: 0,
         courtCount: 0,
         availableCount: 0,
-        availabilitySource: isPickleVibesRemoteEnabled() ? 'picklevibes-remote' : 'local',
+        availabilitySource: 'none',
+        chainStoreCount: 0,
+        localStoreCount: 0,
       },
     };
   }
 
-  if (isPickleVibesRemoteEnabled()) {
+  const remoteEnabled = isPickleVibesRemoteEnabled();
+  const chainStores = remoteEnabled ? stores.filter(isChainStoreForRemote) : [];
+  const localStores = remoteEnabled
+    ? stores.filter((store) => !isChainStoreForRemote(store))
+    : stores;
+
+  const resultChunks = [];
+  const sources = [];
+
+  if (localStores.length > 0) {
+    const localResponse = await searchViaLocalDb({
+      stores: localStores,
+      districtKey,
+      date,
+      startTime,
+      durationNum,
+      courtType,
+    });
+    resultChunks.push(...(localResponse.results || []));
+    sources.push('local');
+  }
+
+  if (chainStores.length > 0) {
     try {
-      return await searchViaPickleVibesApi({
-        stores,
+      const remoteResponse = await searchViaPickleVibesApi({
+        stores: chainStores,
         districtKey,
         date,
         startTime,
         durationNum,
         courtType,
       });
+      resultChunks.push(...(remoteResponse.results || []));
+      sources.push(remoteResponse.meta?.availabilitySource || 'picklevibes-remote');
     } catch (error) {
       const config = getPickleVibesApiConfig();
       if (config.fallbackLocal) {
-        console.warn('[allianceCourtSearch] PickleVibes API 失敗，fallback 本地查詢:', error.message);
-        return searchViaLocalDb({
-          stores,
+        console.warn(
+          '[allianceCourtSearch] 連鎖店 PickleVibes API 失敗，fallback 本地查詢:',
+          error.message
+        );
+        const fallbackResponse = await searchViaLocalDb({
+          stores: chainStores,
           districtKey,
           date,
           startTime,
           durationNum,
           courtType,
         });
-      }
-      if (error instanceof PickleVibesApiError) {
+        resultChunks.push(...(fallbackResponse.results || []));
+        sources.push('local-fallback');
+      } else if (error instanceof PickleVibesApiError) {
         const err = new Error(error.message || 'PickleVibes 場地查詢失敗');
         err.status = error.status && error.status >= 400 ? error.status : 502;
         throw err;
+      } else {
+        throw error;
       }
-      throw error;
     }
   }
 
-  return searchViaLocalDb({
-    stores,
+  const merged = finalizeSearchResponse({
     districtKey,
     date,
     startTime,
     durationNum,
     courtType,
+    stores,
+    courtCount: resultChunks.length,
+    results: resultChunks,
+    availabilitySource: sources.length ? sources.join('+') : 'none',
   });
+  merged.meta.chainStoreCount = chainStores.length;
+  merged.meta.localStoreCount = localStores.length;
+  return merged;
 }
 
 module.exports = {

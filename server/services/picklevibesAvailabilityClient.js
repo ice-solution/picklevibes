@@ -150,10 +150,16 @@ async function mapWithConcurrency(items, limit, mapper) {
 
 /**
  * 對一間 alliance 店查空缺，回傳 courtId → availability row
+ * 跨 DB 時用 store.slug 對 PickleVibes（兩邊 _id 唔同）
  */
 async function fetchStoreAvailabilityMap(store, { date, startTime, endTime, courtTypeFilter }) {
   const config = getPickleVibesApiConfig();
-  const courts = await fetchCourtsForStore(store._id);
+  const storeRef = String(store.slug || store._id || '').trim();
+  if (!storeRef) {
+    return { courts: [], availabilityByCourtId: new Map() };
+  }
+
+  const courts = await fetchCourtsForStore(storeRef);
   const filteredCourts = filterCourtsByType(courts, courtTypeFilter);
 
   if (filteredCourts.length === 0) {
@@ -163,7 +169,7 @@ async function fetchStoreAvailabilityMap(store, { date, startTime, endTime, cour
   const availabilityByCourtId = new Map();
 
   if (config.botEnabled) {
-    const botData = await fetchStoreBotAvailability(store._id, {
+    const botData = await fetchStoreBotAvailability(storeRef, {
       date,
       startTime,
       endTime,
@@ -236,6 +242,7 @@ function normalizePublicAvailability(payload) {
 
 module.exports = {
   PickleVibesApiError,
+  picklevibesRequest,
   fetchCourtsForStore,
   fetchCourtAvailability,
   fetchStoreBotAvailability,

@@ -1,13 +1,19 @@
 /**
  * PickCourt（uat）向 PickleVibes（main）查詢場地空缺的設定。
  *
- * PICKLEVIBES_API_BASE_URL — PickleVibes API 根路徑，例如 https://picklevibes.hk/api
- *   留空時 search 沿用本地 Mongo availability（同 DB 開發用）。
+ * 搜尋行為：
+ * - 僅 Store.isChainStore === true 的連鎖店會打遠端 API
+ * - 其餘聯盟店一律查本地 Mongo store／court
+ *
+ * PICKLEVIBES_API_BASE_URL — PickleVibes API 根路徑，例如 https://uat.picklevibes.hk/api
+ *   留空時連連鎖店都改用本地查詢。
  *
  * PICKLEVIBES_BOT_API_KEY — 對應 main 的 BOT_API_KEY；有值時優先用
- *   GET /api/bot/availability（每店一次 request，較快）。
+ *   GET /api/bot/availability（每店一次 request，較快），
+ *   以及連鎖店訂場轉發 POST /api/bot/booking。
  *
- * PICKLEVIBES_AVAILABILITY_FALLBACK_LOCAL — 設為 1/true 時，遠端失敗會 fallback 本地查詢。
+ * PICKLEVIBES_AVAILABILITY_FALLBACK_LOCAL — 設為 1/true 時，連鎖店遠端失敗會 fallback 本地查詢。
+ * 連鎖店確認預約會轉發至 PickleVibes，specialRequests 會加上「PickCourt 預約」備註。
  */
 function normalizeBaseUrl(raw) {
   const trimmed = String(raw || '').trim().replace(/\/+$/, '');

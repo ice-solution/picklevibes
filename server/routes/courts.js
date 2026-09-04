@@ -19,6 +19,16 @@ const {
   assertCourtSlugUnique,
   findCourtInListBySlug,
 } = require('../utils/courtSlug');
+const {
+  shouldProxyChainStore,
+  findLocalStoreByRef,
+  listRemoteCourtsForLocalStore,
+  attachLocalStoreToRemoteCourt,
+  fetchCourtAvailability,
+  proxyRemoteAvailabilityBatch,
+  tryResolveRemoteCourtForProxy,
+  PickleVibesApiError,
+} = require('../services/chainCourtProxy');
 
 // 為批量 API 創建專門的速率限制
 const batchLimiter = rateLimit({
@@ -73,17 +83,38 @@ router.get('/', optionalAuth, async (req, res) => {
       query.type = type;
     }
 
-    if (storeId && String(storeId).trim() !== '') {
-      query.store = String(storeId).trim();
-    }
-
     const { storeSlug, courtSlug } = req.query;
     if (storeSlug && courtSlug) {
       const Store = require('../models/Store');
-      const store = await Store.findOne({ slug: String(storeSlug).trim().toLowerCase(), isActive: true });
+      const store = await Store.findOne({ slug: String(storeSlug).trim().toLowerCase(), isActive: true })
+        .select('name slug address enableHikAccess isActive isChainStore');
       if (!store) {
         return res.status(404).json({ message: '店鋪不存在' });
       }
+
+      if (shouldProxyChainStore(store) && all !== 'true') {
+        try {
+          const remoteCourts = await listRemoteCourtsForLocalStore(store);
+          const matched =
+            remoteCourts.find(
+              (c) => String(c.slug || '').toLowerCase() === String(courtSlug).trim().toLowerCase()
+            ) ||
+            remoteCourts.find(
+              (c) =>
+                String(c.name || '').toLowerCase().includes(String(courtSlug).trim().toLowerCase())
+            );
+          if (!matched) {
+            return res.status(404).json({ message: '場地不存在' });
+          }
+          return res.json({ court: matched, store });
+        } catch (error) {
+          console.error('連鎖店遠端場地查詢失敗:', error.message);
+          return res.status(502).json({
+            message: error.message || '無法從 PickleVibes 取得場地',
+          });
+        }
+      }
+
       const slugQuery = {
         store: store._id,
         ...(all !== 'true' ? { isActive: true } : {}),
@@ -91,14 +122,14 @@ router.get('/', optionalAuth, async (req, res) => {
       let court = await Court.findOne({
         ...slugQuery,
         slug: String(courtSlug).trim().toLowerCase(),
-      }).populate('store', 'name slug address enableHikAccess');
+      }).populate('store', 'name slug address enableHikAccess isChainStore');
       if (!court) {
         const storeCourts = await Court.find(slugQuery).sort({ number: 1 });
         const matched = findCourtInListBySlug(storeCourts, courtSlug);
         if (matched) {
           court = await Court.findById(matched._id).populate(
             'store',
-            'name slug address enableHikAccess'
+            'name slug address enableHikAccess isChainStore'
           );
         }
       }
@@ -107,9 +138,33 @@ router.get('/', optionalAuth, async (req, res) => {
       }
       return res.json({ court, store });
     }
+
+    // 連鎖店：公開列表改由 PickleVibes API（用 slug）
+    if (storeId && String(storeId).trim() !== '' && all !== 'true') {
+      const localStore = await findLocalStoreByRef(storeId);
+      if (localStore && shouldProxyChainStore(localStore)) {
+        try {
+          const remoteCourts = await listRemoteCourtsForLocalStore(localStore, { type });
+          let result = remoteCourts;
+          if (available === 'true') {
+            result = result.filter((c) => c.isActive !== false && c.status !== 'maintenance');
+          }
+          return res.json({ courts: result, source: 'picklevibes' });
+        } catch (error) {
+          console.error('連鎖店遠端場地列表失敗:', error.message);
+          return res.status(502).json({
+            message: error.message || '無法從 PickleVibes 取得場地列表',
+          });
+        }
+      }
+    }
+
+    if (storeId && String(storeId).trim() !== '') {
+      query.store = String(storeId).trim();
+    }
     
     const courts = await Court.find(query)
-      .populate('store', 'name slug address enableHikAccess isActive')
+      .populate('store', 'name slug address enableHikAccess isActive isChainStore')
       .sort({ number: 1 });
     
     let result = courts;
@@ -140,13 +195,38 @@ router.get('/', optionalAuth, async (req, res) => {
 // @access  Public
 router.get('/:id', async (req, res) => {
   try {
-    const court = await Court.findById(req.params.id);
+    const court = await Court.findById(req.params.id).populate(
+      'store',
+      'name slug address enableHikAccess isActive isChainStore'
+    );
     
-    if (!court) {
-      return res.status(404).json({ message: '場地不存在' });
+    if (court) {
+      return res.json({ court });
     }
-    
-    res.json({ court });
+
+    // 本地無此場：可能係連鎖店遠端 court id
+    try {
+      const remote = await tryResolveRemoteCourtForProxy(req.params.id);
+      if (!remote) {
+        return res.status(404).json({ message: '場地不存在' });
+      }
+      const remoteStoreSlug = remote.store?.slug || remote.storeSlug;
+      let localStore = null;
+      if (remoteStoreSlug) {
+        localStore = await findLocalStoreByRef(remoteStoreSlug);
+      }
+      const courtOut = localStore
+        ? attachLocalStoreToRemoteCourt(remote, localStore)
+        : { ...remote, source: 'picklevibes' };
+      return res.json({ court: courtOut });
+    } catch (error) {
+      if (error instanceof PickleVibesApiError) {
+        return res.status(error.status && error.status >= 400 ? error.status : 502).json({
+          message: error.message || '無法從 PickleVibes 取得場地',
+        });
+      }
+      throw error;
+    }
   } catch (error) {
     console.error('獲取場地詳情錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
@@ -158,18 +238,30 @@ router.get('/:id', async (req, res) => {
 // @access  Public
 router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
   try {
-    const court = await Court.findById(req.params.id);
-    
-    if (!court) {
-      return res.status(404).json({ message: '場地不存在' });
-    }
-    
     const { date, timeSlots } = req.body;
     
     if (!date || !timeSlots || !Array.isArray(timeSlots)) {
       return res.status(400).json({ 
         message: '請提供日期和時間段陣列' 
       });
+    }
+
+    const court = await Court.findById(req.params.id);
+
+    // 本地無 court → 轉發 PickleVibes batch（連鎖店遠端 id）
+    if (!court) {
+      try {
+        const remote = await proxyRemoteAvailabilityBatch(req.params.id, { date, timeSlots });
+        return res.json(remote);
+      } catch (error) {
+        if (error instanceof PickleVibesApiError) {
+          const status = error.status === 404 ? 404 : error.status && error.status >= 400 ? error.status : 502;
+          return res.status(status).json({
+            message: error.status === 404 ? '場地不存在' : error.message || '遠端空缺查詢失敗',
+          });
+        }
+        throw error;
+      }
     }
     
     // 檢查場地是否可用
@@ -298,7 +390,18 @@ router.get('/:id/availability', [
     const court = await Court.findById(req.params.id);
     
     if (!court) {
-      return res.status(404).json({ message: '場地不存在' });
+      try {
+        const remote = await fetchCourtAvailability(req.params.id, { date, startTime, endTime });
+        return res.json(remote);
+      } catch (error) {
+        if (error instanceof PickleVibesApiError) {
+          const status = error.status === 404 ? 404 : error.status && error.status >= 400 ? error.status : 502;
+          return res.status(status).json({
+            message: error.status === 404 ? '場地不存在' : error.message || '遠端空缺查詢失敗',
+          });
+        }
+        throw error;
+      }
     }
     
     // 檢查場地是否可用
