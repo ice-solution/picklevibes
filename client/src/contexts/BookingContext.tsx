@@ -12,12 +12,21 @@ export interface StoreSummary {
   address: string;
   phone?: string;
   enableHikAccess?: boolean;
-  branding?: { primaryColor?: string };
+  branding?: { primaryColor?: string; displayName?: string };
 }
+
+type BookingStoreRef =
+  | string
+  | {
+      _id: string;
+      name: string;
+      slug?: string;
+      branding?: { displayName?: string; primaryColor?: string };
+    };
 
 interface Court {
   _id: string;
-  store?: string | { _id: string; name: string; slug?: string };
+  store?: BookingStoreRef;
   slug?: string;
   name: string;
   number: number;
@@ -60,6 +69,7 @@ interface Player {
 interface Booking {
   _id: string;
   user: string | { _id: string; name: string; email: string };
+  store?: BookingStoreRef;
   court: Court;
   date: string;
   startTime: string;
