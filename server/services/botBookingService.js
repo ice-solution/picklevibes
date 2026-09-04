@@ -55,6 +55,8 @@ async function createBookingViaBot(params) {
     /** PickCourt 等外部平台已收款：只占場、唔扣 PickleVibes 積分 */
     externalSettlement = false,
     externalNote = '',
+    /** PickCourt 實扣積分（寫入 pickcourt_waived 嘅 pointsDeducted／totalPrice） */
+    settledPoints,
   } = params;
 
   const isExternalSettlement =
@@ -267,7 +269,19 @@ async function createBookingViaBot(params) {
     );
   }
 
-  const chargePoints = isExternalSettlement ? 0 : pointsToDeduct;
+  const chargePoints = isExternalSettlement
+    ? Math.max(
+        0,
+        Math.round(
+          Number(
+            settledPoints != null && settledPoints !== ''
+              ? settledPoints
+              : pointsToDeduct
+          )
+        )
+      )
+    : pointsToDeduct;
+  const listPrice = Math.round(tempBooking.pricing.totalPrice + soloCourtFee);
   const settlementNote = String(
     externalNote || (isExternalSettlement ? 'PickCourt 平台已結算' : '')
   )
@@ -295,19 +309,30 @@ async function createBookingViaBot(params) {
     payment: {
       status: 'paid',
       paidAt: new Date(),
-      method: isExternalSettlement ? 'admin_waived' : 'points',
+      method: isExternalSettlement ? 'pickcourt_waived' : 'points',
+      // PickCourt 結算：記實扣金額（供費用計算）；PV 錢包仍未扣
       pointsDeducted: chargePoints,
       originalPrice: tempBooking.pricing.totalPrice,
-      discount: isVip ? 20 : 0,
+      discount: isExternalSettlement
+        ? listPrice > chargePoints
+          ? Math.round(((listPrice - chargePoints) / listPrice) * 100)
+          : 0
+        : isVip
+          ? 20
+          : 0,
       ...(isExternalSettlement && settlementNote ? { externalNote: settlementNote } : {}),
     },
     pricing: {
       basePrice: tempBooking.pricing.basePrice,
       memberDiscount: tempBooking.pricing.memberDiscount,
-      totalPrice: isExternalSettlement ? tempBooking.pricing.totalPrice + soloCourtFee : chargePoints,
+      totalPrice: chargePoints,
       originalPrice: tempBooking.pricing.totalPrice,
       pointsDeducted: chargePoints,
-      vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice * 0.2) : 0,
+      vipDiscount: isExternalSettlement
+        ? Math.max(0, listPrice - chargePoints)
+        : isVip
+          ? Math.round(tempBooking.pricing.totalPrice * 0.2)
+          : 0,
       soloCourtFee,
     },
     createdAt: new Date(),
@@ -382,7 +407,7 @@ async function createBookingViaBot(params) {
       status: 'confirmed',
       payment: {
         status: 'paid',
-        method: isExternalSettlement ? 'admin_waived' : 'points',
+        method: isExternalSettlement ? 'pickcourt_waived' : 'points',
         paidAt: new Date(),
         pointsDeducted: 0,
         originalPrice: tempSoloBooking.pricing.totalPrice,

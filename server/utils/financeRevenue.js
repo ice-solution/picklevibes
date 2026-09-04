@@ -118,6 +118,15 @@ function userPaidPointsRatio(economicTotal, giftTotal) {
 
 function getBookingNominalCharge(booking) {
   if (booking.payment?.method === 'admin_waived') return 0;
+  // PickCourt 已結算：用實扣積分做名義金額，方便之後計 PickCourt 預約費用
+  if (booking.payment?.method === 'pickcourt_waived') {
+    return (
+      Number(booking.payment?.pointsDeducted) ||
+      Number(booking.pricing?.pointsDeducted) ||
+      Number(booking.pricing?.totalPrice) ||
+      0
+    );
+  }
   if (booking.noUserBalanceDebited) return 0;
 
   const method = booking.payment?.method;
@@ -232,6 +241,7 @@ function resolveBookingStore(booking) {
 function paymentMethodLabel(method) {
   if (method === 'points') return '積分';
   if (method === 'admin_waived') return '管理員免扣款';
+  if (method === 'pickcourt_waived') return 'PickCourt 已結算';
   if (method === 'cash') return '現金';
   if (method === 'kpay') return 'KPay';
   if (method === 'fps') return 'FPS 轉數快';
@@ -346,7 +356,9 @@ async function computeIncomeLines(opts) {
     const incomeDate = formatHkYmd(b.date);
     const timeSlot = `${b.startTime || ''}–${b.endTime || ''}`;
     const listPrice = Number(b.pricing?.totalPrice) || 0;
-    const isExcluded = method === 'admin_waived' || b.noUserBalanceDebited === true;
+    const isExcluded =
+      method === 'admin_waived' ||
+      (b.noUserBalanceDebited === true && method !== 'pickcourt_waived');
     const referenceAmount = isExcluded ? listPrice : 0;
 
     if (isExcluded) {
@@ -763,7 +775,7 @@ async function computeFinanceSummary(opts) {
       giftPointsDefinition:
         '派送積分 = 管理員手動充值（payment.method=manual）+ 付費充值中超出實付金額的贈送積分（points − amount）',
       excludedFromRecognized:
-        '管理員免扣款（admin_waived / noUserBalanceDebited）不計入認列收入',
+        '管理員免扣款（admin_waived / noUserBalanceDebited）不計入認列收入；pickcourt_waived 以 PickCourt 實扣積分計名義金額',
       shopDateBasis: '網店以 pointsChargedAt（後台確認扣款日）為準'
     },
     venue: agg.venue,

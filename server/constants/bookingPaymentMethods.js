@@ -10,6 +10,7 @@ const BOOKING_PAYMENT_METHOD_LABELS = {
   other: '其他',
   points: '積分',
   admin_waived: '管理員留場',
+  pickcourt_waived: 'PickCourt 已結算',
 };
 
 function isExternalPaymentMethod(method) {

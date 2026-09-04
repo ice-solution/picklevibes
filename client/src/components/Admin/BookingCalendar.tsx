@@ -511,6 +511,7 @@ const BookingCalendar: React.FC = () => {
     if (info) return info.eligible;
     if (booking.status === 'cancelled') return false;
     const method = booking.payment?.method;
+    if (method === 'pickcourt_waived') return false;
     const pts = Number(booking.payment?.pointsDeducted) || 0;
     if (method === 'points' && pts > 0 && !booking.noUserBalanceDebited) return false;
     if (['cash', 'bank_transfer', 'stripe', 'kpay', 'fps', 'other'].includes(method) && booking.payment?.status === 'paid') {
@@ -560,6 +561,14 @@ const BookingCalendar: React.FC = () => {
         };
       }
       return { amount: paid, suffix: '已結算', courtShare: null, bundleCount: 0 };
+    }
+    if (booking.payment?.method === 'pickcourt_waived') {
+      return {
+        amount: paid || booking.pricing?.totalPrice || 0,
+        suffix: 'PickCourt 已結算',
+        courtShare: null,
+        bundleCount: 0,
+      };
     }
     if (
       ['cash', 'bank_transfer', 'stripe', 'kpay', 'fps', 'other'].includes(booking.payment?.method || '') &&
@@ -1323,7 +1332,9 @@ const BookingCalendar: React.FC = () => {
                   <p className="text-sm text-gray-900">
                   {selectedBooking.payment.method === 'admin_waived'
                     ? '管理員留場（未扣積分）'
-                    : bookingPaymentMethodLabel(selectedBooking.payment.method)}
+                    : selectedBooking.payment.method === 'pickcourt_waived'
+                      ? `PickCourt 已結算（${Number(selectedBooking.payment?.pointsDeducted) || Number(selectedBooking.pricing?.totalPrice) || 0} 積分）`
+                      : bookingPaymentMethodLabel(selectedBooking.payment.method)}
                 </p>
                 </div>
               </div>
@@ -1487,10 +1498,12 @@ const BookingCalendar: React.FC = () => {
                     <button
                       onClick={async () => {
                         const isAdminWaived = selectedBooking.payment?.method === 'admin_waived';
+                        const isPickCourtWaived =
+                          selectedBooking.payment?.method === 'pickcourt_waived';
                         if (
                           !window.confirm(
-                            isAdminWaived
-                              ? '確認要取消此預約嗎？'
+                            isAdminWaived || isPickCourtWaived
+                              ? '確認要取消此預約嗎？（不會退回 PickleVibes 積分）'
                               : '確認要取消此預約並退回積分嗎？'
                           )
                         )

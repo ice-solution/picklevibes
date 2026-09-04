@@ -997,6 +997,7 @@ router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
       status: { $nin: ['cancelled', 'no_show'] },
       venueBundleKind: { $ne: 'activity_hold' },
       relatedActivity: { $in: [null] },
+      'payment.method': { $ne: 'pickcourt_waived' },
       $or: [
         { noUserBalanceDebited: true },
         { bypassRestrictions: true },
@@ -1312,7 +1313,8 @@ router.put('/:id/cancel', [
     const skipAutoPointsRefund =
       booking.noUserBalanceDebited === true ||
       booking.bypassRestrictions === true ||
-      booking.payment?.method === 'admin_waived';
+      booking.payment?.method === 'admin_waived' ||
+      booking.payment?.method === 'pickcourt_waived';
 
     // 如為積分支付且實際有扣款，則退回積分（包場預約除外；免扣款建單除外）
     try {

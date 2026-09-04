@@ -13,5 +13,6 @@ export function bookingPaymentMethodLabel(method?: string | null): string {
   if (found) return found.label;
   if (method === 'points') return '積分';
   if (method === 'admin_waived') return '管理員留場';
+  if (method === 'pickcourt_waived') return 'PickCourt 已結算';
   return method || '—';
 }

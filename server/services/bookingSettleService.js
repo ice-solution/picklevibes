@@ -14,6 +14,8 @@ function isBookingEligibleForSettle(booking) {
   if (!booking || ['cancelled', 'no_show'].includes(booking.status)) return false;
 
   const method = booking.payment?.method;
+  if (method === 'pickcourt_waived') return false;
+
   const pts = Number(booking.payment?.pointsDeducted) || 0;
   if (method === 'points' && pts > 0 && !booking.noUserBalanceDebited) return false;
 

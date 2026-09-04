@@ -148,6 +148,7 @@ router.post(
     body('redeemCodeId').optional().isMongoId(),
     body('externalSettlement').optional().isBoolean(),
     body('externalNote').optional().trim().isLength({ max: 200 }),
+    body('settledPoints').optional().isFloat({ min: 0 }),
   ],
   async (req, res) => {
     try {

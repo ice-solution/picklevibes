@@ -150,10 +150,20 @@ const bookingSchema = new mongoose.Schema({
     },
     method: {
       type: String,
-      enum: ['stripe', 'cash', 'kpay', 'fps', 'bank_transfer', 'other', 'points', 'admin_waived'],
+      enum: [
+        'stripe',
+        'cash',
+        'kpay',
+        'fps',
+        'bank_transfer',
+        'other',
+        'points',
+        'admin_waived',
+        'pickcourt_waived',
+      ],
       default: 'stripe',
       description:
-        'admin_waived = 管理員繞過限制建單，未從用戶扣積分',
+        'admin_waived = 管理員繞過限制建單，未從用戶扣積分；pickcourt_waived = PickCourt 已結算（PV 未扣積分，pointsDeducted 記 PickCourt 實扣）',
     },
     externalNote: {
       type: String,
