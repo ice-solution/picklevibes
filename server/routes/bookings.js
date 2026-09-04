@@ -298,6 +298,7 @@ router.post('/', [
           includeSoloCourt,
           externalSettlement: true,
           externalNote: 'PickCourt 平台已結算',
+          settledPoints: pointsToDeduct,
         });
       } catch (error) {
         try {

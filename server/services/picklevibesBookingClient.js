@@ -30,6 +30,7 @@ async function createPickleVibesBotBooking({
   redeemCodeId,
   externalSettlement = true,
   externalNote = 'PickCourt 平台已結算',
+  settledPoints,
 }) {
   const config = getPickleVibesApiConfig();
   if (!isPickleVibesRemoteEnabled()) {
@@ -52,6 +53,9 @@ async function createPickleVibesBotBooking({
   };
   if (externalSettlement && externalNote) {
     body.externalNote = String(externalNote).trim().slice(0, 200);
+  }
+  if (externalSettlement && settledPoints != null && settledPoints !== '') {
+    body.settledPoints = Math.max(0, Math.round(Number(settledPoints)));
   }
   if (redeemCodeId && !externalSettlement) {
     body.redeemCodeId = redeemCodeId;
