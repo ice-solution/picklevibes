@@ -118,7 +118,9 @@ const AccountBookings: React.FC = () => {
                   <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
-                        <h3 className="font-bold text-pickcourt-navy">{booking.court?.name || '場地'}</h3>
+                        <h3 className="font-bold text-pickcourt-navy">
+                          {booking.court?.name || '場地'}
+                        </h3>
                         <span
                           className={`text-xs font-medium px-2 py-0.5 rounded-full ${
                             statusClass[booking.status] || statusClass.pending
@@ -129,9 +131,18 @@ const AccountBookings: React.FC = () => {
                       </div>
                       <p className="text-sm text-gray-500 flex items-center gap-1.5 mt-1">
                         <MapPinIcon className="w-4 h-4 shrink-0" />
-                        {typeof booking.court?.store === 'object' && booking.court.store?.name
-                          ? booking.court.store.name
-                          : '店鋪'}
+                        {(() => {
+                          const fromBookingStore =
+                            typeof booking.store === 'object'
+                              ? booking.store?.branding?.displayName || booking.store?.name
+                              : null;
+                          const fromCourtStore =
+                            typeof booking.court?.store === 'object'
+                              ? booking.court.store?.branding?.displayName ||
+                                booking.court.store?.name
+                              : null;
+                          return fromBookingStore || fromCourtStore || '店鋪';
+                        })()}
                       </p>
                       <p className="text-sm text-gray-700 flex items-center gap-1.5 mt-1">
                         <CalendarDaysIcon className="w-4 h-4 shrink-0 text-pickcourt-gold" />

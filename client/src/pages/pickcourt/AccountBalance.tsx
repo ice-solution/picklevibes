@@ -19,6 +19,18 @@ type StoreBalanceItem = {
   totalSpent: number;
 };
 
+type RelatedBookingInfo = {
+  date: string;
+  startTime: string;
+  endTime: string;
+  store?: {
+    name?: string;
+    slug?: string;
+    branding?: { displayName?: string };
+  };
+  court?: { name?: string };
+};
+
 type BalanceData = {
   mode?: 'store' | 'platform';
   balance: number;
@@ -33,15 +45,20 @@ type BalanceData = {
     amount: number;
     description: string;
     createdAt: string;
-    relatedBooking?: {
-      date: string;
-      startTime: string;
-      endTime: string;
-      court?: { name: string };
-    };
+    relatedBooking?: RelatedBookingInfo;
   }>;
   pagination?: { current: number; pages: number; total: number };
 };
+
+function relatedBookingLabel(booking: RelatedBookingInfo): string {
+  const storeName = booking.store?.branding?.displayName || booking.store?.name || '';
+  const courtName = booking.court?.name || '';
+  const place = [storeName, courtName].filter(Boolean).join(' · ');
+  const when = booking.date
+    ? `${new Date(booking.date).toLocaleDateString('zh-TW')} ${booking.startTime || ''}–${booking.endTime || ''}`
+    : '';
+  return [place, when].filter(Boolean).join(' · ');
+}
 
 const AccountBalance: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -145,6 +162,11 @@ const AccountBalance: React.FC = () => {
                     <li key={i} className="py-4 flex justify-between gap-4">
                       <div className="min-w-0">
                         <p className="font-medium text-gray-900">{tx.description}</p>
+                        {tx.relatedBooking && (
+                          <p className="text-xs text-gray-500 mt-0.5">
+                            {relatedBookingLabel(tx.relatedBooking)}
+                          </p>
+                        )}
                         <p className="text-xs text-gray-400 mt-0.5">
                           {new Date(tx.createdAt).toLocaleString('zh-TW')}
                         </p>
@@ -259,9 +281,7 @@ const AccountBalance: React.FC = () => {
                       <p className="font-medium text-gray-900">{tx.description}</p>
                       {tx.relatedBooking && (
                         <p className="text-xs text-gray-500 mt-0.5">
-                          {new Date(tx.relatedBooking.date).toLocaleDateString('zh-TW')}{' '}
-                          {tx.relatedBooking.startTime}–{tx.relatedBooking.endTime}
-                          {tx.relatedBooking.court?.name ? ` · ${tx.relatedBooking.court.name}` : ''}
+                          {relatedBookingLabel(tx.relatedBooking)}
                         </p>
                       )}
                       <p className="text-xs text-gray-400 mt-0.5">

@@ -11,8 +11,40 @@ const {
   listUserStoreBalances,
   resolveStoreIdFromInput,
 } = require('../services/storeBalanceService');
+const Booking = require('../models/Booking');
 
 const router = express.Router();
+
+/** 把交易裡的 relatedBooking 補上店名／場地名，方便積分餘額頁顯示 */
+async function enrichTransactionsWithBooking(transactions) {
+  const list = (transactions || []).map((t) =>
+    t && typeof t.toObject === 'function' ? t.toObject() : { ...t }
+  );
+  const ids = [
+    ...new Set(
+      list
+        .map((t) => t.relatedBooking)
+        .filter(Boolean)
+        .map((id) => String(id._id || id))
+    ),
+  ];
+  if (ids.length === 0) return list;
+
+  const bookings = await Booking.find({ _id: { $in: ids } })
+    .select('date startTime endTime store court')
+    .populate('store', 'name slug branding.displayName')
+    .populate('court', 'name number type')
+    .lean();
+  const byId = new Map(bookings.map((b) => [String(b._id), b]));
+
+  return list.map((tx) => {
+    const rawId = tx.relatedBooking;
+    if (!rawId) return tx;
+    const booking = byId.get(String(rawId._id || rawId));
+    if (!booking) return tx;
+    return { ...tx, relatedBooking: booking };
+  });
+}
 
 const stripe =
   getPaymentProvider() === 'stripe' && process.env.STRIPE_SECRET_KEY
@@ -339,7 +371,9 @@ router.get('/balance', auth, async (req, res) => {
         (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
       );
       const startIndex = (pageNum - 1) * limitNum;
-      const paginatedTransactions = sortedTransactions.slice(startIndex, startIndex + limitNum);
+      const paginatedTransactions = await enrichTransactionsWithBooking(
+        sortedTransactions.slice(startIndex, startIndex + limitNum)
+      );
 
       return res.json({
         mode: 'store',
@@ -371,7 +405,9 @@ router.get('/balance', auth, async (req, res) => {
       (a, b) => new Date(b.createdAt) - new Date(a.createdAt)
     );
     const startIndex = (pageNum - 1) * limitNum;
-    const paginatedTransactions = sortedTransactions.slice(startIndex, startIndex + limitNum);
+    const paginatedTransactions = await enrichTransactionsWithBooking(
+      sortedTransactions.slice(startIndex, startIndex + limitNum)
+    );
 
     res.json({
       mode: 'platform',

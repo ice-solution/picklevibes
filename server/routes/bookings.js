@@ -273,7 +273,7 @@ router.post('/', [
           bookingUserId,
           storeId,
           pointsToDeduct,
-          `連鎖店預約 - ${remoteCourt.name || court} ${bookingDate.toDateString()} ${startTime}-${endTimeForApi}`,
+          `連鎖店預約 - ${localStore.name || localStore.slug} · ${remoteCourt.name || court} ${bookingDate.toDateString()} ${startTime}-${endTimeForApi}`,
           null
         );
       } catch (error) {
@@ -1037,7 +1037,12 @@ router.get('/', [auth], async (req, res) => {
     }
 
     const bookings = await Booking.find(query)
-      .populate('court', 'name number type')
+      .populate('store', 'name slug branding.displayName')
+      .populate({
+        path: 'court',
+        select: 'name number type store',
+        populate: { path: 'store', select: 'name slug branding.displayName' },
+      })
       .sort({ date: -1, startTime: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
