@@ -51,6 +51,7 @@ const PLATFORM_ONLY_TABS = new Set([
   'stores',
   'tenant-staff',
   'users',
+  'long-term-supporters',
   'tiers',
   'vlogs',
   'hotnews',

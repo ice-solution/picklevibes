@@ -30,6 +30,7 @@ interface Activity {
   endDate: string;
   registrationDeadline: string;
   location: string;
+  store?: string | { _id: string; name?: string; slug?: string } | null;
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
   organizer: {
     _id: string;
@@ -50,6 +51,12 @@ interface Activity {
   createdAt: string;
   venueHoldMode?: 'full_venue' | 'single_court';
   venueHoldCourtId?: string | { _id: string; name?: string };
+}
+
+interface StoreOption {
+  _id: string;
+  name: string;
+  slug?: string;
 }
 
 interface VenueCourtOption {
@@ -149,20 +156,54 @@ const ActivityManagement: React.FC = () => {
     location: '',
     requirements: '',
     coaches: [] as any[],
+    storeId: '',
     venueHoldMode: 'full_venue' as 'full_venue' | 'single_court',
     venueHoldCourtId: ''
   });
   const [locationOption, setLocationOption] = useState<string>(fixedVenueLocation);
   const [customLocation, setCustomLocation] = useState<string>('');
   const [venueCourts, setVenueCourts] = useState<VenueCourtOption[]>([]);
+  const [stores, setStores] = useState<StoreOption[]>([]);
 
   // 圖片上傳狀態
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string>('');
 
+  const findLaiChiKokStoreId = (list: StoreOption[]): string => {
+    const match = list.find(
+      (s) => s.slug === 'lai-chi-kok' || (s.name && s.name.includes('荔枝角'))
+    );
+    return match?._id || '';
+  };
+
+  const resolveActivityStoreId = (activity: Activity): string => {
+    if (!activity.store) return '';
+    if (typeof activity.store === 'object' && activity.store._id) {
+      return String(activity.store._id);
+    }
+    return String(activity.store);
+  };
+
   useEffect(() => {
     fetchActivities();
   }, [currentPage, statusFilter]);
+
+  useEffect(() => {
+    const loadStores = async () => {
+      try {
+        const res = await fetch(`${apiBaseUrl}/stores/admin/all`, {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem('token')}`,
+          },
+        });
+        const data = await res.json();
+        setStores((data.stores || []) as StoreOption[]);
+      } catch {
+        setStores([]);
+      }
+    };
+    loadStores();
+  }, [apiBaseUrl]);
 
   useEffect(() => {
     if (!showCreateModal && !showEditModal) return;
@@ -183,6 +224,17 @@ const ActivityManagement: React.FC = () => {
     };
     loadCourts();
   }, [showCreateModal, showEditModal, apiBaseUrl]);
+
+  // 固定場地時，若尚未選店鋪則自動對應荔枝角店
+  useEffect(() => {
+    if (!showCreateModal && !showEditModal) return;
+    if (locationOption !== fixedVenueLocation) return;
+    if (formData.storeId) return;
+    const id = findLaiChiKokStoreId(stores);
+    if (id) {
+      setFormData((prev) => (prev.storeId ? prev : { ...prev, storeId: id }));
+    }
+  }, [stores, locationOption, showCreateModal, showEditModal, formData.storeId, fixedVenueLocation]);
 
   const fetchActivities = async () => {
     try {
@@ -225,6 +277,7 @@ const ActivityManagement: React.FC = () => {
       location: '',
       requirements: '',
       coaches: [],
+      storeId: findLaiChiKokStoreId(stores),
       venueHoldMode: 'full_venue',
       venueHoldCourtId: ''
     });
@@ -300,6 +353,11 @@ const ActivityManagement: React.FC = () => {
           ? String(activity.venueHoldCourtId._id)
           : String(activity.venueHoldCourtId);
     }
+    const isFixedVenue = activity.location === fixedVenueLocation;
+    let storeId = resolveActivityStoreId(activity);
+    if (isFixedVenue && !storeId) {
+      storeId = findLaiChiKokStoreId(stores);
+    }
     setFormData({
       title: activity.title,
       description: activity.description,
@@ -312,12 +370,13 @@ const ActivityManagement: React.FC = () => {
       location: activity.location,
       requirements: activity.requirements || '',
       coaches: activity.coaches || [],
+      storeId,
       venueHoldMode: activity.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue',
       venueHoldCourtId: courtId
     });
     setSelectedFile(null);
     setImagePreview(activity.poster ? getImageUrl(activity.poster) : '');
-    if (activity.location === fixedVenueLocation) {
+    if (isFixedVenue) {
       setLocationOption(fixedVenueLocation);
       setCustomLocation('');
     } else {
@@ -371,7 +430,7 @@ const ActivityManagement: React.FC = () => {
       
       // 添加表單數據
       Object.keys(submitPayload).forEach(key => {
-        if (key === 'location' || key === 'venueHoldMode' || key === 'venueHoldCourtId') {
+        if (key === 'location' || key === 'venueHoldMode' || key === 'venueHoldCourtId' || key === 'storeId') {
           return;
         }
         const value = submitPayload[key as keyof typeof submitPayload];
@@ -389,6 +448,7 @@ const ActivityManagement: React.FC = () => {
         }
       });
       formDataToSend.append('location', finalLocation);
+      formDataToSend.append('storeId', formData.storeId || '');
       if (finalLocation === fixedVenueLocation) {
         formDataToSend.append('venueHoldMode', formData.venueHoldMode);
         if (formData.venueHoldMode === 'single_court' && formData.venueHoldCourtId) {
@@ -1412,7 +1472,13 @@ const ActivityManagement: React.FC = () => {
                       onChange={(e) => {
                         const v = e.target.value;
                         setLocationOption(v);
-                        if (v !== fixedVenueLocation) {
+                        if (v === fixedVenueLocation) {
+                          const laiChiKokId = findLaiChiKokStoreId(stores);
+                          setFormData((prev) => ({
+                            ...prev,
+                            storeId: laiChiKokId || prev.storeId
+                          }));
+                        } else {
                           setFormData((prev) => ({
                             ...prev,
                             venueHoldMode: 'full_venue',
@@ -1436,6 +1502,30 @@ const ActivityManagement: React.FC = () => {
                         required
                       />
                     )}
+                    <div className="mt-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        所屬店鋪
+                      </label>
+                      <select
+                        value={formData.storeId}
+                        onChange={(e) =>
+                          setFormData({ ...formData, storeId: e.target.value })
+                        }
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      >
+                        <option value="">其他 / 無店鋪</option>
+                        {stores.map((s) => (
+                          <option key={s._id} value={s._id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                      {locationOption === fixedVenueLocation && (
+                        <p className="mt-1 text-xs text-gray-500">
+                          固定場地會自動對應荔枝角店鋪
+                        </p>
+                      )}
+                    </div>
                     {locationOption === fixedVenueLocation && (
                       <div className="mt-3 space-y-2 rounded-lg border border-amber-100 bg-amber-50/80 p-3">
                         <label className="block text-sm font-medium text-gray-800">

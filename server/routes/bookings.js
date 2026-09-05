@@ -34,6 +34,11 @@ const {
   suggestedSettlePoints,
   BOOKING_EXTERNAL_PAYMENT_METHODS,
 } = require('../services/bookingSettleService');
+const {
+  addPendingRedeem,
+  removePendingRedeem,
+  computePendingRedeemPreview,
+} = require('../services/bookingPendingRedeemService');
 
 const router = express.Router();
 
@@ -1058,6 +1063,116 @@ router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   GET /api/bookings/:id/pending-redeems
+// @desc    預覽待結算預約掛載的兌換碼與應付金額
+// @access  Private (Admin)
+router.get('/:id/pending-redeems', [auth, adminAuth], async (req, res) => {
+  try {
+    const Booking = require('../models/Booking');
+    const booking = await Booking.findById(req.params.id);
+    if (!booking) {
+      return res.status(404).json({ message: '預約不存在' });
+    }
+    const baseOverride =
+      req.query.baseAmount != null && req.query.baseAmount !== ''
+        ? Number(req.query.baseAmount)
+        : undefined;
+    const forUserId = req.query.forUserId || undefined;
+    const preview = await computePendingRedeemPreview(booking, {
+      baseOverride: Number.isFinite(baseOverride) ? baseOverride : undefined,
+      forUserId,
+    });
+    const settleInfo = await getSettlePreview(booking._id, {
+      baseOverride: preview.baseAmount,
+      forUserId,
+    });
+    res.json({
+      ...preview,
+      eligible: settleInfo.eligible,
+      alreadySettled: settleInfo.alreadySettled,
+    });
+  } catch (error) {
+    if (error.status || error.statusCode) {
+      return res.status(error.status || error.statusCode).json({ message: error.message });
+    }
+    console.error('預覽待結算兌換碼錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/bookings/:id/pending-redeems
+// @desc    為待結算預約掛載兌換碼（可多張，結算前可增刪）
+// @access  Private (Admin)
+router.post('/:id/pending-redeems', [
+  auth,
+  adminAuth,
+  body('code').optional().trim(),
+  body('redeemCodeId').optional().isMongoId().withMessage('無效的兌換碼ID'),
+  body('pocketItemId').optional().isMongoId().withMessage('無效的口袋項目'),
+  body('forUserId').optional().isMongoId().withMessage('無效的用戶ID'),
+  body('baseAmount').optional().isFloat({ min: 0 }).withMessage('結算基數必須是非負數'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const preview = await addPendingRedeem({
+      bookingId: req.params.id,
+      code: req.body.code,
+      redeemCodeId: req.body.redeemCodeId,
+      pocketItemId: req.body.pocketItemId,
+      forUserId: req.body.forUserId,
+      baseOverride: req.body.baseAmount,
+      adminUser: req.user,
+    });
+
+    res.json({
+      message: '已掛載兌換碼',
+      ...preview,
+    });
+  } catch (error) {
+    if (error.status || error.statusCode) {
+      return res.status(error.status || error.statusCode).json({ message: error.message });
+    }
+    console.error('掛載待結算兌換碼錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   DELETE /api/bookings/:id/pending-redeems/:redeemCodeId
+// @desc    移除待結算預約上的兌換碼
+// @access  Private (Admin)
+router.delete('/:id/pending-redeems/:redeemCodeId', [auth, adminAuth], async (req, res) => {
+  try {
+    const preview = await removePendingRedeem({
+      bookingId: req.params.id,
+      redeemCodeId: req.params.redeemCodeId,
+      forUserId: req.query.forUserId || req.body?.forUserId,
+      baseOverride:
+        req.query.baseAmount != null
+          ? Number(req.query.baseAmount)
+          : req.body?.baseAmount != null
+            ? Number(req.body.baseAmount)
+            : undefined,
+    });
+    res.json({
+      message: '已移除兌換碼',
+      ...preview,
+    });
+  } catch (error) {
+    if (error.status || error.statusCode) {
+      return res.status(error.status || error.statusCode).json({ message: error.message });
+    }
+    console.error('移除待結算兌換碼錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   PUT /api/bookings/:id/special-requests-processed
 // @desc    更新特殊要求處理狀態（管理員）
 // @access  Private (Admin)
@@ -1104,7 +1219,7 @@ router.post('/:id/settle', [
   auth,
   adminAuth,
   body('userId').notEmpty().withMessage('請選擇用戶'),
-  body('points').optional().isInt({ min: 1 }).withMessage('扣款積分必須是正整數'),
+  body('points').optional().isInt({ min: 0 }).withMessage('扣款積分必須是非負整數'),
   body('reason').optional().trim().isLength({ max: 200 }).withMessage('原因不能超過200字'),
 ], async (req, res) => {
   try {
@@ -1125,18 +1240,23 @@ router.post('/:id/settle', [
       reason,
       adminUser: req.user,
       allowReassign: true,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
     });
 
     res.json({
       message: result.reassigned ? '已指派用戶並完成結算' : '預約結算成功',
       booking: result.booking,
-      deduct: {
-        id: result.deductRecord._id,
-        points: result.deductRecord.points,
-      },
+      deduct: result.deductRecord
+        ? {
+            id: result.deductRecord._id,
+            points: result.deductRecord.points,
+          }
+        : { id: null, points: 0 },
       userBalance: result.userBalance,
       reassigned: result.reassigned,
       bundleCount: result.bundleCount || 1,
+      redeem: result.redeem || null,
     });
   } catch (error) {
     if (error.status) {
@@ -1179,6 +1299,8 @@ router.post('/:id/mark-paid', [
       note,
       adminUser: req.user,
       allowReassign: true,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
     });
 
     res.json({
@@ -1193,6 +1315,7 @@ router.post('/:id/mark-paid', [
       },
       reassigned: result.reassigned,
       bundleCount: result.bundleCount || 1,
+      redeem: result.redeem || null,
     });
   } catch (error) {
     if (error.status) {

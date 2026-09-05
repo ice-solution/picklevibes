@@ -6,7 +6,9 @@ import timeGridPlugin from '@fullcalendar/timegrid';
 import interactionPlugin from '@fullcalendar/interaction';
 import axios from 'axios';
 import CreateBookingModal from './CreateBookingModal';
+import AssignBookingCoachesModal from './AssignBookingCoachesModal';
 import UserAutocomplete from '../Common/UserAutocomplete';
+import SettlePendingRedeems, { type PendingRedeemPreview } from './SettlePendingRedeems';
 import {
   CalendarDaysIcon,
   ClockIcon,
@@ -19,7 +21,8 @@ import {
   ChatBubbleLeftIcon,
   CheckCircleIcon,
   PencilIcon,
-  TrashIcon
+  TrashIcon,
+  AcademicCapIcon,
 } from '@heroicons/react/24/outline';
 import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 import {
@@ -89,6 +92,7 @@ interface Booking extends CalendarBooking {
   noUserBalanceDebited?: boolean;
   bypassRestrictions?: boolean;
   venueBundleKind?: string | null;
+  relatedActivity?: string | { _id: string } | null;
   isFullVenue?: boolean;
   specialRequests?: string;
   pricing: {
@@ -211,6 +215,7 @@ const BookingCalendar: React.FC = () => {
   const [detailLoading, setDetailLoading] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showAssignCoachesModal, setShowAssignCoachesModal] = useState(false);
   const [view, setView] = useState<'dayGridMonth' | 'timeGridWeek' | 'timeGridDay'>('dayGridMonth');
   const [selectedDate, setSelectedDate] = useState<string>('');
   const [selectedCourt, setSelectedCourt] = useState<string>('');
@@ -230,6 +235,10 @@ const BookingCalendar: React.FC = () => {
     eligible: boolean;
     alreadySettled?: boolean;
     suggestedPoints: number;
+    baseAmount?: number;
+    totalDiscount?: number;
+    netPayable?: number;
+    pendingRedeems?: PendingRedeemPreview['applied'];
     bundleCount?: number;
     isFullVenue?: boolean;
     label?: string | null;
@@ -240,6 +249,7 @@ const BookingCalendar: React.FC = () => {
   const [externalMethod, setExternalMethod] = useState<BookingExternalPaymentMethod>('cash');
   const [externalAmount, setExternalAmount] = useState('');
   const [externalNote, setExternalNote] = useState('');
+  const [redeemPreview, setRedeemPreview] = useState<PendingRedeemPreview | null>(null);
   const calendarRangeRef = useRef<{ start: string; end: string } | null>(null);
   /** 避免 datesSet 與 events 更新連鎖造成重複請求／loading 卡死 */
   const lastFetchedRangeKeyRef = useRef<string>('');
@@ -507,7 +517,12 @@ const BookingCalendar: React.FC = () => {
     });
   };
 
+  const isActivityVenueHold = (booking: Booking | CalendarBooking) =>
+    booking.venueBundleKind === 'activity_hold' ||
+    !!(booking as Booking).relatedActivity;
+
   const isBookingPendingSettle = (booking: Booking, info?: typeof settleInfo) => {
+    if (isActivityVenueHold(booking)) return false;
     if (info) return info.eligible;
     if (booking.status === 'cancelled') return false;
     const method = booking.payment?.method;
@@ -573,6 +588,14 @@ const BookingCalendar: React.FC = () => {
         bundleCount: isFV ? bundleCount : 0,
       };
     }
+    if (isActivityVenueHold(booking)) {
+      return {
+        amount: booking.pricing?.totalPrice || 0,
+        suffix: '活動佔場',
+        courtShare: null,
+        bundleCount: 0,
+      };
+    }
     if (isBookingPendingSettle(booking, info)) {
       return {
         amount: getSuggestedSettlePoints(booking, info),
@@ -595,6 +618,7 @@ const BookingCalendar: React.FC = () => {
     setExternalMethod('cash');
     setExternalAmount('');
     setExternalNote('');
+    setRedeemPreview(null);
   };
 
   const initSettleForm = (booking: Booking, info?: typeof settleInfo) => {
@@ -608,6 +632,7 @@ const BookingCalendar: React.FC = () => {
     setExternalMethod('cash');
     setExternalAmount(String(suggested));
     setExternalNote('');
+    setRedeemPreview(null);
   };
 
   const handleSettleUserChange = async (user: { _id: string; name: string; email: string; phone?: string } | null) => {
@@ -624,22 +649,31 @@ const BookingCalendar: React.FC = () => {
 
   const handleSettleBooking = async () => {
     if (!selectedBooking || !settleUser || !settlePoints) return;
-    const points = parseInt(settlePoints, 10);
-    if (points <= 0) {
-      alert('扣款積分必須大於 0');
+    const base = parseInt(settlePoints, 10);
+    if (Number.isNaN(base) || base < 0) {
+      alert('結算基數無效');
       return;
     }
-    if (settleUserBalance !== null && settleUserBalance < points) {
-      alert(`用戶餘額不足！當前：${settleUserBalance}，需要：${points}`);
+    const charge = redeemPreview?.netPayable ?? base;
+    if (charge === 0 && !(redeemPreview && redeemPreview.totalDiscount > 0)) {
+      alert('扣款積分必須大於 0（或先掛載兌換碼全額抵扣）');
+      return;
+    }
+    if (settleUserBalance !== null && charge > 0 && settleUserBalance < charge) {
+      alert(`用戶餘額不足！當前：${settleUserBalance}，需要：${charge}`);
       return;
     }
     const courtLabel = settleInfo?.isFullVenue
       ? `包場（${settleInfo.bundleCount || 3} 個場地）`
       : selectedBooking.court?.name || '場地';
     const dateLabel = formatDate(selectedBooking.date);
+    const discountLine =
+      redeemPreview && redeemPreview.totalDiscount > 0
+        ? `\n基數：${base}，兌換折扣：${redeemPreview.totalDiscount}，應付：${charge}`
+        : '';
     if (
       !window.confirm(
-        `確認將${settleInfo?.isFullVenue ? '包場' : '此預約'}指派予 ${settleUser.name} 並扣除 ${points} 積分？\n${dateLabel} ${selectedBooking.startTime}–${selectedBooking.endTime} ${courtLabel}`
+        `確認將${settleInfo?.isFullVenue ? '包場' : '此預約'}指派予 ${settleUser.name} 並扣除 ${charge} 積分？${discountLine}\n${dateLabel} ${selectedBooking.startTime}–${selectedBooking.endTime} ${courtLabel}`
       )
     ) {
       return;
@@ -648,7 +682,7 @@ const BookingCalendar: React.FC = () => {
       setSettling(true);
       const response = await axios.post(`/bookings/${selectedBooking._id}/settle`, {
         userId: settleUser._id,
-        points,
+        points: base,
         reason: settleReason.trim() || '預約結算',
       });
       alert(response.data.message || '結算成功');
@@ -658,6 +692,7 @@ const BookingCalendar: React.FC = () => {
       setSettleUser(null);
       setSettlePoints('');
       setSettleUserBalance(null);
+      setRedeemPreview(null);
       setSettling(false);
       refetchBookings();
     } catch (error: any) {
@@ -673,11 +708,14 @@ const BookingCalendar: React.FC = () => {
       alert('選擇「其他」時請填寫付款備註');
       return;
     }
-    const amount = externalAmount.trim() ? parseFloat(externalAmount) : undefined;
-    if (amount != null && (Number.isNaN(amount) || amount < 0)) {
+    const base = externalAmount.trim()
+      ? parseFloat(externalAmount)
+      : getSuggestedSettlePoints(selectedBooking, settleInfo || undefined) || 0;
+    if (Number.isNaN(base) || base < 0) {
       alert('請輸入有效金額');
       return;
     }
+    const charge = redeemPreview?.netPayable ?? base;
     const methodLabel =
       BOOKING_EXTERNAL_PAYMENT_METHODS.find((m) => m.value === externalMethod)?.label || externalMethod;
     const courtLabel = settleInfo?.isFullVenue
@@ -685,9 +723,13 @@ const BookingCalendar: React.FC = () => {
       : selectedBooking.court?.name || '場地';
     const dateLabel = formatDate(selectedBooking.date);
     const userLine = settleUser ? `\n指派用戶：${settleUser.name}` : '';
+    const discountLine =
+      redeemPreview && redeemPreview.totalDiscount > 0
+        ? `\n基數：$${base}，兌換折扣：$${redeemPreview.totalDiscount}，實收：$${charge}`
+        : '';
     if (
       !window.confirm(
-        `確認標記${settleInfo?.isFullVenue ? '包場' : '此預約'}為已付款？\n付款方式：${methodLabel}${amount != null ? `\n金額：$${amount}` : ''}${userLine}\n${dateLabel} ${selectedBooking.startTime}–${selectedBooking.endTime} ${courtLabel}`
+        `確認標記${settleInfo?.isFullVenue ? '包場' : '此預約'}為已付款？\n付款方式：${methodLabel}${discountLine || `\n金額：$${charge}`}${userLine}\n${dateLabel} ${selectedBooking.startTime}–${selectedBooking.endTime} ${courtLabel}`
       )
     ) {
       return;
@@ -697,9 +739,9 @@ const BookingCalendar: React.FC = () => {
       const payload: Record<string, unknown> = {
         method: externalMethod,
         note: externalNote.trim() || undefined,
+        amount: base,
       };
       if (settleUser) payload.userId = settleUser._id;
-      if (amount != null) payload.amount = amount;
       const response = await axios.post(`/bookings/${selectedBooking._id}/mark-paid`, payload);
       alert(response.data.message || '已標記付款');
       const refresh = await axios.get(`/bookings/${selectedBooking._id}`);
@@ -1321,7 +1363,9 @@ const BookingCalendar: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">付款方式</label>
                   <p className="text-sm text-gray-900">
-                  {selectedBooking.payment.method === 'admin_waived'
+                  {isActivityVenueHold(selectedBooking)
+                    ? '活動佔場'
+                    : selectedBooking.payment.method === 'admin_waived'
                     ? '管理員留場（未扣積分）'
                     : bookingPaymentMethodLabel(selectedBooking.payment.method)}
                 </p>
@@ -1374,7 +1418,17 @@ const BookingCalendar: React.FC = () => {
                     />
                     {settleMode === 'points' && settleUserBalance !== null && (
                       <p className="mt-1 text-xs text-gray-600">
-                        用戶餘額：<span className={settleUserBalance < parseInt(settlePoints || '0', 10) ? 'text-red-600 font-medium' : 'text-green-700 font-medium'}>{settleUserBalance}</span> 積分
+                        用戶餘額：
+                        <span
+                          className={
+                            settleUserBalance < (redeemPreview?.netPayable ?? parseInt(settlePoints || '0', 10))
+                              ? 'text-red-600 font-medium'
+                              : 'text-green-700 font-medium'
+                          }
+                        >
+                          {settleUserBalance}
+                        </span>{' '}
+                        積分
                       </p>
                     )}
                   </div>
@@ -1383,10 +1437,12 @@ const BookingCalendar: React.FC = () => {
                     <>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">扣款積分</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            結算基數（折扣前）
+                          </label>
                           <input
                             type="number"
-                            min={1}
+                            min={0}
                             value={settlePoints}
                             onChange={(e) => setSettlePoints(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
@@ -1403,10 +1459,26 @@ const BookingCalendar: React.FC = () => {
                           />
                         </div>
                       </div>
+                      <SettlePendingRedeems
+                        bookingId={selectedBooking._id}
+                        baseAmount={parseInt(settlePoints || '0', 10) || 0}
+                        forUserId={settleUser?._id || selectedBooking.user?._id || null}
+                        courtId={selectedBooking.court?._id}
+                        date={selectedBooking.date}
+                        startTime={selectedBooking.startTime}
+                        onPreviewChange={setRedeemPreview}
+                        disabled={settling}
+                      />
+                      <p className="text-sm text-amber-900 font-medium">
+                        將扣除 {redeemPreview?.netPayable ?? settlePoints} 積分
+                        {redeemPreview && redeemPreview.totalDiscount > 0
+                          ? `（基數 ${settlePoints} − 折扣 ${redeemPreview.totalDiscount}）`
+                          : ''}
+                      </p>
                       <button
                         type="button"
                         onClick={handleSettleBooking}
-                        disabled={settling || !settleUser || !settlePoints}
+                        disabled={settling || !settleUser || settlePoints === ''}
                         className="w-full px-4 py-2 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium"
                       >
                         {settling ? '結算中…' : settleInfo?.isFullVenue ? '包場扣積分結算' : '扣積分結算'}
@@ -1430,7 +1502,9 @@ const BookingCalendar: React.FC = () => {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">金額（HKD）</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            收款基數（折扣前）
+                          </label>
                           <input
                             type="number"
                             min={0}
@@ -1441,6 +1515,17 @@ const BookingCalendar: React.FC = () => {
                           />
                         </div>
                       </div>
+                      <SettlePendingRedeems
+                        bookingId={selectedBooking._id}
+                        baseAmount={
+                          externalAmount.trim()
+                            ? parseFloat(externalAmount) || 0
+                            : getSuggestedSettlePoints(selectedBooking, settleInfo || undefined) || 0
+                        }
+                        forUserId={settleUser?._id || selectedBooking.user?._id || null}
+                        onPreviewChange={setRedeemPreview}
+                        disabled={settling}
+                      />
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                           備註{externalMethod === 'other' ? <span className="text-red-500"> *</span> : null}
@@ -1469,6 +1554,16 @@ const BookingCalendar: React.FC = () => {
               {/* 管理動作 */}
               <div className="mt-6 pt-4 border-t border-gray-200">
                 <div className="flex flex-wrap justify-end gap-3">
+                  {selectedBooking.status !== 'cancelled' && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAssignCoachesModal(true)}
+                      className="px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded flex items-center gap-2"
+                    >
+                      <AcademicCapIcon className="w-4 h-4" />
+                      派課
+                    </button>
+                  )}
                   <button
                     onClick={handleResendEmail}
                     disabled={resendingEmail}
@@ -1520,6 +1615,12 @@ const BookingCalendar: React.FC = () => {
           </div>
         </div>
       )}
+
+      <AssignBookingCoachesModal
+        isOpen={showAssignCoachesModal}
+        booking={selectedBooking}
+        onClose={() => setShowAssignCoachesModal(false)}
+      />
 
       {/* 關閉時卸載，避免與 FullCalendar 連動重繪時子元件重複掛載／effect 洗版 */}
       {showCreateModal && (

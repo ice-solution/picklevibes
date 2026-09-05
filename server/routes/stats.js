@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { auth, adminAuth } = require('../middleware/auth');
 const Booking = require('../models/Booking');
 const User = require('../models/User');
@@ -6,10 +7,37 @@ const Court = require('../models/Court');
 const RedeemUsage = require('../models/RedeemUsage');
 const Recharge = require('../models/Recharge');
 const UserBalance = require('../models/UserBalance');
+const {
+  applyBookingStoreFilter
+} = require('../utils/bookingStoreQuery');
 
 const router = express.Router();
 
 const HK_TZ = 'Asia/Hong_Kong';
+
+/**
+ * 解析可選 ?store= ObjectId；省略／空／"all" 視為全店鋪。
+ * @returns {{ storeId: string|null } | { error: string }}
+ */
+function parseOptionalStoreId(raw) {
+  if (raw == null || raw === '' || String(raw).trim().toLowerCase() === 'all') {
+    return { storeId: null };
+  }
+  const s = String(raw).trim();
+  if (!mongoose.Types.ObjectId.isValid(s)) {
+    return { error: '無效的店鋪 ID' };
+  }
+  return { storeId: s };
+}
+
+function storeMeta(storeId, notes = {}) {
+  return {
+    store: storeId || null,
+    storeFilter: storeId
+      ? { applied: true, storeId, ...notes }
+      : { applied: false, storeId: null, ...notes }
+  };
+}
 
 function pad2(n) {
   return String(n).padStart(2, '0');
@@ -89,27 +117,33 @@ function intervalsOverlap(a0, a1, b0, b1) {
   return a1 > b0 && a0 < b1;
 }
 
-async function rentalHoursForHkDay(ymd) {
+async function rentalHoursForHkDay(ymd, storeId = null) {
   const s = hkStartOfDayInstant(ymd);
   const e = hkEndOfDayInstant(ymd);
+  let match = {
+    status: { $in: ['confirmed', 'completed'] },
+    date: { $gte: s, $lte: e }
+  };
+  if (storeId) {
+    match = await applyBookingStoreFilter(match, { storeId });
+  }
   const agg = await Booking.aggregate([
-    {
-      $match: {
-        status: { $in: ['confirmed', 'completed'] },
-        date: { $gte: s, $lte: e }
-      }
-    },
+    { $match: match },
     { $group: { _id: null, minutes: { $sum: '$duration' } } }
   ]);
   const minutes = agg[0]?.minutes || 0;
   return Math.round((minutes / 60) * 100) / 100;
 }
 
-async function rechargePointsForHkDay(ymd) {
+async function rechargePointsForHkDay(ymd, storeId = null) {
   const s = hkStartOfDayInstant(ymd);
   const e = hkEndOfDayInstant(ymd);
+  const statusMatch = { status: 'completed' };
+  if (storeId) {
+    statusMatch.store = new mongoose.Types.ObjectId(storeId);
+  }
   const agg = await Recharge.aggregate([
-    { $match: { status: 'completed' } },
+    { $match: statusMatch },
     {
       $addFields: {
         eff: { $ifNull: ['$payment.paidAt', '$updatedAt'] }
@@ -121,24 +155,65 @@ async function rechargePointsForHkDay(ymd) {
   return agg[0]?.pts || 0;
 }
 
-async function spentPointsForHkDay(ymd) {
+/**
+ * 消費積分：全店鋪時直接加總 spend；單店時僅計入
+ * relatedBooking（Booking.store／court.store）或 relatedPosTransaction.store 可歸屬該店的交易。
+ */
+async function spentPointsForHkDay(ymd, storeId = null) {
   const s = hkStartOfDayInstant(ymd);
   const e = hkEndOfDayInstant(ymd);
-  const agg = await UserBalance.aggregate([
+  const pipeline = [
     { $unwind: '$transactions' },
     {
       $match: {
         'transactions.type': 'spend',
         'transactions.createdAt': { $gte: s, $lte: e }
       }
-    },
-    {
-      $group: {
-        _id: null,
-        spent: { $sum: { $abs: '$transactions.amount' } }
-      }
     }
-  ]);
+  ];
+
+  if (storeId) {
+    const storeOid = new mongoose.Types.ObjectId(storeId);
+    const courtIds = await Court.find({ store: storeId }).distinct('_id');
+    pipeline.push(
+      {
+        $lookup: {
+          from: 'bookings',
+          localField: 'transactions.relatedBooking',
+          foreignField: '_id',
+          as: '_booking'
+        }
+      },
+      { $unwind: { path: '$_booking', preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: 'postransactions',
+          localField: 'transactions.relatedPosTransaction',
+          foreignField: '_id',
+          as: '_pos'
+        }
+      },
+      { $unwind: { path: '$_pos', preserveNullAndEmptyArrays: true } },
+      {
+        $match: {
+          $or: [
+            { '_booking.store': storeOid },
+            ...(courtIds.length ? [{ '_booking.court': { $in: courtIds } }] : []),
+            { '_pos.store': storeOid }
+          ]
+        }
+      }
+    );
+  }
+
+  pipeline.push({
+    $group: {
+      _id: null,
+      spent: { $sum: { $abs: '$transactions.amount' } }
+    }
+  });
+
+  const agg = await UserBalance.aggregate(pipeline);
   return Math.round((agg[0]?.spent || 0) * 100) / 100;
 }
 
@@ -179,6 +254,12 @@ const BOOKING_TIME_BUCKETS = [
 // @access  Private (Admin)
 router.get('/bookings-time-buckets', [auth, adminAuth], async (req, res) => {
   try {
+    const parsed = parseOptionalStoreId(req.query.store);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+    const { storeId } = parsed;
+
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
     const month = Math.min(12, Math.max(1, parseInt(req.query.month, 10) || (new Date().getMonth() + 1)));
     const includeCancelled = String(req.query.includeCancelled || '').toLowerCase() === 'true';
@@ -190,7 +271,7 @@ router.get('/bookings-time-buckets', [auth, adminAuth], async (req, res) => {
       : { status: { $ne: 'cancelled' } };
 
     // 與 /bookings/admin/all 的 dateFrom/dateTo 邏輯一致：包含跨天預約
-    const query = {
+    let query = {
       ...statusQuery,
       $or: [
         { date: { $gte: start, $lt: endExclusive } },
@@ -198,6 +279,9 @@ router.get('/bookings-time-buckets', [auth, adminAuth], async (req, res) => {
         { $and: [{ date: { $lt: endExclusive } }, { endDate: { $gte: start } }] }
       ]
     };
+    if (storeId) {
+      query = await applyBookingStoreFilter(query, { storeId });
+    }
 
     const bookings = await Booking.find(query).select('date startTime status endDate');
 
@@ -219,6 +303,9 @@ router.get('/bookings-time-buckets', [auth, adminAuth], async (req, res) => {
       timezone: 'Asia/Hong_Kong',
       year,
       month,
+      ...storeMeta(storeId, {
+        fields: ['Booking.store', 'Court.store→Booking.court']
+      }),
       range: {
         start: start.toISOString(),
         endExclusive: endExclusive.toISOString()
@@ -237,16 +324,27 @@ router.get('/bookings-time-buckets', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/court-usage', [auth, adminAuth], async (req, res) => {
   try {
+    const parsed = parseOptionalStoreId(req.query.store);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+    const { storeId } = parsed;
+
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
 
     // 只統計已確認/已完成的預約
     const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
     const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
 
-    const bookings = await Booking.find({
+    let bookingQuery = {
       date: { $gte: yearStart, $lte: yearEnd },
       status: { $in: ['confirmed', 'completed'] }
-    }).select('date startTime endTime duration');
+    };
+    if (storeId) {
+      bookingQuery = await applyBookingStoreFilter(bookingQuery, { storeId });
+    }
+
+    const bookings = await Booking.find(bookingQuery).select('date startTime endTime duration');
 
     const ranges = BOOKING_TIME_BUCKETS;
 
@@ -312,6 +410,9 @@ router.get('/court-usage', [auth, adminAuth], async (req, res) => {
     res.json({
       success: true,
       year,
+      ...storeMeta(storeId, {
+        fields: ['Booking.store', 'Court.store→Booking.court']
+      }),
       data: result
     });
   } catch (error) {
@@ -325,6 +426,12 @@ router.get('/court-usage', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/monthly-users', [auth, adminAuth], async (req, res) => {
   try {
+    const parsed = parseOptionalStoreId(req.query.store);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+    const { storeId } = parsed;
+
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
     const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
     const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
@@ -347,6 +454,10 @@ router.get('/monthly-users', [auth, adminAuth], async (req, res) => {
     res.json({
       success: true,
       year,
+      ...storeMeta(storeId, {
+        applied: false,
+        note: 'User 模型無店鋪歸屬，每月註冊用戶維持全平台統計'
+      }),
       data: monthly
     });
   } catch (error) {
@@ -360,13 +471,57 @@ router.get('/monthly-users', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/coupon-usage', [auth, adminAuth], async (req, res) => {
   try {
+    const parsed = parseOptionalStoreId(req.query.store);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+    const { storeId } = parsed;
+
     const year = parseInt(req.query.year, 10) || new Date().getFullYear();
     const yearStart = new Date(year, 0, 1, 0, 0, 0, 0);
     const yearEnd = new Date(year, 11, 31, 23, 59, 59, 999);
 
-    const usages = await RedeemUsage.find({
-      usedAt: { $gte: yearStart, $lte: yearEnd }
-    }).select('usedAt orderType');
+    let usages;
+    let filterNotes;
+
+    if (storeId) {
+      // RedeemUsage 本身無 store：經 orderId 關聯 Booking／Recharge 再篩選
+      let bookingQuery = {
+        date: { $gte: yearStart, $lte: yearEnd }
+      };
+      bookingQuery = await applyBookingStoreFilter(bookingQuery, { storeId });
+      const [bookingIds, rechargeIds] = await Promise.all([
+        Booking.find(bookingQuery).distinct('_id'),
+        Recharge.find({
+          store: storeId,
+          $or: [
+            { 'payment.paidAt': { $gte: yearStart, $lte: yearEnd } },
+            { createdAt: { $gte: yearStart, $lte: yearEnd } }
+          ]
+        }).distinct('_id')
+      ]);
+
+      usages = await RedeemUsage.find({
+        usedAt: { $gte: yearStart, $lte: yearEnd },
+        $or: [
+          { orderType: 'booking', orderId: { $in: bookingIds } },
+          { orderType: 'recharge', orderId: { $in: rechargeIds } }
+        ]
+      }).select('usedAt orderType');
+
+      filterNotes = {
+        fields: [
+          'RedeemUsage→Booking (orderType=booking)',
+          'RedeemUsage→Recharge.store (orderType=recharge)'
+        ],
+        note: 'activity／product／eshop 等無店鋪關聯的兌換不計入單店篩選'
+      };
+    } else {
+      usages = await RedeemUsage.find({
+        usedAt: { $gte: yearStart, $lte: yearEnd }
+      }).select('usedAt orderType');
+      filterNotes = {};
+    }
 
     const monthly = Array.from({ length: 12 }, (_, i) => ({
       year,
@@ -389,6 +544,7 @@ router.get('/coupon-usage', [auth, adminAuth], async (req, res) => {
     res.json({
       success: true,
       year,
+      ...storeMeta(storeId, filterNotes),
       data: monthly
     });
   } catch (error) {
@@ -455,7 +611,14 @@ router.get('/admin-summary', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/dashboard-live', [auth, adminAuth], async (req, res) => {
   try {
-    const courts = await Court.find({}).select('isActive maintenance');
+    const parsed = parseOptionalStoreId(req.query.store);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+    const { storeId } = parsed;
+
+    const courtQuery = storeId ? { store: storeId } : {};
+    const courts = await Court.find(courtQuery).select('isActive maintenance');
     let courtsOnline = 0;
     for (const c of courts) {
       if (typeof c.isAvailable === 'function' && c.isAvailable()) courtsOnline += 1;
@@ -468,14 +631,19 @@ router.get('/dashboard-live', [auth, adminAuth], async (req, res) => {
     const spanStart = new Date(hourStart.getTime() - 36 * 60 * 60 * 1000);
     const spanEnd = new Date(hourEnd.getTime() + 36 * 60 * 60 * 1000);
 
-    const bookings = await Booking.find({
+    let bookingQuery = {
       status: { $in: ['confirmed', 'completed'] },
       $or: [
         { date: { $gte: spanStart, $lte: spanEnd } },
         { endDate: { $gte: spanStart, $lte: spanEnd } },
         { $and: [{ date: { $lte: spanEnd } }, { endDate: { $gte: spanStart } }] }
       ]
-    }).select('court date startTime endTime duration endDate');
+    };
+    if (storeId) {
+      bookingQuery = await applyBookingStoreFilter(bookingQuery, { storeId });
+    }
+
+    const bookings = await Booking.find(bookingQuery).select('court date startTime endTime duration endDate');
 
     const courtIdsInUseOnline = new Set();
     for (const b of bookings) {
@@ -492,6 +660,9 @@ router.get('/dashboard-live', [auth, adminAuth], async (req, res) => {
     res.json({
       success: true,
       timezone: HK_TZ,
+      ...storeMeta(storeId, {
+        fields: ['Court.store', 'Booking.store', 'Court.store→Booking.court']
+      }),
       data: {
         courtsOnline,
         courtsOffline,
@@ -512,20 +683,39 @@ router.get('/dashboard-live', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/dashboard-kpis', [auth, adminAuth], async (req, res) => {
   try {
+    const parsed = parseOptionalStoreId(req.query.store);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+    const { storeId } = parsed;
+
     const today = formatHkYmd();
     const yesterday = addDaysToYmd(today, -1);
     const [tRental, tRecharge, tSpent, yRental, yRecharge, ySpent] = await Promise.all([
-      rentalHoursForHkDay(today),
-      rechargePointsForHkDay(today),
-      spentPointsForHkDay(today),
-      rentalHoursForHkDay(yesterday),
-      rechargePointsForHkDay(yesterday),
-      spentPointsForHkDay(yesterday)
+      rentalHoursForHkDay(today, storeId),
+      rechargePointsForHkDay(today, storeId),
+      spentPointsForHkDay(today, storeId),
+      rentalHoursForHkDay(yesterday, storeId),
+      rechargePointsForHkDay(yesterday, storeId),
+      spentPointsForHkDay(yesterday, storeId)
     ]);
 
     res.json({
       success: true,
       timezone: HK_TZ,
+      ...storeMeta(storeId, {
+        fields: {
+          rentalHours: ['Booking.store', 'Court.store→Booking.court'],
+          rechargePoints: ['Recharge.store'],
+          spentPoints: [
+            'UserBalance.transactions.relatedBooking→Booking.store/court',
+            'UserBalance.transactions.relatedPosTransaction→PosTransaction.store'
+          ]
+        },
+        note: storeId
+          ? '充值積分僅計 Recharge.store 有歸屬該店的紀錄；無店鋪標籤的線上充值不計入單店'
+          : undefined
+      }),
       data: {
         todayYmd: today,
         yesterdayYmd: yesterday,
@@ -552,6 +742,12 @@ router.get('/dashboard-kpis', [auth, adminAuth], async (req, res) => {
 // @access  Private (Admin)
 router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
   try {
+    const parsed = parseOptionalStoreId(req.query.store);
+    if (parsed.error) {
+      return res.status(400).json({ message: parsed.error });
+    }
+    const { storeId } = parsed;
+
     const days = Math.min(90, Math.max(2, parseInt(req.query.days, 10) || 7));
     const toYmd = req.query.to ? String(req.query.to).slice(0, 10) : formatHkYmd();
     const fromYmd = req.query.from
@@ -561,14 +757,85 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
     const start = hkStartOfDayInstant(fromYmd);
     const end = hkEndOfDayInstant(toYmd);
 
-    const [rentalAgg, rechargeAgg, spendAgg] = await Promise.all([
-      Booking.aggregate([
+    let bookingMatch = {
+      status: { $in: ['confirmed', 'completed'] },
+      date: { $gte: start, $lte: end }
+    };
+    if (storeId) {
+      bookingMatch = await applyBookingStoreFilter(bookingMatch, { storeId });
+    }
+
+    const rechargeMatch = { status: 'completed' };
+    if (storeId) {
+      rechargeMatch.store = new mongoose.Types.ObjectId(storeId);
+    }
+
+    const spendPipeline = [
+      { $unwind: '$transactions' },
+      {
+        $match: {
+          'transactions.type': 'spend',
+          'transactions.createdAt': { $gte: start, $lte: end }
+        }
+      }
+    ];
+    if (storeId) {
+      const storeOid = new mongoose.Types.ObjectId(storeId);
+      const courtIds = await Court.find({ store: storeId }).distinct('_id');
+      spendPipeline.push(
         {
-          $match: {
-            status: { $in: ['confirmed', 'completed'] },
-            date: { $gte: start, $lte: end }
+          $lookup: {
+            from: 'bookings',
+            localField: 'transactions.relatedBooking',
+            foreignField: '_id',
+            as: '_booking'
           }
         },
+        { $unwind: { path: '$_booking', preserveNullAndEmptyArrays: true } },
+        {
+          $lookup: {
+            from: 'postransactions',
+            localField: 'transactions.relatedPosTransaction',
+            foreignField: '_id',
+            as: '_pos'
+          }
+        },
+        { $unwind: { path: '$_pos', preserveNullAndEmptyArrays: true } },
+        {
+          $match: {
+            $or: [
+              { '_booking.store': storeOid },
+              ...(courtIds.length ? [{ '_booking.court': { $in: courtIds } }] : []),
+              { '_pos.store': storeOid }
+            ]
+          }
+        }
+      );
+    }
+    spendPipeline.push(
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              date: '$transactions.createdAt',
+              format: '%Y-%m-%d',
+              timezone: HK_TZ
+            }
+          },
+          spentPoints: { $sum: { $abs: '$transactions.amount' } }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          spentPoints: { $round: ['$spentPoints', 2] }
+        }
+      }
+    );
+
+    const [rentalAgg, rechargeAgg, spendAgg] = await Promise.all([
+      Booking.aggregate([
+        { $match: bookingMatch },
         {
           $group: {
             _id: { $dateToString: { date: '$date', format: '%Y-%m-%d', timezone: HK_TZ } },
@@ -583,7 +850,7 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
         }
       ]),
       Recharge.aggregate([
-        { $match: { status: 'completed' } },
+        { $match: rechargeMatch },
         { $addFields: { eff: { $ifNull: ['$payment.paidAt', '$updatedAt'] } } },
         { $match: { eff: { $gte: start, $lte: end } } },
         {
@@ -593,33 +860,7 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
           }
         }
       ]),
-      UserBalance.aggregate([
-        { $unwind: '$transactions' },
-        {
-          $match: {
-            'transactions.type': 'spend',
-            'transactions.createdAt': { $gte: start, $lte: end }
-          }
-        },
-        {
-          $group: {
-            _id: {
-              $dateToString: {
-                date: '$transactions.createdAt',
-                format: '%Y-%m-%d',
-                timezone: HK_TZ
-              }
-            },
-            spentPoints: { $sum: { $abs: '$transactions.amount' } }
-          }
-        },
-        {
-          $project: {
-            _id: 1,
-            spentPoints: { $round: ['$spentPoints', 2] }
-          }
-        }
-      ])
+      UserBalance.aggregate(spendPipeline)
     ]);
 
     const rentalMap = Object.fromEntries(rentalAgg.map((r) => [r._id, r.hours || 0]));
@@ -639,6 +880,19 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
     res.json({
       success: true,
       timezone: HK_TZ,
+      ...storeMeta(storeId, {
+        fields: {
+          rentalHours: ['Booking.store', 'Court.store→Booking.court'],
+          rechargePoints: ['Recharge.store'],
+          spentPoints: [
+            'relatedBooking→Booking.store/court',
+            'relatedPosTransaction→PosTransaction.store'
+          ]
+        },
+        note: storeId
+          ? '充值積分僅計 Recharge.store 有歸屬該店的紀錄；無店鋪標籤的線上充值不計入單店'
+          : undefined
+      }),
       data: { fromYmd, toYmd, series }
     });
   } catch (error) {

@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const Court = require('../models/Court');
 
 /**
@@ -12,8 +13,13 @@ async function buildBookingStoreMatch({ storeId, storeIds } = {}) {
   }
   if (!ids.length) return null;
 
-  const courtIds = await Court.find({ store: { $in: ids } }).distinct('_id');
-  const storeClause = ids.length === 1 ? ids[0] : { $in: ids };
+  const oids = ids
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
+  if (!oids.length) return null;
+
+  const courtIds = await Court.find({ store: { $in: oids } }).distinct('_id');
+  const storeClause = oids.length === 1 ? oids[0] : { $in: oids };
   const orClause = [{ store: storeClause }];
   if (courtIds.length) {
     orClause.push({ court: { $in: courtIds } });

@@ -32,6 +32,8 @@ interface User {
   membershipLevel: 'basic' | 'vip';
   membershipExpiry?: string;
   roleExpiry?: string;
+  isShareholder?: boolean;
+  shareholderStores?: Array<{ _id: string; name: string; slug?: string }>;
   isActive: boolean;
   createdAt: string;
   lastLogin: string;
@@ -158,6 +160,9 @@ const UserManagement: React.FC = () => {
   const [searchType, setSearchType] = useState<'name' | 'email' | 'phone'>('name');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
   const [membershipLevelFilter, setMembershipLevelFilter] = useState<'' | 'basic' | 'vip'>('');
+  const [roleFilter, setRoleFilter] = useState<
+    '' | 'user' | 'admin' | 'coach' | 'athlete' | 'shareholder'
+  >('');
 
   // 防抖搜索查詢
   useEffect(() => {
@@ -221,7 +226,7 @@ const UserManagement: React.FC = () => {
   useEffect(() => {
     fetchUsers();
     fetchStats();
-  }, [currentPage, pageSize, debouncedSearchQuery, searchType, membershipLevelFilter]);
+  }, [currentPage, pageSize, debouncedSearchQuery, searchType, membershipLevelFilter, roleFilter]);
 
   const fetchUsers = async () => {
     try {
@@ -241,6 +246,12 @@ const UserManagement: React.FC = () => {
 
       if (membershipLevelFilter) {
         params.append('membershipLevel', membershipLevelFilter);
+      }
+
+      if (roleFilter === 'shareholder') {
+        params.append('shareholder', 'true');
+      } else if (roleFilter) {
+        params.append('role', roleFilter);
       }
       
       const response = await axios.get(`/users?${params.toString()}`);
@@ -727,6 +738,13 @@ const UserManagement: React.FC = () => {
     setCurrentPage(1);
   };
 
+  const handleRoleFilterChange = (
+    role: '' | 'user' | 'admin' | 'coach' | 'athlete' | 'shareholder'
+  ) => {
+    setRoleFilter(role);
+    setCurrentPage(1);
+  };
+
   const clearSearch = () => {
     setSearchQuery('');
     setCurrentPage(1);
@@ -735,6 +753,7 @@ const UserManagement: React.FC = () => {
   const clearFilters = () => {
     setSearchQuery('');
     setMembershipLevelFilter('');
+    setRoleFilter('');
     setCurrentPage(1);
   };
 
@@ -976,7 +995,27 @@ const UserManagement: React.FC = () => {
               </select>
             </div>
 
-            {(searchQuery || membershipLevelFilter) && (
+            <div className="flex items-center space-x-2">
+              <label className="text-sm text-gray-700">角色／身份:</label>
+              <select
+                value={roleFilter}
+                onChange={(e) =>
+                  handleRoleFilterChange(
+                    e.target.value as '' | 'user' | 'admin' | 'coach' | 'athlete' | 'shareholder'
+                  )
+                }
+                className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+              >
+                <option value="">全部</option>
+                <option value="user">用戶</option>
+                <option value="athlete">選手</option>
+                <option value="shareholder">股東</option>
+                <option value="coach">教練</option>
+                <option value="admin">管理員</option>
+              </select>
+            </div>
+
+            {(searchQuery || membershipLevelFilter || roleFilter) && (
               <button
                 type="button"
                 onClick={clearFilters}
@@ -988,17 +1027,32 @@ const UserManagement: React.FC = () => {
           </div>
           
           {/* 搜索結果提示 */}
-          {(searchQuery || membershipLevelFilter) && (
+          {(searchQuery || membershipLevelFilter || roleFilter) && (
             <div className="mt-3 text-sm text-gray-600">
               {searchQuery && (
                 <span>
                   搜索 "{searchQuery}" ({searchType === 'name' ? '姓名' : searchType === 'email' ? '郵箱' : '電話'})
                 </span>
               )}
-              {searchQuery && membershipLevelFilter && ' · '}
+              {searchQuery && (membershipLevelFilter || roleFilter) && ' · '}
               {membershipLevelFilter && (
                 <span>
                   會員等級：{membershipLevelFilter === 'vip' ? 'VIP會員' : '普通會員'}
+                </span>
+              )}
+              {membershipLevelFilter && roleFilter && ' · '}
+              {roleFilter && (
+                <span>
+                  角色／身份：
+                  {roleFilter === 'athlete'
+                    ? '選手'
+                    : roleFilter === 'shareholder'
+                      ? '股東'
+                      : roleFilter === 'coach'
+                        ? '教練'
+                        : roleFilter === 'admin'
+                          ? '管理員'
+                          : '用戶'}
                 </span>
               )}
               {' — 找到 '}{totalUsers} 個結果
@@ -1062,9 +1116,21 @@ const UserManagement: React.FC = () => {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(user.role)}`}>
-                      {user.role === 'admin' ? '管理員' : user.role === 'coach' ? '教練' : user.role === 'athlete' ? '選手' : '用戶'}
-                    </span>
+                    <div className="flex flex-col gap-1">
+                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getRoleColor(user.role)}`}>
+                        {user.role === 'admin' ? '管理員' : user.role === 'coach' ? '教練' : user.role === 'athlete' ? '選手' : '用戶'}
+                      </span>
+                      {user.isShareholder && (
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-amber-100 text-amber-800">
+                          股東
+                        </span>
+                      )}
+                      {user.isShareholder && (user.shareholderStores?.length || 0) > 0 && (
+                        <div className="text-xs text-amber-700">
+                          {user.shareholderStores!.map((s) => s.name).filter(Boolean).join('、')}
+                        </div>
+                      )}
+                    </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col">
@@ -2035,6 +2101,16 @@ const UserManagement: React.FC = () => {
               </button>
             </div>
             <p className="text-sm text-gray-500 mb-4">用戶: {selectedUser.email}</p>
+            {selectedUser.isShareholder && (
+              <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                <div className="font-medium">股東身份</div>
+                <div className="mt-1 text-amber-800">
+                  {(selectedUser.shareholderStores || []).length > 0
+                    ? `所屬店鋪：${selectedUser.shareholderStores!.map((s) => s.name).join('、')}`
+                    : '已設為股東（未載入店鋪）'}
+                </div>
+              </div>
+            )}
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">姓名</label>

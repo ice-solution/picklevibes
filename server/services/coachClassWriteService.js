@@ -30,6 +30,37 @@ async function cancelBookings(bookingIds) {
 }
 
 /**
+ * 從 body 解析「連結既有預約」ID；有值則驗證存在並回傳，否則 null（走一般 hold 流程）
+ */
+async function resolveLinkedBookingIds(body) {
+  const ids = uniqueIds(
+    body.bookings || body.bookingIds || (body.booking ? [body.booking] : [])
+  );
+  if (!ids.length) return null;
+
+  const found = await Booking.find({ _id: { $in: ids } }).select('_id status');
+  if (found.length !== ids.length) {
+    const err = new Error('連結的預約不存在');
+    err.status = 400;
+    throw err;
+  }
+  const cancelled = found.filter((b) => b.status === 'cancelled');
+  if (cancelled.length) {
+    const err = new Error('不可連結已取消的預約');
+    err.status = 400;
+    throw err;
+  }
+  return ids;
+}
+
+/** 是否應取消／重建 hold 預約（連結既有預約的課堂則否） */
+function shouldManageHoldBookings(coachClassOrFlag) {
+  if (coachClassOrFlag == null) return true;
+  if (typeof coachClassOrFlag === 'boolean') return !coachClassOrFlag;
+  return !coachClassOrFlag.linkExistingBookings;
+}
+
+/**
  * 驗證並組裝教練課堂欄位（建立／更新共用）
  */
 async function buildCoachClassPayload(body, { existing = null } = {}) {
@@ -303,6 +334,8 @@ function formatSessionNote(cc) {
 module.exports = {
   uniqueIds,
   cancelBookings,
+  resolveLinkedBookingIds,
+  shouldManageHoldBookings,
   buildCoachClassPayload,
   shouldHoldCourtsForCoachClass,
   createHoldBookings,

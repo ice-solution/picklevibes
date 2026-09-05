@@ -6,6 +6,7 @@ const Recharge = require('../models/Recharge');
 const Store = require('../models/Store');
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
+const TenantMembership = require('../models/TenantMembership');
 const { auth, adminAuth } = require('../middleware/auth');
 const emailService = require('../services/emailService');
 const {
@@ -103,14 +104,29 @@ async function resolveBookingForManualDeduct(bookingId, userId) {
 // @access  Private (Admin)
 router.get('/', [auth, adminAuth], async (req, res) => {
   try {
-    const { page = 1, limit = 10, role, membershipLevel, search, searchType } = req.query;
-    
+    const { page = 1, limit = 10, role, membershipLevel, search, searchType, shareholder } =
+      req.query;
+
     const query = {};
-    if (role) query.role = role;
+    const wantShareholder =
+      String(shareholder || '').toLowerCase() === 'true' || role === 'shareholder';
+
+    if (wantShareholder) {
+      const shareRows = await TenantMembership.find({
+        role: 'shareholder',
+        isActive: { $ne: false },
+      })
+        .select('user')
+        .lean();
+      const shareUserIds = [...new Set(shareRows.map((r) => String(r.user)))];
+      query._id = { $in: shareUserIds };
+    } else if (role) {
+      query.role = role;
+    }
     if (membershipLevel) query.membershipLevel = membershipLevel;
 
     const escapeRegex = (str) => String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    
+
     // 添加搜索功能
     if (search) {
       const safeSearch = escapeRegex(search);
@@ -132,26 +148,55 @@ router.get('/', [auth, adminAuth], async (req, res) => {
         ];
       }
     }
-    
+
     const users = await User.find(query)
       .select('-password') // 排除密碼
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
-    
-    // 為每個用戶添加積分信息
-    const usersWithBalance = await Promise.all(users.map(async (user) => {
-      const balance = await UserBalance.findOne({ user: user._id });
+
+    const userIds = users.map((u) => u._id);
+    const [balances, shareholderMemberships] = await Promise.all([
+      UserBalance.find({ user: { $in: userIds } }).lean(),
+      TenantMembership.find({
+        user: { $in: userIds },
+        role: 'shareholder',
+        isActive: { $ne: false },
+      })
+        .populate('store', 'name slug')
+        .lean(),
+    ]);
+
+    const balanceByUser = new Map(balances.map((b) => [String(b.user), b]));
+    const shareholderStoresByUser = new Map();
+    for (const row of shareholderMemberships) {
+      const key = String(row.user);
+      const list = shareholderStoresByUser.get(key) || [];
+      if (row.store) {
+        list.push({
+          _id: String(row.store._id || row.store),
+          name: row.store.name || '',
+          slug: row.store.slug || '',
+        });
+      }
+      shareholderStoresByUser.set(key, list);
+    }
+
+    const usersWithBalance = users.map((user) => {
+      const balance = balanceByUser.get(String(user._id));
+      const shareholderStores = shareholderStoresByUser.get(String(user._id)) || [];
       return {
         ...user.toObject(),
         balance: balance ? balance.balance : 0,
         totalRecharged: balance ? balance.totalRecharged : 0,
-        totalSpent: balance ? balance.totalSpent : 0
+        totalSpent: balance ? balance.totalSpent : 0,
+        isShareholder: shareholderStores.length > 0,
+        shareholderStores,
       };
-    }));
-    
+    });
+
     const total = await User.countDocuments(query);
-    
+
     res.json({
       users: usersWithBalance,
       pagination: {

@@ -20,6 +20,8 @@ const {
   markClassPaid,
   totalPay,
   uniqueIds,
+  resolveLinkedBookingIds,
+  shouldManageHoldBookings,
 } = require('../services/coachClassWriteService');
 const { getHKCalendarYMD, hkYmdToBookingUtcMidnight } = require('../utils/bookingDateTime');
 
@@ -260,6 +262,39 @@ const writeValidators = [
   body('notes').optional().trim().isLength({ max: 2000 }),
 ];
 
+// @route   GET /api/coach-classes/by-booking/:bookingId
+router.get('/by-booking/:bookingId', [auth, adminAuth], async (req, res) => {
+  try {
+    const bookingId = String(req.params.bookingId || '').trim();
+    if (!bookingId || !/^[a-f\d]{24}$/i.test(bookingId)) {
+      return res.status(400).json({ message: '預約 ID 無效' });
+    }
+
+    const coachClass = await CoachClass.findOne({
+      status: { $ne: 'cancelled' },
+      $or: [{ bookings: bookingId }, { booking: bookingId }],
+    })
+      .sort({ updatedAt: -1 })
+      .select('_id');
+
+    if (!coachClass) {
+      return res.json({ coachClass: null });
+    }
+
+    const populated = await populateClass(coachClass._id);
+    res.json({
+      coachClass: {
+        ...populated.toObject(),
+        locationLabel: coachClassLocationLabel(populated),
+        totalPay: totalPay(populated.coachPayments),
+      },
+    });
+  } catch (error) {
+    console.error('coach-classes by-booking:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
 // @route   POST /api/coach-classes
 router.post('/', writeValidators, async (req, res) => {
   try {
@@ -269,8 +304,24 @@ router.post('/', writeValidators, async (req, res) => {
     }
 
     const payload = await buildCoachClassPayload(req.body);
+    const linkedBookingIds = await resolveLinkedBookingIds(req.body);
     let bookingIds = [];
-    if (shouldHoldCourtsForCoachClass(payload)) {
+    let linkExistingBookings = false;
+
+    if (linkedBookingIds) {
+      const already = await CoachClass.findOne({
+        status: { $ne: 'cancelled' },
+        $or: [{ bookings: { $in: linkedBookingIds } }, { booking: { $in: linkedBookingIds } }],
+      }).select('_id');
+      if (already) {
+        return res.status(400).json({
+          message: '此預約已有派課，請改用編輯',
+          coachClassId: already._id,
+        });
+      }
+      bookingIds = linkedBookingIds;
+      linkExistingBookings = true;
+    } else if (shouldHoldCourtsForCoachClass(payload)) {
       bookingIds = await createHoldBookings({
         coachIds: payload.coachIds,
         courtIds: payload.courtIds,
@@ -300,6 +351,7 @@ router.post('/', writeValidators, async (req, res) => {
       regularActivity: payload.regularActivityId,
       bookings: bookingIds,
       booking: bookingIds[0] || null,
+      linkExistingBookings,
       createdBy: req.user.id,
       status: 'scheduled',
       paymentStatus: 'unpaid',
@@ -321,11 +373,13 @@ router.post('/', writeValidators, async (req, res) => {
     }
 
     res.status(201).json({
-      message: bookingIds.length
-        ? `教練課堂已建立，並已 hold ${bookingIds.length} 個場地`
-        : payload.regularActivityId && payload.locationType === 'court'
-          ? '恆常班課堂已建立（不 hold 場地）'
-          : '教練課堂已建立',
+      message: linkExistingBookings
+        ? '教練課堂已建立並連結既有預約'
+        : bookingIds.length
+          ? `教練課堂已建立，並已 hold ${bookingIds.length} 個場地`
+          : payload.regularActivityId && payload.locationType === 'court'
+            ? '恆常班課堂已建立（不 hold 場地）'
+            : '教練課堂已建立',
       coachClass: populated,
       notify,
       hours: payload.hours,
@@ -360,25 +414,40 @@ router.put('/:id', writeValidators, async (req, res) => {
     }
 
     const payload = await buildCoachClassPayload(req.body, { existing: coachClass });
-
+    const linkedBookingIds = await resolveLinkedBookingIds(req.body);
     const oldBookingIds = uniqueIds([
       ...(coachClass.bookings || []),
       coachClass.booking,
     ]);
 
-    await cancelBookings(oldBookingIds);
-
     let bookingIds = [];
-    if (shouldHoldCourtsForCoachClass(payload)) {
-      bookingIds = await createHoldBookings({
-        coachIds: payload.coachIds,
-        courtIds: payload.courtIds,
-        dateObj: payload.dateObj,
-        startTime: payload.startTime,
-        endTime: payload.endTime,
-        title: payload.title,
-        notes: payload.notes,
-      });
+    let linkExistingBookings = Boolean(coachClass.linkExistingBookings);
+
+    if (linkedBookingIds) {
+      // 明確傳入既有預約：保留連結、不取消客戶預約
+      if (shouldManageHoldBookings(coachClass)) {
+        await cancelBookings(oldBookingIds);
+      }
+      bookingIds = linkedBookingIds;
+      linkExistingBookings = true;
+    } else if (!shouldManageHoldBookings(coachClass)) {
+      // 原本已連結既有預約：更新課堂欄位，保留原預約
+      bookingIds = oldBookingIds;
+      linkExistingBookings = true;
+    } else {
+      await cancelBookings(oldBookingIds);
+      if (shouldHoldCourtsForCoachClass(payload)) {
+        bookingIds = await createHoldBookings({
+          coachIds: payload.coachIds,
+          courtIds: payload.courtIds,
+          dateObj: payload.dateObj,
+          startTime: payload.startTime,
+          endTime: payload.endTime,
+          title: payload.title,
+          notes: payload.notes,
+        });
+      }
+      linkExistingBookings = false;
     }
 
     coachClass.title = payload.title;
@@ -399,6 +468,7 @@ router.put('/:id', writeValidators, async (req, res) => {
     coachClass.regularActivity = payload.regularActivityId;
     coachClass.bookings = bookingIds;
     coachClass.booking = bookingIds[0] || null;
+    coachClass.linkExistingBookings = linkExistingBookings;
     coachClass.reminderSentAt = null;
     await coachClass.save();
 
@@ -516,7 +586,9 @@ router.post('/:id/cancel', [auth, adminAuth], async (req, res) => {
     coachClass.status = 'cancelled';
     await coachClass.save();
 
-    await cancelBookings([...(coachClass.bookings || []), coachClass.booking]);
+    if (shouldManageHoldBookings(coachClass)) {
+      await cancelBookings([...(coachClass.bookings || []), coachClass.booking]);
+    }
 
     res.json({ message: '教練課堂已取消', coachClass });
   } catch (error) {

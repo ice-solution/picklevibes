@@ -7,7 +7,7 @@ const tierSchema = new mongoose.Schema({
     trim: true,
     maxlength: 50
   },
-  /** 一年內消費滿多少（積分）即可達到此 tier */
+  /** 註冊周年窗口內消費滿多少（積分）即可達到此 tier */
   minAnnualSpent: {
     type: Number,
     required: true,

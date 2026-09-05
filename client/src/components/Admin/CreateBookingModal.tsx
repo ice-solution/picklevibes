@@ -10,10 +10,19 @@ import {
   CalendarDaysIcon,
   CheckCircleIcon,
   CheckIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ChevronDownIcon,
+  AcademicCapIcon,
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
 import { isFullVenueEnabledForStoreSlug } from '../../constants/storeFeatures';
+import BookingCoachAssignPanel, {
+  BookingCoachAssignValue,
+  buildCoachClassPayloadFromAssign,
+  emptyCoachAssignValue,
+  sessionHoursFromTimes,
+} from './BookingCoachAssignPanel';
+import api from '../../services/api';
 
 interface User {
   _id: string;
@@ -117,10 +126,18 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   /** 包場要 hold 的場地（預設全選） */
   const [fullVenueCourtIds, setFullVenueCourtIds] = useState<string[]>([]);
 
+  /** 可選教練設定（摺疊） */
+  const [coachSectionOpen, setCoachSectionOpen] = useState(false);
+  const [coachAssign, setCoachAssign] = useState<BookingCoachAssignValue>(emptyCoachAssignValue());
+
   // 數據選項
   const [stores, setStores] = useState<{ _id: string; name: string; slug?: string; isActive?: boolean; fullVenueHourlyRate?: number }[]>([]);
   const [storeId, setStoreId] = useState('');
   const [courts, setCourts] = useState<Court[]>([]);
+
+  const coachHours = sessionHoursFromTimes(formData.startTime, formData.endTime);
+  const canAssignCoaches =
+    Boolean(formData.courtId) && formData.courtId !== 'full_venue' && Boolean(storeId);
 
   const selectedStore = stores.find((s) => s._id === storeId);
   const fullVenueEnabled = isFullVenueEnabledForStoreSlug(selectedStore?.slug);
@@ -418,7 +435,7 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       }
 
       // 創建預約
-      await axios.post('/bookings', {
+      const bookingRes = await axios.post('/bookings', {
         user: formData.userId,
         court: formData.courtId,
         date: formData.date,
@@ -441,6 +458,36 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         }
       });
 
+      const createdBooking = bookingRes.data?.booking;
+      let coachMsg = '';
+      if (
+        canAssignCoaches &&
+        coachAssign.coachIds.length > 0 &&
+        createdBooking?._id
+      ) {
+        try {
+          const payload = buildCoachClassPayloadFromAssign(coachAssign, {
+            storeId,
+            courtId: formData.courtId,
+            sessionDate: formData.date,
+            startTime: formData.startTime,
+            endTime: formData.endTime,
+            bookingId: createdBooking._id,
+          });
+          const ccRes = await api.post('/coach-classes', payload);
+          const notify = ccRes.data?.notify;
+          coachMsg = ccRes.data?.message || '已一併派課';
+          if (notify?.success === false) {
+            coachMsg += `（WhatsApp 通知未成功${notify?.error ? `：${notify.error}` : ''}）`;
+          }
+        } catch (ccErr: any) {
+          coachMsg =
+            ccErr.response?.data?.message ||
+            '預約已建立，但派課失敗，請至預約詳情再試';
+          alert(coachMsg);
+        }
+      }
+
       // 重置表單
       setFormData({
         userId: '',
@@ -458,9 +505,14 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         customPoints: 0
       });
       setSelectedUser(null);
+      setCoachSectionOpen(false);
+      setCoachAssign(emptyCoachAssignValue());
 
       onBookingCreated();
       onClose();
+      if (coachMsg && !coachMsg.includes('派課失敗')) {
+        alert(`預約創建成功！\n${coachMsg}`);
+      }
     } catch (error: any) {
       console.error('創建預約失敗:', error);
       setError(error.response?.data?.message || error.message || '創建預約失敗');
@@ -828,6 +880,52 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* 可選教練設定 */}
+          {canAssignCoaches && (
+            <div className="border border-violet-200 rounded-lg overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setCoachSectionOpen((o) => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 bg-violet-50/80 hover:bg-violet-50 text-left"
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-violet-900">
+                  <AcademicCapIcon className="w-5 h-5" />
+                  教練設定
+                  <span className="font-normal text-violet-700/80">（選填）</span>
+                  {coachAssign.coachIds.length > 0 && (
+                    <span className="text-xs font-medium bg-violet-200 text-violet-900 px-2 py-0.5 rounded-full">
+                      已選 {coachAssign.coachIds.length} 位
+                    </span>
+                  )}
+                </span>
+                <ChevronDownIcon
+                  className={`w-5 h-5 text-violet-600 transition-transform ${
+                    coachSectionOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {coachSectionOpen && (
+                <div className="px-4 py-4 border-t border-violet-100 space-y-3">
+                  <p className="text-xs text-gray-600">
+                    選擇教練後，建立預約時會一併建立教練課堂（連結此預約、不另 hold），並發送
+                    WhatsApp 通知。留空則只建立一般預約。
+                  </p>
+                  <BookingCoachAssignPanel
+                    hours={coachHours}
+                    value={coachAssign}
+                    onChange={setCoachAssign}
+                    compact
+                  />
+                </div>
+              )}
+            </div>
+          )}
+          {formData.courtId === 'full_venue' && (
+            <p className="text-xs text-gray-500">
+              包場請先建立預約，再於預約詳情使用「派課」為其中一場指派教練。
+            </p>
+          )}
 
           {/* 包場確認對話框 */}
           {showFullVenueConfirm && (

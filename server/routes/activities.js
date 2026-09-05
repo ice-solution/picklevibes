@@ -20,6 +20,26 @@ const {
 
 const router = express.Router();
 const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
+const Store = require('../models/Store');
+
+/** 解析活動所屬店鋪：明確 storeId 優先；荔枝角固定場地自動對應 */
+async function resolveActivityStoreId({ storeId, location } = {}) {
+  const raw = storeId != null ? String(storeId).trim() : '';
+  if (raw && mongoose.Types.ObjectId.isValid(raw)) {
+    const byId = await Store.findById(raw).select('_id').lean();
+    if (byId) return byId._id;
+  }
+  if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
+    const bySlug = await Store.findOne({
+      $or: [{ slug: 'lai-chi-kok' }, { name: /荔枝角/i }],
+      isActive: { $ne: false },
+    })
+      .select('_id')
+      .lean();
+    if (bySlug) return bySlug._id;
+  }
+  return null;
+}
 
 /**
  * 將 datetime-local 格式的字符串轉換為正確的 Date 對象
@@ -477,11 +497,16 @@ async function cancelActivityVenueBookingsForActivity(activityId, previousTitle)
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status, page = 1, limit = 10, store } = req.query;
     
     const query = { isActive: true };
     if (status) {
       query.status = status;
+    }
+    if (store === 'other' || store === 'none') {
+      query.store = null;
+    } else if (store && mongoose.Types.ObjectId.isValid(String(store))) {
+      query.store = store;
     }
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -505,7 +530,8 @@ router.get('/', async (req, res) => {
     if (orderedIds.length > 0) {
       const found = await Activity.find({ _id: { $in: orderedIds } })
         .populate('organizer', 'name email')
-        .populate('coaches', 'name email');
+        .populate('coaches', 'name email')
+        .populate('store', 'name slug address');
       const byId = new Map(found.map((a) => [a._id.toString(), a]));
       activities = orderedIds
         .map((id) => byId.get(id.toString()))
@@ -997,6 +1023,11 @@ router.post('/', [
       }
     }
 
+    const resolvedStoreId = await resolveActivityStoreId({
+      storeId: req.body.storeId || req.body.store,
+      location,
+    });
+
     const activity = new Activity({
       title,
       description,
@@ -1011,6 +1042,7 @@ router.post('/', [
       requirements,
       organizer: req.user.id,
       coaches: coachIds,
+      store: resolvedStoreId,
       venueHoldMode: location === FIXED_ACTIVITY_VENUE_LOCATION ? venueHoldMode : 'full_venue',
       venueHoldCourtId:
         location === FIXED_ACTIVITY_VENUE_LOCATION && venueHoldMode === 'single_court'
@@ -1790,6 +1822,14 @@ router.put('/:id', [
 
     if (activity.venueHoldMode === 'full_venue') {
       activity.venueHoldCourtId = null;
+    }
+
+    const bodyStoreRaw = req.body.storeId || req.body.store;
+    if (bodyStoreRaw !== undefined || updates.location !== undefined) {
+      activity.store = await resolveActivityStoreId({
+        storeId: bodyStoreRaw !== undefined ? bodyStoreRaw : activity.store,
+        location: activity.location,
+      });
     }
 
     await activity.save();

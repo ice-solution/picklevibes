@@ -219,6 +219,26 @@ const bookingSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  /**
+   * 待結算預約可預先掛載的兌換碼（結算時才 consume）。
+   * 折扣以結算基數（customPoints / suggestedSettlePoints）計算，多券各自對同一基數折扣後加總。
+   */
+  pendingRedeems: [{
+    redeemCode: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'RedeemCode',
+      required: true,
+    },
+    code: { type: String, trim: true },
+    name: { type: String, trim: true },
+    type: { type: String, enum: ['fixed', 'percentage'] },
+    value: { type: Number },
+    attachedAt: { type: Date, default: Date.now },
+    attachedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+    },
+  }],
   cancellation: {
     cancelledAt: Date,
     cancelledBy: {

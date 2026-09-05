@@ -10,17 +10,31 @@ const {
   isExternalPaymentMethod,
 } = require('../constants/bookingPaymentMethods');
 
+/** 活動佔場只鎖時段，不當客戶待結算 */
+function isActivityVenueHold(booking) {
+  if (!booking) return false;
+  if (booking.venueBundleKind === 'activity_hold') return true;
+  if (booking.relatedActivity) return true;
+  return false;
+}
+
 function isBookingEligibleForSettle(booking) {
   if (!booking || ['cancelled', 'no_show'].includes(booking.status)) return false;
+  if (isActivityVenueHold(booking)) return false;
 
   const method = booking.payment?.method;
+  const payStatus = booking.payment?.status;
   const pts = Number(booking.payment?.pointsDeducted) || 0;
+
+  // 已標記付款（含兌換碼全額抵扣、外部收款）不可再結算
+  if (payStatus === 'paid' && method !== 'admin_waived') return false;
+
   if (method === 'points' && pts > 0 && !booking.noUserBalanceDebited) return false;
 
   if (
     (['stripe', ...BOOKING_EXTERNAL_PAYMENT_METHODS].includes(method) ||
       isExternalPaymentMethod(method)) &&
-    booking.payment?.status === 'paid' &&
+    payStatus === 'paid' &&
     method !== 'admin_waived'
   ) {
     return false;
@@ -58,7 +72,7 @@ async function bundleAlreadySettled(booking) {
   return !!existing;
 }
 
-async function getSettlePreview(bookingId) {
+async function getSettlePreview(bookingId, { baseOverride, forUserId } = {}) {
   const booking = await Booking.findById(bookingId);
   if (!booking) {
     const err = new Error('預約不存在');
@@ -79,10 +93,25 @@ async function getSettlePreview(bookingId) {
 
   const eligible = isBookingEligibleForSettle(booking) && !alreadySettled;
 
+  let redeemPreview = null;
+  try {
+    const { computePendingRedeemPreview } = require('./bookingPendingRedeemService');
+    redeemPreview = await computePendingRedeemPreview(booking, {
+      baseOverride: baseOverride != null ? baseOverride : suggestedPoints,
+      forUserId,
+    });
+  } catch (err) {
+    console.error('結算兌換碼預覽失敗:', err.message || err);
+  }
+
   return {
     eligible,
     alreadySettled,
     suggestedPoints,
+    baseAmount: redeemPreview?.baseAmount ?? suggestedPoints,
+    totalDiscount: redeemPreview?.totalDiscount ?? 0,
+    netPayable: redeemPreview?.netPayable ?? suggestedPoints,
+    pendingRedeems: redeemPreview?.applied ?? [],
     bundleCount: bundle.length,
     isFullVenue,
     label: isFullVenue ? `包場（${bundle.length} 個場地）` : null,
@@ -159,6 +188,8 @@ async function settleBookingWithPoints({
   reason = '預約結算',
   adminUser,
   allowReassign = true,
+  ipAddress,
+  userAgent,
 }) {
   const booking = await Booking.findById(bookingId)
     .populate('store', 'name slug')
@@ -202,7 +233,36 @@ async function settleBookingWithPoints({
   }
 
   const defaultTotal = bundle.reduce((sum, b) => sum + suggestedSettlePoints(b), 0);
-  const deductPoints = Math.max(1, Number(points) || defaultTotal);
+  const {
+    resolveSettleBase,
+    collectPendingRedeemEntries,
+    consumePendingRedeemsOnSettle,
+    computePendingRedeemPreview,
+  } = require('./bookingPendingRedeemService');
+  const hasPendingRedeems = collectPendingRedeemEntries(bundle).length > 0;
+  const baseAmount = resolveSettleBase(
+    bundle,
+    points != null && points !== '' ? Number(points) : undefined
+  );
+  if (!hasPendingRedeems && baseAmount < 1) {
+    const err = new Error('扣款積分必須大於 0');
+    err.status = 400;
+    throw err;
+  }
+
+  // 先預覽折扣與檢查餘額，再真正 consume，避免扣券後餘額不足
+  const preview = await computePendingRedeemPreview(booking, {
+    baseOverride: baseAmount,
+    forUserId: targetUserId,
+  });
+  if (preview.applied.some((a) => a.valid === false)) {
+    const bad = preview.applied.find((a) => !a.valid);
+    const err = new Error(bad?.error || '掛載的兌換碼已失效，請先移除後再結算');
+    err.status = 400;
+    throw err;
+  }
+  const deductPoints = Math.max(0, Math.round(preview.netPayable));
+
   const isFullVenue =
     bundle.length > 1 &&
     (booking.venueBundleKind === 'full_venue' ||
@@ -215,11 +275,32 @@ async function settleBookingWithPoints({
   if (!userBalance) {
     userBalance = new UserBalance({ user: targetUserId });
   }
-  if (userBalance.balance < deductPoints) {
+  if (deductPoints > 0 && userBalance.balance < deductPoints) {
     const err = new Error(`餘額不足！當前餘額：${userBalance.balance}，需要：${deductPoints}`);
     err.status = 400;
     throw err;
   }
+
+  const redeemResult = await consumePendingRedeemsOnSettle({
+    booking,
+    bundle,
+    baseAmount,
+    targetUserId,
+    ipAddress,
+    userAgent,
+  });
+  // 以實際 consume 結果為準（理論上與 preview 相同）
+  const finalDeduct = Math.max(0, Math.round(redeemResult.netPayable));
+  if (finalDeduct !== deductPoints) {
+    // 極罕見：預覽與消費之間狀態變化；若變高則再檢查餘額
+    if (finalDeduct > userBalance.balance) {
+      const err = new Error(`餘額不足！當前餘額：${userBalance.balance}，需要：${finalDeduct}`);
+      err.status = 400;
+      throw err;
+    }
+  }
+  const chargePoints = finalDeduct;
+  const chargePerBooking = allocateBundlePoints(bundle, chargePoints, { isFullVenue });
 
   const courtLabel = isFullVenue
     ? `包場 ${bundle.length} 場`
@@ -231,17 +312,22 @@ async function settleBookingWithPoints({
     day: '2-digit',
   }).format(new Date(booking.date));
 
-  await userBalance.deductBalance(
-    deductPoints,
-    `${isFullVenue ? '包場結算' : '預約結算'} - ${courtLabel} ${dateLabel} ${booking.startTime}-${booking.endTime} (${reason})`
-  );
+  const discountNote =
+    redeemResult.totalDiscount > 0 ? `，兌換碼折扣 $${redeemResult.totalDiscount}` : '';
+
+  if (chargePoints > 0) {
+    await userBalance.deductBalance(
+      chargePoints,
+      `${isFullVenue ? '包場結算' : '預約結算'} - ${courtLabel} ${dateLabel} ${booking.startTime}-${booking.endTime} (${reason}${discountNote})`
+    );
+  }
 
   const player = buildPlayerFromUser(targetUser);
   const paidAt = new Date();
 
   for (let i = 0; i < bundle.length; i += 1) {
     const b = bundle[i];
-    const courtPts = perBookingPoints[i] || 0;
+    const courtPts = chargePerBooking[i] || 0;
     if (!isSameUser) {
       b.user = targetUserId;
       b.players = [player];
@@ -250,39 +336,46 @@ async function settleBookingWithPoints({
     b.payment.method = 'points';
     b.payment.pointsDeducted = courtPts;
     b.payment.originalPrice = b.pricing?.totalPrice || courtPts;
+    b.payment.discount = i === 0 ? redeemResult.totalDiscount : 0;
     b.payment.status = 'paid';
     b.payment.paidAt = paidAt;
     b.noUserBalanceDebited = false;
     b.pricing.totalPrice = courtPts;
     b.pricing.pointsDeducted = courtPts;
-    if (deductPoints !== defaultTotal) {
+    if (baseAmount !== defaultTotal || redeemResult.totalDiscount > 0) {
       b.pricing.isCustomPoints = true;
       b.pricing.customPoints = courtPts;
     }
+    b.pendingRedeems = [];
     await b.save();
   }
 
-  const deductRecord = new Recharge({
-    user: targetUserId,
-    points: deductPoints,
-    amount: deductPoints,
-    status: 'completed',
-    paymentIntentId: `booking_settle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    description: isFullVenue ? `包場結算 - ${reason}` : `預約結算 - ${reason}`,
-    store: store._id,
-    court: court?._id || booking.court || null,
-    booking: booking._id,
-    adjustedBy: adminUser._id,
-    payment: {
-      status: 'paid',
-      method: 'manual',
-      paidAt,
-      transactionId: `booking_settle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-    },
-    pointsAdded: false,
-    pointsDeducted: true,
-  });
-  await deductRecord.save();
+  let deductRecord = null;
+  if (chargePoints > 0) {
+    deductRecord = new Recharge({
+      user: targetUserId,
+      points: chargePoints,
+      amount: chargePoints,
+      status: 'completed',
+      paymentIntentId: `booking_settle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      description: isFullVenue
+        ? `包場結算 - ${reason}${discountNote}`
+        : `預約結算 - ${reason}${discountNote}`,
+      store: store._id,
+      court: court?._id || booking.court || null,
+      booking: booking._id,
+      adjustedBy: adminUser._id,
+      payment: {
+        status: 'paid',
+        method: 'manual',
+        paidAt,
+        transactionId: `booking_settle_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      },
+      pointsAdded: false,
+      pointsDeducted: true,
+    });
+    await deductRecord.save();
+  }
 
   await booking.populate('user', 'name email phone');
   await booking.populate('store', 'name slug');
@@ -302,6 +395,12 @@ async function settleBookingWithPoints({
     },
     reassigned: !isSameUser,
     bundleCount: bundle.length,
+    redeem: {
+      baseAmount: redeemResult.baseAmount,
+      totalDiscount: redeemResult.totalDiscount,
+      netPayable: chargePoints,
+      applied: redeemResult.applied,
+    },
   };
 }
 
@@ -316,6 +415,8 @@ async function settleBookingWithExternalPayment({
   note = '',
   adminUser,
   allowReassign = true,
+  ipAddress,
+  userAgent,
 }) {
   if (!isExternalPaymentMethod(method)) {
     const err = new Error('無效的付款方式');
@@ -361,8 +462,39 @@ async function settleBookingWithExternalPayment({
 
   const bundle = await loadBundledBookings(booking);
   const defaultTotal = bundle.reduce((sum, b) => sum + suggestedSettlePoints(b), 0);
-  const totalAmount =
-    amount != null && Number(amount) >= 0 ? Number(amount) : defaultTotal;
+  const { resolveSettleBase, collectPendingRedeemEntries, consumePendingRedeemsOnSettle } =
+    require('./bookingPendingRedeemService');
+  const hasPendingRedeems = collectPendingRedeemEntries(bundle).length > 0;
+  const baseAmount = resolveSettleBase(
+    bundle,
+    amount != null && Number(amount) >= 0 ? Number(amount) : undefined
+  );
+
+  let redeemResult = {
+    baseAmount,
+    totalDiscount: 0,
+    netPayable: baseAmount,
+    applied: [],
+  };
+
+  if (hasPendingRedeems) {
+    const consumeUserId = targetUser?._id || booking.user;
+    if (!consumeUserId) {
+      const err = new Error('使用兌換碼結算時請指定用戶');
+      err.status = 400;
+      throw err;
+    }
+    redeemResult = await consumePendingRedeemsOnSettle({
+      booking,
+      bundle,
+      baseAmount,
+      targetUserId: consumeUserId,
+      ipAddress,
+      userAgent,
+    });
+  }
+
+  const totalAmount = Math.max(0, Number(redeemResult.netPayable) || 0);
 
   const isFullVenue =
     bundle.length > 1 &&
@@ -374,7 +506,9 @@ async function settleBookingWithExternalPayment({
   const paidAt = new Date();
   const methodLabel = bookingPaymentMethodLabel(method);
   const noteTrim = String(note || '').trim();
-  const adminNoteContent = `外部收款結算 · ${methodLabel}${noteTrim ? ` · ${noteTrim}` : ''} · $${totalAmount}`;
+  const discountNote =
+    redeemResult.totalDiscount > 0 ? ` · 兌換碼折扣 $${redeemResult.totalDiscount}` : '';
+  const adminNoteContent = `外部收款結算 · ${methodLabel}${noteTrim ? ` · ${noteTrim}` : ''}${discountNote} · $${totalAmount}`;
 
   let reassigned = false;
   if (targetUser) {
@@ -403,13 +537,15 @@ async function settleBookingWithExternalPayment({
     b.payment.paidAt = paidAt;
     b.payment.pointsDeducted = 0;
     b.payment.originalPrice = b.pricing?.totalPrice || courtAmount;
+    b.payment.discount = i === 0 ? redeemResult.totalDiscount : 0;
     b.payment.externalNote = noteTrim || undefined;
     b.noUserBalanceDebited = false;
     b.pricing.totalPrice = courtAmount;
-    if (totalAmount !== defaultTotal) {
+    if (baseAmount !== defaultTotal || redeemResult.totalDiscount > 0) {
       b.pricing.isCustomPoints = true;
       b.pricing.customPoints = courtAmount;
     }
+    b.pendingRedeems = [];
     if (adminUser?._id) {
       b.adminNotes = b.adminNotes || [];
       b.adminNotes.push({
@@ -436,12 +572,21 @@ async function settleBookingWithExternalPayment({
     totalAmount,
     reassigned,
     bundleCount: bundle.length,
+    redeem: {
+      baseAmount: redeemResult.baseAmount,
+      totalDiscount: redeemResult.totalDiscount,
+      netPayable: totalAmount,
+      applied: redeemResult.applied,
+    },
   };
 }
 
 module.exports = {
+  isActivityVenueHold,
   isBookingEligibleForSettle,
   suggestedSettlePoints,
+  loadBundledBookings,
+  bundleAlreadySettled,
   getSettlePreview,
   settleBookingWithPoints,
   settleBookingWithExternalPayment,

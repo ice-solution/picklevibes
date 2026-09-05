@@ -74,6 +74,11 @@ const monthLabels = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8�
 
 const DONUT_COLORS = ['#f97316', '#eab308', '#22c55e'];
 
+interface StoreOption {
+  _id: string;
+  name: string;
+}
+
 function formatNum(n: number, maxFrac = 2) {
   if (Number.isInteger(n)) return String(n);
   return n.toFixed(maxFrac);
@@ -92,9 +97,16 @@ function DeltaTag({ cur, prev }: { cur: number; prev: number }) {
   );
 }
 
+/** 空字串 = 全部店鋪；有值時帶 store query */
+function storeParams(storeId: string): { store?: string } {
+  return storeId ? { store: storeId } : {};
+}
+
 const AnalyticsDashboard: React.FC = () => {
   const [view, setView] = useState<'overview' | 'recharge'>('overview');
   const [year, setYear] = useState<number>(new Date().getFullYear());
+  const [storeId, setStoreId] = useState('');
+  const [stores, setStores] = useState<StoreOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -109,14 +121,25 @@ const AnalyticsDashboard: React.FC = () => {
   const [seriesDays, setSeriesDays] = useState(7);
   const [dashLoading, setDashLoading] = useState(true);
 
-  const fetchYearData = async (targetYear: number) => {
+  const fetchStores = useCallback(async () => {
+    try {
+      const res = await api.get('/stores/admin/all');
+      setStores(res.data.stores || []);
+    } catch (err) {
+      console.error('載入店鋪列表失敗:', err);
+      setStores([]);
+    }
+  }, []);
+
+  const fetchYearData = useCallback(async (targetYear: number, selectedStoreId: string) => {
     setLoading(true);
     setError(null);
     try {
+      const params = { year: targetYear, ...storeParams(selectedStoreId) };
       const [courtRes, usersRes, couponRes] = await Promise.all([
-        api.get('/stats/court-usage', { params: { year: targetYear } }),
-        api.get('/stats/monthly-users', { params: { year: targetYear } }),
-        api.get('/stats/coupon-usage', { params: { year: targetYear } })
+        api.get('/stats/court-usage', { params }),
+        api.get('/stats/monthly-users', { params }),
+        api.get('/stats/coupon-usage', { params })
       ]);
 
       setCourtUsage(courtRes.data?.data || []);
@@ -129,15 +152,16 @@ const AnalyticsDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchDashboard = useCallback(async (days: number) => {
+  const fetchDashboard = useCallback(async (days: number, selectedStoreId: string) => {
     setDashLoading(true);
     try {
+      const storeQ = storeParams(selectedStoreId);
       const [liveRes, kpiRes, serRes] = await Promise.all([
-        api.get('/stats/dashboard-live'),
-        api.get('/stats/dashboard-kpis'),
-        api.get('/stats/dashboard-series', { params: { days } })
+        api.get('/stats/dashboard-live', { params: storeQ }),
+        api.get('/stats/dashboard-kpis', { params: storeQ }),
+        api.get('/stats/dashboard-series', { params: { days, ...storeQ } })
       ]);
       setLive(liveRes.data?.data || null);
       setKpis(kpiRes.data?.data || null);
@@ -152,18 +176,19 @@ const AnalyticsDashboard: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    void fetchYearData(year);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    void fetchStores();
+  }, [fetchStores]);
 
   useEffect(() => {
-    void fetchDashboard(seriesDays);
-  }, [seriesDays, fetchDashboard]);
+    void fetchYearData(year, storeId);
+  }, [year, storeId, fetchYearData]);
+
+  useEffect(() => {
+    void fetchDashboard(seriesDays, storeId);
+  }, [seriesDays, storeId, fetchDashboard]);
 
   const handleYearChange = (delta: number) => {
-    const newYear = year + delta;
-    setYear(newYear);
-    void fetchYearData(newYear);
+    setYear((y) => y + delta);
   };
 
   const getMonthUsers = (m: number) => monthlyUsers.find((u) => u.month === m)?.count || 0;
@@ -200,6 +225,24 @@ const AnalyticsDashboard: React.FC = () => {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
         <h2 className="text-xl font-semibold text-gray-900">數據分析</h2>
         <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
+            <label htmlFor="analytics-store-filter" className="text-sm text-gray-600 whitespace-nowrap">
+              店鋪
+            </label>
+            <select
+              id="analytics-store-filter"
+              value={storeId}
+              onChange={(e) => setStoreId(e.target.value)}
+              className="min-w-[160px] px-3 py-1.5 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+            >
+              <option value="">全部</option>
+              {stores.map((s) => (
+                <option key={s._id} value={s._id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="inline-flex rounded-lg border border-gray-200 bg-white p-0.5">
             <button
               type="button"
@@ -462,6 +505,11 @@ const AnalyticsDashboard: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-gray-50 rounded-lg p-4 md:p-6">
               <h3 className="text-lg font-semibold text-gray-900 mb-4">每月註冊用戶數</h3>
+              {storeId ? (
+                <p className="text-xs text-gray-500 mb-2">
+                  註冊用戶無店鋪歸屬，此表維持全平台統計（不受上方店鋪篩選影響）。
+                </p>
+              ) : null}
               <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
                 {monthLabels.map((label, idx) => {
                   const m = idx + 1;

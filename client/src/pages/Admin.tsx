@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useBooking } from '../contexts/BookingContext';
 import CurrentBookings from '../components/Booking/CurrentBookings';
 import UserManagement from '../components/Admin/UserManagement';
+import LongTermSupporters from '../components/Admin/LongTermSupporters';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
@@ -48,6 +49,7 @@ import {
   DocumentChartBarIcon,
   AcademicCapIcon,
   EnvelopeIcon,
+  GiftIcon,
 } from '@heroicons/react/24/outline';
 
 const Admin: React.FC = () => {
@@ -77,7 +79,7 @@ const Admin: React.FC = () => {
   // 從 URL 參數設置活動標籤
   useEffect(() => {
     const tab = searchParams.get('tab');
-    if (tab && ['bookings', 'calendar', 'coaches', 'users', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'game-leaderboard', 'edm', 'redeem', 'stores', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
+    if (tab && ['bookings', 'calendar', 'coaches', 'users', 'long-term-supporters', 'tiers', 'vlogs', 'hotnews', 'game-halls', 'game-clients', 'game-leaderboard', 'edm', 'redeem', 'stores', 'courts', 'revenue', 'analytics', 'recharge-offers', 'maintenance', 'bulk-upgrade', 'activities', 'regular-activities', 'weekend', 'shop', 'orders', 'booking-config', 'reports'].includes(tab)) {
       setActiveTab(tab);
     }
   }, [searchParams]);
@@ -124,6 +126,7 @@ const Admin: React.FC = () => {
     { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon },
     { id: 'coaches', name: '教練管理', icon: AcademicCapIcon },
     { id: 'users', name: '用戶管理', icon: UsersIcon },
+    { id: 'long-term-supporters', name: '長期支持用戶', icon: GiftIcon },
     { id: 'tiers', name: 'Tier 管理', icon: TagIcon },
     { id: 'vlogs', name: 'Vlog 管理', icon: DocumentChartBarIcon },
     { id: 'hotnews', name: 'HotNews 管理', icon: DocumentChartBarIcon },
@@ -318,6 +321,10 @@ const Admin: React.FC = () => {
 
             {activeTab === 'users' && (
               <UserManagement />
+            )}
+
+            {activeTab === 'long-term-supporters' && (
+              <LongTermSupporters />
             )}
 
             {activeTab === 'tiers' && (

@@ -11,6 +11,7 @@ import CoachAdminHub from '../components/Admin/CoachAdminHub';
 import CourtManagement from '../components/Admin/CourtManagement';
 import StoreManagement from '../components/Admin/StoreManagement';
 import UserManagement from '../components/Admin/UserManagement';
+import LongTermSupporters from '../components/Admin/LongTermSupporters';
 import TierManagement from '../components/Admin/TierManagement';
 import VlogManagement from '../components/Admin/VlogManagement';
 import HotNewsManagement from '../components/Admin/HotNewsManagement';
@@ -60,6 +61,7 @@ import {
   BanknotesIcon,
   LinkIcon,
   AcademicCapIcon,
+  GiftIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -86,6 +88,7 @@ const AdminV2: React.FC = () => {
     { id: 'tenant-staff', name: '店鋪員工', icon: UserPlusIcon, element: <TenantStaffManagement /> },
     { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
     { id: 'users', name: '用戶管理', icon: UsersIcon, element: <UserManagement /> },
+    { id: 'long-term-supporters', name: '長期支持用戶', icon: GiftIcon, element: <LongTermSupporters /> },
     { id: 'tiers', name: 'Tier 管理', icon: TagIcon, element: <TierManagement /> },
     { id: 'vlogs', name: 'Vlog 管理', icon: DocumentChartBarIcon, element: <VlogManagement /> },
     { id: 'hotnews', name: 'HotNews 管理', icon: DocumentChartBarIcon, element: <HotNewsManagement /> },

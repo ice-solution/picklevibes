@@ -5,6 +5,7 @@ import {
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
+import SettlePendingRedeems, { type PendingRedeemPreview } from './SettlePendingRedeems';
 import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 import {
   BOOKING_EXTERNAL_PAYMENT_METHODS,
@@ -88,6 +89,13 @@ const PendingSettleBookings: React.FC = () => {
   const [externalMethod, setExternalMethod] = useState<BookingExternalPaymentMethod>('cash');
   const [externalAmount, setExternalAmount] = useState('');
   const [externalNote, setExternalNote] = useState('');
+  const [redeemPreview, setRedeemPreview] = useState<PendingRedeemPreview | null>(null);
+
+  const settleBase = parseInt(settlePoints || '0', 10) || 0;
+  const netPayable =
+    redeemPreview && redeemPreview.baseAmount === settleBase
+      ? redeemPreview.netPayable
+      : Math.max(0, settleBase - (redeemPreview?.totalDiscount || 0));
 
   useEffect(() => {
     if (lockedStoreId) {
@@ -132,6 +140,7 @@ const PendingSettleBookings: React.FC = () => {
     setExternalMethod('cash');
     setExternalAmount(String(b.suggestedPoints || 0));
     setExternalNote('');
+    setRedeemPreview(null);
   };
 
   const handleSettleUserChange = async (
@@ -150,22 +159,35 @@ const PendingSettleBookings: React.FC = () => {
 
   const handleSettle = async () => {
     if (!selected || !settleUser || !settlePoints) return;
-    const points = parseInt(settlePoints, 10);
-    if (points <= 0) {
-      alert('扣款積分必須大於 0');
+    const base = parseInt(settlePoints, 10);
+    if (Number.isNaN(base) || base < 0) {
+      alert('結算基數無效');
       return;
     }
-    if (settleUserBalance !== null && settleUserBalance < points) {
-      alert(`用戶餘額不足！當前：${settleUserBalance}，需要：${points}`);
+    const charge = redeemPreview?.netPayable ?? base;
+    if (charge < 0) {
+      alert('應付金額無效');
+      return;
+    }
+    if (charge === 0 && !((redeemPreview?.totalDiscount ?? 0) > 0)) {
+      alert('扣款積分必須大於 0（或先掛載兌換碼全額抵扣）');
+      return;
+    }
+    if (settleUserBalance !== null && charge > 0 && settleUserBalance < charge) {
+      alert(`用戶餘額不足！當前：${settleUserBalance}，需要：${charge}`);
       return;
     }
     const isBundle = (selected.bundleCount || 1) > 1;
     const courtLabel = isBundle
       ? `包場（${selected.bundleCount} 個場地）`
       : selected.court?.name || '場地';
+    const discountLine =
+      redeemPreview && redeemPreview.totalDiscount > 0
+        ? `\n基數：${base}，兌換折扣：${redeemPreview.totalDiscount}，應付：${charge}`
+        : '';
     if (
       !window.confirm(
-        `確認將${isBundle ? '包場' : '此預約'}指派予 ${settleUser.name} 並扣除 ${points} 積分？\n${formatDate(selected.date)} ${selected.startTime}–${selected.endTime} ${courtLabel}`
+        `確認將${isBundle ? '包場' : '此預約'}指派予 ${settleUser.name} 並扣除 ${charge} 積分？${discountLine}\n${formatDate(selected.date)} ${selected.startTime}–${selected.endTime} ${courtLabel}`
       )
     ) {
       return;
@@ -174,7 +196,7 @@ const PendingSettleBookings: React.FC = () => {
       setSettling(true);
       const response = await axios.post(`/bookings/${selected._id}/settle`, {
         userId: settleUser._id,
-        points,
+        points: base,
         reason: settleReason.trim() || '預約結算',
       });
       alert(response.data.message || '結算成功');
@@ -194,11 +216,12 @@ const PendingSettleBookings: React.FC = () => {
       alert('選擇「其他」時請填寫付款備註');
       return;
     }
-    const amount = externalAmount.trim() ? parseFloat(externalAmount) : undefined;
-    if (amount != null && (Number.isNaN(amount) || amount < 0)) {
+    const base = externalAmount.trim() ? parseFloat(externalAmount) : selected.suggestedPoints ?? 0;
+    if (Number.isNaN(base) || base < 0) {
       alert('請輸入有效金額');
       return;
     }
+    const charge = redeemPreview?.netPayable ?? base;
     const methodLabel =
       BOOKING_EXTERNAL_PAYMENT_METHODS.find((m) => m.value === externalMethod)?.label || externalMethod;
     const isBundle = (selected.bundleCount || 1) > 1;
@@ -206,9 +229,13 @@ const PendingSettleBookings: React.FC = () => {
       ? `包場（${selected.bundleCount} 個場地）`
       : selected.court?.name || '場地';
     const userLine = settleUser ? `\n指派用戶：${settleUser.name}` : '';
+    const discountLine =
+      redeemPreview && redeemPreview.totalDiscount > 0
+        ? `\n基數：$${base}，兌換折扣：$${redeemPreview.totalDiscount}，實收：$${charge}`
+        : '';
     if (
       !window.confirm(
-        `確認標記${isBundle ? '包場' : '此預約'}為已付款？\n付款方式：${methodLabel}${amount != null ? `\n金額：$${amount}` : ''}${userLine}\n${formatDate(selected.date)} ${selected.startTime}–${selected.endTime} ${courtLabel}`
+        `確認標記${isBundle ? '包場' : '此預約'}為已付款？\n付款方式：${methodLabel}${discountLine || `\n金額：$${charge}`}${userLine}\n${formatDate(selected.date)} ${selected.startTime}–${selected.endTime} ${courtLabel}`
       )
     ) {
       return;
@@ -218,9 +245,9 @@ const PendingSettleBookings: React.FC = () => {
       const payload: Record<string, unknown> = {
         method: externalMethod,
         note: externalNote.trim() || undefined,
+        amount: base,
       };
       if (settleUser) payload.userId = settleUser._id;
-      if (amount != null) payload.amount = amount;
       const response = await axios.post(`/bookings/${selected._id}/mark-paid`, payload);
       alert(response.data.message || '已標記付款');
       setSelected(null);
@@ -368,7 +395,7 @@ const PendingSettleBookings: React.FC = () => {
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/40" onClick={() => setSelected(null)} />
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-start mb-4">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">結算 Hold 場</h3>
@@ -423,7 +450,7 @@ const PendingSettleBookings: React.FC = () => {
                     用戶餘額：
                     <span
                       className={
-                        settleUserBalance < parseInt(settlePoints || '0', 10)
+                        settleUserBalance < netPayable
                           ? 'text-red-600 font-medium'
                           : 'text-green-700 font-medium'
                       }
@@ -437,15 +464,30 @@ const PendingSettleBookings: React.FC = () => {
               {settleMode === 'points' ? (
                 <>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">扣款積分</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      結算基數（折扣前）
+                    </label>
                     <input
                       type="number"
-                      min={1}
+                      min={0}
                       className="w-full border rounded-md px-3 py-2 text-sm"
                       value={settlePoints}
                       onChange={(e) => setSettlePoints(e.target.value)}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      預設為 hold 時輸入金額／建議積分。兌換碼以此為基數計算。
+                    </p>
                   </div>
+                  <SettlePendingRedeems
+                    bookingId={selected._id}
+                    baseAmount={settleBase}
+                    forUserId={settleUser?._id || selected.user?._id || null}
+                    courtId={selected.court?._id}
+                    date={selected.date}
+                    startTime={selected.startTime}
+                    onPreviewChange={setRedeemPreview}
+                    disabled={settling}
+                  />
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">原因</label>
                     <input
@@ -454,10 +496,16 @@ const PendingSettleBookings: React.FC = () => {
                       onChange={(e) => setSettleReason(e.target.value)}
                     />
                   </div>
+                  <p className="text-sm text-amber-900 font-medium">
+                    將扣除 {netPayable} 積分
+                    {redeemPreview && redeemPreview.totalDiscount > 0
+                      ? `（基數 ${settleBase} − 折扣 ${redeemPreview.totalDiscount}）`
+                      : ''}
+                  </p>
                   <button
                     type="button"
                     onClick={() => void handleSettle()}
-                    disabled={settling || !settleUser || !settlePoints}
+                    disabled={settling || !settleUser || settlePoints === ''}
                     className="w-full py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700 disabled:opacity-50"
                   >
                     {settling ? '結算中…' : '確認扣積分結算'}
@@ -482,7 +530,9 @@ const PendingSettleBookings: React.FC = () => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">收款金額（HKD）</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      收款基數（HKD，折扣前）
+                    </label>
                     <input
                       type="number"
                       min={0}
@@ -493,6 +543,17 @@ const PendingSettleBookings: React.FC = () => {
                       placeholder={`建議 $${selected.suggestedPoints ?? 0}`}
                     />
                   </div>
+                  <SettlePendingRedeems
+                    bookingId={selected._id}
+                    baseAmount={
+                      externalAmount.trim()
+                        ? parseFloat(externalAmount) || 0
+                        : selected.suggestedPoints || 0
+                    }
+                    forUserId={settleUser?._id || selected.user?._id || null}
+                    onPreviewChange={setRedeemPreview}
+                    disabled={settling}
+                  />
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       備註{externalMethod === 'other' ? <span className="text-red-500"> *</span> : null}

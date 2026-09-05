@@ -989,7 +989,9 @@
       "all": "全部活動",
       "upcoming": "即將開始",
       "ongoing": "進行中",
-      "completed": "已完結"
+      "completed": "已完結",
+      "store": "店鋪",
+      "allStores": "全部店鋪"
     },
     "empty": {
       "title": "暫無活動",
@@ -1022,6 +1024,10 @@
     "pagination": {
       "prev": "上一頁",
       "next": "下一頁"
+    },
+    "storeGroups": {
+      "laiChiKok": "荔枝角",
+      "other": "其他"
     },
     "deadlineShort": "截止"
   },

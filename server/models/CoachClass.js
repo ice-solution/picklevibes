@@ -122,6 +122,14 @@ const coachClassSchema = new mongoose.Schema(
       ref: 'Booking',
       default: null,
     },
+    /**
+     * true：課堂連結既有客戶／日曆預約（不另 hold、取消課堂不取消預約）
+     * false：派課時系統建立的 hold 預約
+     */
+    linkExistingBookings: {
+      type: Boolean,
+      default: false,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

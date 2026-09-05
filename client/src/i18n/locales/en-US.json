@@ -989,7 +989,9 @@
       "all": "All Activities",
       "upcoming": "Upcoming",
       "ongoing": "Ongoing",
-      "completed": "Completed"
+      "completed": "Completed",
+      "store": "Store",
+      "allStores": "All stores"
     },
     "empty": {
       "title": "No activities",
@@ -1022,6 +1024,10 @@
     "pagination": {
       "prev": "Previous",
       "next": "Next"
+    },
+    "storeGroups": {
+      "laiChiKok": "Lai Chi Kok",
+      "other": "Other"
     },
     "people": "{{n}} people",
     "deadlineShort": "Deadline"

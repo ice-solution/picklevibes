@@ -2695,6 +2695,116 @@ PickleVibes 團隊
   }
 
   /**
+   * 長期支持用戶獎勵：感謝長期使用場地，並告知優惠券已放入兌換券口袋
+   * @param {Object} data
+   * @param {string} data.name
+   * @param {string} data.email
+   * @param {string} data.tierName
+   * @param {string} data.redeemCodeName
+   * @param {string} [data.redeemCodeCode]
+   * @param {number} [data.annualSpent]
+   * @param {Date} [data.windowStart]
+   * @param {Date} [data.windowEnd]
+   */
+  async sendLongTermSupporterRewardEmail(data) {
+    try {
+      if (!this.transporter) {
+        throw new Error('郵件服務未初始化');
+      }
+      if (!data?.email) {
+        throw new Error('缺少收件人 Email');
+      }
+
+      const name = data.name || '會員';
+      const tierName = data.tierName || '支持檔位';
+      const couponName = data.redeemCodeName || '優惠券';
+      const couponCode = data.redeemCodeCode || '';
+      const fmt = (d) => {
+        if (!d) return '';
+        try {
+          return new Date(d).toLocaleDateString('zh-TW');
+        } catch {
+          return '';
+        }
+      };
+      const windowLabel =
+        data.windowStart && data.windowEnd
+          ? `${fmt(data.windowStart)} ～ ${fmt(data.windowEnd)}`
+          : '';
+
+      const subject = `感謝您長期支持 PickleVibes｜${tierName} 獎勵已送達`;
+
+      const html = `
+    <!DOCTYPE html>
+    <html lang="zh-TW">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${subject}</title>
+    </head>
+    <body style="font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background:#f8f9fa;">
+      <div style="background:#fff;border-radius:12px;padding:32px;box-shadow:0 4px 6px rgba(0,0,0,0.08);">
+        ${this.logoBase64 ? '<div style="text-align:center;margin-bottom:20px;"><img src="cid:logo" alt="PickleVibes" style="height:56px;"/></div>' : ''}
+        <h1 style="font-size:22px;color:#2d3748;margin:0 0 16px;">感謝您長期支持 PickleVibes</h1>
+        <p style="font-size:16px;color:#2d3748;">親愛的 ${escapeHtml(name)}，您好：</p>
+        <p style="color:#4a5568;">感謝您長期使用我們的場地與服務。為表心意，我們已為您準備「${escapeHtml(tierName)}」長期支持獎勵。</p>
+        <div style="background:#f7fafc;border-left:4px solid #2563eb;border-radius:8px;padding:16px;margin:20px 0;">
+          <p style="margin:0 0 8px;"><strong>獎勵優惠券：</strong>${escapeHtml(couponName)}${couponCode ? `（${escapeHtml(couponCode)}）` : ''}</p>
+          ${windowLabel ? `<p style="margin:0;color:#718096;font-size:14px;">本年度支持窗口：${escapeHtml(windowLabel)}</p>` : ''}
+        </div>
+        <p style="color:#4a5568;">優惠券已放入您的「我的兌換券」口袋，預約場地時即可使用。</p>
+        <p style="color:#718096;font-size:14px;">再次感謝您的支持，期待在球場再見！</p>
+        <p style="margin-top:28px;color:#a0aec0;font-size:12px;">PickleVibes 匹克球場</p>
+      </div>
+    </body>
+    </html>`;
+
+      const text = [
+        `親愛的 ${name}，您好：`,
+        '',
+        '感謝您長期使用 PickleVibes 場地與服務。',
+        `我們已為您準備「${tierName}」長期支持獎勵。`,
+        '',
+        `獎勵優惠券：${couponName}${couponCode ? `（${couponCode}）` : ''}`,
+        windowLabel ? `本年度支持窗口：${windowLabel}` : '',
+        '',
+        '優惠券已放入您的「我的兌換券」口袋，預約場地時即可使用。',
+        '',
+        '再次感謝您的支持！',
+        'PickleVibes 匹克球場',
+      ]
+        .filter((line) => line !== '')
+        .join('\n');
+
+      const attachments = [];
+      if (this.logoBase64) {
+        attachments.push({
+          filename: 'picklevibes-logo.png',
+          content: this.logoBase64.replace('data:image/png;base64,', ''),
+          encoding: 'base64',
+          cid: 'logo',
+        });
+      }
+
+      const mailOptions = {
+        from: `"PickleVibes" <${process.env.GMAIL_USER}>`,
+        to: data.email,
+        subject,
+        html,
+        text,
+        attachments,
+      };
+
+      const result = await this.transporter.sendMail(mailOptions);
+      console.log('✅ 長期支持獎勵郵件發送成功:', result.messageId);
+      return { success: true, messageId: result.messageId };
+    } catch (error) {
+      console.error('❌ 發送長期支持獎勵郵件失敗:', error.message);
+      throw new Error(`發送長期支持獎勵郵件失敗: ${error.message}`);
+    }
+  }
+
+  /**
    * 教練學校要請：通知內部信箱（優先 NOTICE_EMAIL）
    */
   async sendCoachScheduleRequestEmail({
