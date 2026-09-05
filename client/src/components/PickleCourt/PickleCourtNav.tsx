@@ -8,6 +8,11 @@ import {
   getMembershipTierLabel,
   resolveDisplayMembership,
 } from '../../utils/membershipDisplay';
+import {
+  canAccessAdminPortal,
+  getAdminPortalLabel,
+  getAdminPortalPath,
+} from '../../utils/authRedirect';
 
 type NavLink =
   | { to: string; label: string }
@@ -69,6 +74,9 @@ function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: 
     const membership = resolveDisplayMembership(user);
     const tierLabel = getMembershipTierLabel(membership.tier, membership.isVipActive);
     const badgeClass = getMembershipBadgeClass(membership.tier, membership.isVipActive);
+    const adminPath = getAdminPortalPath(user);
+    const showAdmin = canAccessAdminPortal(user) && Boolean(adminPath);
+    const adminLabel = getAdminPortalLabel(user);
 
     return (
       <div className={`flex items-center ${compact ? 'flex-col gap-2 w-full' : 'gap-3'}`}>
@@ -102,6 +110,19 @@ function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: 
               餘額
             </Link>
           </>
+        )}
+        {showAdmin && adminPath && (
+          <Link
+            to={adminPath}
+            onClick={onNavigate}
+            className={`text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold transition-colors ${
+              compact
+                ? 'w-full py-2 text-center rounded-lg border border-pickcourt-gold/40 bg-pickcourt-gold/10'
+                : ''
+            }`}
+          >
+            {adminLabel}
+          </Link>
         )}
         <button
           type="button"

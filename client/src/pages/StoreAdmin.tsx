@@ -9,8 +9,6 @@ import { canAccessStoreAdmin } from '../utils/authRedirect';
 import StoreIntroSettings from '../components/Admin/StoreIntroSettings';
 import BookingManagement from '../components/Admin/BookingManagement';
 import BookingCalendar from '../components/Admin/BookingCalendar';
-import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
-import CoachClassManagement from '../components/Admin/CoachClassManagement';
 import CourtManagement from '../components/Admin/CourtManagement';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
@@ -34,8 +32,6 @@ import {
   ClockIcon,
   Cog6ToothIcon,
   CurrencyDollarIcon,
-  AcademicCapIcon,
-  ChatBubbleLeftRightIcon,
   BuildingStorefrontIcon,
   ArrowLeftIcon,
   UsersIcon,
@@ -70,8 +66,9 @@ function StoreAdminShell() {
       { id: 'redeem', name: '兌換券', icon: TicketIcon, element: <RedeemCodeManagement /> },
       { id: 'recharge-offers', name: '充值優惠', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
       { id: 'accounting', name: '會計／用量', icon: CurrencyDollarIcon, element: <AccountingManagement /> },
-      { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
-      { id: 'coach-classes', name: '教練課堂', icon: AcademicCapIcon, element: <CoachClassManagement /> },
+      // 教練功能暫時收起
+      // { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
+      // { id: 'coach-classes', name: '教練課堂', icon: AcademicCapIcon, element: <CoachClassManagement /> },
       { id: 'weekend', name: '假期管理', icon: ClockIcon, element: <HolidayManagement /> },
       { id: 'booking-config', name: '預約設定', icon: Cog6ToothIcon, element: <BookingConfig /> },
     ],
