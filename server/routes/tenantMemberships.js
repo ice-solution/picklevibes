@@ -205,24 +205,92 @@ router.post('/', [
   }
 });
 
-/** PATCH /api/tenant-memberships/:id */
-router.patch('/:id', [auth, platformAdminAuth], async (req, res) => {
+/** PATCH /api/tenant-memberships/:id — 更新指派角色／啟用，並可編輯員工資料／重設密碼 */
+router.patch('/:id', [
+  auth,
+  platformAdminAuth,
+  body('role').optional().isIn(['manager', 'staff']).withMessage('role 無效'),
+  body('isActive').optional().isBoolean(),
+  body('name').optional().trim().isLength({ min: 2, max: 50 }).withMessage('姓名必須在 2–50 字'),
+  body('email').optional().isEmail().withMessage('請提供有效 email'),
+  body('phone').optional().matches(/^[0-9]+$/).withMessage('電話只能包含數字'),
+  body('password')
+    .optional({ values: 'falsy' })
+    .isLength({ min: 8 }).withMessage('密碼至少 8 字')
+    .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼須包含字母與數字'),
+  body('storeId').optional().notEmpty().withMessage('storeId 無效'),
+], async (req, res) => {
   try {
-    const update = {};
-    if (req.body.role) update.role = req.body.role;
-    if (typeof req.body.isActive === 'boolean') update.isActive = req.body.isActive;
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ message: errors.array()[0].msg });
+    }
 
-    const membership = await TenantMembership.findByIdAndUpdate(
-      req.params.id,
-      update,
-      { new: true, runValidators: true }
-    )
-      .populate('user', 'name email phone role')
-      .populate('store', 'name slug');
-
+    const membership = await TenantMembership.findById(req.params.id);
     if (!membership) return res.status(404).json({ message: '指派紀錄不存在' });
-    res.json({ message: '已更新', membership });
+
+    if (req.body.role) membership.role = req.body.role;
+    if (typeof req.body.isActive === 'boolean') membership.isActive = req.body.isActive;
+
+    if (req.body.storeId && String(req.body.storeId) !== String(membership.store)) {
+      const store = await Store.findById(req.body.storeId);
+      if (!store) return res.status(404).json({ message: '店鋪不存在' });
+      assertSaasTenantStore(store);
+      const clash = await TenantMembership.findOne({
+        user: membership.user,
+        store: req.body.storeId,
+        _id: { $ne: membership._id },
+      });
+      if (clash) {
+        return res.status(400).json({ message: '此員工已指派至目標店鋪' });
+      }
+      membership.store = req.body.storeId;
+    }
+
+    await membership.save();
+
+    const user = await User.findById(membership.user);
+    if (!user) return res.status(404).json({ message: '員工帳號不存在' });
+    if (user.role === 'admin') {
+      return res.status(400).json({ message: '不可在此編輯平台超級管理員' });
+    }
+
+    if (req.body.name) user.name = String(req.body.name).trim();
+    if (req.body.phone) user.phone = String(req.body.phone).trim();
+    if (req.body.email) {
+      const normalizedEmail = String(req.body.email).trim().toLowerCase();
+      if (normalizedEmail !== user.email) {
+        const emailTaken = await User.findOne({
+          email: normalizedEmail,
+          _id: { $ne: user._id },
+        });
+        if (emailTaken) {
+          return res.status(400).json({ message: '此 email 已被其他帳號使用' });
+        }
+        user.email = normalizedEmail;
+      }
+    }
+    if (req.body.password) {
+      user.password = req.body.password; // pre('save') 會 hash
+    }
+    await user.save();
+
+    await membership.populate([
+      { path: 'user', select: 'name email phone role isActive' },
+      { path: 'store', select: 'name slug' },
+    ]);
+
+    res.json({
+      message: req.body.password ? '已更新並重設密碼' : '已更新',
+      membership,
+    });
   } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message, code: error.code });
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'email 或店鋪指派衝突' });
+    }
     console.error('更新 tenant membership 錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
