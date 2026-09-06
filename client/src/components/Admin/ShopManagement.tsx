@@ -9,7 +9,8 @@ import {
   XMarkIcon,
   PhotoIcon,
   PowerIcon,
-  Bars3Icon
+  Bars3Icon,
+  ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 import api from '../../services/api';
@@ -257,6 +258,7 @@ const ShopManagement: React.FC = () => {
   const [productFormData, setProductFormData] = useState(emptyProductForm);
   const [productGallery, setProductGallery] = useState<GalleryImage[]>([]);
   const [productErrors, setProductErrors] = useState<{[key: string]: string}>({});
+  const [inventoryExporting, setInventoryExporting] = useState(false);
 
   // 分類相關狀態
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -600,6 +602,32 @@ const ShopManagement: React.FC = () => {
     }
   };
 
+  const handleExportInventoryXlsx = async () => {
+    setInventoryExporting(true);
+    try {
+      const response = await api.get('/products/admin/inventory-xlsx', {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      });
+      const ymd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `產品庫存表_${ymd}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (error: any) {
+      console.error('匯出庫存表失敗:', error);
+      alert(error.response?.data?.message || '匯出失敗，請稍後再試');
+    } finally {
+      setInventoryExporting(false);
+    }
+  };
+
   const closeProductModal = () => {
     revokeGalleryPreviews(productGallery);
     productFormData.colorOptions.forEach((opt) => revokeGalleryPreviews(opt.images));
@@ -703,7 +731,16 @@ const ShopManagement: React.FC = () => {
           {/* 產品管理 */}
           {activeTab === 'products' && (
             <div className="space-y-6">
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportInventoryXlsx}
+                  disabled={inventoryExporting}
+                  className="flex items-center space-x-2 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <ArrowDownTrayIcon className="w-5 h-5" />
+                  <span>{inventoryExporting ? '匯出中…' : '匯出庫存表'}</span>
+                </button>
                 <button
                   onClick={() => {
                     setEditingProduct(null);

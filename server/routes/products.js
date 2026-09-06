@@ -1,4 +1,6 @@
 const express = require('express');
+const path = require('path');
+const XLSX = require('xlsx');
 const { body, validationResult } = require('express-validator');
 const Product = require('../models/Product');
 const Category = require('../models/Category');
@@ -132,7 +134,6 @@ function applyVariantFields(body, { colorOptions: mergedColorOptions } = {}) {
   return { productFields };
 }
 const { createUploadConfig, processImage, deleteFile } = require('../middleware/upload');
-const path = require('path');
 
 const router = express.Router();
 
@@ -224,6 +225,112 @@ router.get('/admin/list', [auth, adminAuth], async (req, res) => {
   } catch (error) {
     console.error('獲取管理員產品列表錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+const VARIANT_MODE_LABELS = {
+  none: '無規格',
+  size: '僅尺碼',
+  color: '僅顏色',
+  color_size: '顏色＋尺碼',
+};
+
+// @route   GET /api/products/admin/inventory-xlsx
+// @desc    匯出全部產品庫存（一列＝產品＋SKU／規格）
+// @access  Private (Admin)
+router.get('/admin/inventory-xlsx', [auth, adminAuth], async (req, res) => {
+  try {
+    const products = await Product.find({})
+      .populate('category', 'name')
+      .sort({ sortOrder: 1, name: 1 })
+      .lean();
+
+    const rows = [];
+    const exportedAt = new Date().toLocaleString('zh-HK', { timeZone: 'Asia/Hong_Kong' });
+
+    for (const product of products) {
+      const categoryName = product.category?.name || '';
+      const mode = product.variantMode || 'none';
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+
+      if (mode !== 'none' && variants.length > 0) {
+        for (const v of variants) {
+          rows.push({
+            產品ID: String(product._id),
+            產品名稱: product.name || '',
+            分類: categoryName,
+            規格模式: VARIANT_MODE_LABELS[mode] || mode,
+            SKU: v.sku || '',
+            顏色: v.color || '',
+            尺碼: v.size || '',
+            庫存: Number(v.stock) || 0,
+            原價: product.price ?? '',
+            折扣價: product.discountPrice ?? '',
+            狀態: product.isActive === false ? '停用' : '啟用',
+            匯出時間: exportedAt,
+          });
+        }
+      } else {
+        rows.push({
+          產品ID: String(product._id),
+          產品名稱: product.name || '',
+          分類: categoryName,
+          規格模式: VARIANT_MODE_LABELS[mode] || mode,
+          SKU: '',
+          顏色: '',
+          尺碼: '',
+          庫存: Number(product.stock) || 0,
+          原價: product.price ?? '',
+          折扣價: product.discountPrice ?? '',
+          狀態: product.isActive === false ? '停用' : '啟用',
+          匯出時間: exportedAt,
+        });
+      }
+    }
+
+    const emptyRow = {
+      產品ID: '',
+      產品名稱: '（暫無產品）',
+      分類: '',
+      規格模式: '',
+      SKU: '',
+      顏色: '',
+      尺碼: '',
+      庫存: '',
+      原價: '',
+      折扣價: '',
+      狀態: '',
+      匯出時間: exportedAt,
+    };
+
+    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [emptyRow]);
+    ws['!cols'] = [
+      { wch: 26 },
+      { wch: 28 },
+      { wch: 14 },
+      { wch: 12 },
+      { wch: 18 },
+      { wch: 12 },
+      { wch: 10 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 10 },
+      { wch: 8 },
+      { wch: 20 },
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, '庫存表');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    const ymd = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Hong_Kong' });
+    const filename = `產品庫存表_${ymd}.xlsx`;
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(filename)}`);
+    res.send(buf);
+  } catch (error) {
+    console.error('匯出產品庫存表錯誤:', error);
+    res.status(500).json({ message: '匯出失敗，請稍後再試' });
   }
 });
 
