@@ -64,9 +64,26 @@ interface PosTransactionRow {
   paymentMethod: string;
   status: 'completed' | 'cancelled';
   createdAt: string;
-  items?: Array<{ name: string; quantity: number; price: number; subtotal: number }>;
-  store?: { name: string };
+  items?: Array<{
+    name: string;
+    quantity: number;
+    price: number;
+    subtotal: number;
+    color?: string | null;
+    size?: string | null;
+    product?: { name?: string; images?: string[] };
+  }>;
+  store?: { name: string; slug?: string };
   user?: { name: string; email: string; phone?: string };
+  subtotal?: number;
+  discount?: number;
+  notes?: string;
+  redeemCodeName?: string;
+  pointsChargedAmount?: number;
+  createdBy?: { name?: string; email?: string };
+  cancelledAt?: string;
+  cancelledBy?: { name?: string; email?: string };
+  cancelReason?: string;
 }
 
 interface SelectedUser {
@@ -126,6 +143,8 @@ const PosManagement: React.FC = () => {
   const [pickerQty, setPickerQty] = useState(1);
   const [transactionStatusFilter, setTransactionStatusFilter] = useState<'all' | 'completed' | 'cancelled'>('all');
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const [detailTx, setDetailTx] = useState<PosTransactionRow | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchStores = useCallback(async () => {
     const res = await axios.get('/stores/admin/all');
@@ -172,6 +191,24 @@ const PosManagement: React.FC = () => {
     }
   }, [storeId, transactionStatusFilter, fetchTransactions]);
 
+  const openTransactionDetail = async (id: string) => {
+    setDetailLoading(true);
+    setDetailTx(null);
+    try {
+      const res = await axios.get(`/pos/transactions/${id}`);
+      setDetailTx(res.data);
+    } catch (error: any) {
+      alert(error.response?.data?.message || '無法載入交易明細');
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeTransactionDetail = () => {
+    setDetailTx(null);
+    setDetailLoading(false);
+  };
+
   const handleCancelTransaction = async (tx: PosTransactionRow) => {
     if (tx.status === 'cancelled') return;
     const reason = window.prompt('取消原因（可選）：') ?? '';
@@ -187,6 +224,9 @@ const PosManagement: React.FC = () => {
         fetchProducts(search),
         fetchTransactions(storeId || undefined, transactionStatusFilter),
       ]);
+      if (detailTx?._id === tx._id) {
+        await openTransactionDetail(tx._id);
+      }
     } catch (error: any) {
       alert(error.response?.data?.message || '取消失敗');
     } finally {
@@ -607,7 +647,16 @@ const PosManagement: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {transactions.map((tx) => (
                 <tr key={tx._id} className={tx.status === 'cancelled' ? 'bg-gray-50 opacity-75' : undefined}>
-                  <td className="px-4 py-2 font-mono text-xs">{tx.transactionNumber}</td>
+                  <td className="px-4 py-2 font-mono text-xs">
+                    <button
+                      type="button"
+                      onClick={() => openTransactionDetail(tx._id)}
+                      className="text-primary-600 hover:text-primary-800 hover:underline"
+                      title="查看明細"
+                    >
+                      {tx.transactionNumber}
+                    </button>
+                  </td>
                   <td className="px-4 py-2">{tx.store?.name || '—'}</td>
                   <td className="px-4 py-2">{tx.user?.name || '散客'}</td>
                   <td className="px-4 py-2">{paymentLabel(tx.paymentMethod)}</td>
@@ -722,6 +771,165 @@ const PosManagement: React.FC = () => {
                 加入購物車
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {(detailLoading || detailTx) && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-5 space-y-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="font-semibold text-lg">交易明細</h3>
+                {detailTx && (
+                  <p className="font-mono text-sm text-primary-700 mt-1">{detailTx.transactionNumber}</p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={closeTransactionDetail}
+                className="text-gray-400 hover:text-gray-600 text-sm"
+              >
+                關閉
+              </button>
+            </div>
+
+            {detailLoading && !detailTx ? (
+              <p className="text-sm text-gray-500 py-8 text-center">載入中…</p>
+            ) : detailTx ? (
+              <>
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <div className="text-gray-500">狀態</div>
+                    <span className={`inline-flex mt-0.5 px-2 py-0.5 rounded text-xs ${
+                      detailTx.status === 'cancelled'
+                        ? 'bg-red-100 text-red-700'
+                        : 'bg-green-100 text-green-700'
+                    }`}>
+                      {detailTx.status === 'cancelled' ? '已取消' : '已完成'}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">時間</div>
+                    <div>{new Date(detailTx.createdAt).toLocaleString('zh-HK')}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">店鋪</div>
+                    <div>{detailTx.store?.name || '—'}</div>
+                  </div>
+                  <div>
+                    <div className="text-gray-500">付款</div>
+                    <div>{paymentLabel(detailTx.paymentMethod)}</div>
+                  </div>
+                  <div className="col-span-2">
+                    <div className="text-gray-500">客戶</div>
+                    <div>
+                      {detailTx.user
+                        ? `${detailTx.user.name}${detailTx.user.phone ? ` · ${detailTx.user.phone}` : ''}${detailTx.user.email ? ` · ${detailTx.user.email}` : ''}`
+                        : '散客'}
+                    </div>
+                  </div>
+                  {detailTx.createdBy?.name && (
+                    <div className="col-span-2">
+                      <div className="text-gray-500">經手人</div>
+                      <div>{detailTx.createdBy.name}</div>
+                    </div>
+                  )}
+                  {detailTx.notes && (
+                    <div className="col-span-2">
+                      <div className="text-gray-500">備註</div>
+                      <div>{detailTx.notes}</div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t pt-3 space-y-3">
+                  <div className="text-sm font-medium text-gray-800">商品</div>
+                  {(detailTx.items || []).length === 0 ? (
+                    <p className="text-sm text-gray-500">無商品資料</p>
+                  ) : (
+                    (detailTx.items || []).map((item, index) => (
+                      <div key={index} className="flex items-start gap-3 text-sm">
+                        <img
+                          src={getImageUrl(item.product?.images?.[0])}
+                          alt={item.name}
+                          className="w-12 h-12 object-cover rounded border border-gray-100"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-gray-900">{item.name}</div>
+                          {(item.color || item.size) && (
+                            <div className="text-xs text-gray-500">
+                              {item.color ? `顏色：${item.color}` : ''}
+                              {item.color && item.size ? ' · ' : ''}
+                              {item.size ? `尺碼：${item.size}` : ''}
+                            </div>
+                          )}
+                          <div className="text-gray-600">
+                            {item.quantity} × HK${Number(item.price || 0).toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="font-semibold whitespace-nowrap">
+                          HK${Number(item.subtotal ?? item.price * item.quantity).toFixed(2)}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                <div className="border-t pt-3 space-y-1 text-sm">
+                  {detailTx.subtotal != null && (
+                    <div className="flex justify-between text-gray-600">
+                      <span>小計</span>
+                      <span>HK${Number(detailTx.subtotal).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {Number(detailTx.discount || 0) > 0 && (
+                    <div className="flex justify-between text-green-700">
+                      <span>折扣{detailTx.redeemCodeName ? `（${detailTx.redeemCodeName}）` : ''}</span>
+                      <span>-HK${Number(detailTx.discount).toFixed(2)}</span>
+                    </div>
+                  )}
+                  {detailTx.paymentMethod === 'points' && detailTx.pointsChargedAmount != null && (
+                    <div className="flex justify-between text-gray-600">
+                      <span>扣積分</span>
+                      <span>{Number(detailTx.pointsChargedAmount).toFixed(0)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-semibold text-base pt-1">
+                    <span>總額</span>
+                    <span>HK${Number(detailTx.total).toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {detailTx.status === 'cancelled' && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 space-y-1">
+                    <div>已取消{detailTx.cancelledAt ? ` · ${new Date(detailTx.cancelledAt).toLocaleString('zh-HK')}` : ''}</div>
+                    {detailTx.cancelledBy?.name && <div>取消人：{detailTx.cancelledBy.name}</div>}
+                    {detailTx.cancelReason && <div>原因：{detailTx.cancelReason}</div>}
+                  </div>
+                )}
+
+                <div className="flex gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={closeTransactionDetail}
+                    className="flex-1 py-2 border rounded-lg"
+                  >
+                    關閉
+                  </button>
+                  {detailTx.status === 'completed' && (
+                    <button
+                      type="button"
+                      onClick={() => handleCancelTransaction(detailTx)}
+                      disabled={cancellingId === detailTx._id}
+                      className="flex-1 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {cancellingId === detailTx._id ? '處理中…' : '取消交易'}
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       )}

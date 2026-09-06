@@ -21,6 +21,7 @@ import {
   ColorOption,
   VARIANT_MODE_OPTIONS,
   getEffectiveVariantMode,
+  getTotalStock,
   buildVariantRows,
   normalizeHex
 } from '../../constants/productVariants';
@@ -717,61 +718,123 @@ const ShopManagement: React.FC = () => {
                 </button>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {products.map((product) => (
-                  <div key={product._id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                    <img
-                      src={getImageUrl(product.images[0])}
-                      alt={product.name}
-                      className="w-full h-48 object-cover"
-                    />
-                    <div className="p-4">
-                      <h3 className="font-semibold mb-2">{product.name}</h3>
-                      <p className="text-sm text-gray-600 mb-2">{product.category.name}</p>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-lg font-bold">
-                          HK${product.discountPrice || product.price}
-                        </span>
-                        <span className={`px-2 py-1 rounded text-xs ${
-                          product.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}>
-                          {product.isActive ? '啟用' : '停用'}
-                        </span>
-                      </div>
-                      {getEffectiveVariantMode(product) !== 'none' && (
-                        <p className="text-xs text-primary-600 font-medium mb-1">
-                          規格：{VARIANT_MODE_OPTIONS.find((o) => o.value === getEffectiveVariantMode(product))?.label}
-                          {(product.variants?.length ?? 0) > 0 && ` · ${product.variants!.length} SKU`}
-                        </p>
+              <div className="bg-white rounded-lg shadow-md overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200 text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">產品</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">分類</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">價格</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">庫存</th>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">狀態</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {products.map((product) => {
+                        const stock = getTotalStock(product);
+                        const mode = getEffectiveVariantMode(product);
+                        const displayPrice = product.discountPrice ?? product.price;
+                        const hasDiscount =
+                          product.discountPrice != null && product.discountPrice < product.price;
+
+                        return (
+                          <tr key={product._id} className={!product.isActive ? 'bg-gray-50' : undefined}>
+                            <td className="px-4 py-3">
+                              <div className="flex items-center gap-3 min-w-[200px]">
+                                <img
+                                  src={getImageUrl(product.images[0])}
+                                  alt={product.name}
+                                  className="w-12 h-12 rounded object-cover border border-gray-100 shrink-0"
+                                />
+                                <div className="min-w-0">
+                                  <div className="font-medium text-gray-900 truncate">{product.name}</div>
+                                  {mode !== 'none' && (
+                                    <div className="text-xs text-primary-600 mt-0.5">
+                                      {VARIANT_MODE_OPTIONS.find((o) => o.value === mode)?.label}
+                                      {(product.variants?.length ?? 0) > 0 &&
+                                        ` · ${product.variants!.length} SKU`}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-4 py-3 text-gray-700 whitespace-nowrap">
+                              {product.category?.name || '—'}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <div className="font-semibold text-gray-900">
+                                HK${Number(displayPrice).toFixed(2)}
+                              </div>
+                              {hasDiscount && (
+                                <div className="text-xs text-gray-400 line-through">
+                                  HK${Number(product.price).toFixed(2)}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <span
+                                className={`font-medium ${
+                                  stock <= 0
+                                    ? 'text-red-600'
+                                    : stock <= 5
+                                      ? 'text-amber-600'
+                                      : 'text-gray-900'
+                                }`}
+                              >
+                                {stock}
+                              </span>
+                              {mode !== 'none' && (product.variants?.length ?? 0) > 0 && (
+                                <div className="text-xs text-gray-500">各規格合計</div>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => handleProductToggleStatus(product)}
+                                className={`px-2 py-1 rounded text-xs ${
+                                  product.isActive
+                                    ? 'bg-green-100 text-green-800 hover:bg-green-200'
+                                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                                }`}
+                              >
+                                {product.isActive ? '啟用' : '停用'}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3 whitespace-nowrap text-right">
+                              <div className="inline-flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => handleProductEdit(product)}
+                                  className="p-1.5 text-primary-600 hover:text-primary-800"
+                                  title="編輯"
+                                >
+                                  <PencilIcon className="w-5 h-5" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleProductDelete(product._id)}
+                                  className="p-1.5 text-red-600 hover:text-red-800"
+                                  title="刪除"
+                                >
+                                  <TrashIcon className="w-5 h-5" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {products.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-10 text-center text-gray-500">
+                            暫無產品
+                          </td>
+                        </tr>
                       )}
-                      <div className="flex space-x-2 mt-4">
-                        <button
-                          onClick={() => handleProductToggleStatus(product)}
-                          className={`px-3 py-2 rounded text-sm ${
-                            product.isActive
-                              ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
-                          }`}
-                        >
-                          {product.isActive ? '啟用' : '停用'}
-                        </button>
-                        <button
-                          onClick={() => handleProductEdit(product)}
-                          className="flex-1 px-3 py-2 bg-primary-600 text-white rounded hover:bg-primary-700"
-                        >
-                          <PencilIcon className="w-4 h-4 inline mr-1" />
-                          編輯
-                        </button>
-                        <button
-                          onClick={() => handleProductDelete(product._id)}
-                          className="px-3 py-2 bg-red-600 text-white rounded hover:bg-red-700"
-                        >
-                          <TrashIcon className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           )}
