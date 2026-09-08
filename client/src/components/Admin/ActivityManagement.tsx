@@ -407,11 +407,7 @@ const ActivityManagement: React.FC = () => {
 
       if (finalLocation === fixedVenueLocation) {
         if (formData.venueHoldMode === 'single_court' && !formData.venueHoldCourtId) {
-          alert('請選擇要佔用的場地');
-          return;
-        }
-        const shouldContinue = window.confirm('相關日期將會佔據場地時間，確認?');
-        if (!shouldContinue) {
+          alert('請選擇要檢查的場地');
           return;
         }
       }
@@ -424,52 +420,64 @@ const ActivityManagement: React.FC = () => {
         startDate: snapDateTimeLocalToHour(formData.startDate),
         endDate: snapDateTimeLocalToHour(formData.endDate)
       };
-      
-      // 創建 FormData 對象
-      const formDataToSend = new FormData();
-      
-      // 添加表單數據
-      Object.keys(submitPayload).forEach(key => {
-        if (key === 'location' || key === 'venueHoldMode' || key === 'venueHoldCourtId' || key === 'storeId') {
-          return;
-        }
-        const value = submitPayload[key as keyof typeof submitPayload];
-        if (value !== '' && value !== null) {
-          // 特殊處理 coaches 陣列
-          if (key === 'coaches' && Array.isArray(value)) {
-            value.forEach((coach, index) => {
-              if (coach && typeof coach === 'object' && coach._id) {
-                formDataToSend.append(`coaches[${index}]`, coach._id);
-              }
-            });
-          } else {
-            formDataToSend.append(key, String(value));
+
+      const buildFormData = (confirmVenueConflict = false) => {
+        const formDataToSend = new FormData();
+        Object.keys(submitPayload).forEach(key => {
+          if (key === 'location' || key === 'venueHoldMode' || key === 'venueHoldCourtId' || key === 'storeId') {
+            return;
+          }
+          const value = submitPayload[key as keyof typeof submitPayload];
+          if (value !== '' && value !== null) {
+            if (key === 'coaches' && Array.isArray(value)) {
+              value.forEach((coach, index) => {
+                if (coach && typeof coach === 'object' && coach._id) {
+                  formDataToSend.append(`coaches[${index}]`, coach._id);
+                }
+              });
+            } else {
+              formDataToSend.append(key, String(value));
+            }
+          }
+        });
+        formDataToSend.append('location', finalLocation);
+        formDataToSend.append('storeId', formData.storeId || '');
+        if (finalLocation === fixedVenueLocation) {
+          formDataToSend.append('venueHoldMode', formData.venueHoldMode);
+          if (formData.venueHoldMode === 'single_court' && formData.venueHoldCourtId) {
+            formDataToSend.append('venueHoldCourtId', formData.venueHoldCourtId);
           }
         }
-      });
-      formDataToSend.append('location', finalLocation);
-      formDataToSend.append('storeId', formData.storeId || '');
-      if (finalLocation === fixedVenueLocation) {
-        formDataToSend.append('venueHoldMode', formData.venueHoldMode);
-        if (formData.venueHoldMode === 'single_court' && formData.venueHoldCourtId) {
-          formDataToSend.append('venueHoldCourtId', formData.venueHoldCourtId);
+        if (confirmVenueConflict) {
+          formDataToSend.append('confirmVenueConflict', 'true');
         }
-      }
+        if (selectedFile) {
+          formDataToSend.append('poster', selectedFile);
+        }
+        return formDataToSend;
+      };
 
-      // 如果有選中的文件，添加到 FormData
-      if (selectedFile) {
-        formDataToSend.append('poster', selectedFile);
-      }
-      
-      const response = await fetch(url, {
-        method,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: formDataToSend
-      });
+      const postOnce = async (confirmVenueConflict: boolean) => {
+        const response = await fetch(url, {
+          method,
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          },
+          body: buildFormData(confirmVenueConflict)
+        });
+        const data = await response.json();
+        return { response, data };
+      };
 
-      const data = await response.json();
+      let { response, data } = await postOnce(false);
+
+      if (response.status === 409 && data?.requiresConfirm) {
+        const ok = window.confirm(
+          `${data.message || '該時段已有人佔用場地。'} \n\n確認仍要${selectedActivity ? '更新' : '建立'}活動？（不會自動佔用場地）`
+        );
+        if (!ok) return;
+        ({ response, data } = await postOnce(true));
+      }
 
       if (!response.ok) {
         throw new Error(data.message || '操作失敗');
@@ -1522,7 +1530,7 @@ const ActivityManagement: React.FC = () => {
                       </select>
                       {locationOption === fixedVenueLocation && (
                         <p className="mt-1 text-xs text-gray-500">
-                          固定場地會自動對應荔枝角店鋪
+                          固定場地會自動對應荔枝角店鋪（不會自動佔用場地；僅檢查時段衝突）
                         </p>
                       )}
                     </div>
@@ -1568,6 +1576,9 @@ const ActivityManagement: React.FC = () => {
                             </select>
                           </div>
                         )}
+                        <p className="text-xs text-amber-800">
+                          僅用於檢查該時段有冇人預約；唔會喺日曆自動 hold 場。
+                        </p>
                       </div>
                     )}
                   </div>

@@ -202,12 +202,15 @@ async function getActivityTargetCourts(activity) {
 }
 
 /**
- * 固定場地活動：檢查各場是否可佔用（與一般預約同一套 checkTimeConflict）
+ * 固定場地活動：檢查各場是否已被預約（不 throw；回傳衝突場地名）
  */
-async function assertFixedVenueSlotsFree(activityLike, { excludeBookingIds = [] } = {}) {
+async function findFixedVenueConflicts(activityLike, { excludeBookingIds = [] } = {}) {
   const targetCourts = await getActivityTargetCourts(activityLike);
   if (!targetCourts.length) {
-    throw new Error('找不到可用場地，請確認已選擇有效場地（單一場地模式須選場）');
+    return {
+      error: '找不到可用場地，請確認已選擇有效場地（單一場地模式須選場）',
+      conflicts: [],
+    };
   }
   const fields = computeActivityVenueBookingFields(activityLike);
   const conflicts = [];
@@ -224,11 +227,26 @@ async function assertFixedVenueSlotsFree(activityLike, { excludeBookingIds = [] 
       conflicts.push(court.name || String(court._id));
     }
   }
+  return { conflicts, error: null };
+}
+
+/**
+ * 固定場地活動：檢查各場是否可佔用（與一般預約同一套 checkTimeConflict）
+ * @deprecated 新流程改用 findFixedVenueConflicts + admin confirm；保留給舊 hold 同步邏輯
+ */
+async function assertFixedVenueSlotsFree(activityLike, { excludeBookingIds = [] } = {}) {
+  const { conflicts, error } = await findFixedVenueConflicts(activityLike, { excludeBookingIds });
+  if (error) throw new Error(error);
   if (conflicts.length) {
     throw new Error(
-      `以下場地在該時段已有其他預約，無法佔用：${conflicts.join('、')}`
+      `以下場地在該時段已有其他預約：${conflicts.join('、')}`
     );
   }
+}
+
+function parseConfirmVenueConflict(body) {
+  const raw = body?.confirmVenueConflict;
+  return raw === true || raw === 'true' || raw === '1' || raw === 1;
 }
 
 async function createActivityVenueBookings({ activity, adminUser }) {
@@ -460,7 +478,7 @@ async function reconcileActivityVenueBookings(activity, adminUserId, previousTit
   await syncActivityVenueBookings({ activity, previousTitle });
 }
 
-/** 活動改為非固定場地時，取消自動佔用 */
+/** 取消活動相關自動佔場（保留工具函式；新活動已停用 hold，預設唔會自動呼叫清場） */
 async function cancelActivityVenueBookingsForActivity(activityId, previousTitle) {
   const now = new Date();
   const $set = {
@@ -468,7 +486,7 @@ async function cancelActivityVenueBookingsForActivity(activityId, previousTitle)
     updatedAt: now,
     'cancellation.cancelledAt': now,
     'cancellation.cancelledBy': 'admin',
-    'cancellation.reason': '活動地點已變更，原自動場地佔用取消'
+    'cancellation.reason': '活動已取消自動佔場'
   };
 
   await Booking.updateMany(
@@ -1004,29 +1022,35 @@ router.post('/', [
       venueHoldCourtId = new mongoose.Types.ObjectId(String(req.body.venueHoldCourtId));
     }
 
-    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
-      if (venueHoldMode === 'single_court' && !venueHoldCourtId) {
-        return res.status(400).json({ message: '請選擇要佔用的場地' });
-      }
-      try {
-        await assertFixedVenueSlotsFree({
-          startDate: start,
-          endDate: end,
-          title,
-          venueHoldMode,
-          venueHoldCourtId
-        });
-      } catch (slotErr) {
-        return res.status(400).json({
-          message: slotErr.message || '該時段已有預約，無法建立活動'
-        });
-      }
-    }
-
     const resolvedStoreId = await resolveActivityStoreId({
       storeId: req.body.storeId || req.body.store,
       location,
     });
+
+    // 固定場地：只做衝突檢查，不 hold 場；有衝突需 admin confirm
+    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
+      if (venueHoldMode === 'single_court' && !venueHoldCourtId) {
+        return res.status(400).json({ message: '請選擇要檢查的場地' });
+      }
+      const { conflicts, error } = await findFixedVenueConflicts({
+        startDate: start,
+        endDate: end,
+        title,
+        store: resolvedStoreId,
+        venueHoldMode,
+        venueHoldCourtId,
+      });
+      if (error) {
+        return res.status(400).json({ message: error });
+      }
+      if (conflicts.length && !parseConfirmVenueConflict(req.body)) {
+        return res.status(409).json({
+          requiresConfirm: true,
+          conflictCourts: conflicts,
+          message: `以下場地在該時段已有預約：${conflicts.join('、')}。活動不會自動佔用場地；確認仍要建立？`,
+        });
+      }
+    }
 
     const activity = new Activity({
       title,
@@ -1047,29 +1071,12 @@ router.post('/', [
       venueHoldCourtId:
         location === FIXED_ACTIVITY_VENUE_LOCATION && venueHoldMode === 'single_court'
           ? venueHoldCourtId
-          : null
+          : null,
     });
 
     await activity.save();
 
-    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
-      const adminUser = await User.findById(req.user.id).select('name email phone');
-      if (!adminUser) {
-        await Activity.findByIdAndDelete(activity._id);
-        return res.status(400).json({ message: '找不到管理員資料，無法建立活動場地預約' });
-      }
-
-      try {
-        await reconcileActivityVenueBookings(activity, req.user.id, undefined);
-      } catch (bookingError) {
-        await Activity.findByIdAndDelete(activity._id);
-        console.error('建立活動場地預約失敗:', bookingError);
-        return res.status(400).json({
-          message: bookingError.message || '建立活動場地預約失敗，活動未建立'
-        });
-      }
-    }
-
+    // 不建立 activity_hold 預約
     console.log(`🎯 管理員創建新活動: ${activity.title} (${activity._id})`);
 
     res.status(201).json({
@@ -1697,9 +1704,6 @@ router.put('/:id', [
       return res.status(404).json({ message: '活動不存在' });
     }
 
-    const previousTitle = activity.title;
-    const previousLocation = activity.location;
-
     const updates = req.body;
     
     // 如果有新上傳的圖片，使用新圖片與縮略圖路徑
@@ -1757,6 +1761,9 @@ router.put('/:id', [
       }
     }
 
+    const previousTitle = activity.title;
+    const previousLocation = activity.location;
+
     const effectiveLocation =
       updates.location !== undefined ? updates.location : activity.location;
     const effectiveStart =
@@ -1776,40 +1783,52 @@ router.put('/:id', [
 
     const wasFixed = previousLocation === FIXED_ACTIVITY_VENUE_LOCATION;
     const nextIsFixed = effectiveLocation === FIXED_ACTIVITY_VENUE_LOCATION;
-    /** 以「實際時間／標題是否與資料庫不同」為準，避免 multipart 未帶齊欄位時只改日期卻不觸發同步 */
     const tMs = (d) => new Date(d).getTime();
-    const startMoved = tMs(effectiveStart) !== tMs(activity.startDate);
-    const endMoved = tMs(effectiveEnd) !== tMs(activity.endDate);
-    const titleMoved = effectiveTitle !== activity.title;
-    const timeChanged = startMoved || endMoved;
+    const timeChanged =
+      tMs(effectiveStart) !== tMs(activity.startDate) ||
+      tMs(effectiveEnd) !== tMs(activity.endDate);
     const venueScopeChanged =
       updates.venueHoldMode !== undefined || updates.venueHoldCourtId !== undefined;
 
     if (nextIsFixed && effectiveVenueHoldMode === 'single_court' && !effectiveVenueHoldCourtId) {
-      return res.status(400).json({ message: '荔枝角場地請選擇要佔用的場地' });
+      return res.status(400).json({ message: '荔枝角場地請選擇要檢查的場地' });
     }
 
-    const needSlotAssert = nextIsFixed && (!wasFixed || timeChanged || venueScopeChanged);
+    const bodyStoreRaw = req.body.storeId || req.body.store;
+    const resolvedStoreForCheck =
+      bodyStoreRaw !== undefined || updates.location !== undefined
+        ? await resolveActivityStoreId({
+            storeId: bodyStoreRaw !== undefined ? bodyStoreRaw : activity.store,
+            location: effectiveLocation,
+          })
+        : activity.store;
 
-    if (needSlotAssert) {
-      try {
-        const excludeIds =
-          wasFixed && (timeChanged || venueScopeChanged)
-            ? await getActivityVenueBookingIdList(activity._id, previousTitle)
-            : [];
-        await assertFixedVenueSlotsFree(
-          {
-            startDate: effectiveStart,
-            endDate: effectiveEnd,
-            title: effectiveTitle,
-            venueHoldMode: effectiveVenueHoldMode,
-            venueHoldCourtId: effectiveVenueHoldCourtId
-          },
-          { excludeBookingIds: excludeIds }
-        );
-      } catch (slotErr) {
-        return res.status(400).json({
-          message: slotErr.message || '該時段已有其他預約，無法更新活動時間'
+    // 固定場地：只檢查衝突，不 hold／不取消既有佔場
+    const needConflictCheck = nextIsFixed && (!wasFixed || timeChanged || venueScopeChanged || updates.location !== undefined);
+    if (needConflictCheck) {
+      const excludeIds =
+        wasFixed && (timeChanged || venueScopeChanged)
+          ? await getActivityVenueBookingIdList(activity._id, previousTitle)
+          : [];
+      const { conflicts, error } = await findFixedVenueConflicts(
+        {
+          startDate: effectiveStart,
+          endDate: effectiveEnd,
+          title: effectiveTitle,
+          store: resolvedStoreForCheck,
+          venueHoldMode: effectiveVenueHoldMode,
+          venueHoldCourtId: effectiveVenueHoldCourtId,
+        },
+        { excludeBookingIds: excludeIds }
+      );
+      if (error) {
+        return res.status(400).json({ message: error });
+      }
+      if (conflicts.length && !parseConfirmVenueConflict(req.body)) {
+        return res.status(409).json({
+          requiresConfirm: true,
+          conflictCourts: conflicts,
+          message: `以下場地在該時段已有預約：${conflicts.join('、')}。活動不會自動佔用場地；確認仍要更新？`,
         });
       }
     }
@@ -1823,27 +1842,18 @@ router.put('/:id', [
     if (activity.venueHoldMode === 'full_venue') {
       activity.venueHoldCourtId = null;
     }
+    if (effectiveLocation !== FIXED_ACTIVITY_VENUE_LOCATION) {
+      activity.venueHoldMode = 'full_venue';
+      activity.venueHoldCourtId = null;
+    }
 
-    const bodyStoreRaw = req.body.storeId || req.body.store;
     if (bodyStoreRaw !== undefined || updates.location !== undefined) {
-      activity.store = await resolveActivityStoreId({
-        storeId: bodyStoreRaw !== undefined ? bodyStoreRaw : activity.store,
-        location: activity.location,
-      });
+      activity.store = resolvedStoreForCheck;
     }
 
     await activity.save();
 
-    try {
-      if (wasFixed && !nextIsFixed) {
-        await cancelActivityVenueBookingsForActivity(activity._id, previousTitle);
-      } else if (nextIsFixed) {
-        await reconcileActivityVenueBookings(activity, req.user.id, previousTitle);
-      }
-    } catch (venueErr) {
-      console.error('活動場地預約同步失敗:', venueErr);
-    }
-
+    // 不建立／同步 activity_hold；亦不取消既有佔場
     console.log(`🎯 管理員更新活動: ${activity.title} (${activity._id})`);
 
     res.json({
