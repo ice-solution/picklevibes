@@ -135,15 +135,20 @@ async function rentalHoursForHkDay(ymd, storeId = null) {
   return Math.round((minutes / 60) * 100) / 100;
 }
 
-async function rechargePointsForHkDay(ymd, storeId = null) {
+/**
+ * 充值積分：全平台合計，不分店。
+ * 排除手動扣除等 pointsDeducted 審計記錄（同用 Recharge 表但非充值）。
+ */
+async function rechargePointsForHkDay(ymd) {
   const s = hkStartOfDayInstant(ymd);
   const e = hkEndOfDayInstant(ymd);
-  const statusMatch = { status: 'completed' };
-  if (storeId) {
-    statusMatch.store = new mongoose.Types.ObjectId(storeId);
-  }
   const agg = await Recharge.aggregate([
-    { $match: statusMatch },
+    {
+      $match: {
+        status: 'completed',
+        pointsDeducted: { $ne: true }
+      }
+    },
     {
       $addFields: {
         eff: { $ifNull: ['$payment.paidAt', '$updatedAt'] }
@@ -155,55 +160,131 @@ async function rechargePointsForHkDay(ymd, storeId = null) {
   return agg[0]?.pts || 0;
 }
 
+/** 不計入「消費積分」：手動扣除、活動報名、收款連結退款扣回充值 */
+const SPEND_EXCLUDE_DESC_REGEX = /^(管理員手動扣除|活動報名|收款連結退款扣回充值)/;
+
+function spendBaseMatch(s, e) {
+  return {
+    'transactions.type': 'spend',
+    'transactions.createdAt': { $gte: s, $lte: e },
+    'transactions.description': { $not: SPEND_EXCLUDE_DESC_REGEX }
+  };
+}
+
+function activitySpendMatch(s, e) {
+  return {
+    'transactions.type': 'spend',
+    'transactions.createdAt': { $gte: s, $lte: e },
+    'transactions.description': /^活動報名/
+  };
+}
+
 /**
- * 消費積分：全店鋪時直接加總 spend；單店時僅計入
- * relatedBooking（Booking.store／court.store）或 relatedPosTransaction.store 可歸屬該店的交易。
+ * 單店消費歸屬：預約／POS／收款連結（含舊資料以「付款：」+ 時間鄰近推斷）。
+ */
+async function appendStoreSpendFilterStages(pipeline, storeId) {
+  const storeOid = new mongoose.Types.ObjectId(storeId);
+  const courtIds = await Court.find({ store: storeId }).distinct('_id');
+  pipeline.push(
+    {
+      $lookup: {
+        from: 'bookings',
+        localField: 'transactions.relatedBooking',
+        foreignField: '_id',
+        as: '_booking'
+      }
+    },
+    { $unwind: { path: '$_booking', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'postransactions',
+        localField: 'transactions.relatedPosTransaction',
+        foreignField: '_id',
+        as: '_pos'
+      }
+    },
+    { $unwind: { path: '$_pos', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'paymentlinkpayments',
+        localField: 'transactions.relatedPaymentLinkPayment',
+        foreignField: '_id',
+        as: '_paylink'
+      }
+    },
+    { $unwind: { path: '$_paylink', preserveNullAndEmptyArrays: true } },
+    // 舊收款連結扣款未寫 relatedPaymentLinkPayment：以用戶 + 約 ±2 分鐘完成時間對齊
+    {
+      $lookup: {
+        from: 'paymentlinkpayments',
+        let: {
+          uid: '$user',
+          txAt: '$transactions.createdAt',
+          desc: '$transactions.description'
+        },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ['$user', '$$uid'] },
+                  { $eq: ['$status', 'completed'] },
+                  { $eq: ['$store', storeOid] },
+                  {
+                    $regexMatch: {
+                      input: { $ifNull: ['$$desc', ''] },
+                      regex: '^付款：'
+                    }
+                  },
+                  {
+                    $gte: [
+                      { $ifNull: ['$payment.paidAt', '$updatedAt'] },
+                      { $subtract: ['$$txAt', 120000] }
+                    ]
+                  },
+                  {
+                    $lte: [
+                      { $ifNull: ['$payment.paidAt', '$updatedAt'] },
+                      { $add: ['$$txAt', 120000] }
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          { $limit: 1 }
+        ],
+        as: '_paylinkLegacy'
+      }
+    },
+    {
+      $match: {
+        $or: [
+          { '_booking.store': storeOid },
+          ...(courtIds.length ? [{ '_booking.court': { $in: courtIds } }] : []),
+          { '_pos.store': storeOid },
+          { '_paylink.store': storeOid },
+          { '_paylinkLegacy.0': { $exists: true } }
+        ]
+      }
+    }
+  );
+}
+
+/**
+ * 消費積分：預約／POS／收款連結等店鋪消費。
+ * 排除手動扣除、活動報名；活動另見 activitySpentPointsForHkDay。
  */
 async function spentPointsForHkDay(ymd, storeId = null) {
   const s = hkStartOfDayInstant(ymd);
   const e = hkEndOfDayInstant(ymd);
   const pipeline = [
     { $unwind: '$transactions' },
-    {
-      $match: {
-        'transactions.type': 'spend',
-        'transactions.createdAt': { $gte: s, $lte: e }
-      }
-    }
+    { $match: spendBaseMatch(s, e) }
   ];
 
   if (storeId) {
-    const storeOid = new mongoose.Types.ObjectId(storeId);
-    const courtIds = await Court.find({ store: storeId }).distinct('_id');
-    pipeline.push(
-      {
-        $lookup: {
-          from: 'bookings',
-          localField: 'transactions.relatedBooking',
-          foreignField: '_id',
-          as: '_booking'
-        }
-      },
-      { $unwind: { path: '$_booking', preserveNullAndEmptyArrays: true } },
-      {
-        $lookup: {
-          from: 'postransactions',
-          localField: 'transactions.relatedPosTransaction',
-          foreignField: '_id',
-          as: '_pos'
-        }
-      },
-      { $unwind: { path: '$_pos', preserveNullAndEmptyArrays: true } },
-      {
-        $match: {
-          $or: [
-            { '_booking.store': storeOid },
-            ...(courtIds.length ? [{ '_booking.court': { $in: courtIds } }] : []),
-            { '_pos.store': storeOid }
-          ]
-        }
-      }
-    );
+    await appendStoreSpendFilterStages(pipeline, storeId);
   }
 
   pipeline.push({
@@ -214,6 +295,25 @@ async function spentPointsForHkDay(ymd, storeId = null) {
   });
 
   const agg = await UserBalance.aggregate(pipeline);
+  return Math.round((agg[0]?.spent || 0) * 100) / 100;
+}
+
+/**
+ * 活動消費：全平台合計，與店鋪篩選無關（活動本身不歸屬分店）。
+ */
+async function activitySpentPointsForHkDay(ymd) {
+  const s = hkStartOfDayInstant(ymd);
+  const e = hkEndOfDayInstant(ymd);
+  const agg = await UserBalance.aggregate([
+    { $unwind: '$transactions' },
+    { $match: activitySpendMatch(s, e) },
+    {
+      $group: {
+        _id: null,
+        spent: { $sum: { $abs: '$transactions.amount' } }
+      }
+    }
+  ]);
   return Math.round((agg[0]?.spent || 0) * 100) / 100;
 }
 
@@ -679,7 +779,7 @@ router.get('/dashboard-live', [auth, adminAuth], async (req, res) => {
 });
 
 // @route   GET /api/stats/dashboard-kpis
-// @desc    今日 vs 昨日：總出租小時、充值積分、消費積分（香港日曆日）
+// @desc    今日 vs 昨日：總出租小時、充值積分、消費積分、活動消費（香港日曆日）
 // @access  Private (Admin)
 router.get('/dashboard-kpis', [auth, adminAuth], async (req, res) => {
   try {
@@ -691,13 +791,24 @@ router.get('/dashboard-kpis', [auth, adminAuth], async (req, res) => {
 
     const today = formatHkYmd();
     const yesterday = addDaysToYmd(today, -1);
-    const [tRental, tRecharge, tSpent, yRental, yRecharge, ySpent] = await Promise.all([
+    const [
+      tRental,
+      tRecharge,
+      tSpent,
+      tActivity,
+      yRental,
+      yRecharge,
+      ySpent,
+      yActivity
+    ] = await Promise.all([
       rentalHoursForHkDay(today, storeId),
-      rechargePointsForHkDay(today, storeId),
+      rechargePointsForHkDay(today),
       spentPointsForHkDay(today, storeId),
+      activitySpentPointsForHkDay(today),
       rentalHoursForHkDay(yesterday, storeId),
-      rechargePointsForHkDay(yesterday, storeId),
-      spentPointsForHkDay(yesterday, storeId)
+      rechargePointsForHkDay(yesterday),
+      spentPointsForHkDay(yesterday, storeId),
+      activitySpentPointsForHkDay(yesterday)
     ]);
 
     res.json({
@@ -706,15 +817,17 @@ router.get('/dashboard-kpis', [auth, adminAuth], async (req, res) => {
       ...storeMeta(storeId, {
         fields: {
           rentalHours: ['Booking.store', 'Court.store→Booking.court'],
-          rechargePoints: ['Recharge.store'],
+          rechargePoints: ['全平台 Recharge（不分店；排除 pointsDeducted）'],
           spentPoints: [
-            'UserBalance.transactions.relatedBooking→Booking.store/court',
-            'UserBalance.transactions.relatedPosTransaction→PosTransaction.store'
-          ]
+            'relatedBooking→Booking.store/court',
+            'relatedPosTransaction→PosTransaction.store',
+            'relatedPaymentLinkPayment→PaymentLinkPayment.store'
+          ],
+          activitySpentPoints: ['活動報名 spend（全平台，不分店）']
         },
         note: storeId
-          ? '充值積分僅計 Recharge.store 有歸屬該店的紀錄；無店鋪標籤的線上充值不計入單店'
-          : undefined
+          ? '充值積分／活動消費為全平台數字（與店鋪篩選無關）；消費積分僅計可歸屬該店的預約／POS／收款連結'
+          : '消費積分不含手動扣除與活動報名；活動消費另欄顯示'
       }),
       data: {
         todayYmd: today,
@@ -722,12 +835,14 @@ router.get('/dashboard-kpis', [auth, adminAuth], async (req, res) => {
         today: {
           rentalHours: tRental,
           rechargePoints: tRecharge,
-          spentPoints: tSpent
+          spentPoints: tSpent,
+          activitySpentPoints: tActivity
         },
         yesterday: {
           rentalHours: yRental,
           rechargePoints: yRecharge,
-          spentPoints: ySpent
+          spentPoints: ySpent,
+          activitySpentPoints: yActivity
         }
       }
     });
@@ -738,7 +853,7 @@ router.get('/dashboard-kpis', [auth, adminAuth], async (req, res) => {
 });
 
 // @route   GET /api/stats/dashboard-series
-// @desc    按香港日曆日序列：出租小時、充值積分、消費積分（預設最近 7 日含今天）
+// @desc    按香港日曆日序列：出租小時、充值積分、消費積分、活動消費（預設最近 7 日含今天）
 // @access  Private (Admin)
 router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
   try {
@@ -765,52 +880,18 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
       bookingMatch = await applyBookingStoreFilter(bookingMatch, { storeId });
     }
 
-    const rechargeMatch = { status: 'completed' };
-    if (storeId) {
-      rechargeMatch.store = new mongoose.Types.ObjectId(storeId);
-    }
+    // 充值：全平台、排除手動扣除審計
+    const rechargeMatch = {
+      status: 'completed',
+      pointsDeducted: { $ne: true }
+    };
 
     const spendPipeline = [
       { $unwind: '$transactions' },
-      {
-        $match: {
-          'transactions.type': 'spend',
-          'transactions.createdAt': { $gte: start, $lte: end }
-        }
-      }
+      { $match: spendBaseMatch(start, end) }
     ];
     if (storeId) {
-      const storeOid = new mongoose.Types.ObjectId(storeId);
-      const courtIds = await Court.find({ store: storeId }).distinct('_id');
-      spendPipeline.push(
-        {
-          $lookup: {
-            from: 'bookings',
-            localField: 'transactions.relatedBooking',
-            foreignField: '_id',
-            as: '_booking'
-          }
-        },
-        { $unwind: { path: '$_booking', preserveNullAndEmptyArrays: true } },
-        {
-          $lookup: {
-            from: 'postransactions',
-            localField: 'transactions.relatedPosTransaction',
-            foreignField: '_id',
-            as: '_pos'
-          }
-        },
-        { $unwind: { path: '$_pos', preserveNullAndEmptyArrays: true } },
-        {
-          $match: {
-            $or: [
-              { '_booking.store': storeOid },
-              ...(courtIds.length ? [{ '_booking.court': { $in: courtIds } }] : []),
-              { '_pos.store': storeOid }
-            ]
-          }
-        }
-      );
+      await appendStoreSpendFilterStages(spendPipeline, storeId);
     }
     spendPipeline.push(
       {
@@ -833,7 +914,30 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
       }
     );
 
-    const [rentalAgg, rechargeAgg, spendAgg] = await Promise.all([
+    const activityPipeline = [
+      { $unwind: '$transactions' },
+      { $match: activitySpendMatch(start, end) },
+      {
+        $group: {
+          _id: {
+            $dateToString: {
+              date: '$transactions.createdAt',
+              format: '%Y-%m-%d',
+              timezone: HK_TZ
+            }
+          },
+          activitySpentPoints: { $sum: { $abs: '$transactions.amount' } }
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          activitySpentPoints: { $round: ['$activitySpentPoints', 2] }
+        }
+      }
+    ];
+
+    const [rentalAgg, rechargeAgg, spendAgg, activityAgg] = await Promise.all([
       Booking.aggregate([
         { $match: bookingMatch },
         {
@@ -860,12 +964,16 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
           }
         }
       ]),
-      UserBalance.aggregate(spendPipeline)
+      UserBalance.aggregate(spendPipeline),
+      UserBalance.aggregate(activityPipeline)
     ]);
 
     const rentalMap = Object.fromEntries(rentalAgg.map((r) => [r._id, r.hours || 0]));
     const rechargeMap = Object.fromEntries(rechargeAgg.map((r) => [r._id, r.rechargePoints || 0]));
     const spendMap = Object.fromEntries(spendAgg.map((r) => [r._id, r.spentPoints || 0]));
+    const activityMap = Object.fromEntries(
+      activityAgg.map((r) => [r._id, r.activitySpentPoints || 0])
+    );
 
     const series = [];
     for (let d = fromYmd; d <= toYmd; d = addDaysToYmd(d, 1)) {
@@ -873,7 +981,8 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
         date: d,
         rentalHours: rentalMap[d] || 0,
         rechargePoints: rechargeMap[d] || 0,
-        spentPoints: spendMap[d] || 0
+        spentPoints: spendMap[d] || 0,
+        activitySpentPoints: activityMap[d] || 0
       });
     }
 
@@ -883,15 +992,17 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
       ...storeMeta(storeId, {
         fields: {
           rentalHours: ['Booking.store', 'Court.store→Booking.court'],
-          rechargePoints: ['Recharge.store'],
+          rechargePoints: ['全平台 Recharge（不分店）'],
           spentPoints: [
             'relatedBooking→Booking.store/court',
-            'relatedPosTransaction→PosTransaction.store'
-          ]
+            'relatedPosTransaction→PosTransaction.store',
+            'relatedPaymentLinkPayment→PaymentLinkPayment.store'
+          ],
+          activitySpentPoints: ['活動報名 spend（全平台）']
         },
         note: storeId
-          ? '充值積分僅計 Recharge.store 有歸屬該店的紀錄；無店鋪標籤的線上充值不計入單店'
-          : undefined
+          ? '充值積分／活動消費為全平台（切換店鋪不變）；消費積分僅計該店預約／POS／收款連結'
+          : '消費積分不含手動扣除與活動報名'
       }),
       data: { fromYmd, toYmd, series }
     });

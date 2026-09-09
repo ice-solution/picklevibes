@@ -169,12 +169,12 @@ async function completeMemberGatewayPayment(payment, link, transactionId) {
   );
 
   if (!recharge) {
+    // 充值不分店：收款連結的中間充值記錄不寫 store（店鋪歸屬在 PaymentLinkPayment）
     recharge = new Recharge({
       user: payment.user,
       points: creditPoints,
       amount: Number(payment.amount),
       description: linkTitle,
-      store: payment.store,
       status: 'pending',
       paymentIntentId: `paylink_${payment._id}`,
       payment: {
@@ -206,7 +206,14 @@ async function completeMemberGatewayPayment(payment, link, transactionId) {
         `扣積分失敗：充值後餘額 ${userBalance.balance}，需扣 ${debitPoints}`
       );
     }
-    await userBalance.deductBalance(debitPoints, `付款：${linkTitle}`);
+    await userBalance.deductBalance(
+      debitPoints,
+      `付款：${linkTitle}`,
+      null,
+      null,
+      null,
+      payment._id
+    );
     payment.pointsDebited = true;
     await payment.save();
   }
@@ -306,10 +313,18 @@ async function payWithPoints({ link, userId, payerNote = '', user = null }) {
   });
 
   try {
-    await userBalance.deductBalance(pointsAmount, `付款：${link.title}`);
+    await userBalance.deductBalance(
+      pointsAmount,
+      `付款：${link.title}`,
+      null,
+      null,
+      null,
+      payment._id
+    );
     payment.status = 'completed';
     payment.payment.paidAt = new Date();
     payment.payment.transactionId = `points_${payment._id}`;
+    payment.pointsDebited = true;
     await payment.save();
     await bumpLinkStats(link._id, pointsAmount);
     return { payment };
@@ -474,7 +489,11 @@ async function refundMemberPoints(payment, link, reason) {
     }
     await userBalance.refund(
       debitPoints,
-      `收款連結退款：${linkTitle}${reason ? ` · ${reason}` : ''}`
+      `收款連結退款：${linkTitle}${reason ? ` · ${reason}` : ''}`,
+      null,
+      null,
+      null,
+      payment._id
     );
     payment.pointsDebited = false;
   }
@@ -488,7 +507,11 @@ async function refundMemberPoints(payment, link, reason) {
       }
       await userBalance.deductBalance(
         recharge.points,
-        `收款連結退款扣回充值：${linkTitle}${reason ? ` · ${reason}` : ''}`
+        `收款連結退款扣回充值：${linkTitle}${reason ? ` · ${reason}` : ''}`,
+        null,
+        null,
+        null,
+        payment._id
       );
       recharge.pointsAdded = false;
       recharge.pointsDeducted = true;

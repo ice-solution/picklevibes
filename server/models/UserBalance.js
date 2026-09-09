@@ -43,6 +43,10 @@ const userBalanceSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'PosTransaction'
     },
+    relatedPaymentLinkPayment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PaymentLinkPayment'
+    },
     createdAt: {
       type: Date,
       default: Date.now
@@ -70,7 +74,8 @@ userBalanceSchema.methods.deductBalance = function(
   description = '消費',
   relatedBooking = null,
   relatedOrder = null,
-  relatedPosTransaction = null
+  relatedPosTransaction = null,
+  relatedPaymentLinkPayment = null
 ) {
   if (this.balance < amount) {
     throw new Error('餘額不足');
@@ -85,6 +90,7 @@ userBalanceSchema.methods.deductBalance = function(
   if (relatedBooking) entry.relatedBooking = relatedBooking;
   if (relatedOrder) entry.relatedOrder = relatedOrder;
   if (relatedPosTransaction) entry.relatedPosTransaction = relatedPosTransaction;
+  if (relatedPaymentLinkPayment) entry.relatedPaymentLinkPayment = relatedPaymentLinkPayment;
   this.transactions.push(entry);
   return this.save();
 };
@@ -95,7 +101,8 @@ userBalanceSchema.methods.refund = function(
   description = '退款',
   relatedBooking = null,
   relatedOrder = null,
-  relatedPosTransaction = null
+  relatedPosTransaction = null,
+  relatedPaymentLinkPayment = null
 ) {
   this.balance += amount;
   if (this.totalSpent > 0) {
@@ -109,6 +116,7 @@ userBalanceSchema.methods.refund = function(
   if (relatedBooking) entry.relatedBooking = relatedBooking;
   if (relatedOrder) entry.relatedOrder = relatedOrder;
   if (relatedPosTransaction) entry.relatedPosTransaction = relatedPosTransaction;
+  if (relatedPaymentLinkPayment) entry.relatedPaymentLinkPayment = relatedPaymentLinkPayment;
   this.transactions.push(entry);
   return this.save();
 };

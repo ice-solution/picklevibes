@@ -59,8 +59,18 @@ interface DashboardLive {
 interface DashboardKpis {
   todayYmd: string;
   yesterdayYmd: string;
-  today: { rentalHours: number; rechargePoints: number; spentPoints: number };
-  yesterday: { rentalHours: number; rechargePoints: number; spentPoints: number };
+  today: {
+    rentalHours: number;
+    rechargePoints: number;
+    spentPoints: number;
+    activitySpentPoints: number;
+  };
+  yesterday: {
+    rentalHours: number;
+    rechargePoints: number;
+    spentPoints: number;
+    activitySpentPoints: number;
+  };
 }
 
 interface SeriesRow {
@@ -68,6 +78,7 @@ interface SeriesRow {
   rentalHours: number;
   rechargePoints: number;
   spentPoints: number;
+  activitySpentPoints: number;
 }
 
 const monthLabels = ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'];
@@ -371,7 +382,11 @@ const AnalyticsDashboard: React.FC = () => {
 
             <div>
               <h4 className="text-base font-semibold text-gray-900 mb-3">經營概況</h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <p className="text-xs text-gray-500 mb-3">
+                充值積分與活動消費為全平台數字（切換店鋪不變）。消費積分不含手動扣除與活動報名
+                {storeId ? '；單店僅計該店預約／POS／收款連結' : ''}。
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
                 <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                   <p className="text-sm text-gray-600">今日總出租小時</p>
                   <p className="mt-1 text-2xl font-bold text-gray-900">{formatNum(kpis.today.rentalHours)}</p>
@@ -386,7 +401,7 @@ const AnalyticsDashboard: React.FC = () => {
                   <p className="text-sm text-gray-600">今日充值積分</p>
                   <p className="mt-1 text-2xl font-bold text-gray-900">{formatNum(kpis.today.rechargePoints, 0)}</p>
                   <p className="mt-1 text-xs text-gray-500">
-                    昨日 {formatNum(kpis.yesterday.rechargePoints, 0)} 分
+                    昨日 {formatNum(kpis.yesterday.rechargePoints, 0)} 分 · 全平台
                   </p>
                   <div className="mt-2">
                     <DeltaTag cur={kpis.today.rechargePoints} prev={kpis.yesterday.rechargePoints} />
@@ -400,6 +415,21 @@ const AnalyticsDashboard: React.FC = () => {
                   </p>
                   <div className="mt-2">
                     <DeltaTag cur={kpis.today.spentPoints} prev={kpis.yesterday.spentPoints} />
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                  <p className="text-sm text-gray-600">今日活動消費</p>
+                  <p className="mt-1 text-2xl font-bold text-gray-900">
+                    {formatNum(kpis.today.activitySpentPoints ?? 0)}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    昨日 {formatNum(kpis.yesterday.activitySpentPoints ?? 0)} 分 · 全平台
+                  </p>
+                  <div className="mt-2">
+                    <DeltaTag
+                      cur={kpis.today.activitySpentPoints ?? 0}
+                      prev={kpis.yesterday.activitySpentPoints ?? 0}
+                    />
                   </div>
                 </div>
               </div>
@@ -436,13 +466,32 @@ const AnalyticsDashboard: React.FC = () => {
                     <YAxis yAxisId="h" orientation="left" tick={{ fontSize: 11 }} width={40} label={{ value: '小時', angle: -90, position: 'insideLeft', fontSize: 10 }} />
                     <YAxis yAxisId="p" orientation="right" tick={{ fontSize: 11 }} width={44} label={{ value: '積分', angle: 90, position: 'insideRight', fontSize: 10 }} />
                     <Tooltip
-                      formatter={(v: number, name: string) => [formatNum(v, name === 'rentalHours' ? 2 : 2), name === 'rentalHours' ? '出租小時' : name === 'rechargePoints' ? '充值積分' : '消費積分']}
+                      formatter={(v: number, name: string) => {
+                        const labels: Record<string, string> = {
+                          rentalHours: '出租小時',
+                          rechargePoints: '充值積分',
+                          spentPoints: '消費積分',
+                          activitySpentPoints: '活動消費'
+                        };
+                        return [formatNum(v, name === 'rentalHours' ? 2 : 2), labels[name] || name];
+                      }}
                       labelFormatter={(l) => `日期 ${l}`}
                     />
-                    <Legend formatter={(v) => (v === 'rentalHours' ? '總出租小時' : v === 'rechargePoints' ? '充值積分' : '消費積分')} />
+                    <Legend
+                      formatter={(v) => {
+                        const labels: Record<string, string> = {
+                          rentalHours: '總出租小時',
+                          rechargePoints: '充值積分',
+                          spentPoints: '消費積分',
+                          activitySpentPoints: '活動消費'
+                        };
+                        return labels[v] || v;
+                      }}
+                    />
                     <Line yAxisId="h" type="monotone" dataKey="rentalHours" stroke="#3b82f6" strokeWidth={2} dot={false} name="rentalHours" />
                     <Line yAxisId="p" type="monotone" dataKey="rechargePoints" stroke="#22c55e" strokeWidth={2} dot={false} name="rechargePoints" />
                     <Line yAxisId="p" type="monotone" dataKey="spentPoints" stroke="#f59e0b" strokeWidth={2} dot={false} name="spentPoints" />
+                    <Line yAxisId="p" type="monotone" dataKey="activitySpentPoints" stroke="#0d9488" strokeWidth={2} dot={false} name="activitySpentPoints" />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
