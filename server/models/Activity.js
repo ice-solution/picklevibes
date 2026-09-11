@@ -66,7 +66,8 @@ const activitySchema = new mongoose.Schema({
     trim: true
   },
   /**
-   * 僅當 location 為本店固定地址時有效：full_venue=三場地佔用；single_court=僅佔用 venueHoldCourtId
+   * 當 location 等於所屬店鋪 Store.address 時有效：
+   * full_venue=該店全部場地檢查；single_court=僅檢查 venueHoldCourtId
    */
   venueHoldMode: {
     type: String,

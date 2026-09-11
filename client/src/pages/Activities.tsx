@@ -61,10 +61,10 @@ interface StoreOption {
   _id: string;
   name: string;
   slug?: string;
+  address?: string;
 }
 
 const SECTION_ORDER: SectionStatus[] = ['upcoming', 'ongoing', 'completed'];
-const FIXED_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
 
 const Activities: React.FC = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -176,47 +176,48 @@ const Activities: React.FC = () => {
     return derived as SectionStatus;
   };
 
-  const isLaiChiKokLocation = (location?: string) => {
-    const loc = location || '';
-    return loc.includes('荔枝角') || loc === FIXED_VENUE_LOCATION;
+  /**
+   * 只用地鋪管理「啟用中」的店做分組。
+   * 已刪／停用（如舊 iSQUARE）唔再顯示為獨立店鋪組；可改以地址對應現有店。
+   */
+  const resolveActivityStore = (activity: Activity): StoreOption | null => {
+    const store = activity.store;
+    if (store && typeof store === 'object' && store._id) {
+      const active = stores.find((s) => s._id === store._id);
+      if (active) return active;
+    }
+    const loc = (activity.location || '').trim();
+    if (loc) {
+      const byAddress = stores.find((s) => (s.address || '').trim() === loc);
+      if (byAddress) return byAddress;
+    }
+    return null;
   };
 
   const getStoreGroupName = (activity: Activity): string => {
-    const store = activity.store;
-    if (store && typeof store === 'object' && store.name) {
-      return store.branding?.displayName || store.name;
+    const resolved = resolveActivityStore(activity);
+    if (!resolved) return t('activitiesPage.storeGroups.other');
+    if (
+      activity.store &&
+      typeof activity.store === 'object' &&
+      activity.store._id === resolved._id &&
+      activity.store.branding?.displayName
+    ) {
+      return activity.store.branding.displayName;
     }
-    if (isLaiChiKokLocation(activity.location)) {
-      return t('activitiesPage.storeGroups.laiChiKok');
-    }
-    return t('activitiesPage.storeGroups.other');
+    return resolved.name;
   };
 
   const activityMatchesStoreFilter = (activity: Activity, filter: string): boolean => {
     if (!filter) return true;
 
-    const storeId =
-      activity.store && typeof activity.store === 'object' ? activity.store._id : null;
+    const resolved = resolveActivityStore(activity);
 
     if (filter === 'other') {
-      if (storeId) return false;
-      return !isLaiChiKokLocation(activity.location);
+      return !resolved;
     }
 
-    if (storeId && storeId === filter) return true;
-
-    // 未綁 store 但地點屬荔枝角：對應 slug / 名稱含荔枝角的店鋪
-    const selected = stores.find((s) => s._id === filter);
-    if (
-      !storeId &&
-      selected &&
-      isLaiChiKokLocation(activity.location) &&
-      (selected.slug === 'lai-chi-kok' || /荔枝角/i.test(selected.name || ''))
-    ) {
-      return true;
-    }
-
-    return false;
+    return Boolean(resolved && resolved._id === filter);
   };
 
   const filteredActivities = useMemo(

@@ -19,26 +19,36 @@ const {
 } = require('../utils/activityPin');
 
 const router = express.Router();
-const FIXED_ACTIVITY_VENUE_LOCATION = '荔枝角福源廣場8樓B C D室';
 const Store = require('../models/Store');
 
-/** 解析活動所屬店鋪：明確 storeId 優先；荔枝角固定場地自動對應 */
+/**
+ * 解析活動所屬店鋪：明確 storeId 優先；否則用 location 對應 Store.address。
+ */
 async function resolveActivityStoreId({ storeId, location } = {}) {
   const raw = storeId != null ? String(storeId).trim() : '';
   if (raw && mongoose.Types.ObjectId.isValid(raw)) {
-    const byId = await Store.findById(raw).select('_id').lean();
+    const byId = await Store.findById(raw).select('_id address').lean();
     if (byId) return byId._id;
   }
-  if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
-    const bySlug = await Store.findOne({
-      $or: [{ slug: 'lai-chi-kok' }, { name: /荔枝角/i }],
-      isActive: { $ne: false },
-    })
-      .select('_id')
-      .lean();
-    if (bySlug) return bySlug._id;
+  const loc = location != null ? String(location).trim() : '';
+  if (loc) {
+    const byAddress = await Store.findOne({ address: loc }).select('_id').lean();
+    if (byAddress) return byAddress._id;
   }
   return null;
+}
+
+/** 是否為店鋪管理地址（可設定場地佔用方式／做衝突檢查） */
+async function isStoreManagedVenue({ storeId, location } = {}) {
+  const loc = location != null ? String(location).trim() : '';
+  if (!loc) return false;
+  const raw = storeId != null ? String(storeId).trim() : '';
+  if (raw && mongoose.Types.ObjectId.isValid(raw)) {
+    const store = await Store.findById(raw).select('address').lean();
+    if (store && String(store.address || '').trim() === loc) return true;
+  }
+  const byAddress = await Store.findOne({ address: loc }).select('_id').lean();
+  return Boolean(byAddress);
 }
 
 /**
@@ -180,7 +190,7 @@ async function getActivityVenueBookingIdList(activityId, previousTitle) {
     .map((row) => row._id);
 }
 
-/** 荔枝角固定場地活動：要佔用的場地清單（包場=三場；單一場地=一場） */
+/** 店鋪場地活動：要檢查的場地清單（包場=該店全部；單一場地=一場） */
 async function getActivityTargetCourts(activity) {
   const storeFilter = activity.store ? { store: activity.store } : {};
   const mode = activity.venueHoldMode || 'full_venue';
@@ -202,7 +212,7 @@ async function getActivityTargetCourts(activity) {
 }
 
 /**
- * 固定場地活動：檢查各場是否已被預約（不 throw；回傳衝突場地名）
+ * 店鋪管理地址活動：檢查各場是否已被預約（不 throw；回傳衝突場地名）
  */
 async function findFixedVenueConflicts(activityLike, { excludeBookingIds = [] } = {}) {
   const targetCourts = await getActivityTargetCourts(activityLike);
@@ -1026,9 +1036,13 @@ router.post('/', [
       storeId: req.body.storeId || req.body.store,
       location,
     });
+    const storeVenue = await isStoreManagedVenue({
+      storeId: resolvedStoreId,
+      location,
+    });
 
-    // 固定場地：只做衝突檢查，不 hold 場；有衝突需 admin confirm
-    if (location === FIXED_ACTIVITY_VENUE_LOCATION) {
+    // 店鋪管理地址：只做衝突檢查，不 hold 場；有衝突需 admin confirm
+    if (storeVenue) {
       if (venueHoldMode === 'single_court' && !venueHoldCourtId) {
         return res.status(400).json({ message: '請選擇要檢查的場地' });
       }
@@ -1067,11 +1081,9 @@ router.post('/', [
       organizer: req.user.id,
       coaches: coachIds,
       store: resolvedStoreId,
-      venueHoldMode: location === FIXED_ACTIVITY_VENUE_LOCATION ? venueHoldMode : 'full_venue',
+      venueHoldMode: storeVenue ? venueHoldMode : 'full_venue',
       venueHoldCourtId:
-        location === FIXED_ACTIVITY_VENUE_LOCATION && venueHoldMode === 'single_court'
-          ? venueHoldCourtId
-          : null,
+        storeVenue && venueHoldMode === 'single_court' ? venueHoldCourtId : null,
     });
 
     await activity.save();
@@ -1763,6 +1775,7 @@ router.put('/:id', [
 
     const previousTitle = activity.title;
     const previousLocation = activity.location;
+    const previousStore = activity.store;
 
     const effectiveLocation =
       updates.location !== undefined ? updates.location : activity.location;
@@ -1781,19 +1794,6 @@ router.put('/:id', [
         ? updates.venueHoldCourtId
         : activity.venueHoldCourtId;
 
-    const wasFixed = previousLocation === FIXED_ACTIVITY_VENUE_LOCATION;
-    const nextIsFixed = effectiveLocation === FIXED_ACTIVITY_VENUE_LOCATION;
-    const tMs = (d) => new Date(d).getTime();
-    const timeChanged =
-      tMs(effectiveStart) !== tMs(activity.startDate) ||
-      tMs(effectiveEnd) !== tMs(activity.endDate);
-    const venueScopeChanged =
-      updates.venueHoldMode !== undefined || updates.venueHoldCourtId !== undefined;
-
-    if (nextIsFixed && effectiveVenueHoldMode === 'single_court' && !effectiveVenueHoldCourtId) {
-      return res.status(400).json({ message: '荔枝角場地請選擇要檢查的場地' });
-    }
-
     const bodyStoreRaw = req.body.storeId || req.body.store;
     const resolvedStoreForCheck =
       bodyStoreRaw !== undefined || updates.location !== undefined
@@ -1803,11 +1803,33 @@ router.put('/:id', [
           })
         : activity.store;
 
-    // 固定場地：只檢查衝突，不 hold／不取消既有佔場
-    const needConflictCheck = nextIsFixed && (!wasFixed || timeChanged || venueScopeChanged || updates.location !== undefined);
+    const wasStoreVenue = await isStoreManagedVenue({
+      storeId: previousStore,
+      location: previousLocation,
+    });
+    const nextIsStoreVenue = await isStoreManagedVenue({
+      storeId: resolvedStoreForCheck,
+      location: effectiveLocation,
+    });
+
+    const tMs = (d) => new Date(d).getTime();
+    const timeChanged =
+      tMs(effectiveStart) !== tMs(activity.startDate) ||
+      tMs(effectiveEnd) !== tMs(activity.endDate);
+    const venueScopeChanged =
+      updates.venueHoldMode !== undefined || updates.venueHoldCourtId !== undefined;
+
+    if (nextIsStoreVenue && effectiveVenueHoldMode === 'single_court' && !effectiveVenueHoldCourtId) {
+      return res.status(400).json({ message: '請選擇要檢查的場地' });
+    }
+
+    // 店鋪管理地址：只檢查衝突，不 hold／不取消既有佔場
+    const needConflictCheck =
+      nextIsStoreVenue &&
+      (!wasStoreVenue || timeChanged || venueScopeChanged || updates.location !== undefined);
     if (needConflictCheck) {
       const excludeIds =
-        wasFixed && (timeChanged || venueScopeChanged)
+        wasStoreVenue && (timeChanged || venueScopeChanged)
           ? await getActivityVenueBookingIdList(activity._id, previousTitle)
           : [];
       const { conflicts, error } = await findFixedVenueConflicts(
@@ -1842,7 +1864,7 @@ router.put('/:id', [
     if (activity.venueHoldMode === 'full_venue') {
       activity.venueHoldCourtId = null;
     }
-    if (effectiveLocation !== FIXED_ACTIVITY_VENUE_LOCATION) {
+    if (!nextIsStoreVenue) {
       activity.venueHoldMode = 'full_venue';
       activity.venueHoldCourtId = null;
     }
