@@ -8,8 +8,17 @@ import {
   ClipboardDocumentIcon,
   EyeIcon,
 } from '@heroicons/react/24/outline';
+import Time24Input from '../Common/Time24Input';
 
 type StoreOption = { _id: string; name: string; slug: string };
+
+type PassPlanOption = {
+  _id: string;
+  name: string;
+  type: string;
+  durationDays: number;
+  price: number;
+};
 
 type PaymentLinkDoc = {
   _id: string;
@@ -21,6 +30,11 @@ type PaymentLinkDoc = {
   isActive: boolean;
   expiresAt?: string | null;
   store: StoreOption | string;
+  purpose?: 'activity' | 'sell_pass';
+  isReclub?: boolean;
+  sessionStart?: string;
+  sessionEnd?: string;
+  passPlan?: PassPlanOption | string | null;
   createdBy?: { name?: string; email?: string };
   stats?: { paidCount?: number; paidAmountTotal?: number };
   createdAt?: string;
@@ -76,7 +90,13 @@ const PaymentLinkManagement: React.FC = () => {
     pointsAmount: '',
     expiresAt: '',
     isActive: true,
+    purpose: 'activity' as 'activity' | 'sell_pass',
+    passPlanId: '',
+    isReclub: false,
+    sessionStart: '',
+    sessionEnd: '',
   });
+  const [passPlans, setPassPlans] = useState<PassPlanOption[]>([]);
 
   const [paymentsLink, setPaymentsLink] = useState<PaymentLinkDoc | null>(null);
   const [payments, setPayments] = useState<PaymentRow[]>([]);
@@ -86,6 +106,15 @@ const PaymentLinkManagement: React.FC = () => {
   const loadStores = useCallback(async () => {
     const res = await axios.get('/stores/admin/all');
     setStores(res.data.stores || []);
+  }, []);
+
+  const loadPassPlans = useCallback(async () => {
+    try {
+      const res = await axios.get('/monthly-pass-plans');
+      setPassPlans(res.data.plans || []);
+    } catch {
+      setPassPlans([]);
+    }
   }, []);
 
   const loadLinks = useCallback(async () => {
@@ -103,7 +132,8 @@ const PaymentLinkManagement: React.FC = () => {
 
   useEffect(() => {
     void loadStores();
-  }, [loadStores]);
+    void loadPassPlans();
+  }, [loadStores, loadPassPlans]);
 
   useEffect(() => {
     void loadLinks();
@@ -119,12 +149,23 @@ const PaymentLinkManagement: React.FC = () => {
       pointsAmount: '',
       expiresAt: '',
       isActive: true,
+      purpose: 'activity',
+      passPlanId: passPlans[0]?._id || '',
+      isReclub: false,
+      sessionStart: '',
+      sessionEnd: '',
     });
     setEditorOpen(true);
   };
 
   const openEdit = (link: PaymentLinkDoc) => {
     setEditing(link);
+    const planId =
+      typeof link.passPlan === 'object' && link.passPlan
+        ? link.passPlan._id
+        : link.passPlan
+          ? String(link.passPlan)
+          : '';
     setForm({
       store: typeof link.store === 'string' ? link.store : link.store._id,
       title: link.title,
@@ -137,6 +178,11 @@ const PaymentLinkManagement: React.FC = () => {
       ),
       expiresAt: toDatetimeLocalValue(link.expiresAt),
       isActive: link.isActive,
+      purpose: link.purpose === 'sell_pass' ? 'sell_pass' : 'activity',
+      passPlanId: planId,
+      isReclub: Boolean(link.isReclub),
+      sessionStart: link.sessionStart || '',
+      sessionEnd: link.sessionEnd || '',
     });
     setEditorOpen(true);
   };
@@ -144,6 +190,14 @@ const PaymentLinkManagement: React.FC = () => {
   const save = async () => {
     if (!form.store || !form.title.trim() || !form.amount || !form.pointsAmount) {
       alert('請填寫店鋪、標題、正價與積分價');
+      return;
+    }
+    if (form.purpose === 'sell_pass' && !form.passPlanId) {
+      alert('賣月卡連結請選擇月卡方案');
+      return;
+    }
+    if (form.purpose === 'activity' && form.isReclub && (!form.sessionStart || !form.sessionEnd)) {
+      alert('Reclub 活動請填寫時段');
       return;
     }
     setBusy(true);
@@ -156,6 +210,11 @@ const PaymentLinkManagement: React.FC = () => {
         pointsAmount: Number(form.pointsAmount),
         expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
         isActive: form.isActive,
+        purpose: form.purpose,
+        passPlan: form.purpose === 'sell_pass' ? form.passPlanId : null,
+        isReclub: form.purpose === 'activity' ? form.isReclub : false,
+        sessionStart: form.purpose === 'activity' ? form.sessionStart : '',
+        sessionEnd: form.purpose === 'activity' ? form.sessionEnd : '',
       };
       if (editing) {
         await axios.patch(`/payment-links/${editing._id}`, payload);
@@ -359,6 +418,26 @@ const PaymentLinkManagement: React.FC = () => {
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-900">{link.title}</p>
                       <p className="text-xs text-gray-400 font-mono">/pay/{link.code}</p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {link.purpose === 'sell_pass' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
+                            賣月卡
+                          </span>
+                        )}
+                        {link.isReclub && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
+                            Reclub
+                            {link.sessionStart && link.sessionEnd
+                              ? ` ${link.sessionStart}-${link.sessionEnd}`
+                              : ''}
+                          </span>
+                        )}
+                        {!link.isReclub && link.sessionStart && link.sessionEnd && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">
+                            {link.sessionStart}-{link.sessionEnd}
+                          </span>
+                        )}
+                      </div>
                       {link.expiresAt && (
                         <p className="text-xs text-gray-500 mt-0.5">
                           過期：{new Date(link.expiresAt).toLocaleString('zh-HK', { hour12: false })}
@@ -492,6 +571,95 @@ const PaymentLinkManagement: React.FC = () => {
                   className="mt-1 w-full border rounded-lg px-3 py-2"
                 />
               </label>
+              <label className="block text-sm">
+                <span className="font-medium text-gray-700">連結類型</span>
+                <select
+                  value={form.purpose}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      purpose: e.target.value === 'sell_pass' ? 'sell_pass' : 'activity',
+                    }))
+                  }
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                >
+                  <option value="activity">活動／一般收款（可被月卡免單）</option>
+                  <option value="sell_pass">賣月卡（付款後發權益，永不免單）</option>
+                </select>
+              </label>
+              {form.purpose === 'sell_pass' ? (
+                <label className="block text-sm">
+                  <span className="font-medium text-gray-700">月卡方案</span>
+                  <select
+                    value={form.passPlanId}
+                    onChange={(e) => setForm((f) => ({ ...f, passPlanId: e.target.value }))}
+                    className="mt-1 w-full border rounded-lg px-3 py-2"
+                  >
+                    <option value="">請選擇</option>
+                    {passPlans.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.name}（{p.durationDays} 日）
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : (
+                <>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.isReclub}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, isReclub: e.target.checked }))
+                      }
+                    />
+                    Reclub 活動（任打月卡可免單，唔查時段）
+                  </label>
+                  {(form.isReclub || form.sessionStart || form.sessionEnd) && (
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block text-sm">
+                        <span className="font-medium text-gray-700">
+                          開始時段 {form.isReclub ? '*' : ''}（24小時制）
+                        </span>
+                        <div className="mt-1">
+                          <Time24Input
+                            value={form.sessionStart}
+                            onChange={(v) => setForm((f) => ({ ...f, sessionStart: v }))}
+                            required={form.isReclub}
+                          />
+                        </div>
+                      </label>
+                      <label className="block text-sm">
+                        <span className="font-medium text-gray-700">
+                          結束時段 {form.isReclub ? '*' : ''}（24小時制）
+                        </span>
+                        <div className="mt-1">
+                          <Time24Input
+                            value={form.sessionEnd}
+                            onChange={(v) => setForm((f) => ({ ...f, sessionEnd: v }))}
+                            required={form.isReclub}
+                          />
+                        </div>
+                      </label>
+                    </div>
+                  )}
+                  {!form.isReclub && (
+                    <button
+                      type="button"
+                      className="text-xs text-primary-600"
+                      onClick={() =>
+                        setForm((f) => ({
+                          ...f,
+                          sessionStart: f.sessionStart || '10:00',
+                          sessionEnd: f.sessionEnd || '16:00',
+                        }))
+                      }
+                    >
+                      ＋ 設定活動時段（非繁忙月卡免單用）
+                    </button>
+                  )}
+                </>
+              )}
               <label className="block text-sm">
                 <span className="font-medium text-gray-700">正價（線上付款 HKD）</span>
                 <input

@@ -13,6 +13,7 @@ import {
   UserIcon,
   TrophyIcon
 } from '@heroicons/react/24/outline';
+import MyMonthlyPasses from '../components/Common/MyMonthlyPasses';
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth();
@@ -152,6 +153,15 @@ const Dashboard: React.FC = () => {
               </div>
             </div>
           </div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.15 }}
+          className="mb-8"
+        >
+          <MyMonthlyPasses variant="full" />
         </motion.div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

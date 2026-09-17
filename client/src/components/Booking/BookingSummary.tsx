@@ -170,6 +170,12 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
       return;
     }
 
+    const phone = String(bookingData.contactPhone || '').trim();
+    if (!phone || !/^[0-9]+$/.test(phone)) {
+      alert(t('bookingPage.bookingSummary.invalidPhone'));
+      return;
+    }
+
     console.log('🔍 開始創建預約');
     setIsSubmitting(true);
     try {
@@ -355,12 +361,31 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           
           <div className="space-y-3">
             <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200">
-              <div>
+              <div className="min-w-0 flex-1">
                 <p className="font-medium text-gray-900">{bookingData.contactName}</p>
                 <p className="text-sm text-gray-600">{bookingData.contactEmail}</p>
-                <p className="text-sm text-gray-600">{bookingData.contactPhone}</p>
+                {onEditBooking ? (
+                  <div className="mt-2">
+                    <label className="block text-xs font-medium text-gray-500 mb-1">
+                      {t('bookingPage.playerForm.contactPhone')}
+                    </label>
+                    <input
+                      type="tel"
+                      value={bookingData.contactPhone}
+                      onChange={(e) => onEditBooking('contactPhone', e.target.value)}
+                      inputMode="numeric"
+                      className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder={t('bookingPage.playerForm.contactPhone')}
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t('bookingPage.bookingSummary.phoneWhatsAppHint')}
+                    </p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-600">{bookingData.contactPhone}</p>
+                )}
               </div>
-              <span className="text-sm text-gray-500">{t('bookingPage.bookingSummary.role')}</span>
+              <span className="ml-3 shrink-0 text-sm text-gray-500">{t('bookingPage.bookingSummary.role')}</span>
             </div>
           </div>
           

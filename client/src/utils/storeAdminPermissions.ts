@@ -53,6 +53,7 @@ const PLATFORM_ONLY_TABS = new Set([
   'users',
   'long-term-supporters',
   'tiers',
+  'monthly-pass-plans',
   'vlogs',
   'hotnews',
   'game-halls',

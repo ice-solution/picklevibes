@@ -8,6 +8,11 @@ const emailService = require('./emailService');
 const { getPaymentProvider } = require('../config/paymentProvider');
 const wonderPaymentService = require('./wonderPaymentService');
 const { isAthleteRole, applyAthletePaymentLinkPrice } = require('../utils/memberBenefits');
+const {
+  doesUserPassCoverLink,
+  grantOrExtendEntitlement,
+} = require('./monthlyPassService');
+const MonthlyPassPlan = require('../models/MonthlyPassPlan');
 
 function getApiBaseUrl() {
   if (process.env.WONDER_CALLBACK_URL) {
@@ -64,6 +69,49 @@ async function reverseLinkStats(linkId, amount) {
   });
 }
 
+async function resolvePaymentLinkPrices(link, user = null) {
+  const listAmount = Number(link.amount) || 0;
+  const listPoints =
+    link?.pointsAmount != null && Number(link.pointsAmount) > 0
+      ? Number(link.pointsAmount)
+      : listAmount;
+
+  const purpose = String(link.purpose || 'activity');
+  if (purpose === 'sell_pass') {
+    return {
+      amount: listAmount,
+      pointsAmount: listPoints,
+      listAmount,
+      listPointsAmount: listPoints,
+      monthlyPassApplied: false,
+      athleteDiscountApplied: false,
+    };
+  }
+
+  const userId = user?._id || user?.id || null;
+  if (userId && (await doesUserPassCoverLink(userId, link))) {
+    return {
+      amount: 0,
+      pointsAmount: 0,
+      listAmount,
+      listPointsAmount: listPoints,
+      monthlyPassApplied: true,
+      athleteDiscountApplied: false,
+    };
+  }
+
+  const athleteDiscountApplied = isAthleteRole(user);
+  return {
+    amount: applyAthletePaymentLinkPrice(listAmount, user),
+    pointsAmount: applyAthletePaymentLinkPrice(listPoints, user),
+    listAmount,
+    listPointsAmount: listPoints,
+    monthlyPassApplied: false,
+    athleteDiscountApplied,
+  };
+}
+
+/** @deprecated 改用 resolvePaymentLinkPrices；同步 wrapper 僅選手折扣、無月卡 */
 function resolvePointsPrice(link, gatewayAmount, user = null) {
   const baseGateway = gatewayAmount != null ? Number(gatewayAmount) : Number(link.amount);
   if (link?.pointsAmount != null && Number(link.pointsAmount) > 0) {
@@ -74,6 +122,35 @@ function resolvePointsPrice(link, gatewayAmount, user = null) {
 
 function resolveGatewayAmount(link, user = null) {
   return applyAthletePaymentLinkPrice(Number(link.amount) || 0, user);
+}
+
+async function maybeGrantSellPassEntitlement(payment, link) {
+  if (!payment || payment.entitlementGranted) return null;
+  if (String(link?.purpose || '') !== 'sell_pass') return null;
+  if (!payment.user) return null;
+  if (payment.status !== 'completed') return null;
+
+  let plan = null;
+  if (link.passPlan) {
+    plan = await MonthlyPassPlan.findById(link.passPlan);
+  }
+  if (!plan || !plan.isActive) {
+    console.warn('sell_pass 完成但找不到有效月卡方案:', link._id);
+    return null;
+  }
+
+  const result = await grantOrExtendEntitlement({
+    userId: payment.user,
+    planType: plan.type,
+    durationDays: plan.durationDays,
+    planId: plan._id,
+    sourcePaymentId: payment._id,
+    note: `付款連結購買：${link.title || plan.name}`,
+  });
+
+  payment.entitlementGranted = true;
+  await payment.save();
+  return result;
 }
 
 async function sendPaymentInvoiceEmail(payment, linkTitle) {
@@ -154,8 +231,29 @@ async function completeGuestGatewayPayment(payment, link, transactionId) {
  */
 async function completeMemberGatewayPayment(payment, link, transactionId) {
   const linkTitle = link?.title || '收款連結';
-  const creditPoints = Math.round(Number(payment.amount));
-  const debitPoints = resolvePointsPrice(link, payment.amount);
+  const payAmount = Number(payment.amount) || 0;
+
+  // 月卡全免：$0 唔做充值／扣點
+  if (payAmount <= 0) {
+    const alreadyDone = payment.status === 'completed';
+    payment.status = 'completed';
+    payment.payment.paidAt = payment.payment.paidAt || new Date();
+    if (transactionId) {
+      payment.payment.transactionId = String(transactionId);
+    }
+    payment.pointsDebited = true;
+    payment.accountingTransaction = null;
+    await payment.save();
+    if (!alreadyDone) {
+      await bumpLinkStats(payment.link?._id || payment.link, 0);
+    }
+    await maybeGrantSellPassEntitlement(payment, link);
+    return { payment, alreadyCompleted: alreadyDone, free: true };
+  }
+
+  const creditPoints = Math.round(payAmount);
+  const prices = await resolvePaymentLinkPrices(link, await User.findById(payment.user));
+  const debitPoints = prices.pointsAmount;
 
   let recharge = payment.recharge
     ? await Recharge.findById(payment.recharge)
@@ -173,7 +271,7 @@ async function completeMemberGatewayPayment(payment, link, transactionId) {
     recharge = new Recharge({
       user: payment.user,
       points: creditPoints,
-      amount: Number(payment.amount),
+      amount: payAmount,
       description: linkTitle,
       status: 'pending',
       paymentIntentId: `paylink_${payment._id}`,
@@ -249,18 +347,21 @@ async function completeMemberGatewayPayment(payment, link, transactionId) {
     await bumpLinkStats(payment.link?._id || payment.link, payment.amount);
   }
 
+  await maybeGrantSellPassEntitlement(payment, link);
+
   return { payment, alreadyCompleted: false, recharge };
 }
 
 async function completeGatewayPayment(paymentId, transactionId) {
   const payment = await PaymentLinkPayment.findById(paymentId).populate(
     'link',
-    'title code pointsAmount amount store createdBy'
+    'title code pointsAmount amount store createdBy purpose passPlan isReclub sessionStart sessionEnd'
   );
   if (!payment) {
     throw new Error(`找不到收款付款記錄: ${paymentId}`);
   }
   if (payment.status === 'completed') {
+    await maybeGrantSellPassEntitlement(payment, payment.link);
     return { payment, alreadyCompleted: true };
   }
   if (payment.status !== 'pending') {
@@ -288,12 +389,18 @@ async function payWithPoints({ link, userId, payerNote = '', user = null }) {
   const check = await assertLinkPayable(link);
   if (check.error) return check;
 
-  const pointsAmount = resolvePointsPrice(link, link.amount, user);
+  if (String(link.purpose || '') === 'sell_pass' && !userId) {
+    return { error: '購買月卡請先登入', status: 401 };
+  }
+
+  const prices = await resolvePaymentLinkPrices(link, user);
+  const pointsAmount = prices.pointsAmount;
+
   let userBalance = await UserBalance.findOne({ user: userId });
   if (!userBalance) {
     userBalance = new UserBalance({ user: userId, balance: 0 });
   }
-  if (userBalance.balance < pointsAmount) {
+  if (pointsAmount > 0 && userBalance.balance < pointsAmount) {
     return {
       error: `積分不足（餘額 ${userBalance.balance}，需 ${pointsAmount}）`,
       status: 400,
@@ -313,21 +420,28 @@ async function payWithPoints({ link, userId, payerNote = '', user = null }) {
   });
 
   try {
-    await userBalance.deductBalance(
-      pointsAmount,
-      `付款：${link.title}`,
-      null,
-      null,
-      null,
-      payment._id
-    );
+    if (pointsAmount > 0) {
+      await userBalance.deductBalance(
+        pointsAmount,
+        `付款：${link.title}`,
+        null,
+        null,
+        null,
+        payment._id
+      );
+    }
     payment.status = 'completed';
     payment.payment.paidAt = new Date();
     payment.payment.transactionId = `points_${payment._id}`;
     payment.pointsDebited = true;
     await payment.save();
     await bumpLinkStats(link._id, pointsAmount);
-    return { payment };
+    await maybeGrantSellPassEntitlement(payment, link);
+    return {
+      payment,
+      monthlyPassApplied: prices.monthlyPassApplied,
+      athleteDiscountApplied: prices.athleteDiscountApplied,
+    };
   } catch (err) {
     payment.status = 'failed';
     await payment.save();
@@ -346,6 +460,10 @@ async function createGatewayCheckout({
   const check = await assertLinkPayable(link);
   if (check.error) return check;
 
+  if (String(link.purpose || '') === 'sell_pass' && !userId) {
+    return { error: '購買月卡請先登入', status: 401 };
+  }
+
   const email = String(user?.email || contactEmail || '').trim();
   const phone = String(user?.phone || contactPhone || '').trim();
   const contactName = String(user?.name || '').trim();
@@ -362,9 +480,43 @@ async function createGatewayCheckout({
     }
   }
 
+  const prices = await resolvePaymentLinkPrices(link, user);
+  const amount = prices.amount;
+
+  // 月卡全免：即時完成，唔經 Gateway
+  if (amount <= 0) {
+    if (!userId) {
+      return { error: '月卡免費結帳請先登入', status: 401 };
+    }
+    const payment = await PaymentLinkPayment.create({
+      link: link._id,
+      store: link.store,
+      amount: 0,
+      method: 'points',
+      status: 'pending',
+      user: userId,
+      contactEmail: email,
+      contactPhone: phone,
+      payerNote: String(payerNote || '').trim(),
+    });
+    payment.status = 'completed';
+    payment.payment.paidAt = new Date();
+    payment.payment.transactionId = `pass_free_${payment._id}`;
+    payment.pointsDebited = true;
+    await payment.save();
+    await bumpLinkStats(link._id, 0);
+    await maybeGrantSellPassEntitlement(payment, link);
+    return {
+      payment,
+      url: null,
+      free: true,
+      monthlyPassApplied: true,
+      provider: 'points',
+    };
+  }
+
   const provider = getPaymentProvider();
   const method = provider === 'wonder' ? 'wonder' : 'stripe';
-  const amount = resolveGatewayAmount(link, user);
 
   const payment = await PaymentLinkPayment.create({
     link: link._id,
@@ -454,22 +606,23 @@ async function createGatewayCheckout({
   }
 }
 
-function serializePublicLink(link, store, user = null) {
-  const listAmount = Number(link.amount) || 0;
-  const listPoints =
-    link?.pointsAmount != null && Number(link.pointsAmount) > 0
-      ? Number(link.pointsAmount)
-      : listAmount;
-  const athleteDiscountApplied = isAthleteRole(user);
+async function serializePublicLink(link, store, user = null) {
+  const prices = await resolvePaymentLinkPrices(link, user);
   return {
     code: link.code,
     title: link.title,
     description: link.description || '',
-    amount: applyAthletePaymentLinkPrice(listAmount, user),
-    pointsAmount: applyAthletePaymentLinkPrice(listPoints, user),
-    listAmount,
-    listPointsAmount: listPoints,
-    athleteDiscountApplied,
+    amount: prices.amount,
+    pointsAmount: prices.pointsAmount,
+    listAmount: prices.listAmount,
+    listPointsAmount: prices.listPointsAmount,
+    athleteDiscountApplied: prices.athleteDiscountApplied,
+    monthlyPassApplied: prices.monthlyPassApplied,
+    purpose: link.purpose || 'activity',
+    isReclub: Boolean(link.isReclub),
+    sessionStart: link.sessionStart || '',
+    sessionEnd: link.sessionEnd || '',
+    passPlan: link.passPlan || null,
     store: store
       ? { name: store.name, slug: store.slug }
       : undefined,
@@ -480,7 +633,11 @@ function serializePublicLink(link, store, user = null) {
 
 async function refundMemberPoints(payment, link, reason) {
   const linkTitle = link?.title || '收款連結';
-  const debitPoints = resolvePointsPrice(link, payment.amount);
+  // 退款時以原 payment.amount 為準（已付金額）；Gateway 流程用列表價推算扣點
+  const debitPoints =
+    payment.method === 'points'
+      ? Number(payment.amount) || 0
+      : resolvePointsPrice(link, payment.amount);
 
   if (payment.user && payment.pointsDebited) {
     let userBalance = await UserBalance.findOne({ user: payment.user });
@@ -729,7 +886,9 @@ module.exports = {
   buildPaylinkReference,
   parsePaylinkIdFromReference,
   serializePublicLink,
+  resolvePaymentLinkPrices,
   getApiBaseUrl,
   refundPaymentLinkPayment,
   retryWonderRefundPayment,
+  maybeGrantSellPassEntitlement,
 };

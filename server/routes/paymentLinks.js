@@ -20,8 +20,39 @@ const {
   retryWonderRefundPayment,
 } = require('../services/paymentLinkPaymentService');
 const { getPaymentProvider } = require('../config/paymentProvider');
+const { isValidHhMm } = require('../services/monthlyPassService');
+const { normalizePaymentLinkPassFields } = require('../utils/paymentLinkPassFields');
+const MonthlyPassPlan = require('../models/MonthlyPassPlan');
+const UserEntitlement = require('../models/UserEntitlement');
 
 const router = express.Router();
+
+async function buildMonthlyPassGrantInfo(payment) {
+  if (!payment || payment.status !== 'completed' || !payment.user) return null;
+  const link = await PaymentLink.findById(payment.link || payment.link?._id)
+    .populate('passPlan', 'name type durationDays')
+    .lean();
+  if (!link || String(link.purpose || '') !== 'sell_pass') return null;
+
+  const planType = link.passPlan?.type;
+  if (!planType) return null;
+
+  const ent = await UserEntitlement.findOne({ user: payment.user, planType }).lean();
+  if (!ent) {
+    return {
+      granted: Boolean(payment.entitlementGranted),
+      planType,
+      name: link.passPlan?.name || '月卡',
+      expiresAt: null,
+    };
+  }
+  return {
+    granted: true,
+    planType,
+    name: link.passPlan?.name || (planType === 'reclub_unlimited' ? '任打 Reclub 月卡' : '非繁忙時間月卡'),
+    expiresAt: ent.expiresAt,
+  };
+}
 
 // ─── Public ───────────────────────────────────────────────
 
@@ -54,11 +85,14 @@ router.get('/public/payments/:paymentId/confirm', async (req, res) => {
       }
     }
 
+    const monthlyPass = await buildMonthlyPassGrantInfo(payment);
+
     res.json({
       status: payment.status,
       amount: payment.amount,
       method: payment.method,
       paidAt: payment.payment?.paidAt || null,
+      monthlyPass,
     });
   } catch (error) {
     console.error('confirm payment link:', error);
@@ -72,11 +106,12 @@ router.get('/public/payments/:paymentId', async (req, res) => {
       return res.status(400).json({ message: '無效 ID' });
     }
     const payment = await PaymentLinkPayment.findById(req.params.paymentId)
-      .populate('link', 'title code amount')
+      .populate('link', 'title code amount purpose')
       .lean();
     if (!payment) {
       return res.status(404).json({ message: '付款記錄不存在' });
     }
+    const monthlyPass = await buildMonthlyPassGrantInfo(payment);
     res.json({
       payment: {
         _id: payment._id,
@@ -89,8 +124,10 @@ router.get('/public/payments/:paymentId', async (req, res) => {
               title: payment.link.title,
               code: payment.link.code,
               amount: payment.link.amount,
+              purpose: payment.link.purpose || 'activity',
             }
           : null,
+        monthlyPass,
       },
     });
   } catch (error) {
@@ -114,11 +151,11 @@ router.get('/public/:code', optionalAuth, async (req, res) => {
         message: check.error,
         closed: check.error.includes('關閉'),
         expired: check.error.includes('過期'),
-        link: serializePublicLink(link, link.store, req.user || null),
+        link: await serializePublicLink(link, link.store, req.user || null),
       });
     }
     res.json({
-      link: serializePublicLink(link, link.store, req.user || null),
+      link: await serializePublicLink(link, link.store, req.user || null),
       paymentProvider: getPaymentProvider(),
     });
   } catch (error) {
@@ -204,8 +241,10 @@ router.post(
       }
 
       res.json({
-        message: '支付會話創建成功',
-        url: result.url,
+        message: result.free ? '月卡免費結帳成功' : '支付會話創建成功',
+        url: result.url || null,
+        free: Boolean(result.free),
+        monthlyPassApplied: Boolean(result.monthlyPassApplied),
         paymentId: result.payment._id,
         provider: result.provider,
       });
@@ -254,6 +293,7 @@ router.get('/', async (req, res) => {
     const links = await PaymentLink.find(filter)
       .populate('store', 'name slug')
       .populate('createdBy', 'name email')
+      .populate('passPlan', 'name type durationDays price')
       .sort({ createdAt: -1 })
       .lean();
 
@@ -302,6 +342,18 @@ router.post(
       }
 
       const code = await PaymentLink.generateUniqueCode();
+      const passNorm = normalizePaymentLinkPassFields(req.body, { isValidHhMm });
+      if (passNorm.error) {
+        return res.status(400).json({ message: passNorm.error });
+      }
+      if (passNorm.fields.purpose === 'sell_pass') {
+        const plan = await MonthlyPassPlan.findById(passNorm.fields.passPlan);
+        if (!plan || !plan.isActive) {
+          return res.status(400).json({ message: '月卡方案不存在或已停用' });
+        }
+        passNorm.fields.passPlan = plan._id;
+      }
+
       const link = await PaymentLink.create({
         store: store._id,
         title: String(req.body.title).trim(),
@@ -312,11 +364,13 @@ router.post(
         isActive: req.body.isActive !== false,
         expiresAt,
         createdBy: req.user.id || req.user._id,
+        ...passNorm.fields,
       });
 
       const populated = await PaymentLink.findById(link._id)
         .populate('store', 'name slug')
-        .populate('createdBy', 'name email');
+        .populate('createdBy', 'name email')
+        .populate('passPlan', 'name type durationDays price');
       res.status(201).json({ link: populated });
     } catch (error) {
       console.error('create payment link:', error);
@@ -363,10 +417,46 @@ router.patch(
       }
       if (typeof req.body.isActive === 'boolean') link.isActive = req.body.isActive;
 
+      if (
+        req.body.purpose != null ||
+        req.body.isReclub != null ||
+        req.body.sessionStart != null ||
+        req.body.sessionEnd != null ||
+        req.body.passPlan != null ||
+        req.body.passPlanId != null
+      ) {
+        const passNorm = normalizePaymentLinkPassFields(
+          {
+            purpose: req.body.purpose != null ? req.body.purpose : link.purpose,
+            isReclub: req.body.isReclub != null ? req.body.isReclub : link.isReclub,
+            sessionStart:
+              req.body.sessionStart != null ? req.body.sessionStart : link.sessionStart,
+            sessionEnd: req.body.sessionEnd != null ? req.body.sessionEnd : link.sessionEnd,
+            passPlan:
+              req.body.passPlan != null || req.body.passPlanId != null
+                ? req.body.passPlan || req.body.passPlanId
+                : link.passPlan,
+          },
+          { isValidHhMm }
+        );
+        if (passNorm.error) {
+          return res.status(400).json({ message: passNorm.error });
+        }
+        if (passNorm.fields.purpose === 'sell_pass') {
+          const plan = await MonthlyPassPlan.findById(passNorm.fields.passPlan);
+          if (!plan || !plan.isActive) {
+            return res.status(400).json({ message: '月卡方案不存在或已停用' });
+          }
+          passNorm.fields.passPlan = plan._id;
+        }
+        Object.assign(link, passNorm.fields);
+      }
+
       await link.save();
       const populated = await PaymentLink.findById(link._id)
         .populate('store', 'name slug')
-        .populate('createdBy', 'name email');
+        .populate('createdBy', 'name email')
+        .populate('passPlan', 'name type durationDays price');
       res.json({ link: populated });
     } catch (error) {
       console.error('update payment link:', error);

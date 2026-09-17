@@ -26,6 +26,39 @@ const paymentLinkSchema = new mongoose.Schema(
       default: null,
       min: [1, '積分價必須大於 0'],
     },
+    /**
+     * activity = 活動／一般收款（可被月卡免單）
+     * sell_pass = 賣月卡（永不免單；付款後發／續權益）
+     */
+    purpose: {
+      type: String,
+      enum: ['activity', 'sell_pass'],
+      default: 'activity',
+      index: true,
+    },
+    /** sell_pass 時必填：月卡方案 */
+    passPlan: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'MonthlyPassPlan',
+      default: null,
+    },
+    /** Reclub 活動：勾選後須填 sessionStart/sessionEnd */
+    isReclub: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    /** 活動時段 HH:mm（香港本地鐘面時間） */
+    sessionStart: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    sessionEnd: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     /** 公開 URL 短碼 */
     code: {
       type: String,

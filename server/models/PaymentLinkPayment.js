@@ -53,6 +53,12 @@ const paymentLinkPaymentSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    /** 賣卡連結已發放／延長月卡（idempotent） */
+    entitlementGranted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     /** 舊版曾寫收支登記；新流程不再使用 */
     accountingTransaction: {
       type: mongoose.Schema.Types.ObjectId,

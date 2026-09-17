@@ -13,6 +13,11 @@ type PublicLink = {
   listAmount?: number;
   listPointsAmount?: number;
   athleteDiscountApplied?: boolean;
+  monthlyPassApplied?: boolean;
+  purpose?: 'activity' | 'sell_pass';
+  isReclub?: boolean;
+  sessionStart?: string;
+  sessionEnd?: string;
   store?: { name: string; slug: string };
   expiresAt?: string | null;
   isActive: boolean;
@@ -88,6 +93,11 @@ const PublicPaymentLink: React.FC = () => {
   const handlePay = async () => {
     if (!link) return;
 
+    if (link.purpose === 'sell_pass' && !isAuthenticated) {
+      alert('購買月卡請先登入');
+      return;
+    }
+
     if (!isAuthenticated) {
       if (!contactEmail.trim()) {
         alert('請填寫電郵，以便發送付款記錄與發票');
@@ -99,14 +109,33 @@ const PublicPaymentLink: React.FC = () => {
       }
     }
 
-    if (isAuthenticated && payMethod === 'points') {
-      if (!window.confirm(`確認使用 ${displayPrice} 積分支付「${link.title}」？`)) return;
+    const isFree = Number(displayPrice) <= 0;
+
+    if (isAuthenticated && (payMethod === 'points' || isFree)) {
+      if (
+        !window.confirm(
+          isFree
+            ? `確認使用月卡免費完成「${link.title}」？`
+            : `確認使用 ${displayPrice} 積分支付「${link.title}」？`
+        )
+      ) {
+        return;
+      }
       setBusy(true);
       try {
+        if (isFree && payMethod === 'gateway') {
+          const res = await axios.post(`/payment-links/public/${link.code}/pay-gateway`, {});
+          if (res.data.free && res.data.paymentId) {
+            navigate(
+              `/pay/${link.code}/success?payment_id=${res.data.paymentId}&provider=points`
+            );
+            return;
+          }
+        }
         const res = await axios.post(`/payment-links/public/${link.code}/pay-points`, {});
         navigate(`/pay/${link.code}/success?payment_id=${res.data.payment._id}&provider=points`);
       } catch (e: any) {
-        alert(e.response?.data?.message || '積分付款失敗');
+        alert(e.response?.data?.message || '付款失敗');
       } finally {
         setBusy(false);
       }
@@ -123,6 +152,12 @@ const PublicPaymentLink: React.FC = () => {
               contactPhone: contactPhone.trim(),
             }),
       });
+      if (res.data.free && res.data.paymentId) {
+        navigate(
+          `/pay/${link.code}/success?payment_id=${res.data.paymentId}&provider=points`
+        );
+        return;
+      }
       if (res.data.url) {
         window.location.href = res.data.url;
       } else {
@@ -164,6 +199,17 @@ const PublicPaymentLink: React.FC = () => {
             <p className="text-xs text-gray-500 mb-1">{link.store.name}</p>
           )}
           <h1 className="text-2xl font-bold text-gray-900">{link.title}</h1>
+          {link.purpose === 'sell_pass' && (
+            <p className="mt-1 text-sm text-indigo-700 font-medium">此連結用於購買月卡</p>
+          )}
+          {(link.isReclub || (link.sessionStart && link.sessionEnd)) && (
+            <p className="mt-1 text-xs text-gray-500">
+              {link.isReclub ? 'Reclub' : '活動時段'}
+              {link.sessionStart && link.sessionEnd
+                ? ` · ${link.sessionStart} – ${link.sessionEnd}`
+                : ''}
+            </p>
+          )}
           {link.description && (
             <p className="mt-2 text-sm text-gray-600 whitespace-pre-wrap">{link.description}</p>
           )}
@@ -176,7 +222,20 @@ const PublicPaymentLink: React.FC = () => {
             </div>
           ) : (
             <>
-              {!isAuthenticated && (
+              {link.purpose === 'sell_pass' && !isAuthenticated && (
+                <div className="rounded-lg bg-indigo-50 border border-indigo-200 p-3 text-sm text-indigo-900">
+                  購買月卡必須登入。
+                  <Link
+                    to="/login"
+                    state={{ from: { pathname: `/pay/${link.code}` } }}
+                    className="text-primary-600 hover:underline ml-1"
+                  >
+                    前往登入
+                  </Link>
+                </div>
+              )}
+
+              {!isAuthenticated && link.purpose !== 'sell_pass' && (
                 <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm text-gray-700">
                   未登入亦可線上付款。請填寫電郵與電話，我們會把付款記錄與發票寄給你。
                   <p className="text-xs text-gray-500 mt-1">
@@ -192,7 +251,18 @@ const PublicPaymentLink: React.FC = () => {
                 </div>
               )}
 
-              {link.athleteDiscountApplied && (
+              {link.monthlyPassApplied && (
+                <div className="rounded-lg bg-teal-50 border border-teal-200 p-3 text-sm text-teal-900">
+                  月卡優惠：此連結已全免
+                  {link.listAmount != null && Number(link.listAmount) > 0 && (
+                    <span className="ml-2">
+                      （原價 HK${Number(link.listAmount).toFixed(2)}）
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {link.athleteDiscountApplied && !link.monthlyPassApplied && (
                 <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-800">
                   選手優惠：此連結已套用半價
                   {link.listAmount != null && link.listAmount !== link.amount && (
@@ -203,7 +273,7 @@ const PublicPaymentLink: React.FC = () => {
                 </div>
               )}
 
-              {isAuthenticated ? (
+              {isAuthenticated && Number(link.amount) > 0 ? (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     付款方式
@@ -229,7 +299,12 @@ const PublicPaymentLink: React.FC = () => {
                     {user?.phone ? ` · ${user.phone}` : ''}
                   </p>
                 </div>
-              ) : (
+              ) : isAuthenticated ? (
+                <p className="text-sm text-gray-600">
+                  已登入：{user?.name}
+                  {user?.email ? ` · ${user.email}` : ''}
+                </p>
+              ) : link.purpose === 'sell_pass' ? null : (
                 <div className="space-y-3">
                   <p className="text-sm font-medium text-gray-700">
                     付款方式：線上付款（正價）
@@ -261,12 +336,18 @@ const PublicPaymentLink: React.FC = () => {
 
               <div className="flex items-end justify-between border-t pt-4">
                 <span className="text-sm text-gray-500">
-                  {isAuthenticated && payMethod === 'points' ? '應付積分' : '應付金額'}
+                  {Number(displayPrice) <= 0
+                    ? '應付'
+                    : isAuthenticated && payMethod === 'points'
+                      ? '應付積分'
+                      : '應付金額'}
                 </span>
                 <span className="text-3xl font-bold text-gray-900">
-                  {isAuthenticated && payMethod === 'points'
-                    ? `${displayPrice} 分`
-                    : `HK$${displayPrice.toFixed(2)}`}
+                  {Number(displayPrice) <= 0
+                    ? '免費'
+                    : isAuthenticated && payMethod === 'points'
+                      ? `${displayPrice} 分`
+                      : `HK$${displayPrice.toFixed(2)}`}
                 </span>
               </div>
 
@@ -276,15 +357,21 @@ const PublicPaymentLink: React.FC = () => {
 
               <button
                 type="button"
-                disabled={busy || pointsInsufficient}
+                disabled={
+                  busy ||
+                  pointsInsufficient ||
+                  (link.purpose === 'sell_pass' && !isAuthenticated)
+                }
                 onClick={() => void handlePay()}
                 className="w-full bg-primary-600 text-white py-3 rounded-xl font-medium hover:bg-primary-700 disabled:opacity-50"
               >
                 {busy
                   ? '處理中…'
-                  : isAuthenticated && payMethod === 'points'
-                    ? `確認以 ${displayPrice} 積分支付`
-                    : `確認線上付款 HK$${displayPrice.toFixed(2)}`}
+                  : Number(displayPrice) <= 0
+                    ? '確認免費完成'
+                    : isAuthenticated && payMethod === 'points'
+                      ? `確認以 ${displayPrice} 積分支付`
+                      : `確認線上付款 HK$${displayPrice.toFixed(2)}`}
               </button>
             </>
           )}

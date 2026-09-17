@@ -202,6 +202,7 @@ app.use('/api/coach-classes', require('./routes/coachClasses'));
 app.use('/api/edm', require('./routes/edm'));
 app.use('/api/application-forms', require('./routes/applicationForms'));
 app.use('/api/payment-links', require('./routes/paymentLinks'));
+app.use('/api/monthly-pass-plans', require('./routes/monthlyPassPlans'));
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

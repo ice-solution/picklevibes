@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { UserGroupIcon, UserIcon, PhoneIcon, EnvelopeIcon } from '@heroicons/react/24/outline';
@@ -21,20 +21,23 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
   const { user } = useAuth();
   const { t } = useTranslation();
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
+  const hasAutofilledRef = useRef(false);
 
-  // 自動填入已登入用戶的資料
+  // 登入後只自動填一次；之後用戶清空欄位時唔好用舊資料覆寫返
   useEffect(() => {
-    if (user && (!formData.contactName || !formData.contactEmail || !formData.contactPhone)) {
-      const newFormData = {
-        ...formData,
-        contactName: formData.contactName || user.name || '',
-        contactEmail: formData.contactEmail || user.email || '',
-        contactPhone: formData.contactPhone || user.phone || '',
-      };
-      console.log('🔍 PlayerForm 自動填入用戶資料:', newFormData);
-      onFormDataChange(newFormData);
+    if (!user || hasAutofilledRef.current) return;
+    if (formData.contactName && formData.contactEmail && formData.contactPhone) {
+      hasAutofilledRef.current = true;
+      return;
     }
-  }, [user, formData.contactName, formData.contactEmail, formData.contactPhone]); // 添加必要的依賴
+    hasAutofilledRef.current = true;
+    onFormDataChange({
+      ...formData,
+      contactName: formData.contactName || user.name || '',
+      contactEmail: formData.contactEmail || user.email || '',
+      contactPhone: formData.contactPhone || user.phone || '',
+    });
+  }, [user, formData, onFormDataChange]);
 
   const handleInputChange = (field: keyof BookingFormData, value: string | number) => {
     console.log('🔍 PlayerForm handleInputChange:', field, value);
@@ -180,11 +183,21 @@ const PlayerForm: React.FC<PlayerFormProps> = ({ formData, onFormDataChange, max
                 <input
                   type="tel"
                   value={formData.contactPhone}
-                  readOnly
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-700 cursor-not-allowed"
+                  onChange={(e) => handleInputChange('contactPhone', e.target.value)}
+                  onBlur={(e) => validateField('contactPhone', e.target.value)}
+                  inputMode="numeric"
+                  className={`w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent bg-white text-gray-900 ${
+                    errors.contactPhone ? 'border-red-300' : 'border-gray-300'
+                  }`}
                   placeholder={t('bookingPage.playerForm.contactPhone')}
                 />
               </div>
+              {errors.contactPhone && (
+                <p className="mt-1 text-sm text-red-600">{errors.contactPhone}</p>
+              )}
+              <p className="mt-1 text-xs text-gray-500">
+                {t('bookingPage.playerForm.phoneWhatsAppHint')}
+              </p>
             </div>
           </div>
         </motion.div>

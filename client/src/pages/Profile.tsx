@@ -13,6 +13,7 @@ import {
   QrCodeIcon,
   TagIcon
 } from '@heroicons/react/24/outline';
+import MyMonthlyPasses from '../components/Common/MyMonthlyPasses';
 
 type GameMatchItem = {
   _id: string;
@@ -550,6 +551,11 @@ const Profile: React.FC = () => {
                         {!user?.membershipLevel && '普通會員'}
                       </span>
                     </div>
+                  </div>
+
+                  {/* 月卡 */}
+                  <div>
+                    <MyMonthlyPasses variant="full" />
                   </div>
                 </div>
 

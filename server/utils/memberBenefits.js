@@ -1,6 +1,11 @@
 const VIP_BOOKING_DISCOUNT_RATE = 0.8;
 const ATHLETE_PAYMENT_LINK_RATE = 0.5;
 
+/**
+ * 訂場／收款連結身份折扣（VIP、選手）。
+ * 月卡全免邏輯在 monthlyPassService + paymentLinkPaymentService.resolvePaymentLinkPrices。
+ */
+
 function isAthleteRole(user) {
   return String(user?.role || '').toLowerCase() === 'athlete';
 }

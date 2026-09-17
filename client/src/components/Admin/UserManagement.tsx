@@ -133,6 +133,19 @@ const UserManagement: React.FC = () => {
   const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
   const [athleteRoleDays, setAthleteRoleDays] = useState(30);
   const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
+  const [showMonthlyPassModal, setShowMonthlyPassModal] = useState(false);
+  const [monthlyPassEntitlements, setMonthlyPassEntitlements] = useState<
+    Array<{
+      planType: string;
+      expiresAt: string;
+      plan?: { name?: string };
+    }>
+  >([]);
+  const [monthlyPassForm, setMonthlyPassForm] = useState({
+    planType: 'reclub_unlimited' as 'reclub_unlimited' | 'off_peak',
+    durationDays: 30,
+  });
+  const [monthlyPassBusy, setMonthlyPassBusy] = useState(false);
   const [showProfileEditModal, setShowProfileEditModal] = useState(false);
   const [profileEditForm, setProfileEditForm] = useState({ name: '', phone: '' });
   
@@ -585,6 +598,61 @@ const UserManagement: React.FC = () => {
     setSelectedUser(user);
     setSelectedMembership(user.membershipLevel);
     setShowMembershipModal(true);
+  };
+
+  const handleOpenMonthlyPass = async (user: User) => {
+    setSelectedUser(user);
+    setMonthlyPassForm({ planType: 'reclub_unlimited', durationDays: 30 });
+    setShowMonthlyPassModal(true);
+    try {
+      const res = await axios.get(`/monthly-pass-plans/users/${user._id}/entitlements`);
+      setMonthlyPassEntitlements(res.data.entitlements || []);
+    } catch {
+      setMonthlyPassEntitlements([]);
+    }
+  };
+
+  const handleGrantMonthlyPass = async () => {
+    if (!selectedUser) return;
+    setMonthlyPassBusy(true);
+    try {
+      await axios.put(`/monthly-pass-plans/users/${selectedUser._id}/entitlements`, {
+        planType: monthlyPassForm.planType,
+        durationDays: monthlyPassForm.durationDays,
+        note: '管理員手動發放／延長',
+      });
+      const res = await axios.get(
+        `/monthly-pass-plans/users/${selectedUser._id}/entitlements`
+      );
+      setMonthlyPassEntitlements(res.data.entitlements || []);
+      alert('已更新月卡');
+    } catch (e: any) {
+      alert(e.response?.data?.message || '更新月卡失敗');
+    } finally {
+      setMonthlyPassBusy(false);
+    }
+  };
+
+  const handleExpireMonthlyPass = async () => {
+    if (!selectedUser) return;
+    if (!window.confirm('確定立即令此類型月卡過期？')) return;
+    setMonthlyPassBusy(true);
+    try {
+      await axios.put(`/monthly-pass-plans/users/${selectedUser._id}/entitlements`, {
+        planType: monthlyPassForm.planType,
+        expiresAt: new Date().toISOString(),
+        note: '管理員手動終止',
+      });
+      const res = await axios.get(
+        `/monthly-pass-plans/users/${selectedUser._id}/entitlements`
+      );
+      setMonthlyPassEntitlements(res.data.entitlements || []);
+      alert('已終止月卡');
+    } catch (e: any) {
+      alert(e.response?.data?.message || '操作失敗');
+    } finally {
+      setMonthlyPassBusy(false);
+    }
   };
 
   const handleEditProfile = (user: User) => {
@@ -1188,6 +1256,13 @@ const UserManagement: React.FC = () => {
                         title="修改會員等級"
                       >
                         <StarIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => void handleOpenMonthlyPass(user)}
+                        className="text-teal-600 hover:text-teal-900"
+                        title="月卡權益"
+                      >
+                        <TicketIcon className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleEditUser(user, 'status')}
@@ -1982,6 +2057,96 @@ const UserManagement: React.FC = () => {
       )}
 
       {/* 會員等級管理模態框 */}
+      {showMonthlyPassModal && selectedUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">月卡權益</h3>
+              <button
+                onClick={() => setShowMonthlyPassModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XMarkIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="text-sm text-gray-600 mb-3">
+              {selectedUser.name}（{selectedUser.email}）
+            </p>
+            <div className="mb-4 space-y-1 text-sm">
+              {monthlyPassEntitlements.length === 0 ? (
+                <p className="text-gray-500">尚未有月卡紀錄</p>
+              ) : (
+                monthlyPassEntitlements.map((e) => {
+                  const active = new Date(e.expiresAt) > new Date();
+                  return (
+                    <p key={e.planType} className={active ? 'text-teal-800' : 'text-gray-400'}>
+                      {e.plan?.name || e.planType}：至{' '}
+                      {formatMembershipExpiry(e.expiresAt)}
+                      {active ? '' : '（已過期）'}
+                    </p>
+                  );
+                })
+              )}
+            </div>
+            <div className="space-y-3">
+              <label className="block text-sm">
+                <span className="font-medium text-gray-700">類型</span>
+                <select
+                  value={monthlyPassForm.planType}
+                  onChange={(e) =>
+                    setMonthlyPassForm((f) => ({
+                      ...f,
+                      planType: e.target.value as 'reclub_unlimited' | 'off_peak',
+                    }))
+                  }
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                >
+                  <option value="reclub_unlimited">任打 Reclub</option>
+                  <option value="off_peak">非繁忙時間</option>
+                </select>
+              </label>
+              <label className="block text-sm">
+                <span className="font-medium text-gray-700">延長日數</span>
+                <select
+                  value={monthlyPassForm.durationDays}
+                  onChange={(e) =>
+                    setMonthlyPassForm((f) => ({
+                      ...f,
+                      durationDays: Number(e.target.value),
+                    }))
+                  }
+                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                >
+                  {[7, 15, 30, 60, 90, 180].map((d) => (
+                    <option key={d} value={d}>
+                      {d} 日
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                disabled={monthlyPassBusy}
+                onClick={() => void handleExpireMonthlyPass()}
+                className="px-3 py-2 rounded-lg bg-gray-100 text-sm"
+              >
+                立即過期
+              </button>
+              <button
+                type="button"
+                disabled={monthlyPassBusy}
+                onClick={() => void handleGrantMonthlyPass()}
+                className="px-4 py-2 rounded-lg bg-teal-600 text-white text-sm disabled:opacity-50"
+              >
+                發放／延長
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showMembershipModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl p-6 w-full max-w-md">
