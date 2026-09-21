@@ -1,8 +1,10 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const StorePlatformFee = require('../models/StorePlatformFee');
-const { auth, platformAdminAuth } = require('../middleware/auth');
+const Store = require('../models/Store');
+const { auth, adminAuth, platformAdminAuth } = require('../middleware/auth');
 const { sumFeesForStore } = require('../services/platformFeeService');
+const { resolveFinanceStoreFilter } = require('../utils/resolveFinanceStoreFilter');
 const Booking = require('../models/Booking');
 
 const router = express.Router();
@@ -19,7 +21,7 @@ function parseDateBound(value, endOfDay) {
   return d;
 }
 
-// GET /api/platform-fees/store-booking-stats — 須在 /:id 之前
+// GET /api/platform-fees/store-booking-stats — 須在 /:id 之前（僅平台）
 router.get('/store-booking-stats', [auth, platformAdminAuth], async (req, res) => {
   try {
     const fromD = parseDateBound(req.query.from, false);
@@ -99,11 +101,23 @@ router.get('/store-booking-stats', [auth, platformAdminAuth], async (req, res) =
 });
 
 // GET /api/platform-fees
-router.get('/', [auth, platformAdminAuth], async (req, res) => {
+// 平台 admin：可查全部／指定店；店鋪 staff：只讀本店
+router.get('/', [auth, adminAuth], async (req, res) => {
   try {
-    const { page = 1, limit = 50, settled, type, from, to, store } = req.query;
+    const storeFilter = resolveFinanceStoreFilter(req);
+    if (!storeFilter.ok) {
+      return res.status(storeFilter.status).json({ message: storeFilter.message });
+    }
+
+    const isPlatformAdmin = Boolean(req.tenantAccess?.isPlatformAdmin);
+    // 店鋪員工必須鎖店；平台可選店或全部
+    if (!isPlatformAdmin && !storeFilter.storeId) {
+      return res.status(400).json({ message: '請指定店鋪' });
+    }
+
+    const { page = 1, limit = 50, settled, type, from, to } = req.query;
     const q = { voided: { $ne: true } };
-    if (store) q.store = store;
+    if (storeFilter.storeId) q.store = storeFilter.storeId;
     if (settled === 'true') q.settled = true;
     if (settled === 'false') q.settled = false;
     if (type === 'store_recharge' || type === 'booking_points') q.type = type;
@@ -119,14 +133,17 @@ router.get('/', [auth, platformAdminAuth], async (req, res) => {
     const lim = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
     const skip = (Math.max(1, parseInt(page, 10) || 1) - 1) * lim;
 
-    const [rows, total, summary] = await Promise.all([
-      StorePlatformFee.find(q)
-        .populate('store', 'name slug platformFeePercent')
-        .populate('settledBy', 'name email')
-        .sort({ occurredAt: -1 })
-        .skip(skip)
-        .limit(lim)
-        .lean(),
+    let feeQuery = StorePlatformFee.find(q)
+      .populate('store', 'name slug platformFeePercent')
+      .sort({ occurredAt: -1 })
+      .skip(skip)
+      .limit(lim);
+    if (isPlatformAdmin) {
+      feeQuery = feeQuery.populate('settledBy', 'name email');
+    }
+
+    const [rows, total, summary, storeMeta] = await Promise.all([
+      feeQuery.lean(),
       StorePlatformFee.countDocuments(q),
       StorePlatformFee.aggregate([
         { $match: q },
@@ -142,10 +159,15 @@ router.get('/', [auth, platformAdminAuth], async (req, res) => {
           },
         },
       ]),
+      storeFilter.storeId
+        ? Store.findById(storeFilter.storeId).select('name slug platformFeePercent').lean()
+        : Promise.resolve(null),
     ]);
 
+    const fees = rows;
+
     res.json({
-      fees: rows,
+      fees,
       pagination: {
         current: parseInt(page, 10) || 1,
         pages: Math.ceil(total / lim) || 1,
@@ -157,6 +179,15 @@ router.get('/', [auth, platformAdminAuth], async (req, res) => {
         netAmount: 0,
         unsettledFee: 0,
       },
+      store: storeMeta
+        ? {
+            _id: storeMeta._id,
+            name: storeMeta.name,
+            slug: storeMeta.slug,
+            platformFeePercent: Number(storeMeta.platformFeePercent) || 0,
+          }
+        : null,
+      canSettle: isPlatformAdmin,
     });
   } catch (error) {
     console.error('列出抽成錯誤:', error);

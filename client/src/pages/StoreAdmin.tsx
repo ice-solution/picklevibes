@@ -17,6 +17,7 @@ import ActivityManagement from '../components/Admin/ActivityManagement';
 import HolidayManagement from '../components/Admin/WeekendManagement';
 import BookingConfig from '../components/Admin/BookingConfig';
 import AccountingManagement from '../components/Admin/AccountingManagement';
+import PlatformFeeManagement from '../components/Admin/PlatformFeeManagement';
 import { resolveMediaUrl, storeBrandStyles, storePrimaryColor, STORE_BRAND_CLASS } from '../utils/storeBrandUtils';
 import { useDocumentStoreBrand } from '../hooks/useDocumentStoreBrand';
 import { PICKCOURT_HOME } from '../utils/pickcourtRoutes';
@@ -35,6 +36,7 @@ import {
   BuildingStorefrontIcon,
   ArrowLeftIcon,
   UsersIcon,
+  ReceiptPercentIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -66,6 +68,12 @@ function StoreAdminShell() {
       { id: 'redeem', name: '兌換券', icon: TicketIcon, element: <RedeemCodeManagement /> },
       { id: 'recharge-offers', name: '充值優惠', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
       { id: 'accounting', name: '會計／用量', icon: CurrencyDollarIcon, element: <AccountingManagement /> },
+      {
+        id: 'platform-fees',
+        name: '抽成交易',
+        icon: ReceiptPercentIcon,
+        element: <PlatformFeeManagement storeScoped />,
+      },
       // 教練功能暫時收起
       // { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
       // { id: 'coach-classes', name: '教練課堂', icon: AcademicCapIcon, element: <CoachClassManagement /> },

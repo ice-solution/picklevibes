@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
+import { useLockedStoreId } from '../../contexts/StoreAdminContext';
 
 type FeeRow = {
   _id: string;
@@ -12,7 +13,12 @@ type FeeRow = {
   settled: boolean;
   settledAt?: string | null;
   note?: string;
-  store?: { name?: string; slug?: string };
+  store?: { name?: string; slug?: string; platformFeePercent?: number };
+};
+
+type Props = {
+  /** 店鋪後台：鎖店、只讀（唔可標記找數） */
+  storeScoped?: boolean;
 };
 
 const TYPE_LABEL: Record<string, string> = {
@@ -20,10 +26,15 @@ const TYPE_LABEL: Record<string, string> = {
   booking_points: '積分預約',
 };
 
-const PlatformFeeManagement: React.FC = () => {
+const PlatformFeeManagement: React.FC<Props> = ({ storeScoped = false }) => {
+  const lockedStoreId = useLockedStoreId();
+  const effectiveStoreScoped = storeScoped || Boolean(lockedStoreId);
+
   const [fees, setFees] = useState<FeeRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [settledFilter, setSettledFilter] = useState<'all' | 'true' | 'false'>('false');
+  const [settledFilter, setSettledFilter] = useState<'all' | 'true' | 'false'>(
+    effectiveStoreScoped ? 'all' : 'false'
+  );
   const [typeFilter, setTypeFilter] = useState<'all' | 'store_recharge' | 'booking_points'>('all');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -33,9 +44,12 @@ const PlatformFeeManagement: React.FC = () => {
     netAmount: 0,
     unsettledFee: 0,
   });
+  const [storeFeePercent, setStoreFeePercent] = useState<number | null>(null);
+  const [canSettle, setCanSettle] = useState(!effectiveStoreScoped);
   const [toggling, setToggling] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (effectiveStoreScoped && !lockedStoreId) return;
     try {
       setLoading(true);
       const params: Record<string, string> = { limit: '100' };
@@ -43,6 +57,8 @@ const PlatformFeeManagement: React.FC = () => {
       if (typeFilter !== 'all') params.type = typeFilter;
       if (from) params.from = from;
       if (to) params.to = to;
+      if (lockedStoreId) params.store = lockedStoreId;
+
       const res = await axios.get('/platform-fees', { params });
       setFees(res.data.fees || []);
       setSummary(
@@ -53,18 +69,22 @@ const PlatformFeeManagement: React.FC = () => {
           unsettledFee: 0,
         }
       );
+      const pct = res.data.store?.platformFeePercent;
+      setStoreFeePercent(pct != null ? Number(pct) : null);
+      setCanSettle(Boolean(res.data.canSettle) && !effectiveStoreScoped);
     } catch (e: any) {
       alert(e.response?.data?.message || '載入抽成紀錄失敗');
     } finally {
       setLoading(false);
     }
-  }, [settledFilter, typeFilter, from, to]);
+  }, [settledFilter, typeFilter, from, to, lockedStoreId, effectiveStoreScoped]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const toggleSettled = async (fee: FeeRow) => {
+    if (!canSettle) return;
     try {
       setToggling(fee._id);
       await axios.patch(`/platform-fees/${fee._id}/settled`, {
@@ -78,13 +98,33 @@ const PlatformFeeManagement: React.FC = () => {
     }
   };
 
+  const colCount = canSettle
+    ? effectiveStoreScoped
+      ? 8
+      : 9
+    : effectiveStoreScoped
+      ? 7
+      : 8;
+
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">店鋪抽成／找數</h2>
+        <h2 className="text-2xl font-bold text-gray-900">
+          {effectiveStoreScoped ? '抽成交易紀錄' : '店鋪抽成／找數'}
+        </h2>
         <p className="text-gray-600">
-          店充值與積分預約場地之平台收取費；入店淨額 = 基數 − 抽成。可逐筆標記已找數。
+          {effectiveStoreScoped
+            ? '本店充值與積分預約之平台抽成明細；入店淨額 = 基數 − 抽成。'
+            : '店充值與積分預約場地之平台收取費；入店淨額 = 基數 − 抽成。可逐筆標記已找數。'}
         </p>
+        {effectiveStoreScoped && storeFeePercent != null && (
+          <p className="mt-2 text-sm text-gray-700">
+            本店現行抽成比例：{' '}
+            <span className="font-semibold text-amber-700">
+              {storeFeePercent > 0 ? `${storeFeePercent}%` : '0%（不抽成）'}
+            </span>
+          </p>
+        )}
       </div>
 
       <div className="grid sm:grid-cols-4 gap-4">
@@ -158,7 +198,7 @@ const PlatformFeeManagement: React.FC = () => {
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
+      <div className="bg-white rounded-lg shadow overflow-x-auto">
         {loading ? (
           <div className="flex justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
@@ -167,9 +207,16 @@ const PlatformFeeManagement: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">找數</th>
+                {canSettle && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">找數</th>
+                )}
+                {!canSettle && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">狀態</th>
+                )}
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">日期</th>
-                <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">店鋪</th>
+                {!effectiveStoreScoped && (
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">店鋪</th>
+                )}
                 <th className="px-3 py-3 text-left text-xs font-medium text-gray-500">類型</th>
                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500">基數</th>
                 <th className="px-3 py-3 text-right text-xs font-medium text-gray-500">%</th>
@@ -181,19 +228,35 @@ const PlatformFeeManagement: React.FC = () => {
             <tbody className="divide-y divide-gray-100">
               {fees.map((fee) => (
                 <tr key={fee._id} className="hover:bg-gray-50">
-                  <td className="px-3 py-2">
-                    <input
-                      type="checkbox"
-                      checked={fee.settled}
-                      disabled={toggling === fee._id}
-                      onChange={() => void toggleSettled(fee)}
-                      title={fee.settled ? '已找數（再按取消）' : '標記已找數'}
-                    />
-                  </td>
+                  {canSettle ? (
+                    <td className="px-3 py-2">
+                      <input
+                        type="checkbox"
+                        checked={fee.settled}
+                        disabled={toggling === fee._id}
+                        onChange={() => void toggleSettled(fee)}
+                        title={fee.settled ? '已找數（再按取消）' : '標記已找數'}
+                      />
+                    </td>
+                  ) : (
+                    <td className="px-3 py-2 whitespace-nowrap">
+                      <span
+                        className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${
+                          fee.settled
+                            ? 'bg-green-50 text-green-700'
+                            : 'bg-amber-50 text-amber-800'
+                        }`}
+                      >
+                        {fee.settled ? '已找數' : '未找數'}
+                      </span>
+                    </td>
+                  )}
                   <td className="px-3 py-2 whitespace-nowrap text-gray-700">
                     {new Date(fee.occurredAt).toLocaleString('zh-HK')}
                   </td>
-                  <td className="px-3 py-2">{fee.store?.name || '—'}</td>
+                  {!effectiveStoreScoped && (
+                    <td className="px-3 py-2">{fee.store?.name || '—'}</td>
+                  )}
                   <td className="px-3 py-2">{TYPE_LABEL[fee.type] || fee.type}</td>
                   <td className="px-3 py-2 text-right">{fee.grossAmount.toLocaleString()}</td>
                   <td className="px-3 py-2 text-right">{fee.feePercent}%</td>
@@ -208,7 +271,7 @@ const PlatformFeeManagement: React.FC = () => {
               ))}
               {fees.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-3 py-8 text-center text-gray-500">
+                  <td colSpan={colCount} className="px-3 py-8 text-center text-gray-500">
                     沒有符合條件的抽成紀錄
                   </td>
                 </tr>
