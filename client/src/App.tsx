@@ -48,6 +48,7 @@ import PublicPaymentLink from './pages/PublicPaymentLink';
 import PublicPaymentLinkSuccess from './pages/PublicPaymentLinkSuccess';
 import Courts from './pages/Courts';
 import Vips from './pages/Vips';
+import FoodOrder from './pages/FoodOrder';
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
@@ -112,6 +113,10 @@ function AppLayout() {
                       <MyBookings />
                     </ProtectedRoute>
                   } 
+                />
+                <Route
+                  path="/food-order"
+                  element={<FoodOrder />}
                 />
                 <Route 
                   path="/profile" 

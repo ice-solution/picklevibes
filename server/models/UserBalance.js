@@ -47,6 +47,10 @@ const userBalanceSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'PaymentLinkPayment'
     },
+    relatedFoodOrder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'FoodOrder'
+    },
     createdAt: {
       type: Date,
       default: Date.now
@@ -75,7 +79,8 @@ userBalanceSchema.methods.deductBalance = function(
   relatedBooking = null,
   relatedOrder = null,
   relatedPosTransaction = null,
-  relatedPaymentLinkPayment = null
+  relatedPaymentLinkPayment = null,
+  relatedFoodOrder = null
 ) {
   if (this.balance < amount) {
     throw new Error('餘額不足');
@@ -91,6 +96,7 @@ userBalanceSchema.methods.deductBalance = function(
   if (relatedOrder) entry.relatedOrder = relatedOrder;
   if (relatedPosTransaction) entry.relatedPosTransaction = relatedPosTransaction;
   if (relatedPaymentLinkPayment) entry.relatedPaymentLinkPayment = relatedPaymentLinkPayment;
+  if (relatedFoodOrder) entry.relatedFoodOrder = relatedFoodOrder;
   this.transactions.push(entry);
   return this.save();
 };
@@ -102,7 +108,8 @@ userBalanceSchema.methods.refund = function(
   relatedBooking = null,
   relatedOrder = null,
   relatedPosTransaction = null,
-  relatedPaymentLinkPayment = null
+  relatedPaymentLinkPayment = null,
+  relatedFoodOrder = null
 ) {
   this.balance += amount;
   if (this.totalSpent > 0) {
@@ -117,6 +124,7 @@ userBalanceSchema.methods.refund = function(
   if (relatedOrder) entry.relatedOrder = relatedOrder;
   if (relatedPosTransaction) entry.relatedPosTransaction = relatedPosTransaction;
   if (relatedPaymentLinkPayment) entry.relatedPaymentLinkPayment = relatedPaymentLinkPayment;
+  if (relatedFoodOrder) entry.relatedFoodOrder = relatedFoodOrder;
   this.transactions.push(entry);
   return this.save();
 };

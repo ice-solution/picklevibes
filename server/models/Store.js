@@ -99,6 +99,18 @@ const storeSchema = new mongoose.Schema({
     holidayNotifyEnabled: { type: Boolean, default: false },
   },
   /**
+   * 訂餐廚房／製作通知（WhatsApp OpenWA 純文字）
+   * 新訂單完成扣積分後，發送至 notifyPhones
+   */
+  foodOrderNotify: {
+    enabled: { type: Boolean, default: false },
+    notifyPhones: {
+      type: [String],
+      default: [],
+    },
+  },
+
+  /**
    * Tuya 控制區：設備綁在控制區，場地指派到控制區。
    * 任一關聯場地有預約燈光時段 → 控制區內設備應開（OR 邏輯）。
    */

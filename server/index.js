@@ -203,6 +203,7 @@ app.use('/api/edm', require('./routes/edm'));
 app.use('/api/application-forms', require('./routes/applicationForms'));
 app.use('/api/payment-links', require('./routes/paymentLinks'));
 app.use('/api/monthly-pass-plans', require('./routes/monthlyPassPlans'));
+app.use('/api/food', require('./routes/food'));
 
 // 維護模式管理員中間件（在認證之後，允許管理員通過所有 API）
 app.use(maintenanceAdminMiddleware);

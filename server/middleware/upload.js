@@ -285,6 +285,10 @@ const receiptUpload = multer({
   },
 });
 
+// 訂餐餐點圖片（800x800）
+const foodUpload = createUploadConfig('food', 'food');
+const processFoodImage = processImage(800, 800);
+
 module.exports = {
   // 場地上傳
   courtUpload,
@@ -304,6 +308,10 @@ module.exports = {
 
   // 會計單據
   receiptUpload,
+
+  // 訂餐圖片
+  foodUpload,
+  processFoodImage,
   
   // 通用功能
   createUploadConfig,

@@ -37,6 +37,7 @@ import PaymentLinkManagement from '../components/Admin/PaymentLinkManagement';
 import MonthlyPassPlanManagement from '../components/Admin/MonthlyPassPlanManagement';
 import EdmSend from '../components/Admin/EdmSend';
 import TenantStaffManagement from '../components/Admin/TenantStaffManagement';
+import FoodOrderManagement from '../components/Admin/FoodOrderManagement';
 
 import {
   Bars3Icon,
@@ -63,6 +64,7 @@ import {
   LinkIcon,
   AcademicCapIcon,
   GiftIcon,
+  CakeIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -101,6 +103,7 @@ const AdminV2: React.FC = () => {
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
     { id: 'monthly-pass-plans', name: '月卡方案', icon: TicketIcon, element: <MonthlyPassPlanManagement /> },
     { id: 'payment-links', name: '收款連結', icon: LinkIcon, element: <PaymentLinkManagement /> },
+    { id: 'food', name: '訂餐系統', icon: CakeIcon, element: <FoodOrderManagement /> },
     { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement /> },
     { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon, element: <OrderManagement /> },
     { id: 'pos', name: 'POS 收銀', icon: BanknotesIcon, element: <PosManagement /> },

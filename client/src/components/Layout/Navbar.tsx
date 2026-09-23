@@ -26,6 +26,7 @@ import {
   TagIcon,
   ShoppingCartIcon,
   TicketIcon,
+  CakeIcon,
 } from '@heroicons/react/24/outline';
 
 const navLinkClass = (active: boolean) =>
@@ -116,6 +117,10 @@ const Navbar: React.FC = () => {
       <Link to="/my-bookings" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
         <CalendarDaysIcon className="w-4 h-4" />
         <span>{t('nav.myBookings')}</span>
+      </Link>
+      <Link to="/food-order" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
+        <CakeIcon className="w-4 h-4" />
+        <span>{t('nav.foodOrder')}</span>
       </Link>
       <Link to="/my-activities" onClick={() => setIsUserDropdownOpen(false)} className="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
         <UsersIcon className="w-4 h-4" />
@@ -341,6 +346,10 @@ const Navbar: React.FC = () => {
                       <CalendarDaysIcon className="w-5 h-5" />
                       {t('nav.myBookings')}
                     </Link>
+                    <Link to="/food-order" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
+                      <CakeIcon className="w-5 h-5" />
+                      {t('nav.foodOrder')}
+                    </Link>
                     <Link to="/my-activities" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
                       <UsersIcon className="w-5 h-5" />
                       {t('nav.myActivities')}
@@ -361,6 +370,18 @@ const Navbar: React.FC = () => {
                       <ShoppingBagIcon className="w-5 h-5" />
                       {t('nav.orders')}
                     </Link>
+                    {isCoach && (
+                      <>
+                        <Link to="/coach-calendar" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
+                          <CalendarIcon className="w-5 h-5" />
+                          教練課表
+                        </Link>
+                        <Link to="/coach-courses" onClick={() => setIsOpen(false)} className="flex items-center gap-2 px-3 py-2 rounded-md text-base font-medium text-gray-700 hover:bg-gray-50">
+                          <AcademicCapIcon className="w-5 h-5" />
+                          我的課堂
+                        </Link>
+                      </>
+                    )}
                     <button
                       type="button"
                       onClick={() => {

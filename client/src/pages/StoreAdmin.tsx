@@ -27,6 +27,7 @@ import ShopManagement from '../components/Admin/ShopManagement';
 import OrderManagement from '../components/Admin/OrderManagement';
 import PosManagement from '../components/Admin/PosManagement';
 import PaymentLinkManagement from '../components/Admin/PaymentLinkManagement';
+import FoodOrderManagement from '../components/Admin/FoodOrderManagement';
 import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
 import ReportManagement from '../components/Admin/ReportManagement';
 
@@ -47,6 +48,7 @@ import {
   DocumentChartBarIcon,
   BanknotesIcon,
   LinkIcon,
+  CakeIcon,
 } from '@heroicons/react/24/outline';
 
 type Tab = {
@@ -91,6 +93,12 @@ function StoreAdminShell() {
         name: '收款連結',
         icon: LinkIcon,
         element: <PaymentLinkManagement />,
+      },
+      {
+        id: 'food',
+        name: '訂餐系統',
+        icon: CakeIcon,
+        element: <FoodOrderManagement />,
       },
       { id: 'analytics', name: '數據分析', icon: DocumentChartBarIcon, element: <AnalyticsDashboard /> },
       { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement /> },

@@ -28,6 +28,7 @@ const MODULE_CATALOG = [
   { key: 'redeem', label: '兌換券' },
   { key: 'rechargeOffers', label: '充值優惠' },
   { key: 'paymentLinks', label: '收款連結' },
+  { key: 'foodOrders', label: '訂餐系統' },
   { key: 'accounting', label: '會計' },
   { key: 'coachClasses', label: '教練管理' },
   { key: 'weekend', label: '假期管理' },
@@ -52,6 +53,7 @@ const TAB_MODULE = {
   redeem: 'redeem',
   'recharge-offers': 'rechargeOffers',
   'payment-links': 'paymentLinks',
+  food: 'foodOrders',
   accounting: 'accounting',
   coaches: 'coachClasses',
   weekend: 'weekend',
@@ -70,6 +72,7 @@ const ROLE_MODULES = {
     'activities',
     'regularActivities',
     'paymentLinks',
+    'foodOrders',
   ]),
   manager: null, // all
   shareholder: new Set([
