@@ -54,6 +54,12 @@ const activitySchema = new mongoose.Schema({
     enum: ['upcoming', 'ongoing', 'completed', 'cancelled'],
     default: 'upcoming'
   },
+  /** regular = 恆常班；trial = 體驗班 */
+  category: {
+    type: String,
+    enum: ['regular', 'trial'],
+    index: true,
+  },
   store: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Store',

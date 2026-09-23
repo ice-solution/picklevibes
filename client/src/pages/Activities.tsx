@@ -53,6 +53,7 @@ interface Activity {
   } | null;
   isEffectivelyPinned?: boolean;
   pinnedUntil?: string | null;
+  category?: 'regular' | 'trial' | null;
 }
 
 type SectionStatus = 'upcoming' | 'ongoing' | 'completed';
@@ -73,6 +74,8 @@ const Activities: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<string>('');
   /** '' = 全部；'other' = 其他；其餘為 store _id */
   const [storeFilter, setStoreFilter] = useState<string>('');
+  /** '' = 全部；regular = 恆常班；trial = 體驗班 */
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'activities' | 'regular'>('activities');
   const { user } = useAuth();
   const { t, i18n } = useTranslation();
@@ -221,8 +224,13 @@ const Activities: React.FC = () => {
   };
 
   const filteredActivities = useMemo(
-    () => activities.filter((a) => activityMatchesStoreFilter(a, storeFilter)),
-    [activities, storeFilter, stores]
+    () =>
+      activities.filter(
+        (a) =>
+          activityMatchesStoreFilter(a, storeFilter) &&
+          (!categoryFilter || a.category === categoryFilter)
+      ),
+    [activities, storeFilter, categoryFilter, stores]
   );
 
   const getImageUrl = (imagePath: string) => {
@@ -324,11 +332,18 @@ const Activities: React.FC = () => {
 
       <div className="p-6">
         {/* Status Badge */}
-        <div className="flex items-center justify-between mb-3">
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(getDerivedStatus(activity))}`}>
-            {getStatusText(getDerivedStatus(activity))}
-          </span>
-          <span className="text-sm text-gray-500">
+        <div className="flex items-center justify-between mb-3 gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(getDerivedStatus(activity))}`}>
+              {getStatusText(getDerivedStatus(activity))}
+            </span>
+            {activity.category && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
+                {t(`activitiesPage.categories.${activity.category}`)}
+              </span>
+            )}
+          </div>
+          <span className="text-sm text-gray-500 shrink-0">
             {t('activitiesPage.deadline', { date: formatDate(activity.registrationDeadline) })}
           </span>
         </div>
@@ -486,6 +501,22 @@ const Activities: React.FC = () => {
           <>
             {/* Filter */}
             <div className="flex flex-wrap items-center gap-4 mb-8">
+              <div className="flex items-center gap-2">
+                <label htmlFor="activities-category-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
+                  {t('activitiesPage.filters.category')}
+                </label>
+                <select
+                  id="activities-category-filter"
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="min-w-[160px] px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                >
+                  <option value="">{t('activitiesPage.filters.allCategories')}</option>
+                  <option value="regular">{t('activitiesPage.categories.regular')}</option>
+                  <option value="trial">{t('activitiesPage.categories.trial')}</option>
+                </select>
+              </div>
+
               <div className="flex items-center gap-2">
                 <label htmlFor="activities-store-filter" className="text-sm font-medium text-gray-700 whitespace-nowrap">
                   {t('activitiesPage.filters.store')}

@@ -3,6 +3,9 @@ const SmartGoogleCalendarSync = require('../services/smartGoogleCalendarSync');
 require('dotenv').config();
 
 async function smartSyncGoogleCalendar() {
+  console.log('📅 Google Calendar 智能同步已停用，此腳本不會執行同步');
+  return;
+
   try {
     // 解析命令行參數
     const args = process.argv.slice(2);

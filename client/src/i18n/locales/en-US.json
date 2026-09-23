@@ -991,7 +991,13 @@
       "ongoing": "Ongoing",
       "completed": "Completed",
       "store": "Store",
-      "allStores": "All stores"
+      "allStores": "All stores",
+      "category": "Category",
+      "allCategories": "All categories"
+    },
+    "categories": {
+      "regular": "Regular class",
+      "trial": "Trial class"
     },
     "empty": {
       "title": "No activities",

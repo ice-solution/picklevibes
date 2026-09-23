@@ -1,9 +1,17 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import FullCalendar from '@fullcalendar/react';
+import dayGridPlugin from '@fullcalendar/daygrid';
+import timeGridPlugin from '@fullcalendar/timegrid';
+import interactionPlugin from '@fullcalendar/interaction';
+import type { EventClickArg, EventInput } from '@fullcalendar/core';
 import api from '../../services/api';
 import { useBooking } from '../../contexts/BookingContext';
 import {
   AcademicCapIcon,
   BanknotesIcon,
+  CalendarDaysIcon,
+  ListBulletIcon,
+  MagnifyingGlassIcon,
   PencilSquareIcon,
   PlusIcon,
   SpeakerWaveIcon,
@@ -145,6 +153,38 @@ function rowCoachNames(row: CoachClassRow): string {
   return row.coach?.name || '—';
 }
 
+function rowStoreName(row: CoachClassRow): string {
+  return typeof row.store === 'object' ? row.store?.name || '' : '';
+}
+
+/** 香港牆鐘 → ISO，供 FullCalendar 顯示 */
+function classEventRange(sessionDate: string, startTime: string, endTime: string) {
+  const ymd = toDateInputValue(sessionDate);
+  if (!ymd || !startTime) return null;
+  const start = new Date(`${ymd}T${startTime.length === 5 ? startTime : startTime.slice(0, 5)}:00+08:00`);
+  let endIsoTime = endTime === '24:00' ? null : endTime;
+  let end: Date;
+  if (!endIsoTime) {
+    const next = new Date(`${ymd}T00:00:00+08:00`);
+    next.setTime(next.getTime() + 24 * 60 * 60 * 1000);
+    end = next;
+  } else {
+    end = new Date(`${ymd}T${endIsoTime.length === 5 ? endIsoTime : endIsoTime.slice(0, 5)}:00+08:00`);
+  }
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
+function eventColorForRow(row: CoachClassRow): { backgroundColor: string; borderColor: string } {
+  if (row.status === 'cancelled') {
+    return { backgroundColor: '#9CA3AF', borderColor: '#6B7280' };
+  }
+  if (row.paymentStatus === 'paid') {
+    return { backgroundColor: '#059669', borderColor: '#047857' };
+  }
+  return { backgroundColor: '#7C3AED', borderColor: '#6D28D9' };
+}
+
 const emptyForm = {
   title: '教練課堂',
   storeId: '',
@@ -184,6 +224,14 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
   const [payments, setPayments] = useState<CoachPaymentForm[]>([]);
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('scheduled');
+  const [paymentFilter, setPaymentFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [batchPaying, setBatchPaying] = useState(false);
+  const [calendarSelected, setCalendarSelected] = useState<CoachClassRow | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
   /** 開啟編輯時略過一次自動重算，保留已存堂費 */
   const skipPaymentRebuildRef = useRef(false);
@@ -299,6 +347,89 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
     return Number.isNaN(x.getTime())
       ? d
       : x.toLocaleDateString('zh-HK', { year: 'numeric', month: '2-digit', day: '2-digit' });
+  };
+
+  useEffect(() => {
+    setSelectedIds([]);
+  }, [filter, paymentFilter, searchQuery, dateFrom, dateTo, classes]);
+
+  const filteredClasses = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return classes.filter((row) => {
+      if (paymentFilter === 'unpaid' && row.paymentStatus === 'paid') return false;
+      if (paymentFilter === 'paid' && row.paymentStatus !== 'paid') return false;
+      const ymd = toDateInputValue(row.sessionDate);
+      if (dateFrom && ymd && ymd < dateFrom) return false;
+      if (dateTo && ymd && ymd > dateTo) return false;
+      if (!q) return true;
+      const hay = [
+        row.title,
+        rowCoachNames(row),
+        rowLocationLabel(row),
+        rowStoreName(row),
+        row.activity?.title,
+        row.regularActivity?.title,
+        row.notes,
+        row.startTime,
+        row.endTime,
+        formatDate(row.sessionDate),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [classes, searchQuery, paymentFilter, dateFrom, dateTo]);
+
+  const unpaidSelectable = useMemo(
+    () =>
+      filteredClasses.filter(
+        (r) => r.status === 'scheduled' && r.paymentStatus !== 'paid'
+      ),
+    [filteredClasses]
+  );
+
+  const allUnpaidSelected =
+    unpaidSelectable.length > 0 &&
+    unpaidSelectable.every((r) => selectedIds.includes(r._id));
+
+  const calendarEvents: EventInput[] = useMemo(() => {
+    return filteredClasses
+      .map((row) => {
+        const range = classEventRange(row.sessionDate, row.startTime, row.endTime);
+        if (!range) return null;
+        const colors = eventColorForRow(row);
+        return {
+          id: row._id,
+          title: `${row.title} · ${rowCoachNames(row)}`,
+          start: range.start,
+          end: range.end,
+          ...colors,
+          extendedProps: { row },
+        } as EventInput;
+      })
+      .filter(Boolean) as EventInput[];
+  }, [filteredClasses]);
+
+  const selectedUnpaidTotal = useMemo(() => {
+    const set = new Set(selectedIds);
+    return unpaidSelectable
+      .filter((r) => set.has(r._id))
+      .reduce((sum, r) => sum + (Number(r.totalPay) || 0), 0);
+  }, [selectedIds, unpaidSelectable]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllUnpaid = () => {
+    if (allUnpaidSelected) {
+      setSelectedIds([]);
+      return;
+    }
+    setSelectedIds(unpaidSelectable.map((r) => r._id));
   };
 
   const openCreate = () => {
@@ -481,6 +612,49 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
     }
   };
 
+  const handleBatchMarkPaid = async () => {
+    const ids = selectedIds.filter((id) =>
+      unpaidSelectable.some((r) => r._id === id)
+    );
+    if (ids.length === 0) {
+      alert('請先勾選未付款課堂');
+      return;
+    }
+    if (
+      !window.confirm(
+        `確認將 ${ids.length} 堂標記為已付款？\n合計薪資約 $${selectedUnpaidTotal}\n每堂會分別寫入會計支出（薪資）。`
+      )
+    ) {
+      return;
+    }
+    setBatchPaying(true);
+    try {
+      const res = await api.post('/coach-classes/mark-paid-batch', { ids });
+      setSelectedIds([]);
+      await load();
+      const failed = res.data?.failed || [];
+      if (failed.length) {
+        alert(
+          `${res.data?.message || '完成'}\n失敗：\n${failed
+            .map((f: { id: string; reason: string }) => `- ${f.id}: ${f.reason}`)
+            .join('\n')}`
+        );
+      } else {
+        alert(res.data?.message || '已批量標記付款');
+      }
+    } catch (err: any) {
+      alert(err.response?.data?.message || '批量標記付款失敗');
+    } finally {
+      setBatchPaying(false);
+    }
+  };
+
+  const handleCalendarEventClick = (arg: EventClickArg) => {
+    const row = arg.event.extendedProps?.row as CoachClassRow | undefined;
+    if (!row) return;
+    setCalendarSelected(row);
+  };
+
   const handleResendNotify = async (row: CoachClassRow) => {
     if (
       !window.confirm(
@@ -520,7 +694,7 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
         </button>
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
@@ -528,21 +702,144 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
         >
           <option value="scheduled">進行中</option>
           <option value="cancelled">已取消</option>
-          <option value="">全部</option>
+          <option value="">全部狀態</option>
         </select>
+        <select
+          value={paymentFilter}
+          onChange={(e) => setPaymentFilter(e.target.value as 'all' | 'unpaid' | 'paid')}
+          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+        >
+          <option value="all">全部付款狀態</option>
+          <option value="unpaid">未付款</option>
+          <option value="paid">已付款</option>
+        </select>
+        <div className="flex items-center gap-1.5 text-sm">
+          <label htmlFor="coach-class-date-from" className="text-gray-600 whitespace-nowrap">
+            日期
+          </label>
+          <input
+            id="coach-class-date-from"
+            type="date"
+            value={dateFrom}
+            max={dateTo || undefined}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+          />
+          <span className="text-gray-400">至</span>
+          <input
+            id="coach-class-date-to"
+            type="date"
+            value={dateTo}
+            min={dateFrom || undefined}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
+          />
+          {(dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+              }}
+              className="text-xs text-violet-700 hover:underline whitespace-nowrap"
+            >
+              清除日期
+            </button>
+          )}
+        </div>
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="搜尋標題、教練、店鋪、地點、活動…"
+            className="w-full border border-gray-300 rounded-lg pl-8 pr-3 py-1.5 text-sm"
+          />
+        </div>
+        <div className="inline-flex rounded-lg border border-gray-300 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setViewMode('list')}
+            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm ${
+              viewMode === 'list' ? 'bg-violet-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <ListBulletIcon className="w-4 h-4" />
+            列表
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode('calendar')}
+            className={`inline-flex items-center gap-1 px-3 py-1.5 text-sm border-l border-gray-300 ${
+              viewMode === 'calendar' ? 'bg-violet-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
+            <CalendarDaysIcon className="w-4 h-4" />
+            日曆
+          </button>
+        </div>
+        {viewMode === 'list' && (
+          <button
+            type="button"
+            disabled={batchPaying || selectedIds.length === 0}
+            onClick={() => void handleBatchMarkPaid()}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm text-white hover:bg-emerald-700 disabled:opacity-50"
+          >
+            <BanknotesIcon className="w-4 h-4" />
+            {batchPaying
+              ? '處理中…'
+              : `批量已付款（${selectedIds.length}${selectedIds.length ? ` · $${selectedUnpaidTotal}` : ''}）`}
+          </button>
+        )}
       </div>
+      <p className="text-xs text-gray-500">
+        顯示 {filteredClasses.length} / {classes.length} 堂
+        {viewMode === 'calendar' && ' · 紫＝未付款 · 綠＝已付款 · 灰＝已取消'}
+      </p>
 
       {loading ? (
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-violet-600" />
         </div>
-      ) : classes.length === 0 ? (
-        <p className="text-sm text-gray-500 py-8 text-center">尚無教練課堂</p>
+      ) : filteredClasses.length === 0 ? (
+        <p className="text-sm text-gray-500 py-8 text-center">
+          {classes.length === 0 ? '尚無教練課堂' : '沒有符合搜尋／篩選的課堂'}
+        </p>
+      ) : viewMode === 'calendar' ? (
+        <div className="bg-white rounded-lg shadow p-3 md:p-4">
+          <FullCalendar
+            plugins={[dayGridPlugin, timeGridPlugin, interactionPlugin]}
+            initialView="timeGridWeek"
+            headerToolbar={{
+              left: 'prev,next today',
+              center: 'title',
+              right: 'dayGridMonth,timeGridWeek,timeGridDay',
+            }}
+            locale="zh-tw"
+            height="auto"
+            events={calendarEvents}
+            eventClick={handleCalendarEventClick}
+            slotMinTime="06:00:00"
+            slotMaxTime="24:00:00"
+            allDaySlot={false}
+            nowIndicator
+          />
+        </div>
       ) : (
         <div className="bg-white rounded-lg shadow overflow-x-auto">
           <table className="min-w-full divide-y divide-gray-200 text-sm">
             <thead className="bg-gray-50">
               <tr>
+                <th className="px-3 py-3 text-left font-medium text-gray-500 w-10">
+                  <input
+                    type="checkbox"
+                    checked={allUnpaidSelected}
+                    onChange={toggleSelectAllUnpaid}
+                    title="全選未付款"
+                    disabled={unpaidSelectable.length === 0}
+                  />
+                </th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">日期／時間</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">店鋪</th>
                 <th className="px-4 py-3 text-left font-medium text-gray-500">教練</th>
@@ -553,8 +850,19 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {classes.map((row) => (
+              {filteredClasses.map((row) => {
+                const canSelect =
+                  row.status === 'scheduled' && row.paymentStatus !== 'paid';
+                return (
                 <tr key={row._id} className="hover:bg-gray-50">
+                  <td className="px-3 py-3">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.includes(row._id)}
+                      disabled={!canSelect}
+                      onChange={() => toggleSelect(row._id)}
+                    />
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div>{formatDate(row.sessionDate)}</div>
                     <div className="text-xs text-gray-500">
@@ -632,9 +940,89 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
                     )}
                   </td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {calendarSelected && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <h3 className="text-lg font-semibold text-gray-900">{calendarSelected.title}</h3>
+              <button
+                type="button"
+                onClick={() => setCalendarSelected(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="text-sm text-gray-700 space-y-1">
+              <p>
+                {formatDate(calendarSelected.sessionDate)} · {calendarSelected.startTime} –{' '}
+                {calendarSelected.endTime}
+              </p>
+              <p>教練：{rowCoachNames(calendarSelected)}</p>
+              <p>店鋪：{rowStoreName(calendarSelected) || '—'}</p>
+              <p>地點：{rowLocationLabel(calendarSelected)}</p>
+              <p>
+                薪資：${calendarSelected.totalPay ?? 0}（
+                {calendarSelected.paymentStatus === 'paid' ? '已付款' : '未付款'}）
+              </p>
+              {(calendarSelected.activity || calendarSelected.regularActivity) && (
+                <p className="text-violet-700">
+                  {calendarSelected.activity
+                    ? `活動：${calendarSelected.activity.title}`
+                    : ''}
+                  {calendarSelected.activity && calendarSelected.regularActivity ? ' · ' : ''}
+                  {calendarSelected.regularActivity
+                    ? `恆常：${calendarSelected.regularActivity.title}`
+                    : ''}
+                </p>
+              )}
+              {calendarSelected.notes && (
+                <p className="text-gray-500 whitespace-pre-wrap">{calendarSelected.notes}</p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 pt-2">
+              {calendarSelected.status === 'scheduled' &&
+                calendarSelected.paymentStatus !== 'paid' && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCalendarSelected(null);
+                        openEdit(calendarSelected);
+                      }}
+                      className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm text-violet-800"
+                    >
+                      編輯
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const row = calendarSelected;
+                        setCalendarSelected(null);
+                        await handleMarkPaid(row);
+                      }}
+                      className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-800"
+                    >
+                      標記已付款
+                    </button>
+                  </>
+                )}
+              <button
+                type="button"
+                onClick={() => setCalendarSelected(null)}
+                className="rounded-lg border px-3 py-1.5 text-sm text-gray-700"
+              >
+                關閉
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

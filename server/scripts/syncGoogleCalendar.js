@@ -3,6 +3,9 @@ const GoogleCalendarService = require('../services/googleCalendarService');
 require('dotenv').config();
 
 async function syncGoogleCalendar() {
+  console.log('📅 Google Calendar 同步已停用，此腳本不會執行同步');
+  return;
+
   try {
     console.log('🔄 開始Google Calendar同步任務...');
     

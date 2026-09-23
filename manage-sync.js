@@ -3,6 +3,9 @@ const SmartGoogleCalendarSync = require('./server/services/smartGoogleCalendarSy
 require('dotenv').config();
 
 async function manageSync() {
+  console.log('📅 Google Calendar 同步已停用，manage-sync 不會執行同步');
+  return;
+
   try {
     // 連接數據庫
     await mongoose.connect(process.env.MONGODB_URI);

@@ -7,6 +7,7 @@ import {
   LinkIcon,
   ClipboardDocumentIcon,
   EyeIcon,
+  DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 import Time24Input from '../Common/Time24Input';
 
@@ -249,6 +250,53 @@ const PaymentLinkManagement: React.FC = () => {
     }
   };
 
+  const duplicateLink = async (link: PaymentLinkDoc) => {
+    const baseTitle = link.title.replace(/\s*（複製）$/, '').trim();
+    const storeName =
+      typeof link.store === 'object' && link.store?.name ? link.store.name : '';
+    const ok = window.confirm(
+      `確定要複製此付款連結，建立一條新連結？\n\n` +
+        `標題：${link.title}\n` +
+        (storeName ? `店鋪：${storeName}\n` : '') +
+        `正價：HK$${Number(link.amount).toFixed(2)}\n\n` +
+        `新連結會用相同資料，並產生獨立短碼；付款紀錄由零開始。`
+    );
+    if (!ok) return;
+
+    const planId =
+      typeof link.passPlan === 'object' && link.passPlan
+        ? link.passPlan._id
+        : link.passPlan
+          ? String(link.passPlan)
+          : '';
+    const purpose = link.purpose === 'sell_pass' ? 'sell_pass' : 'activity';
+    setBusy(true);
+    try {
+      await axios.post('/payment-links', {
+        store: typeof link.store === 'string' ? link.store : link.store._id,
+        title: `${baseTitle}（複製）`,
+        description: (link.description || '').trim(),
+        amount: Number(link.amount),
+        pointsAmount: Number(
+          link.pointsAmount != null && link.pointsAmount > 0 ? link.pointsAmount : link.amount
+        ),
+        expiresAt: link.expiresAt ? new Date(link.expiresAt).toISOString() : null,
+        isActive: true,
+        purpose,
+        passPlan: purpose === 'sell_pass' ? planId : null,
+        isReclub: purpose === 'activity' ? Boolean(link.isReclub) : false,
+        sessionStart: purpose === 'activity' ? link.sessionStart || '' : '',
+        sessionEnd: purpose === 'activity' ? link.sessionEnd || '' : '',
+      });
+      await loadLinks();
+      alert('已用相同資料建立新付款連結');
+    } catch (e) {
+      alert(errMsg(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const openPayments = async (link: PaymentLinkDoc) => {
     setPaymentsLink(link);
     setPaymentsLoading(true);
@@ -477,6 +525,15 @@ const PaymentLinkManagement: React.FC = () => {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap justify-end gap-1">
+                        <button
+                          type="button"
+                          title="複製成新付款連結"
+                          disabled={busy}
+                          onClick={() => void duplicateLink(link)}
+                          className="p-1.5 rounded border hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          <DocumentDuplicateIcon className="w-4 h-4" />
+                        </button>
                         <button
                           type="button"
                           title="複製連結"

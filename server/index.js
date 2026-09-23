@@ -257,9 +257,9 @@ setTimeout(async () => {
   }
 }, 10000); // 延遲10秒執行，確保MongoDB連接已建立
 
-// 啟動Google Calendar定時任務
-const calendarScheduler = require('./scheduler/calendarScheduler');
-calendarScheduler.start();
+// Google Calendar 同步已停用（不再啟動定時任務）
+// const calendarScheduler = require('./scheduler/calendarScheduler');
+// calendarScheduler.start();
 
 // Tuya 燈控自動排程（Phase 2）
 const tuyaScheduler = require('./scheduler/tuyaScheduler');
@@ -278,10 +278,10 @@ try {
   console.error('申請表通知佇列啟動失敗:', err.message);
 }
 
-// 啟動智能Google Calendar同步
-const ScheduledSync = require('./scripts/scheduledSync');
-const scheduledSync = new ScheduledSync();
-scheduledSync.initialize();
+// Google Calendar 智能同步已停用
+// const ScheduledSync = require('./scripts/scheduledSync');
+// const scheduledSync = new ScheduledSync();
+// scheduledSync.initialize();
 
 const PORT = process.env.PORT || 5009;
 server.listen(PORT, () => {

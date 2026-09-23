@@ -548,6 +548,53 @@ router.post('/:id/resend-notify', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   POST /api/coach-classes/mark-paid-batch
+router.post('/mark-paid-batch', [auth, adminAuth], async (req, res) => {
+  try {
+    const rawIds = Array.isArray(req.body.ids) ? req.body.ids : [];
+    const ids = [...new Set(rawIds.map((id) => String(id || '').trim()).filter(Boolean))];
+    if (ids.length === 0) {
+      return res.status(400).json({ message: '請選擇至少一堂課' });
+    }
+    if (ids.length > 100) {
+      return res.status(400).json({ message: '一次最多標記 100 堂' });
+    }
+
+    const adminId = req.user.id || req.user._id;
+    const succeeded = [];
+    const failed = [];
+
+    for (const id of ids) {
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const coachClass = await CoachClass.findById(id);
+        if (!coachClass) {
+          failed.push({ id, reason: '課堂不存在' });
+          continue;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const result = await markClassPaid(coachClass, adminId);
+        succeeded.push({
+          id,
+          title: result.coachClass.title,
+          totalPay: totalPay(result.coachClass.coachPayments),
+        });
+      } catch (error) {
+        failed.push({ id, reason: error.message || '標記失敗' });
+      }
+    }
+
+    res.json({
+      message: `已標記 ${succeeded.length} 堂為已付款${failed.length ? `，${failed.length} 堂失敗` : ''}`,
+      succeeded,
+      failed,
+    });
+  } catch (error) {
+    console.error('coach-classes mark-paid-batch:', error);
+    res.status(500).json({ message: error.message || '批量標記付款失敗' });
+  }
+});
+
 // @route   POST /api/coach-classes/:id/mark-paid
 router.post('/:id/mark-paid', [auth, adminAuth], async (req, res) => {
   try {

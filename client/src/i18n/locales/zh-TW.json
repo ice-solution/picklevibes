@@ -991,7 +991,13 @@
       "ongoing": "進行中",
       "completed": "已完結",
       "store": "店鋪",
-      "allStores": "全部店鋪"
+      "allStores": "全部店鋪",
+      "category": "分類",
+      "allCategories": "全部分類"
+    },
+    "categories": {
+      "regular": "恆常班",
+      "trial": "體驗班"
     },
     "empty": {
       "title": "暫無活動",

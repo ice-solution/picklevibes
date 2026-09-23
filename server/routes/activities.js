@@ -525,7 +525,7 @@ async function cancelActivityVenueBookingsForActivity(activityId, previousTitle)
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    const { status, page = 1, limit = 10, store } = req.query;
+    const { status, page = 1, limit = 10, store, category } = req.query;
     
     const query = { isActive: true };
     if (status) {
@@ -535,6 +535,11 @@ router.get('/', async (req, res) => {
       query.store = null;
     } else if (store && mongoose.Types.ObjectId.isValid(String(store))) {
       query.store = store;
+    }
+    if (category === 'regular' || category === 'trial') {
+      query.category = category;
+    } else if (category === 'none') {
+      query.$or = [{ category: null }, { category: { $exists: false } }];
     }
 
     const pageNum = Math.max(1, parseInt(page, 10) || 1);
@@ -920,6 +925,8 @@ router.post('/:id/duplicate', [auth, adminAuth], async (req, res) => {
       endDate: source.endDate,
       registrationDeadline: source.registrationDeadline,
       location: source.location,
+      category: source.category,
+      store: source.store || null,
       requirements: source.requirements,
       organizer: req.user.id,
       coaches: source.coaches ? [...source.coaches] : [],
@@ -952,7 +959,8 @@ router.post('/', [
   body('startDate').isISO8601().withMessage('請提供有效的開始時間'),
   body('endDate').isISO8601().withMessage('請提供有效的結束時間'),
   body('registrationDeadline').isISO8601().withMessage('請提供有效的報名截止時間'),
-  body('location').trim().isLength({ min: 1 }).withMessage('活動地點不能為空')
+  body('location').trim().isLength({ min: 1 }).withMessage('活動地點不能為空'),
+  body('category').isIn(['regular', 'trial']).withMessage('請選擇活動分類（恆常班或體驗班）')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -1077,6 +1085,7 @@ router.post('/', [
       endDate: end,
       registrationDeadline: deadline,
       location,
+      category: req.body.category,
       requirements,
       organizer: req.user.id,
       coaches: coachIds,
@@ -1771,6 +1780,9 @@ router.put('/:id', [
       if (!['full_venue', 'single_court'].includes(updates.venueHoldMode)) {
         delete updates.venueHoldMode;
       }
+    }
+    if (updates.category !== undefined && !['regular', 'trial'].includes(updates.category)) {
+      return res.status(400).json({ message: '請選擇活動分類（恆常班或體驗班）' });
     }
 
     const previousTitle = activity.title;

@@ -36,6 +36,7 @@ interface Activity {
   endDate: string;
   registrationDeadline: string;
   location: string;
+  category?: 'regular' | 'trial' | null;
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
   organizer: {
     _id: string;
@@ -363,6 +364,13 @@ const ActivityDetail: React.FC = () => {
             <h1 className="text-3xl font-bold text-gray-900 mb-4">
               {activity.title}
             </h1>
+            {activity.category && (
+              <p className="mb-4">
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
+                  {t(`activitiesPage.categories.${activity.category}`)}
+                </span>
+              </p>
+            )}
 
             {/* Description */}
             <div className="prose max-w-none mb-8">

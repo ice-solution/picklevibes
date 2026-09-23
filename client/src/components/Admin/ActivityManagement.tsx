@@ -32,6 +32,7 @@ interface Activity {
   location: string;
   store?: string | { _id: string; name?: string; slug?: string } | null;
   status: 'upcoming' | 'ongoing' | 'completed' | 'cancelled';
+  category?: 'regular' | 'trial' | null;
   organizer: {
     _id: string;
     name: string;
@@ -104,6 +105,11 @@ const defaultParticipantStats = {
   maxParticipants: 0
 };
 
+const CATEGORY_LABEL: Record<string, string> = {
+  regular: '恆常班',
+  trial: '體驗班',
+};
+
 type ParticipantStats = typeof defaultParticipantStats;
 type ParticipantCountValue = number | '';
 
@@ -118,6 +124,8 @@ const ActivityManagement: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [categoryFilter, setCategoryFilter] = useState<string>('');
+  const [storeFilter, setStoreFilter] = useState<string>('');
   const [pinModalActivity, setPinModalActivity] = useState<Activity | null>(null);
   const [pinUntilValue, setPinUntilValue] = useState('');
   const [pinSaving, setPinSaving] = useState(false);
@@ -157,6 +165,7 @@ const ActivityManagement: React.FC = () => {
     registrationDeadline: '',
     location: '',
     requirements: '',
+    category: '' as '' | 'regular' | 'trial',
     coaches: [] as any[],
     storeId: '',
     venueHoldMode: 'full_venue' as 'full_venue' | 'single_court',
@@ -178,6 +187,14 @@ const ActivityManagement: React.FC = () => {
       return String(activity.store._id);
     }
     return String(activity.store);
+  };
+
+  const activityStoreName = (activity: Activity): string => {
+    if (activity.store && typeof activity.store === 'object' && activity.store.name) {
+      return activity.store.name;
+    }
+    const id = resolveActivityStoreId(activity);
+    return stores.find((s) => s._id === id)?.name || '';
   };
 
   /** 可選作活動地點的店鋪（優先啟用中；編輯時保留已選 inactive） */
@@ -208,7 +225,7 @@ const ActivityManagement: React.FC = () => {
 
   useEffect(() => {
     fetchActivities();
-  }, [currentPage, statusFilter]);
+  }, [currentPage, statusFilter, categoryFilter, storeFilter]);
 
   useEffect(() => {
     const loadStores = async () => {
@@ -276,6 +293,12 @@ const ActivityManagement: React.FC = () => {
       if (statusFilter) {
         params.append('status', statusFilter);
       }
+      if (categoryFilter) {
+        params.append('category', categoryFilter);
+      }
+      if (storeFilter) {
+        params.append('store', storeFilter);
+      }
 
       const response = await fetch(`${apiBaseUrl}/activities?${params}`, {
         headers: {
@@ -306,6 +329,7 @@ const ActivityManagement: React.FC = () => {
       registrationDeadline: '',
       location: first?.address || '',
       requirements: '',
+      category: '',
       coaches: [],
       storeId: first?._id || '',
       venueHoldMode: 'full_venue',
@@ -407,6 +431,7 @@ const ActivityManagement: React.FC = () => {
       registrationDeadline: formatDateTimeLocal(activity.registrationDeadline),
       location: activity.location,
       requirements: activity.requirements || '',
+      category: activity.category === 'trial' || activity.category === 'regular' ? activity.category : '',
       coaches: activity.coaches || [],
       storeId: isStoreVenue ? matchedStore!._id : storeId,
       venueHoldMode: activity.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue',
@@ -1001,9 +1026,54 @@ const ActivityManagement: React.FC = () => {
       </div>
 
       {/* Filter */}
-      <div className="flex flex-wrap gap-4">
+      <div className="flex flex-wrap items-end gap-4">
+        <div>
+          <label htmlFor="admin-activity-category" className="block text-xs font-medium text-gray-500 mb-1">
+            分類
+          </label>
+          <select
+            id="admin-activity-category"
+            value={categoryFilter}
+            onChange={(e) => {
+              setCategoryFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="min-w-[160px] px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+          >
+            <option value="">全部分類</option>
+            <option value="regular">恆常班</option>
+            <option value="trial">體驗班</option>
+            <option value="none">未分類</option>
+          </select>
+        </div>
+        <div>
+          <label htmlFor="admin-activity-store" className="block text-xs font-medium text-gray-500 mb-1">
+            店鋪
+          </label>
+          <select
+            id="admin-activity-store"
+            value={storeFilter}
+            onChange={(e) => {
+              setStoreFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="min-w-[180px] px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800"
+          >
+            <option value="">全部店鋪</option>
+            {stores.map((s) => (
+              <option key={s._id} value={s._id}>
+                {s.name}
+              </option>
+            ))}
+            <option value="none">未指定店鋪</option>
+          </select>
+        </div>
+        <div className="flex flex-wrap gap-2">
         <button
-          onClick={() => setStatusFilter('')}
+          onClick={() => {
+            setStatusFilter('');
+            setCurrentPage(1);
+          }}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             statusFilter === '' 
               ? 'bg-primary-600 text-white' 
@@ -1013,7 +1083,10 @@ const ActivityManagement: React.FC = () => {
           全部活動
         </button>
         <button
-          onClick={() => setStatusFilter('upcoming')}
+          onClick={() => {
+            setStatusFilter('upcoming');
+            setCurrentPage(1);
+          }}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             statusFilter === 'upcoming' 
               ? 'bg-primary-600 text-white' 
@@ -1023,7 +1096,10 @@ const ActivityManagement: React.FC = () => {
           即將開始
         </button>
         <button
-          onClick={() => setStatusFilter('ongoing')}
+          onClick={() => {
+            setStatusFilter('ongoing');
+            setCurrentPage(1);
+          }}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             statusFilter === 'ongoing' 
               ? 'bg-primary-600 text-white' 
@@ -1033,7 +1109,10 @@ const ActivityManagement: React.FC = () => {
           進行中
         </button>
         <button
-          onClick={() => setStatusFilter('completed')}
+          onClick={() => {
+            setStatusFilter('completed');
+            setCurrentPage(1);
+          }}
           className={`px-4 py-2 rounded-lg font-medium transition-colors ${
             statusFilter === 'completed' 
               ? 'bg-primary-600 text-white' 
@@ -1042,6 +1121,7 @@ const ActivityManagement: React.FC = () => {
         >
           已完結
         </button>
+        </div>
       </div>
 
       {/* Activities List */}
@@ -1094,6 +1174,11 @@ const ActivityManagement: React.FC = () => {
                     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(activity.status)}`}>
                       {getStatusText(activity.status)}
                     </span>
+                    {activity.category && CATEGORY_LABEL[activity.category] && (
+                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-50 text-indigo-700">
+                        {CATEGORY_LABEL[activity.category]}
+                      </span>
+                    )}
                     {activity.isEffectivelyPinned && (
                       <span className="text-xs text-amber-700">{formatPinUntil(activity.pinnedUntil)}</span>
                     )}
@@ -1121,7 +1206,11 @@ const ActivityManagement: React.FC = () => {
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <MapPinIcon className="h-4 w-4 mr-2" />
-                    <span>{activity.location}</span>
+                    <span>
+                      {activityStoreName(activity)
+                        ? `${activityStoreName(activity)} · ${activity.location}`
+                        : activity.location}
+                    </span>
                   </div>
                   <div className="flex items-center text-sm text-gray-600">
                     <UsersIcon className="h-4 w-4 mr-2" />
@@ -1516,6 +1605,27 @@ const ActivityManagement: React.FC = () => {
                     placeholder="請輸入活動標題"
                     required
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    分類 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={formData.category}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        category: e.target.value as '' | 'regular' | 'trial',
+                      })
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    required
+                  >
+                    <option value="">請選擇分類</option>
+                    <option value="regular">恆常班</option>
+                    <option value="trial">體驗班</option>
+                  </select>
                 </div>
 
                 <div>
