@@ -7,6 +7,7 @@ import './i18n'; // 初始化 i18n
 import './styles/globals.css'; // 引入全局樣式
 import Navbar from './components/Layout/Navbar';
 import Footer from './components/Layout/Footer';
+import ScrollToTop from './components/Layout/ScrollToTop';
 import Home from './pages/Home';
 import About from './pages/About';
 import FAQ from './pages/FAQ';
@@ -71,6 +72,7 @@ function AppLayout() {
           : 'min-h-screen bg-gray-50'
       }
     >
+      <ScrollToTop />
       <Navbar />
       <main className={fullscreenAdmin ? 'flex-1 min-h-0 overflow-hidden' : undefined}>
         <Routes>

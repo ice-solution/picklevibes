@@ -13,7 +13,7 @@ const { scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 const { normalizeHkPhone } = require('../utils/phoneUtils');
 const { findUserByPhone } = require('./botUserService');
 const { calculateDuration } = require('./botAvailabilityService');
-const { hasBookingVipDiscount, applyBookingVipDiscount, resolveMaxAdvanceDays, bookingVipDiscountLabel } = require('../utils/memberBenefits');
+const { hasBookingVipDiscount, applyBookingVipDiscount, resolveMaxAdvanceDays, bookingVipDiscountLabel, getBookingDiscountRate } = require('../utils/memberBenefits');
 const { calculateSoloCourtFee } = require('../utils/soloCourtFee');
 
 function normalizeDateTime(date, time) {
@@ -278,7 +278,7 @@ async function createBookingViaBot(params) {
       totalPrice: pointsToDeduct,
       originalPrice: tempBooking.pricing.totalPrice,
       pointsDeducted: pointsToDeduct,
-      vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice * 0.2) : 0,
+      vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice - applyBookingVipDiscount(tempBooking.pricing.totalPrice, bookingUser)) : 0,
       soloCourtFee,
     },
     createdAt: new Date(),
@@ -365,7 +365,7 @@ async function createBookingViaBot(params) {
         totalPrice: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.8) : tempSoloBooking.pricing.totalPrice,
         originalPrice: tempSoloBooking.pricing.totalPrice,
         pointsDeducted: 0,
-        vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.2) : 0,
+        vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice - applyBookingVipDiscount(tempSoloBooking.pricing.totalPrice, bookingUser)) : 0,
         soloCourtFee: 0,
       },
     });

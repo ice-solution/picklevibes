@@ -186,6 +186,7 @@ router.post('/login', authLimiter, [
         phone: user.phone,
         role: user.role,
         membershipLevel: user.membershipLevel,
+        membershipExpiry: user.membershipExpiry,
         preferences: user.preferences,
         ...formatTenantAccessForClient(tenantAccess),
       }
@@ -231,6 +232,7 @@ router.put('/profile', auth, [
         phone: userObj.phone,
         role: userObj.role,
         membershipLevel: userObj.membershipLevel,
+        membershipExpiry: userObj.membershipExpiry,
         preferences: userObj.preferences,
         lastLogin: userObj.lastLogin,
         createdAt: userObj.createdAt
@@ -259,6 +261,7 @@ router.get('/me', auth, async (req, res) => {
         phone: user.phone,
         role: user.role,
         membershipLevel: user.membershipLevel,
+        membershipExpiry: user.membershipExpiry,
         preferences: user.preferences,
         lastLogin: user.lastLogin,
         createdAt: user.createdAt,

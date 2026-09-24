@@ -38,46 +38,51 @@ const Footer: React.FC = () => {
 
   return (
     <footer className="bg-gray-900 text-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          <div className="lg:col-span-1">
-            <Link to="/" className="flex items-center space-x-2 mb-6">
-              <div className="w-10 h-10 bg-primary-600 rounded-lg flex items-center justify-center">
-                <span className="text-white font-bold text-xl">P</span>
+      {/* 手機：緊湊單欄；桌面：維持多欄 */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-10 md:py-12">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-8">
+          <div className="col-span-2 lg:col-span-1">
+            <Link to="/" className="flex items-center space-x-2 mb-3 sm:mb-6">
+              <div className="w-8 h-8 sm:w-10 sm:h-10 bg-primary-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg sm:text-xl">P</span>
               </div>
-              <span className="text-2xl font-bold">PickleVibes</span>
+              <span className="text-xl sm:text-2xl font-bold">PickleVibes</span>
             </Link>
 
-            <p className="text-gray-300 mb-6 leading-relaxed">{t('footer.tagline')}</p>
+            <p className="text-gray-300 text-sm sm:text-base mb-3 sm:mb-6 leading-relaxed line-clamp-2 sm:line-clamp-none">
+              {t('footer.tagline')}
+            </p>
 
-            <div className="flex space-x-4">
+            <div className="flex space-x-3 sm:space-x-4">
               <a
                 href="https://facebook.com/picklevibes.hk"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-10 h-10 bg-gray-800 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors duration-200 hover:scale-110 transform"
+                className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-blue-600 rounded-full flex items-center justify-center transition-colors duration-200"
+                aria-label="Facebook"
               >
-                <FacebookIcon className="w-5 h-5" />
+                <FacebookIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
               <a
                 href="https://instagram.com/picklevibes.hk"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="w-10 h-10 bg-gray-800 hover:bg-gradient-to-r hover:from-purple-500 hover:to-pink-500 rounded-full flex items-center justify-center transition-colors duration-200 hover:scale-110 transform"
+                className="w-9 h-9 sm:w-10 sm:h-10 bg-gray-800 hover:bg-gradient-to-r hover:from-purple-500 hover:to-pink-500 rounded-full flex items-center justify-center transition-colors duration-200"
+                aria-label="Instagram"
               >
-                <InstagramIcon className="w-5 h-5" />
+                <InstagramIcon className="w-4 h-4 sm:w-5 sm:h-5" />
               </a>
             </div>
           </div>
 
           <div>
-            <h3 className="text-lg font-semibold mb-6">{t('footer.company')}</h3>
-            <ul className="space-y-3">
+            <h3 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-6">{t('footer.company')}</h3>
+            <ul className="space-y-1.5 sm:space-y-3">
               {footerLinks.company.map((link) => (
                 <li key={link.href}>
                   <Link
                     to={link.href}
-                    className="text-gray-300 hover:text-white transition-colors duration-200"
+                    className="text-sm text-gray-300 hover:text-white transition-colors duration-200"
                   >
                     {link.name}
                   </Link>
@@ -87,22 +92,36 @@ const Footer: React.FC = () => {
           </div>
 
           <div>
-            <h3 className="text-lg font-semibold mb-6">{t('footer.support')}</h3>
-            <ul className="space-y-3">
+            <h3 className="text-sm sm:text-lg font-semibold mb-2 sm:mb-6">{t('footer.support')}</h3>
+            <ul className="space-y-1.5 sm:space-y-3">
               {footerLinks.support.map((link) => (
                 <li key={link.href}>
                   <Link
                     to={link.href}
-                    className="text-gray-300 hover:text-white transition-colors duration-200"
+                    className="text-sm text-gray-300 hover:text-white transition-colors duration-200"
                   >
                     {link.name}
                   </Link>
                 </li>
               ))}
             </ul>
+
+            <h3 className="text-sm sm:text-lg font-semibold mt-4 sm:mt-8 mb-2 sm:mb-6 lg:hidden">
+              {t('footer.contact')}
+            </h3>
+            <div className="space-y-2 sm:space-y-3 lg:hidden">
+              <a href="tel:+85261902761" className="flex items-center gap-2 text-sm text-gray-300">
+                <PhoneIcon className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                +852 6190 2761
+              </a>
+              <a href="mailto:info@picklevibes.hk" className="flex items-center gap-2 text-sm text-gray-300 break-all">
+                <EnvelopeIcon className="w-4 h-4 text-primary-400 flex-shrink-0" />
+                info@picklevibes.hk
+              </a>
+            </div>
           </div>
 
-          <div>
+          <div className="hidden lg:block">
             <h3 className="text-lg font-semibold mb-6">{t('footer.contact')}</h3>
             <div className="space-y-4">
               <div className="flex items-start space-x-3">
@@ -129,13 +148,13 @@ const Footer: React.FC = () => {
           </div>
         </div>
 
-        <div className="border-t border-gray-800 mt-12 pt-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="text-gray-400 text-sm mb-4 md:mb-0">
+        <div className="border-t border-gray-800 mt-5 sm:mt-10 md:mt-12 pt-4 sm:pt-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center gap-2 sm:gap-0">
+            <div className="text-gray-400 text-xs sm:text-sm">
               © {currentYear} PickleVibes hk {t('footer.rights')}
             </div>
 
-            <div className="flex space-x-6 text-sm">
+            <div className="flex space-x-6 text-xs sm:text-sm">
               {footerLinks.legal.map((link) => (
                 <Link
                   key={link.href}

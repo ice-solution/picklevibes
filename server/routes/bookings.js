@@ -24,6 +24,7 @@ const {
   hasBookingVipDiscount,
   bookingVipDiscountLabel,
   applyBookingVipDiscount,
+  getBookingDiscountRate,
   resolveMaxAdvanceDays,
 } = require('../utils/memberBenefits');
 const { calculateSoloCourtFee } = require('../utils/soloCourtFee');
@@ -442,7 +443,7 @@ router.post('/', [
         method: bypassRestrictions ? 'admin_waived' : 'points',
         pointsDeducted: bypassRestrictions ? 0 : chargePoints,
         originalPrice: tempBooking.pricing.totalPrice,
-        discount: isVip ? 20 : 0 // VIP折扣百分比
+        discount: isVip ? Math.round((1 - getBookingDiscountRate(bookingUser)) * 100) : 0 // 會員折扣百分比
       },
       pricing: {
         basePrice: tempBooking.pricing.basePrice,
@@ -451,7 +452,7 @@ router.post('/', [
         totalPrice: chargePoints,
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
         pointsDeducted: bypassRestrictions ? 0 : chargePoints,
-        vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice * 0.2) : 0,
+        vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice - applyBookingVipDiscount(tempBooking.pricing.totalPrice, bookingUser)) : 0,
         soloCourtFee,
         customPoints: customPointsFlag ? customPointsNum : undefined, // 自訂積分
         isCustomPoints: customPointsFlag // 是否使用自訂積分
@@ -574,7 +575,7 @@ router.post('/', [
           totalPrice: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.8) : tempSoloBooking.pricing.totalPrice, // 應用 VIP 折扣
           originalPrice: tempSoloBooking.pricing.totalPrice, // 保存原價
           pointsDeducted: 0, // 費用已包含在主預約中
-          vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.2) : 0,
+          vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice - applyBookingVipDiscount(tempSoloBooking.pricing.totalPrice, bookingUser)) : 0,
           soloCourtFee: 0
         },
         createdAt: new Date(),

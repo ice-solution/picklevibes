@@ -10,6 +10,7 @@ import {
   applyBookingVipDiscount,
   getBookingDiscountRate,
   membershipLevelLabelZh,
+  bookingMembershipDiscountLabelZh,
 } from '../../utils/memberBenefits';
 import { calculateSoloCourtFee, SOLO_COURT_FEE_PER_HOUR, soloCourtFeeHours } from '../../utils/soloCourtFee';
 import { 
@@ -529,7 +530,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                     <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
                       {membershipLevelLabelZh(user?.membershipLevel)}
                     </span>
-                    {t('bookingPage.bookingSummary.vipDiscount')}
+                    {bookingMembershipDiscountLabelZh(user)}
                   </span>
                   <span className="font-medium">
                     -{Math.round(courtListPrice * (1 - getBookingDiscountRate(user)))} {t('common.currency')}
@@ -573,7 +574,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   </span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1 text-right">
-                  {hasBookingVipDiscount(user) && t('bookingPage.bookingSummary.vipApplied')}
+                  {hasBookingVipDiscount(user) && `已享受${bookingMembershipDiscountLabelZh(user)}`}
                   {redeemData && t('bookingPage.bookingSummary.plusRedeem')}
                 </div>
               </div>

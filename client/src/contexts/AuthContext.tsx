@@ -18,6 +18,7 @@ export interface User {
   phone: string;
   role: string;
   membershipLevel: string;
+  membershipExpiry?: string | null;
   isPlatformAdmin?: boolean;
   managedStores?: ManagedStore[];
   preferences?: {

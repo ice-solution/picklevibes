@@ -314,7 +314,7 @@
         "join": "JOIN AT $15,000",
         "credits": "RECEIVE $18,000 CREDITS",
         "bonus": "+$3,000 BONUS · 20%",
-        "perks": "12 MONTHS · 5% OFF COURTS · BOOK 21 DAYS AHEAD"
+        "perks": "12 MONTHS · 5% OFF VIP PRICE · BOOK 21 DAYS AHEAD"
       },
       "gold": {
         "name": "GOLD",
@@ -322,7 +322,7 @@
         "join": "JOIN AT $30,000",
         "credits": "RECEIVE $38,000 CREDITS",
         "bonus": "+$8,000 BONUS · 27%",
-        "perks": "18 MONTHS · 10% OFF COURTS · BOOK 28 DAYS AHEAD"
+        "perks": "18 MONTHS · 10% OFF VIP PRICE · BOOK 28 DAYS AHEAD"
       },
       "platinum": {
         "name": "PLATINUM",
@@ -330,7 +330,7 @@
         "join": "JOIN AT $50,000",
         "credits": "RECEIVE $66,666 CREDITS",
         "bonus": "+$16,666 BONUS · 33%",
-        "perks": "36 MONTHS · 15% OFF COURTS · BOOK 60 DAYS AHEAD"
+        "perks": "36 MONTHS · 15% OFF VIP PRICE · BOOK 60 DAYS AHEAD"
       }
     },
     "perks": {

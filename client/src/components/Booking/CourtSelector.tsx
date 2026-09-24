@@ -1,3 +1,5 @@
+import { useAuth } from '../../contexts/AuthContext';
+import { getBookingDiscountRate, hasBookingVipDiscount } from '../../utils/memberBenefits';
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +16,9 @@ interface CourtSelectorProps {
 }
 
 const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }) => {
+  const { user } = useAuth();
+  const memberRate = hasBookingVipDiscount(user) ? getBookingDiscountRate(user) : 0.8;
+
   const { courts, loading } = useBooking();
   const { t } = useTranslation();
 
@@ -196,7 +201,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                           {t('common.perHourPoints', { n: slot.price })}
                         </span>
                         <span className="text-xs text-red-600 font-semibold">
-                          VIP: {t('common.perHourPoints', { n: Math.round(slot.price * 0.8) })}
+                          會員: {t('common.perHourPoints', { n: Math.round(slot.price * memberRate) })}
                         </span>
                       </div>
                     </div>
@@ -210,7 +215,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                           {t('common.perHourPoints', { n: court.pricing.offPeak })}
                         </span>
                         <span className="text-xs text-red-600 font-semibold">
-                          VIP: {t('common.perHourPoints', { n: Math.round(court.pricing.offPeak * 0.8) })}
+                          會員: {t('common.perHourPoints', { n: Math.round(court.pricing.offPeak * memberRate) })}
                         </span>
                       </div>
                     </div>
@@ -221,7 +226,7 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                           {t('common.perHourPoints', { n: court.pricing.peakHour })}
                         </span>
                         <span className="text-xs text-red-600 font-semibold">
-                          VIP: {t('common.perHourPoints', { n: Math.round(court.pricing.peakHour * 0.8) })}
+                          會員: {t('common.perHourPoints', { n: Math.round(court.pricing.peakHour * memberRate) })}
                         </span>
                       </div>
                     </div>

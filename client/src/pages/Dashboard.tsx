@@ -1,6 +1,11 @@
 import React, { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import {
+  membershipLevelLabelZh,
+  formatMembershipExpiryZh,
+  getMembershipPerkLines,
+} from '../utils/memberBenefits';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useBooking } from '../contexts/BookingContext';
@@ -129,13 +134,29 @@ const Dashboard: React.FC = () => {
           </div>
 
           <div className="bg-white rounded-xl p-6 shadow-lg">
-            <div className="flex items-center">
+            <div className="flex items-start">
               <div className="p-2 bg-blue-100 rounded-lg">
                 <TrophyIcon className="w-6 h-6 text-blue-600" />
               </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-500">會員等級</p>
-                <p className="text-2xl font-bold text-gray-900 capitalize">{user?.membershipLevel || 'Basic'}</p>
+              <div className="ml-4 min-w-0 flex-1">
+                <p className="text-sm font-medium text-gray-500">我的會籍</p>
+                <p className="text-xl font-bold text-gray-900">
+                  {membershipLevelLabelZh(user?.membershipLevel)}
+                </p>
+                <p className="text-xs text-gray-600 mt-1">
+                  {formatMembershipExpiryZh(user?.membershipExpiry, user?.membershipLevel)}
+                </p>
+                <ul className="mt-2 text-xs text-gray-600 space-y-0.5">
+                  {getMembershipPerkLines(user?.membershipLevel).slice(0, 2).map((line) => (
+                    <li key={line}>· {line}</li>
+                  ))}
+                </ul>
+                <Link
+                  to="/vips"
+                  className="inline-block mt-2 text-xs font-medium text-primary-600 hover:text-primary-800"
+                >
+                  查看方案詳情
+                </Link>
               </div>
             </div>
           </div>

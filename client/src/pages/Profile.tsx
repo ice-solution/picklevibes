@@ -2,7 +2,11 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { membershipLevelLabelZh } from '../utils/memberBenefits';
+import {
+  membershipLevelLabelZh,
+  getMembershipPerkLines,
+  formatMembershipExpiryZh,
+} from '../utils/memberBenefits';
 import axios from 'axios';
 import QRCode from 'qrcode';
 import { 
@@ -357,6 +361,40 @@ const Profile: React.FC = () => {
           <p className="text-gray-600">管理您的個人信息和偏好設置</p>
         </motion.div>
 
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="mb-8 bg-white rounded-xl shadow-lg border border-primary-100 p-6"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm text-gray-500 mb-1">我的會籍</p>
+              <h2 className="text-2xl font-bold text-gray-900">
+                {membershipLevelLabelZh(user?.membershipLevel)}
+              </h2>
+              <p className="text-sm text-gray-700 mt-2">
+                <span className="text-gray-500">有效期：</span>
+                {formatMembershipExpiryZh(user?.membershipExpiry, user?.membershipLevel)}
+              </p>
+            </div>
+            <Link
+              to="/vips"
+              className="shrink-0 px-4 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+            >
+              查看方案詳情
+            </Link>
+          </div>
+          <ul className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-gray-700">
+            {getMembershipPerkLines(user?.membershipLevel).map((line) => (
+              <li key={line} className="flex items-start gap-2">
+                <span className="text-primary-600 mt-0.5">✓</span>
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        </motion.div>
+
         {(mongoUserId || tierProgress?.enabled) && (
           <div className="mb-8 grid grid-cols-1 lg:grid-cols-2 gap-8 items-start">
             {mongoUserId && (
@@ -540,15 +578,32 @@ const Profile: React.FC = () => {
                   </div>
 
                   {/* 會員等級 */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      會員等級
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">
+                  <div className="rounded-xl border border-primary-100 bg-primary-50/40 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        我的會籍
+                      </label>
+                      <Link
+                        to="/vips"
+                        className="text-sm font-medium text-primary-600 hover:text-primary-800"
+                      >
+                        查看 VIP 方案
+                      </Link>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <span className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-semibold">
                         {membershipLevelLabelZh(user?.membershipLevel)}
                       </span>
                     </div>
+                    <p className="text-sm text-gray-800 mb-2">
+                      <span className="text-gray-500">有效期：</span>
+                      {formatMembershipExpiryZh(user?.membershipExpiry, user?.membershipLevel)}
+                    </p>
+                    <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
+                      {getMembershipPerkLines(user?.membershipLevel).map((line) => (
+                        <li key={line}>{line}</li>
+                      ))}
+                    </ul>
                   </div>
 
                   {/* 月卡 */}
