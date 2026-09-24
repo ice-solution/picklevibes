@@ -117,16 +117,49 @@ async function checkExpiredAthleteRoles() {
   }
 }
 
-/** 每日任務：先續期（餘 1 整日），再降級已過期 VIP，再處理選手 role 到期 */
+
+/** 付費會籍（silver/gold/platinum）過期 → 回到 vip 常駐 */
+async function checkExpiredPaidTiers() {
+  try {
+    const { PAID_MEMBERSHIP_TIERS } = require('../constants/membershipTiers');
+    console.log('🕐 開始檢查過期的付費會籍（銀／金／白金）...');
+    const now = new Date();
+    const paidUsers = await User.find({
+      membershipLevel: { $in: PAID_MEMBERSHIP_TIERS },
+      membershipExpiry: { $ne: null, $lte: now },
+    });
+
+    let expiredCount = 0;
+    for (const user of paidUsers) {
+      console.log(
+        `🔄 用戶 ${user.name} (${user.email}) 的 ${user.membershipLevel} 已過期，回到 VIP`
+      );
+      user.membershipLevel = 'vip';
+      user.membershipExpiry = new Date(now.getTime() + VIP_PERIOD_MS);
+      await user.save();
+      expiredCount += 1;
+    }
+
+    console.log(`✅ 付費會籍檢查完成，${expiredCount} 位已回到 VIP`);
+    return { expiredPaidTierCount: expiredCount };
+  } catch (error) {
+    console.error('❌ 檢查過期付費會籍失敗:', error);
+    throw error;
+  }
+}
+
+/** 每日任務：先續期 VIP → 付費會籍過期回 VIP → VIP 過期降級 → 選手 role */
 async function runDailyMembershipJobs() {
   const renew = await renewVipMembershipsOneDayLeft();
+  const paid = await checkExpiredPaidTiers();
   const expire = await checkExpiredMemberships();
   const athletes = await checkExpiredAthleteRoles();
-  return { ...renew, ...expire, ...athletes };
+  return { ...renew, ...paid, ...expire, ...athletes };
 }
 
 module.exports = {
   checkExpiredMemberships,
+  checkExpiredPaidTiers,
   renewVipMembershipsOneDayLeft,
   checkExpiredAthleteRoles,
   runDailyMembershipJobs

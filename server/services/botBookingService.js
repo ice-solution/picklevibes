@@ -13,7 +13,7 @@ const { scheduleTuyaCourtsSync } = require('../services/tuyaSchedulerService');
 const { normalizeHkPhone } = require('../utils/phoneUtils');
 const { findUserByPhone } = require('./botUserService');
 const { calculateDuration } = require('./botAvailabilityService');
-const { hasBookingVipDiscount, applyBookingVipDiscount } = require('../utils/memberBenefits');
+const { hasBookingVipDiscount, applyBookingVipDiscount, resolveMaxAdvanceDays, bookingVipDiscountLabel } = require('../utils/memberBenefits');
 const { calculateSoloCourtFee } = require('../utils/soloCourtFee');
 
 function normalizeDateTime(date, time) {
@@ -116,7 +116,7 @@ async function createBookingViaBot(params) {
   }
 
   const bookingConfig = await Config.getBookingConfig();
-  const maxDays = bookingConfig.maxAdvanceDaysByRole[user.role] ?? 7;
+  const maxDays = resolveMaxAdvanceDays(user, bookingConfig.maxAdvanceDaysByRole);
   if (diffDays > maxDays) {
     const err = new Error(`您的身份最多可預約 ${maxDays} 天內的場地`);
     err.code = 'DATE_TOO_FAR';
@@ -235,7 +235,7 @@ async function createBookingViaBot(params) {
     err.details = {
       required: pointsToDeduct,
       available: userBalance.balance,
-      discount: isVip ? 'VIP會員8折' : '無折扣',
+      discount: bookingVipDiscountLabel(bookingUser),
     };
     throw err;
   }
@@ -423,7 +423,7 @@ async function createBookingViaBot(params) {
     },
     pointsDeducted: pointsToDeduct,
     remainingBalance: userBalance.balance,
-    discount: isVip ? 'VIP會員8折' : '無折扣',
+    discount: bookingVipDiscountLabel(bookingUser),
     redeemCode: redeemCodeData,
   };
 }

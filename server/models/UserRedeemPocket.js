@@ -17,10 +17,10 @@ const userRedeemPocketSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
-  /** admin_assign = 後台派發；user_claim = 用戶自行輸入入袋 */
+  /** admin_assign = 後台派發；user_claim = 用戶自行輸入入袋；recharge_offer = 充值優惠贈券 */
   source: {
     type: String,
-    enum: ['admin_assign', 'user_claim'],
+    enum: ['admin_assign', 'user_claim', 'recharge_offer'],
     required: true,
   },
   status: {

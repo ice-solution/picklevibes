@@ -102,6 +102,21 @@ const redeemCodeSchema = new mongoose.Schema({
     type: String,
     enum: ['貓頭鷹時間', '非繁忙時間', '繁忙時間', '紅日'],
   }],
+  /**
+   * 商城／POS 商品限制（空陣列 = 不限商品）
+   * 與 applicableCategories 同時有值時為 OR：命中商品或分類其一即可
+   */
+  applicableProducts: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Product',
+  }],
+  /**
+   * 商城／POS 分類限制（空陣列 = 不限分類）
+   */
+  applicableCategories: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Category',
+  }],
   // 專用代碼限制（如果設置，則只能在此代碼指定的地方使用）
   // 如果為空或 null，則可以在所有 applicableTypes 指定的地方使用
   // 如果設置了，則需要檢查是否匹配當前使用場景

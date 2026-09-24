@@ -574,6 +574,10 @@ const PosManagement: React.FC = () => {
                 }
                 onRedeemRemoved={() => setRedeemData(null)}
                 restrictedCode="product"
+                productScopeItems={cart.map((item) => ({
+                  productId: item.productId,
+                  subtotal: (item.price || 0) * (item.quantity || 0),
+                }))}
               />
             )}
             {!selectedUser && (

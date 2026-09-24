@@ -52,6 +52,8 @@ function serializePocketItem(pocket, redeemCode, canUse) {
           validUntil: redeemCode.validUntil,
           applicableTypes: redeemCode.applicableTypes,
           applicablePricingSlots: redeemCode.applicablePricingSlots || [],
+          applicableProducts: redeemCode.applicableProducts || [],
+          applicableCategories: redeemCode.applicableCategories || [],
           isActive: redeemCode.isActive,
         }
       : null,

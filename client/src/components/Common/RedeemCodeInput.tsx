@@ -29,6 +29,8 @@ interface RedeemCodeInputProps {
     startTime?: string;
     pricingSlotName?: string;
   };
+  /** 商城／POS：用於商品／分類限制驗證 */
+  productScopeItems?: { productId: string; subtotal: number }[];
 }
 
 interface RedeemData {
@@ -64,6 +66,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
   restrictedCode,
   forUserId,
   bookingContext,
+  productScopeItems,
 }) => {
   const { t } = useTranslation();
   const [code, setCode] = useState('');
@@ -115,7 +118,7 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
     }
     loadPocket();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderType, forUserId]);
+  }, [orderType, forUserId, JSON.stringify(productScopeItems || [])]);
 
   const applyValidatePayload = async (payload: Record<string, unknown>) => {
     setLoading(true);
@@ -131,6 +134,9 @@ const RedeemCodeInput: React.FC<RedeemCodeInputProps> = ({
         pricingSlotName: bookingContext?.pricingSlotName,
         alsoClaimToPocket: true,
         ...(forUserId ? { forUserId } : {}),
+        ...(productScopeItems && productScopeItems.length > 0
+          ? { cartItems: productScopeItems }
+          : {}),
         ...payload,
       });
 

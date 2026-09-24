@@ -24,6 +24,7 @@ const {
   hasBookingVipDiscount,
   bookingVipDiscountLabel,
   applyBookingVipDiscount,
+  resolveMaxAdvanceDays,
 } = require('../utils/memberBenefits');
 const { calculateSoloCourtFee } = require('../utils/soloCourtFee');
 const {
@@ -215,10 +216,12 @@ router.post('/', [
         return res.status(400).json({ message: '不可預約過去的日期' });
       }
       if (!adminRelaxRules) {
-        const bookingUserDoc = await User.findById(bookingUserId).select('role');
-        const role = bookingUserDoc?.role || 'user';
+        const bookingUserDoc = await User.findById(bookingUserId).select('role membershipLevel');
         const bookingConfig = await Config.getBookingConfig();
-        const maxDays = bookingConfig.maxAdvanceDaysByRole[role] ?? 7;
+        const maxDays = resolveMaxAdvanceDays(
+          bookingUserDoc || { role: 'user', membershipLevel: 'basic' },
+          bookingConfig.maxAdvanceDaysByRole
+        );
         if (diffDays > maxDays) {
           return res.status(400).json({
             message: `您的身份最多可預約 ${maxDays} 天內的場地，請選擇較近的日期`
@@ -646,7 +649,7 @@ router.post('/', [
       booking,
       pointsDeducted: pointsToDeduct,
       remainingBalance: userBalance.balance,
-      discount: isVip ? 'VIP會員8折' : '無折扣'
+      discount: bookingVipDiscountLabel(bookingUser)
     };
 
     // 如果創建了單人場預約，添加到響應中

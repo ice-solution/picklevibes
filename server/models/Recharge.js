@@ -42,6 +42,15 @@ const rechargeSchema = new mongoose.Schema({
     required: false,
     description: '使用的充值優惠ID，null表示手動輸入'
   },
+  /** 充值優惠贈券是否已派入口袋（避免重複派發） */
+  bonusRedeemGranted: {
+    type: Boolean,
+    default: false,
+  },
+  membershipGranted: {
+    type: Boolean,
+    default: false,
+  },
   discountAmount: {
     type: Number,
     default: 0

@@ -2,6 +2,8 @@ const express = require('express');
 const { body, validationResult } = require('express-validator');
 const RechargeOffer = require('../models/RechargeOffer');
 const { auth, adminAuth } = require('../middleware/auth');
+const { normalizeObjectIdArray } = require('../utils/redeemProductScope');
+const RedeemCode = require('../models/RedeemCode');
 
 const router = express.Router();
 
@@ -34,7 +36,8 @@ router.get('/admin', auth, adminAuth, async (req, res) => {
   try {
     const offers = await RechargeOffer.find()
       .sort({ sortOrder: 1, createdAt: -1 })
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('bonusRedeemCodes', 'code name type value validUntil isActive');
 
     res.json({ offers });
   } catch (error) {
@@ -54,7 +57,11 @@ router.post('/', [
   body('amount').isFloat({ min: 1 }).withMessage('充值金額必須是大於0的數值'),
   body('description').trim().isLength({ min: 1, max: 500 }).withMessage('描述必須在1-500個字符之間'),
   body('expiryDate').isISO8601().withMessage('請提供有效的過期日期'),
-  body('sortOrder').optional().isInt({ min: 0 }).withMessage('排序順序必須是非負整數')
+  body('sortOrder').optional().isInt({ min: 0 }).withMessage('排序順序必須是非負整數'),
+  body('bonusRedeemCodes').optional().isArray().withMessage('贈送兌換券必須是數組'),
+  body('bonusRedeemValidDays').optional().isInt({ min: 1, max: 365 }).withMessage('贈券有效天數須為1-365'),
+  body('grantMembershipLevel').optional({ nullable: true }).isIn(['silver', 'gold', 'platinum', null, '']).withMessage('會籍等級無效'),
+  body('grantMembershipMonths').optional({ nullable: true }).isInt({ min: 1, max: 120 }).withMessage('會籍月數須為1-120')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -65,7 +72,7 @@ router.post('/', [
       });
     }
 
-    const { name, points, amount, description, expiryDate, sortOrder } = req.body;
+    const { name, points, amount, description, expiryDate, sortOrder, bonusRedeemCodes, bonusRedeemValidDays, grantMembershipLevel, grantMembershipMonths } = req.body;
 
     // 檢查過期日期是否為未來時間
     const expiry = new Date(expiryDate);
@@ -76,6 +83,14 @@ router.post('/', [
     }
 
     // 創建充值優惠
+    const normalizedBonus = normalizeObjectIdArray(bonusRedeemCodes);
+    if (normalizedBonus.length > 0) {
+      const found = await RedeemCode.countDocuments({ _id: { $in: normalizedBonus } });
+      if (found !== normalizedBonus.length) {
+        return res.status(400).json({ message: '部分贈送兌換券不存在' });
+      }
+    }
+
     const offer = new RechargeOffer({
       name,
       points,
@@ -83,6 +98,12 @@ router.post('/', [
       description,
       expiryDate: expiry,
       sortOrder: sortOrder || 0,
+      bonusRedeemCodes: normalizedBonus,
+      bonusRedeemValidDays: bonusRedeemValidDays != null ? Number(bonusRedeemValidDays) : 30,
+      grantMembershipLevel: grantMembershipLevel || null,
+      grantMembershipMonths: grantMembershipMonths != null && grantMembershipMonths !== ''
+        ? Number(grantMembershipMonths)
+        : null,
       createdBy: req.user.id
     });
 
@@ -90,7 +111,8 @@ router.post('/', [
 
     // 返回創建的優惠（包含創建者信息）
     const createdOffer = await RechargeOffer.findById(offer._id)
-      .populate('createdBy', 'name email');
+      .populate('createdBy', 'name email')
+      .populate('bonusRedeemCodes', 'code name type value validUntil isActive');
 
     res.status(201).json({
       message: '充值優惠創建成功',
@@ -115,7 +137,11 @@ router.put('/:id', [
   body('description').optional().trim().isLength({ min: 1, max: 500 }).withMessage('描述必須在1-500個字符之間'),
   body('expiryDate').optional().isISO8601().withMessage('請提供有效的過期日期'),
   body('isActive').optional().isBoolean().withMessage('活動狀態必須是布爾值'),
-  body('sortOrder').optional().isInt({ min: 0 }).withMessage('排序順序必須是非負整數')
+  body('sortOrder').optional().isInt({ min: 0 }).withMessage('排序順序必須是非負整數'),
+  body('bonusRedeemCodes').optional().isArray().withMessage('贈送兌換券必須是數組'),
+  body('bonusRedeemValidDays').optional().isInt({ min: 1, max: 365 }).withMessage('贈券有效天數須為1-365'),
+  body('grantMembershipLevel').optional({ nullable: true }).isIn(['silver', 'gold', 'platinum', null, '']).withMessage('會籍等級無效'),
+  body('grantMembershipMonths').optional({ nullable: true }).isInt({ min: 1, max: 120 }).withMessage('會籍月數須為1-120')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -127,7 +153,7 @@ router.put('/:id', [
     }
 
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
 
     // 如果更新過期日期，檢查是否為未來時間
     if (updates.expiryDate) {
@@ -139,11 +165,35 @@ router.put('/:id', [
       }
     }
 
+    if (updates.bonusRedeemCodes !== undefined) {
+      updates.bonusRedeemCodes = normalizeObjectIdArray(updates.bonusRedeemCodes);
+      if (updates.bonusRedeemCodes.length > 0) {
+        const found = await RedeemCode.countDocuments({ _id: { $in: updates.bonusRedeemCodes } });
+        if (found !== updates.bonusRedeemCodes.length) {
+          return res.status(400).json({ message: '部分贈送兌換券不存在' });
+        }
+      }
+    }
+
+    if (updates.bonusRedeemValidDays !== undefined && updates.bonusRedeemValidDays !== null && updates.bonusRedeemValidDays !== '') {
+      updates.bonusRedeemValidDays = Number(updates.bonusRedeemValidDays);
+    }
+
+    if (updates.grantMembershipLevel === '' || updates.grantMembershipLevel === undefined) {
+      if (updates.grantMembershipLevel === '') updates.grantMembershipLevel = null;
+    }
+    if (updates.grantMembershipMonths !== undefined && updates.grantMembershipMonths !== null && updates.grantMembershipMonths !== '') {
+      updates.grantMembershipMonths = Number(updates.grantMembershipMonths);
+    } else if (updates.grantMembershipMonths === '') {
+      updates.grantMembershipMonths = null;
+    }
+
     const offer = await RechargeOffer.findByIdAndUpdate(
       id,
       updates,
       { new: true, runValidators: true }
-    ).populate('createdBy', 'name email');
+    ).populate('createdBy', 'name email')
+     .populate('bonusRedeemCodes', 'code name type value validUntil isActive');
 
     if (!offer) {
       return res.status(404).json({ message: '充值優惠不存在' });
@@ -197,9 +247,13 @@ router.post('/:id/toggle', auth, adminAuth, async (req, res) => {
     offer.isActive = !offer.isActive;
     await offer.save();
 
+    const populated = await RechargeOffer.findById(offer._id)
+      .populate('createdBy', 'name email')
+      .populate('bonusRedeemCodes', 'code name type value validUntil isActive');
+
     res.json({
       message: `充值優惠已${offer.isActive ? '啟用' : '停用'}`,
-      offer
+      offer: populated
     });
 
   } catch (error) {

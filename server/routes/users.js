@@ -387,7 +387,7 @@ router.put('/:id/role', [
 router.put('/:id/membership', [
   auth,
   adminAuth,
-  body('membershipLevel').isIn(['basic', 'premium', 'vip']).withMessage('會員等級必須是 basic、premium 或 vip')
+  body('membershipLevel').isIn(['basic', 'vip', 'silver', 'gold', 'platinum']).withMessage('會員等級無效')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -1080,13 +1080,21 @@ router.put('/:id/membership', [auth, adminAuth], async (req, res) => {
     const { membershipLevel, days = 180 } = req.body; // 默認180天
     
     // 驗證會員等級
-    if (!['basic', 'vip'].includes(membershipLevel)) {
+    if (!['basic', 'vip', 'silver', 'gold', 'platinum'].includes(membershipLevel)) {
       return res.status(400).json({ message: '無效的會員等級' });
     }
     
-    // 驗證 VIP 期限
-    if (membershipLevel === 'vip' && (!days || days < 1 || days > 365)) {
-      return res.status(400).json({ message: 'VIP 期限必須在 1-365 天之間' });
+    const { isPaidMembershipTier, GRANT_MONTHS_BY_TIER, MEMBERSHIP_LABELS_ZH, addMonths } = require('../constants/membershipTiers');
+
+    if (membershipLevel === 'vip' && (!days || days < 1 || days > 3650)) {
+      return res.status(400).json({ message: 'VIP 期限必須在 1-3650 天之間' });
+    }
+    if (isPaidMembershipTier(membershipLevel)) {
+      const months = req.body.months != null ? Number(req.body.months) : GRANT_MONTHS_BY_TIER[membershipLevel];
+      if (!months || months < 1 || months > 120) {
+        return res.status(400).json({ message: '付費會籍月數必須在 1-120 之間' });
+      }
+      req.body._paidMonths = months;
     }
     
     const user = await User.findById(userId);
@@ -1094,26 +1102,34 @@ router.put('/:id/membership', [auth, adminAuth], async (req, res) => {
       return res.status(404).json({ message: '用戶不存在' });
     }
     
-    // 如果設置為VIP，計算到期日期
     if (membershipLevel === 'vip') {
       const now = new Date();
       const expiryDate = new Date(now.getTime() + (days * 24 * 60 * 60 * 1000));
-      
       user.membershipLevel = 'vip';
       user.membershipExpiry = expiryDate;
-      
       console.log(`👤 管理員更新用戶 ${user.name} 為 VIP 會員，期限: ${days} 天`);
+    } else if (isPaidMembershipTier(membershipLevel)) {
+      const months = req.body._paidMonths;
+      user.membershipLevel = membershipLevel;
+      user.membershipExpiry = addMonths(new Date(), months);
+      console.log(`👤 管理員更新用戶 ${user.name} 為 ${membershipLevel}，${months} 個月`);
     } else {
       user.membershipLevel = 'basic';
       user.membershipExpiry = null;
-      
       console.log(`👤 管理員更新用戶 ${user.name} 為普通會員`);
     }
     
     await user.save();
+
+    const label = MEMBERSHIP_LABELS_ZH[membershipLevel] || membershipLevel;
+    const detail = membershipLevel === 'vip'
+      ? `${label} (${days}天)`
+      : isPaidMembershipTier(membershipLevel)
+        ? `${label} (${req.body._paidMonths}個月)`
+        : label;
     
     res.json({
-      message: `用戶會員等級已更新為 ${membershipLevel === 'vip' ? `VIP會員 (${days}天)` : '普通會員'}`,
+      message: `用戶會員等級已更新為 ${detail}`,
       user: {
         id: user._id,
         name: user.name,
@@ -1161,7 +1177,7 @@ router.post('/create', [
     .matches(/^(?=.*[a-zA-Z])(?=.*\d)/).withMessage('密碼必須包含至少一個字母和一個數字'),
   body('phone').matches(/^[0-9]+$/).withMessage('電話號碼只能包含數字'),
   body('role').optional().isIn(['user', 'admin', 'coach', 'athlete']).withMessage('無效的角色'),
-  body('membershipLevel').optional().isIn(['basic', 'vip']).withMessage('無效的會員等級'),
+  body('membershipLevel').optional().isIn(['basic', 'vip', 'silver', 'gold', 'platinum']).withMessage('無效的會員等級'),
   body('vipDays').optional().isInt({ min: 1, max: 365 }).withMessage('VIP 期限必須在 1-365 天之間')
 ], async (req, res) => {
   try {

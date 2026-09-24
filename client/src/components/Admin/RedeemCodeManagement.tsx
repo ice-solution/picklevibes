@@ -37,6 +37,8 @@ interface RedeemCode {
   totalDiscount: number;
   applicableTypes: string[];
   applicablePricingSlots?: string[];
+  applicableProducts?: string[] | { _id: string; name: string }[];
+  applicableCategories?: string[] | { _id: string; name: string }[];
   restrictedCode?: string;
   createdAt: string;
 }
@@ -75,6 +77,8 @@ interface RedeemCodeGroup {
   isActive: boolean;
   applicableTypes: string[];
   applicablePricingSlots?: string[];
+  applicableProducts?: string[];
+  applicableCategories?: string[];
   createdAt: string;
   totalCodes: number;
   totalUsed: number;
@@ -137,6 +141,98 @@ function ApplicablePricingSlotsPicker({
   );
 }
 
+
+function idList(value: Array<string | { _id: string }> | undefined): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((v) => (typeof v === 'string' ? v : v._id)).filter(Boolean);
+}
+
+function ApplicableProductScopePicker({
+  applicableTypes,
+  productIds,
+  categoryIds,
+  products,
+  categories,
+  onChangeProducts,
+  onChangeCategories,
+}: {
+  applicableTypes: string[];
+  productIds: string[];
+  categoryIds: string[];
+  products: { _id: string; name: string }[];
+  categories: { _id: string; name: string }[];
+  onChangeProducts: (ids: string[]) => void;
+  onChangeCategories: (ids: string[]) => void;
+}) {
+  const show =
+    applicableTypes.includes('all') ||
+    applicableTypes.includes('product') ||
+    applicableTypes.includes('eshop');
+  if (!show) return null;
+
+  const toggle = (ids: string[], id: string, checked: boolean) => {
+    if (checked) return [...ids, id];
+    return ids.filter((x) => x !== id);
+  };
+
+  return (
+    <div className="mt-3 p-4 bg-emerald-50 border border-emerald-200 rounded-lg space-y-4">
+      <div>
+        <label className="block text-sm font-semibold text-emerald-900 mb-1">
+          適用商品／分類（商城／POS）
+        </label>
+        <p className="text-xs text-emerald-700 mb-2">
+          不勾選 = 商城不限商品。有勾選則折扣只計算符合條件的商品小計；商品與分類同時勾選時為「或」關係。
+        </p>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-gray-700 mb-2">指定分類</p>
+        <div className="grid grid-cols-2 gap-2 max-h-36 overflow-y-auto">
+          {categories.length === 0 ? (
+            <p className="text-xs text-gray-500 col-span-2">暫無分類</p>
+          ) : (
+            categories.map((cat) => (
+              <label key={cat._id} className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={categoryIds.includes(cat._id)}
+                  onChange={(e) =>
+                    onChangeCategories(toggle(categoryIds, cat._id, e.target.checked))
+                  }
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-800 truncate">{cat.name}</span>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
+      <div>
+        <p className="text-xs font-medium text-gray-700 mb-2">指定商品</p>
+        <div className="grid grid-cols-1 gap-1 max-h-40 overflow-y-auto">
+          {products.length === 0 ? (
+            <p className="text-xs text-gray-500">暫無商品</p>
+          ) : (
+            products.map((prod) => (
+              <label key={prod._id} className="flex items-center">
+                <input
+                  type="checkbox"
+                  checked={productIds.includes(prod._id)}
+                  onChange={(e) =>
+                    onChangeProducts(toggle(productIds, prod._id, e.target.checked))
+                  }
+                  className="mr-2"
+                />
+                <span className="text-sm text-gray-800 truncate">{prod.name}</span>
+              </label>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const RedeemCodeManagement: React.FC = () => {
   const [redeemCodes, setRedeemCodes] = useState<RedeemCode[]>([]);
   const [redeemGroups, setRedeemGroups] = useState<RedeemCodeGroup[]>([]);
@@ -149,6 +245,8 @@ const RedeemCodeManagement: React.FC = () => {
   const [editingGroup, setEditingGroup] = useState<RedeemCodeGroup | null>(null);
   const [showGroupEditModal, setShowGroupEditModal] = useState(false);
   const [groupEditLoading, setGroupEditLoading] = useState(false);
+  const [productCatalog, setProductCatalog] = useState<{ _id: string; name: string }[]>([]);
+  const [categoryCatalog, setCategoryCatalog] = useState<{ _id: string; name: string }[]>([]);
   const [groupFormData, setGroupFormData] = useState({
     name: '',
     description: '',
@@ -162,6 +260,8 @@ const RedeemCodeManagement: React.FC = () => {
     validUntil: '',
     applicableTypes: ['all'] as string[],
     applicablePricingSlots: [] as string[],
+    applicableProducts: [] as string[],
+    applicableCategories: [] as string[],
   });
   
   // 分頁狀態
@@ -207,13 +307,35 @@ const RedeemCodeManagement: React.FC = () => {
     validUntil: '',
     applicableTypes: ['all'] as string[],
     applicablePricingSlots: [] as string[],
+    applicableProducts: [] as string[],
+    applicableCategories: [] as string[],
     restrictedCode: '' // 專用代碼限制
   });
 
   useEffect(() => {
     fetchRedeemCodes();
     fetchStats();
+    fetchProductScopeCatalogs();
   }, []);
+
+  const fetchProductScopeCatalogs = async () => {
+    try {
+      const [prodRes, catRes] = await Promise.all([
+        axios.get('/products/admin/list', { params: { limit: 200, includeInactive: 'true' } }),
+        axios.get('/categories'),
+      ]);
+      setProductCatalog(
+        (prodRes.data.products || []).map((x: any) => ({ _id: x._id, name: x.name }))
+      );
+      setCategoryCatalog(
+        (Array.isArray(catRes.data) ? catRes.data : catRes.data.categories || []).map(
+          (x: any) => ({ _id: x._id, name: x.name })
+        )
+      );
+    } catch (err) {
+      console.error('載入商品／分類清單失敗:', err);
+    }
+  };
 
   const fetchRedeemCodes = async (
     page = currentPage,
@@ -403,6 +525,8 @@ const RedeemCodeManagement: React.FC = () => {
       validUntil: new Date(g.validUntil).toISOString().split('T')[0],
       applicableTypes: Array.isArray(g.applicableTypes) ? g.applicableTypes : ['all'],
       applicablePricingSlots: Array.isArray(g.applicablePricingSlots) ? g.applicablePricingSlots : [],
+      applicableProducts: idList(g.applicableProducts),
+      applicableCategories: idList(g.applicableCategories),
     });
     setShowGroupEditModal(true);
   };
@@ -452,6 +576,8 @@ const RedeemCodeManagement: React.FC = () => {
       validUntil: new Date(code.validUntil).toISOString().split('T')[0],
       applicableTypes: code.applicableTypes,
       applicablePricingSlots: code.applicablePricingSlots || [],
+      applicableProducts: idList(code.applicableProducts),
+      applicableCategories: idList(code.applicableCategories),
       restrictedCode: (code as any).restrictedCode || ''
     });
     setEditingCode(code);
@@ -534,6 +660,8 @@ const RedeemCodeManagement: React.FC = () => {
         validUntil: '',
         applicableTypes: ['all'],
         applicablePricingSlots: [],
+        applicableProducts: [],
+        applicableCategories: [],
         restrictedCode: ''
       });
       
@@ -632,6 +760,8 @@ const RedeemCodeManagement: React.FC = () => {
         validUntil: '',
         applicableTypes: ['all'],
         applicablePricingSlots: [],
+        applicableProducts: [],
+        applicableCategories: [],
         restrictedCode: ''
       });
       
@@ -995,6 +1125,13 @@ const RedeemCodeManagement: React.FC = () => {
                     {code.applicablePricingSlots && code.applicablePricingSlots.length > 0 && (
                       <div className="text-xs text-indigo-600 mt-1">
                         時段：{code.applicablePricingSlots.join('、')}
+                      </div>
+                    )}
+                    {(idList(code.applicableProducts).length > 0 || idList(code.applicableCategories).length > 0) && (
+                      <div className="text-xs text-emerald-600 mt-1">
+                        限商品／分類
+                        {idList(code.applicableProducts).length > 0 ? ` · ${idList(code.applicableProducts).length} 件商品` : ''}
+                        {idList(code.applicableCategories).length > 0 ? ` · ${idList(code.applicableCategories).length} 個分類` : ''}
                       </div>
                     )}
                   </td>
@@ -1378,6 +1515,15 @@ const RedeemCodeManagement: React.FC = () => {
                   value={groupFormData.applicablePricingSlots}
                   onChange={(slots) => setGroupFormData({ ...groupFormData, applicablePricingSlots: slots })}
                 />
+                <ApplicableProductScopePicker
+                  applicableTypes={groupFormData.applicableTypes}
+                  productIds={groupFormData.applicableProducts}
+                  categoryIds={groupFormData.applicableCategories}
+                  products={productCatalog}
+                  categories={categoryCatalog}
+                  onChangeProducts={(ids) => setGroupFormData({ ...groupFormData, applicableProducts: ids })}
+                  onChangeCategories={(ids) => setGroupFormData({ ...groupFormData, applicableCategories: ids })}
+                />
               </div>
 
               <div className="flex justify-end space-x-3 pt-4">
@@ -1718,6 +1864,15 @@ const RedeemCodeManagement: React.FC = () => {
                   applicableTypes={formData.applicableTypes}
                   value={formData.applicablePricingSlots}
                   onChange={(slots) => setFormData({ ...formData, applicablePricingSlots: slots })}
+                />
+                <ApplicableProductScopePicker
+                  applicableTypes={formData.applicableTypes}
+                  productIds={formData.applicableProducts}
+                  categoryIds={formData.applicableCategories}
+                  products={productCatalog}
+                  categories={categoryCatalog}
+                  onChangeProducts={(ids) => setFormData({ ...formData, applicableProducts: ids })}
+                  onChangeCategories={(ids) => setFormData({ ...formData, applicableCategories: ids })}
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   適用範圍二選一：<strong>全部適用</strong>（無限制）或<strong>勾選特定類型</strong>（僅在勾選的類型中使用）。只限商城 = 僅限線上商店／商品訂單。

@@ -23,6 +23,12 @@ const { auth, adminAuth } = require('../middleware/auth');
 
 const { assertRedeemCodePricingSlotAllowed } = require('../utils/redeemBookingContext');
 const { normalizeApplicablePricingSlots } = require('../utils/redeemPricingSlots');
+const {
+  normalizeObjectIdArray,
+  resolveProductScopeDiscount,
+  loadProductLineItems,
+  hasProductScopeRestriction,
+} = require('../utils/redeemProductScope');
 
 const router = express.Router();
 const COMMISSION_RATE_VALUES = ['0', '5', '10', 0, 5, 10];
@@ -43,6 +49,12 @@ function sanitizeRedeemPayload(body) {
   const data = { ...body };
   if (Array.isArray(data.applicablePricingSlots)) {
     data.applicablePricingSlots = normalizeApplicablePricingSlots(data.applicablePricingSlots);
+  }
+  if (data.applicableProducts !== undefined) {
+    data.applicableProducts = normalizeObjectIdArray(data.applicableProducts);
+  }
+  if (data.applicableCategories !== undefined) {
+    data.applicableCategories = normalizeObjectIdArray(data.applicableCategories);
   }
   return data;
 }
@@ -95,6 +107,7 @@ router.post('/validate', [
   body('startTime').optional().matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/).withMessage('請提供有效的開始時間'),
   body('pricingSlotName').optional().trim(),
   body('forUserId').optional().isMongoId().withMessage('無效的用戶ID'),
+  body('cartItems').optional().isArray().withMessage('購物車商品必須是數組'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -117,6 +130,7 @@ router.post('/validate', [
       pricingSlotName,
       alsoClaimToPocket,
       forUserId,
+      cartItems,
     } = req.body;
 
     // 後台代顧客驗證（POS）：僅 admin／staff 可指定 forUserId
@@ -170,10 +184,36 @@ router.post('/validate', [
       return res.status(400).json({ message: '此兌換碼不適用於當前訂單類型' });
     }
 
-    if (amount < redeemCode.minAmount) {
-      return res.status(400).json({ 
-        message: `此兌換碼需要最低消費 HK$${redeemCode.minAmount}` 
-      });
+    let productLineItems = null;
+    if (orderType === 'product' || orderType === 'eshop') {
+      if (Array.isArray(cartItems) && cartItems.length > 0) {
+        productLineItems = await loadProductLineItems(cartItems);
+      }
+      if (hasProductScopeRestriction(redeemCode) && (!productLineItems || productLineItems.length === 0)) {
+        return res.status(400).json({
+          message: '此兌換碼限定指定商品／分類，請確認購物車商品',
+        });
+      }
+    }
+
+    const scopeResult = (orderType === 'product' || orderType === 'eshop')
+      ? resolveProductScopeDiscount(redeemCode, productLineItems, amount)
+      : (() => {
+          if (amount < redeemCode.minAmount) {
+            return {
+              ok: false,
+              message: `此兌換碼需要最低消費 HK$${redeemCode.minAmount}`,
+            };
+          }
+          return {
+            ok: true,
+            eligibleAmount: amount,
+            discount: redeemCode.calculateDiscount(amount),
+          };
+        })();
+
+    if (!scopeResult.ok) {
+      return res.status(400).json({ message: scopeResult.message });
     }
 
     const canUse = await redeemCode.canUserUse(targetUserId);
@@ -198,7 +238,7 @@ router.post('/validate', [
       }
     }
 
-    const discountAmount = redeemCode.calculateDiscount(amount);
+    const discountAmount = scopeResult.discount;
     const finalAmount = amount - discountAmount;
 
     res.json({
@@ -498,6 +538,8 @@ router.post('/admin/create', [
   body('validUntil').isISO8601().withMessage('請提供有效的到期日期'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
   body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
+  body('applicableProducts').optional().isArray().withMessage('適用商品必須是數組'),
+  body('applicableCategories').optional().isArray().withMessage('適用分類必須是數組'),
   body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {
@@ -658,6 +700,8 @@ const redeemTemplateValidators = [
   body('validUntil').isISO8601().withMessage('請提供有效的到期日期'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
   body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
+  body('applicableProducts').optional().isArray().withMessage('適用商品必須是數組'),
+  body('applicableCategories').optional().isArray().withMessage('適用分類必須是數組'),
   body('restrictedCode').optional().trim(),
 ];
 
@@ -832,6 +876,8 @@ router.get('/admin/groups', [auth, adminAuth], async (req, res) => {
             isActive: { $first: '$isActive' },
             applicableTypes: { $first: '$applicableTypes' },
             applicablePricingSlots: { $first: '$applicablePricingSlots' },
+            applicableProducts: { $first: '$applicableProducts' },
+            applicableCategories: { $first: '$applicableCategories' },
             createdAt: { $first: '$createdAt' },
             totalCodes: { $sum: 1 },
             totalUsed: { $sum: '$totalUsed' },
@@ -880,6 +926,8 @@ router.put('/admin/batch/:batchId', [
   body('isActive').optional().isBoolean().withMessage('狀態必須是布林值'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
   body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
+  body('applicableProducts').optional().isArray().withMessage('適用商品必須是數組'),
+  body('applicableCategories').optional().isArray().withMessage('適用分類必須是數組'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -980,6 +1028,8 @@ router.put('/admin/:id', [
   body('validUntil').optional().isISO8601().withMessage('請提供有效的到期日期'),
   body('applicableTypes').optional().isArray().withMessage('適用類型必須是數組'),
   body('applicablePricingSlots').optional().isArray().withMessage('適用時段必須是數組'),
+  body('applicableProducts').optional().isArray().withMessage('適用商品必須是數組'),
+  body('applicableCategories').optional().isArray().withMessage('適用分類必須是數組'),
   body('restrictedCode').optional().trim()
 ], async (req, res) => {
   try {

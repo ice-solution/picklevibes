@@ -5,7 +5,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
 import apiConfig from '../../config/api';
 import { BOOKING_CANCELLATION_POLICY_LINES } from '../../constants/bookingCancellationPolicy';
-import { hasBookingVipDiscount, applyBookingVipDiscount } from '../../utils/memberBenefits';
+import {
+  hasBookingVipDiscount,
+  applyBookingVipDiscount,
+  getBookingDiscountRate,
+  membershipLevelLabelZh,
+} from '../../utils/memberBenefits';
 import { calculateSoloCourtFee, SOLO_COURT_FEE_PER_HOUR, soloCourtFeeHours } from '../../utils/soloCourtFee';
 import { 
   CalendarDaysIcon, 
@@ -489,7 +494,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.pricingTitle')}</h3>
             
             {/* VIP折扣提示框 */}
-            {user?.membershipLevel !== 'vip' && (
+            {!hasBookingVipDiscount(user) && (
               <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-400 rounded-lg shadow-md">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <span className="text-2xl animate-bounce">🎉</span>
@@ -521,11 +526,13 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               {hasBookingVipDiscount(user) && (
                 <div className="flex justify-between text-green-600">
                   <span className="flex items-center gap-2">
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">VIP</span>
+                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                      {membershipLevelLabelZh(user?.membershipLevel)}
+                    </span>
                     {t('bookingPage.bookingSummary.vipDiscount')}
                   </span>
                   <span className="font-medium">
-                    -{Math.round(courtListPrice * 0.2)} {t('common.currency')}
+                    -{Math.round(courtListPrice * (1 - getBookingDiscountRate(user)))} {t('common.currency')}
                   </span>
                 </div>
               )}

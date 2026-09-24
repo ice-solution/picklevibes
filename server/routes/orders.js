@@ -13,6 +13,7 @@ const {
   usesVariantStock,
 } = require('../utils/productVariants');
 const { auth, adminAuth } = require('../middleware/auth');
+const { resolveProductScopeDiscount } = require('../utils/redeemProductScope');
 
 const router = express.Router();
 
@@ -45,6 +46,7 @@ router.post('/', [
     // 驗證產品並計算總額
     let subtotal = 0;
     const orderItems = [];
+    const itemsProductCategories = [];
 
     for (const item of items) {
       const product = await Product.findById(item.productId);
@@ -90,6 +92,7 @@ router.post('/', [
         color: selection.color,
         size: selection.size
       });
+      itemsProductCategories.push(product.category);
     }
 
     // 處理兌換碼
@@ -111,11 +114,14 @@ router.post('/', [
         return res.status(400).json({ message: '此兌換碼不適用於產品購買' });
       }
 
-      // 檢查最低消費金額
-      if (subtotal < redeemCode.minAmount) {
-        return res.status(400).json({ 
-          message: `此兌換碼需要最低消費 HK$${redeemCode.minAmount}` 
-        });
+      const productLineItems = orderItems.map((oi, idx) => ({
+        productId: oi.product,
+        categoryId: itemsProductCategories[idx],
+        subtotal: oi.subtotal,
+      }));
+      const scopeResult = resolveProductScopeDiscount(redeemCode, productLineItems, subtotal);
+      if (!scopeResult.ok) {
+        return res.status(400).json({ message: scopeResult.message });
       }
 
       // 檢查用戶是否可以使用
@@ -128,8 +134,8 @@ router.post('/', [
         return res.status(400).json({ message: '您已超過此兌換碼的使用次數限制' });
       }
 
-      // 計算折扣
-      discount = redeemCode.calculateDiscount(subtotal);
+      // 計算折扣（僅適用商品小計）
+      discount = scopeResult.discount;
       redeemCodeName = redeemCode.name;
     }
 

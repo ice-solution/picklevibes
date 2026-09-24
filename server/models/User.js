@@ -50,7 +50,7 @@ const userSchema = new mongoose.Schema({
   },
   membershipLevel: {
     type: String,
-    enum: ['basic', 'vip'],
+    enum: ['basic', 'vip', 'silver', 'gold', 'platinum'],
     default: 'basic'
   },
   membershipExpiry: {
@@ -106,18 +106,30 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// 檢查會員狀態是否過期
+// 檢查會員狀態是否過期（付費級過期 → 回到 vip 常駐；vip 過期 → basic）
 userSchema.methods.checkMembershipStatus = function() {
+  const { isPaidMembershipTier } = require('../constants/membershipTiers');
+  const { VIP_PERIOD_MS } = require('../constants/vipMembership');
+  const now = new Date();
+
+  if (isPaidMembershipTier(this.membershipLevel) && this.membershipExpiry) {
+    if (now > this.membershipExpiry) {
+      this.membershipLevel = 'vip';
+      this.membershipExpiry = new Date(now.getTime() + VIP_PERIOD_MS);
+      return false;
+    }
+    return true;
+  }
+
   if (this.membershipLevel === 'vip' && this.membershipExpiry) {
-    const now = new Date();
     if (now > this.membershipExpiry) {
       this.membershipLevel = 'basic';
       this.membershipExpiry = null;
-      return false; // 已過期
+      return false;
     }
-    return true; // 仍然有效
+    return true;
   }
-  return this.membershipLevel === 'vip';
+  return this.membershipLevel === 'vip' || isPaidMembershipTier(this.membershipLevel);
 };
 
 // 設置VIP會員（與 server/constants/vipMembership.js 週期一致）
@@ -128,6 +140,22 @@ userSchema.methods.setVipMembership = function() {
   this.membershipLevel = 'vip';
   this.membershipExpiry = expiryDate;
 
+  return this.save();
+};
+
+// 設定付費會籍（silver/gold/platinum）；到期後會回到 vip
+userSchema.methods.setPaidMembershipTier = function(level, months) {
+  const {
+    isPaidMembershipTier,
+    addMonths,
+    GRANT_MONTHS_BY_TIER,
+  } = require('../constants/membershipTiers');
+  if (!isPaidMembershipTier(level)) {
+    throw new Error('無效的付費會籍等級');
+  }
+  const m = months != null ? Number(months) : GRANT_MONTHS_BY_TIER[level];
+  this.membershipLevel = level;
+  this.membershipExpiry = addMonths(new Date(), m);
   return this.save();
 };
 

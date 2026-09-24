@@ -13,6 +13,16 @@ import {
 } from '@heroicons/react/24/outline';
 import axios from 'axios';
 
+interface BonusRedeemCodeRef {
+  _id: string;
+  code: string;
+  name: string;
+  type?: string;
+  value?: number;
+  validUntil?: string;
+  isActive?: boolean;
+}
+
 interface RechargeOffer {
   _id: string;
   name: string;
@@ -22,6 +32,10 @@ interface RechargeOffer {
   expiryDate: string;
   isActive: boolean;
   sortOrder: number;
+  bonusRedeemCodes?: BonusRedeemCodeRef[] | string[];
+  bonusRedeemValidDays?: number;
+  grantMembershipLevel?: string | null;
+  grantMembershipMonths?: number | null;
   createdBy: {
     name: string;
     email: string;
@@ -37,6 +51,10 @@ interface RechargeOfferFormData {
   description: string;
   expiryDate: string;
   sortOrder: number;
+  bonusRedeemCodes: string[];
+  bonusRedeemValidDays: number;
+  grantMembershipLevel: string;
+  grantMembershipMonths: number | '';
 }
 
 interface RechargeUsage {
@@ -66,8 +84,13 @@ const RechargeOfferManagement: React.FC = () => {
     amount: 0,
     description: '',
     expiryDate: '',
-    sortOrder: 0
+    sortOrder: 0,
+    bonusRedeemCodes: [],
+    bonusRedeemValidDays: 30,
+    grantMembershipLevel: '',
+    grantMembershipMonths: '',
   });
+  const [redeemCodeOptions, setRedeemCodeOptions] = useState<BonusRedeemCodeRef[]>([]);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
 
   // 使用記錄 modal 狀態
@@ -81,7 +104,33 @@ const RechargeOfferManagement: React.FC = () => {
 
   useEffect(() => {
     fetchOffers();
+    fetchRedeemCodeOptions();
   }, []);
+
+  const fetchRedeemCodeOptions = async () => {
+    try {
+      const response = await axios.get('/redeem/admin/list', {
+        params: { status: 'active', limit: 100, standaloneOnly: 'true' },
+      });
+      setRedeemCodeOptions(response.data.redeemCodes || []);
+    } catch (error) {
+      console.error('獲取兌換碼清單失敗:', error);
+    }
+  };
+
+  const bonusIdsOf = (offer: RechargeOffer): string[] => {
+    if (!Array.isArray(offer.bonusRedeemCodes)) return [];
+    return offer.bonusRedeemCodes.map((x) => (typeof x === 'string' ? x : x._id));
+  };
+
+  const bonusLabelsOf = (offer: RechargeOffer): string => {
+    if (!Array.isArray(offer.bonusRedeemCodes) || offer.bonusRedeemCodes.length === 0) {
+      return '—';
+    }
+    return offer.bonusRedeemCodes
+      .map((x) => (typeof x === 'string' ? x : `${x.name} (${x.code})`))
+      .join('、');
+  };
 
   const fetchOffers = async () => {
     try {
@@ -95,7 +144,7 @@ const RechargeOfferManagement: React.FC = () => {
     }
   };
 
-  const handleInputChange = (field: keyof RechargeOfferFormData, value: string | number) => {
+  const handleInputChange = (field: keyof RechargeOfferFormData, value: string | number | string[]) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -158,7 +207,11 @@ const RechargeOfferManagement: React.FC = () => {
         amount: 0,
         description: '',
         expiryDate: '',
-        sortOrder: 0
+        sortOrder: 0,
+        bonusRedeemCodes: [],
+        bonusRedeemValidDays: 30,
+        grantMembershipLevel: '',
+        grantMembershipMonths: '',
       });
       fetchOffers();
     } catch (error: any) {
@@ -181,7 +234,11 @@ const RechargeOfferManagement: React.FC = () => {
       amount: offer.amount,
       description: offer.description,
       expiryDate: offer.expiryDate.split('T')[0],
-      sortOrder: offer.sortOrder
+      sortOrder: offer.sortOrder,
+      bonusRedeemCodes: bonusIdsOf(offer),
+      bonusRedeemValidDays: offer.bonusRedeemValidDays || 30,
+      grantMembershipLevel: offer.grantMembershipLevel || '',
+      grantMembershipMonths: offer.grantMembershipMonths ?? '',
     });
     setShowEditModal(true);
   };
@@ -319,6 +376,12 @@ const RechargeOfferManagement: React.FC = () => {
                     積分/金額
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    贈券
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    升會籍
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     狀態
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -350,6 +413,21 @@ const RechargeOfferManagement: React.FC = () => {
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">{offer.points} 分</div>
                       <div className="text-sm text-gray-500">HK${offer.amount}</div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-xs text-gray-700 max-w-[200px]">
+                        {bonusLabelsOf(offer)}
+                      </div>
+                      {Array.isArray(offer.bonusRedeemCodes) && offer.bonusRedeemCodes.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          派發後 {offer.bonusRedeemValidDays || 30} 日有效
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-xs text-gray-700">
+                      {offer.grantMembershipLevel
+                        ? `${String(offer.grantMembershipLevel).toUpperCase()} · ${offer.grantMembershipMonths || '—'} 月`
+                        : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -409,7 +487,7 @@ const RechargeOfferManagement: React.FC = () => {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-lg p-6 w-full max-w-md mx-4"
+            className="bg-white rounded-lg p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">新增充值優惠</h3>
@@ -504,6 +582,101 @@ const RechargeOfferManagement: React.FC = () => {
                 {errors.expiryDate && <p className="text-red-500 text-sm mt-1">{errors.expiryDate}</p>}
               </div>
 
+
+
+              <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 space-y-2">
+                <label className="block text-sm font-medium text-amber-900">
+                  充值成功升級會籍（疊在 VIP 之上）
+                </label>
+                <p className="text-xs text-amber-800">
+                  付費級到期後會自動回到 VIP 常駐。不選則只充值積分／贈券。
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">會籍等級</label>
+                    <select
+                      value={formData.grantMembershipLevel}
+                      onChange={(e) => handleInputChange('grantMembershipLevel', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="">不升級</option>
+                      <option value="silver">SILVER 銀級</option>
+                      <option value="gold">GOLD 金級</option>
+                      <option value="platinum">PLATINUM 白金級</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">有效月數</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={formData.grantMembershipMonths}
+                      onChange={(e) =>
+                        handleInputChange(
+                          'grantMembershipMonths',
+                          e.target.value === '' ? '' : parseInt(e.target.value, 10) || ''
+                        )
+                      }
+                      placeholder="銀12／金18／白金36"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                      disabled={!formData.grantMembershipLevel}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  充值成功自動派券（入口袋）
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  可多選。所選兌換碼只作折扣／適用範圍「範本」；充值成功會複製成個人券並自動入口袋，有效期由充值當日起計。
+                </p>
+                <div className="mb-3 flex items-center gap-2">
+                  <label className="text-sm text-gray-700 whitespace-nowrap">派發後有效</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={formData.bonusRedeemValidDays}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'bonusRedeemValidDays',
+                        Math.min(365, Math.max(1, parseInt(e.target.value, 10) || 30))
+                      )
+                    }
+                    className="w-24 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-600">日（預設 30＝一個月）</span>
+                </div>
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+                  {redeemCodeOptions.length === 0 ? (
+                    <p className="text-xs text-gray-500 px-1 py-2">暫無可用兌換碼，請先到兌換碼管理建立</p>
+                  ) : (
+                    redeemCodeOptions.map((rc) => (
+                      <label key={rc._id} className="flex items-start gap-2 px-1 py-1 hover:bg-gray-50 rounded">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={formData.bonusRedeemCodes.includes(rc._id)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...formData.bonusRedeemCodes, rc._id]
+                              : formData.bonusRedeemCodes.filter((id) => id !== rc._id);
+                            handleInputChange('bonusRedeemCodes', next);
+                          }}
+                        />
+                        <span className="text-sm text-gray-800">
+                          <span className="font-medium">{rc.name}</span>
+                          <span className="text-gray-500"> · {rc.code}</span>
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   排序順序
@@ -544,7 +717,7 @@ const RechargeOfferManagement: React.FC = () => {
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="bg-white rounded-lg p-6 w-full max-w-md mx-4"
+            className="bg-white rounded-lg p-6 w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto"
           >
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">編輯充值優惠</h3>
@@ -637,6 +810,101 @@ const RechargeOfferManagement: React.FC = () => {
                   }`}
                 />
                 {errors.expiryDate && <p className="text-red-500 text-sm mt-1">{errors.expiryDate}</p>}
+              </div>
+
+
+
+              <div className="p-3 rounded-lg border border-amber-200 bg-amber-50 space-y-2">
+                <label className="block text-sm font-medium text-amber-900">
+                  充值成功升級會籍（疊在 VIP 之上）
+                </label>
+                <p className="text-xs text-amber-800">
+                  付費級到期後會自動回到 VIP 常駐。不選則只充值積分／贈券。
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">會籍等級</label>
+                    <select
+                      value={formData.grantMembershipLevel}
+                      onChange={(e) => handleInputChange('grantMembershipLevel', e.target.value)}
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="">不升級</option>
+                      <option value="silver">SILVER 銀級</option>
+                      <option value="gold">GOLD 金級</option>
+                      <option value="platinum">PLATINUM 白金級</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-600 mb-1">有效月數</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={120}
+                      value={formData.grantMembershipMonths}
+                      onChange={(e) =>
+                        handleInputChange(
+                          'grantMembershipMonths',
+                          e.target.value === '' ? '' : parseInt(e.target.value, 10) || ''
+                        )
+                      }
+                      placeholder="銀12／金18／白金36"
+                      className="w-full px-2 py-1.5 border border-gray-300 rounded-lg text-sm"
+                      disabled={!formData.grantMembershipLevel}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  充值成功自動派券（入口袋）
+                </label>
+                <p className="text-xs text-gray-500 mb-2">
+                  可多選。所選兌換碼只作折扣／適用範圍「範本」；充值成功會複製成個人券並自動入口袋，有效期由充值當日起計。
+                </p>
+                <div className="mb-3 flex items-center gap-2">
+                  <label className="text-sm text-gray-700 whitespace-nowrap">派發後有效</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={365}
+                    value={formData.bonusRedeemValidDays}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'bonusRedeemValidDays',
+                        Math.min(365, Math.max(1, parseInt(e.target.value, 10) || 30))
+                      )
+                    }
+                    className="w-24 px-2 py-1.5 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <span className="text-sm text-gray-600">日（預設 30＝一個月）</span>
+                </div>
+                <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
+                  {redeemCodeOptions.length === 0 ? (
+                    <p className="text-xs text-gray-500 px-1 py-2">暫無可用兌換碼，請先到兌換碼管理建立</p>
+                  ) : (
+                    redeemCodeOptions.map((rc) => (
+                      <label key={rc._id} className="flex items-start gap-2 px-1 py-1 hover:bg-gray-50 rounded">
+                        <input
+                          type="checkbox"
+                          className="mt-1"
+                          checked={formData.bonusRedeemCodes.includes(rc._id)}
+                          onChange={(e) => {
+                            const next = e.target.checked
+                              ? [...formData.bonusRedeemCodes, rc._id]
+                              : formData.bonusRedeemCodes.filter((id) => id !== rc._id);
+                            handleInputChange('bonusRedeemCodes', next);
+                          }}
+                        />
+                        <span className="text-sm text-gray-800">
+                          <span className="font-medium">{rc.name}</span>
+                          <span className="text-gray-500"> · {rc.code}</span>
+                        </span>
+                      </label>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div>

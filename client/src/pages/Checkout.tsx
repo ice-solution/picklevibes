@@ -313,6 +313,10 @@ const Checkout: React.FC = () => {
                       onRedeemApplied={handleRedeemApplied}
                       onRedeemRemoved={handleRedeemRemoved}
                       restrictedCode="product"
+                      productScopeItems={cartItems.map((item) => ({
+                        productId: item.productId,
+                        subtotal: item.price * item.quantity,
+                      }))}
                     />
                   </div>
 

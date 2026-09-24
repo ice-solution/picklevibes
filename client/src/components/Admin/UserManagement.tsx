@@ -1,3 +1,4 @@
+import { membershipLevelLabelZh } from '../../utils/memberBenefits';
 import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { 
@@ -29,7 +30,7 @@ interface User {
   email: string;
   phone: string;
   role: 'user' | 'admin' | 'coach' | 'athlete';
-  membershipLevel: 'basic' | 'vip';
+  membershipLevel: 'basic' | 'vip' | 'silver' | 'gold' | 'platinum';
   membershipExpiry?: string;
   roleExpiry?: string;
   isShareholder?: boolean;
@@ -130,7 +131,7 @@ const UserManagement: React.FC = () => {
   const [newStatus, setNewStatus] = useState('');
   const [statusReason, setStatusReason] = useState('');
   const [showMembershipModal, setShowMembershipModal] = useState(false);
-  const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip'>('basic');
+  const [selectedMembership, setSelectedMembership] = useState<'basic' | 'vip' | 'silver' | 'gold' | 'platinum'>('basic');
   const [athleteRoleDays, setAthleteRoleDays] = useState(30);
   const [vipDuration, setVipDuration] = useState(30); // VIP 期限（天數）
   const [showMonthlyPassModal, setShowMonthlyPassModal] = useState(false);
@@ -157,7 +158,7 @@ const UserManagement: React.FC = () => {
     password: '',
     phone: '',
     role: 'user' as 'user' | 'admin' | 'coach',
-    membershipLevel: 'basic' as 'basic' | 'vip',
+    membershipLevel: 'basic' as 'basic' | 'vip' | 'silver' | 'gold' | 'platinum' | 'silver' | 'gold' | 'platinum',
     vipDays: 30
   });
   const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true);
@@ -172,7 +173,7 @@ const UserManagement: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchType, setSearchType] = useState<'name' | 'email' | 'phone'>('name');
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState('');
-  const [membershipLevelFilter, setMembershipLevelFilter] = useState<'' | 'basic' | 'vip'>('');
+  const [membershipLevelFilter, setMembershipLevelFilter] = useState<'' | 'basic' | 'vip' | 'silver' | 'gold' | 'platinum'>('');
   const [roleFilter, setRoleFilter] = useState<
     '' | 'user' | 'admin' | 'coach' | 'athlete' | 'shareholder'
   >('');
@@ -590,6 +591,9 @@ const UserManagement: React.FC = () => {
   const getMembershipColor = (level: string) => {
     switch (level) {
       case 'vip': return 'bg-purple-100 text-purple-800';
+      case 'silver': return 'bg-slate-200 text-slate-800';
+      case 'gold': return 'bg-amber-100 text-amber-800';
+      case 'platinum': return 'bg-cyan-100 text-cyan-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
@@ -693,16 +697,19 @@ const UserManagement: React.FC = () => {
         membershipLevel: selectedMembership
       };
       
-      // 如果設置為 VIP，添加期限
       if (selectedMembership === 'vip') {
         requestData.days = vipDuration;
+      }
+      if (selectedMembership === 'silver' || selectedMembership === 'gold' || selectedMembership === 'platinum') {
+        const defaults: Record<string, number> = { silver: 12, gold: 18, platinum: 36 };
+        requestData.months = defaults[selectedMembership];
       }
       
       await axios.put(`/users/${selectedUser._id}/membership`, requestData);
       
       setShowMembershipModal(false);
-      fetchUsers(); // 重新獲取用戶列表
-      alert(`會員等級已更新為 ${selectedMembership === 'vip' ? `VIP會員 (${vipDuration}天)` : '普通會員'}！`);
+      fetchUsers();
+      alert(`會員等級已更新為 ${membershipLevelLabelZh(selectedMembership)}！`);
     } catch (error) {
       console.error('更新會員等級失敗:', error);
       alert('更新會員等級失敗，請稍後再試');
@@ -801,7 +808,7 @@ const UserManagement: React.FC = () => {
     setCurrentPage(1); // 切換搜索類型時重置到第一頁
   };
 
-  const handleMembershipLevelFilterChange = (level: '' | 'basic' | 'vip') => {
+  const handleMembershipLevelFilterChange = (level: '' | 'basic' | 'vip' | 'silver' | 'gold' | 'platinum') => {
     setMembershipLevelFilter(level);
     setCurrentPage(1);
   };
@@ -1054,12 +1061,15 @@ const UserManagement: React.FC = () => {
               <label className="text-sm text-gray-700">會員等級:</label>
               <select
                 value={membershipLevelFilter}
-                onChange={(e) => handleMembershipLevelFilterChange(e.target.value as '' | 'basic' | 'vip')}
+                onChange={(e) => handleMembershipLevelFilterChange(e.target.value as '' | 'basic' | 'vip' | 'silver' | 'gold' | 'platinum')}
                 className="px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
               >
                 <option value="">全部</option>
                 <option value="basic">普通會員</option>
                 <option value="vip">VIP會員</option>
+                <option value="silver">SILVER 銀級</option>
+                <option value="gold">GOLD 金級</option>
+                <option value="platinum">PLATINUM 白金級</option>
               </select>
             </div>
 
@@ -1105,7 +1115,7 @@ const UserManagement: React.FC = () => {
               {searchQuery && (membershipLevelFilter || roleFilter) && ' · '}
               {membershipLevelFilter && (
                 <span>
-                  會員等級：{membershipLevelFilter === 'vip' ? 'VIP會員' : '普通會員'}
+                  會員等級：{membershipLevelLabelZh(membershipLevelFilter)}
                 </span>
               )}
               {membershipLevelFilter && roleFilter && ' · '}
@@ -1203,14 +1213,14 @@ const UserManagement: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="flex flex-col">
                       <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${getMembershipColor(user.membershipLevel)}`}>
-                        {user.membershipLevel === 'vip' ? 'VIP會員' : '普通會員'}
+                        {membershipLevelLabelZh(user.membershipLevel)}
                       </span>
                       {user.role === 'athlete' && user.roleExpiry && (
                         <div className="text-xs text-emerald-600 mt-0.5">
                           選手至 {formatMembershipExpiry(user.roleExpiry)}
                         </div>
                       )}
-                      {user.membershipLevel === 'vip' && user.membershipExpiry && (
+                      {(user.membershipLevel === 'vip' || user.membershipLevel === 'silver' || user.membershipLevel === 'gold' || user.membershipLevel === 'platinum') && user.membershipExpiry && (
                         <span className="text-xs text-gray-500 mt-1">
                           {formatMembershipExpiry(user.membershipExpiry)}
                         </span>
@@ -2166,7 +2176,7 @@ const UserManagement: React.FC = () => {
                   用戶: {selectedUser.name} ({selectedUser.email})
                 </p>
                 <p className="text-xs text-gray-500">當前等級: {
-                  selectedUser.membershipLevel === 'vip' ? 'VIP會員' : '普通會員'
+                  membershipLevelLabelZh(selectedUser.membershipLevel)
                 }</p>
                 {selectedUser.membershipLevel === 'vip' && selectedUser.membershipExpiry && (
                   <p className="text-xs text-gray-500">
@@ -2180,30 +2190,33 @@ const UserManagement: React.FC = () => {
                   選擇會員等級
                 </label>
                 <div className="space-y-2">
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="membershipLevel"
-                      value="basic"
-                      checked={selectedMembership === 'basic'}
-                      onChange={(e) => setSelectedMembership(e.target.value as 'basic' | 'vip')}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">普通會員</span>
-                  </label>
-                  <label className="flex items-center">
-                    <input
-                      type="radio"
-                      name="membershipLevel"
-                      value="vip"
-                      checked={selectedMembership === 'vip'}
-                      onChange={(e) => setSelectedMembership(e.target.value as 'basic' | 'vip')}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">VIP會員</span>
-                  </label>
+                  {([
+                    ['basic', '普通會員'],
+                    ['vip', 'VIP會員'],
+                    ['silver', 'SILVER 銀級'],
+                    ['gold', 'GOLD 金級'],
+                    ['platinum', 'PLATINUM 白金級'],
+                  ] as const).map(([value, label]) => (
+                    <label key={value} className="flex items-center">
+                      <input
+                        type="radio"
+                        name="membershipLevel"
+                        value={value}
+                        checked={selectedMembership === value}
+                        onChange={(e) => setSelectedMembership(e.target.value as 'basic' | 'vip' | 'silver' | 'gold' | 'platinum')}
+                        className="mr-2"
+                      />
+                      <span className="text-sm">{label}</span>
+                    </label>
+                  ))}
                 </div>
               </div>
+
+              {(selectedMembership === 'silver' || selectedMembership === 'gold' || selectedMembership === 'platinum') && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  付費會籍預設月數：銀 12／金 18／白金 36。到期後自動回到 VIP 常駐。
+                </p>
+              )}
 
               {selectedMembership === 'vip' && (
                 <div className="space-y-3">
@@ -2416,7 +2429,7 @@ const UserManagement: React.FC = () => {
                         name="newUserMembershipLevel"
                         value="basic"
                         checked={newUser.membershipLevel === 'basic'}
-                        onChange={(e) => setNewUser({ ...newUser, membershipLevel: e.target.value as 'basic' | 'vip' })}
+                        onChange={(e) => setNewUser({ ...newUser, membershipLevel: e.target.value as 'basic' | 'vip' | 'silver' | 'gold' | 'platinum' })}
                         className="mr-2"
                       />
                       <span className="text-sm">普通會員</span>
@@ -2427,7 +2440,7 @@ const UserManagement: React.FC = () => {
                         name="newUserMembershipLevel"
                         value="vip"
                         checked={newUser.membershipLevel === 'vip'}
-                        onChange={(e) => setNewUser({ ...newUser, membershipLevel: e.target.value as 'basic' | 'vip' })}
+                        onChange={(e) => setNewUser({ ...newUser, membershipLevel: e.target.value as 'basic' | 'vip' | 'silver' | 'gold' | 'platinum' })}
                         className="mr-2"
                       />
                       <span className="text-sm">VIP會員</span>

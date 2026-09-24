@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { membershipLevelLabelZh } from '../utils/memberBenefits';
 import axios from 'axios';
 import QRCode from 'qrcode';
 import { 
@@ -545,10 +546,7 @@ const Profile: React.FC = () => {
                     </label>
                     <div className="flex items-center gap-2">
                       <span className="px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm font-medium">
-                        {user?.membershipLevel === 'basic' && '普通會員'}
-                        {user?.membershipLevel === 'premium' && '高級會員'}
-                        {user?.membershipLevel === 'vip' && 'VIP會員'}
-                        {!user?.membershipLevel && '普通會員'}
+                        {membershipLevelLabelZh(user?.membershipLevel)}
                       </span>
                     </div>
                   </div>

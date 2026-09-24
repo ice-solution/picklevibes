@@ -9,6 +9,7 @@ const {
   usesVariantStock,
 } = require('../utils/productVariants');
 const { canAccessStore } = require('../utils/tenantAccess');
+const { resolveProductScopeDiscount } = require('../utils/redeemProductScope');
 
 const PAYMENT_LABELS = {
   kpay: 'KPay',
@@ -60,6 +61,7 @@ async function buildPosItems(rawItems, { allowInactive = true } = {}) {
 
     items.push({
       product: product._id,
+      category: product.category,
       name: product.name,
       price,
       quantity: item.quantity,
@@ -123,14 +125,20 @@ async function checkoutPos({
     ) {
       return { error: '此兌換碼不適用於商品／POS 銷售', status: 400 };
     }
-    if (subtotal < redeemCode.minAmount) {
-      return { error: `此兌換碼需要最低消費 HK$${redeemCode.minAmount}`, status: 400 };
+    const productLineItems = items.map((it) => ({
+      productId: it.product,
+      categoryId: it.category,
+      subtotal: it.subtotal,
+    }));
+    const scopeResult = resolveProductScopeDiscount(redeemCode, productLineItems, subtotal);
+    if (!scopeResult.ok) {
+      return { error: scopeResult.message, status: 400 };
     }
     const canUse = await redeemCode.canUserUse(userId);
     if (!canUse) {
       return { error: '客戶已超過此兌換碼的使用次數限制', status: 400 };
     }
-    discount = redeemCode.calculateDiscount(subtotal);
+    discount = scopeResult.discount;
     redeemCodeName = redeemCode.name;
     total = Math.max(0, subtotal - discount);
   }

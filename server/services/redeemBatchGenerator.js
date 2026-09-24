@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const RedeemCode = require('../models/RedeemCode');
 const RedeemBatchJob = require('../models/RedeemBatchJob');
+const { normalizeObjectIdArray } = require('../utils/redeemProductScope');
 
 const REDEEM_CODE_RANDOM_REGEX = /^[A-Z0-9]{6}$/;
 const INSERT_CHUNK_SIZE = 250;
@@ -76,6 +77,8 @@ function buildRedeemCodeDocuments(codes, batchId, template, createdBy) {
     isActive: template.isActive !== false,
     applicableTypes: template.applicableTypes || ['all'],
     applicablePricingSlots: template.applicablePricingSlots || [],
+    applicableProducts: template.applicableProducts || [],
+    applicableCategories: template.applicableCategories || [],
     restrictedCode: template.restrictedCode || null,
     createdBy,
     totalUsed: 0,
@@ -150,6 +153,8 @@ function normalizeTemplate(body, createdBy) {
     isActive: body.isActive !== false,
     applicableTypes: body.applicableTypes || ['all'],
     applicablePricingSlots: body.applicablePricingSlots || [],
+    applicableProducts: normalizeObjectIdArray(body.applicableProducts),
+    applicableCategories: normalizeObjectIdArray(body.applicableCategories),
     restrictedCode: body.restrictedCode || null,
     createdBy: new mongoose.Types.ObjectId(createdBy),
   };
@@ -235,11 +240,17 @@ async function resumePendingRedeemBatchJobs() {
   }
 }
 
+async function generateOneUniqueIndependentCode() {
+  const [code] = await collectUniqueCodes(1);
+  return code;
+}
+
 module.exports = {
   normalizeTemplate,
   runRedeemBatchJob,
   scheduleRedeemBatchJob,
   resumePendingRedeemBatchJobs,
+  generateOneUniqueIndependentCode,
   SYNC_MAX_QUANTITY: 100,
   BULK_MIN_QUANTITY: 101,
   BULK_MAX_QUANTITY: 10000,

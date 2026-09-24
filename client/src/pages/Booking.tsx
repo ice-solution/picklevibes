@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useBooking } from '../contexts/BookingContext';
+import { resolveMaxAdvanceDays } from '../utils/memberBenefits';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import StoreSelector from '../components/Booking/StoreSelector';
@@ -130,9 +131,7 @@ const Booking: React.FC = () => {
     }
   }, [selectedCourt, selectedDate, selectedTimeSlot, checkSoloCourtAvailability]);
 
-  const maxAdvanceDays = user?.role && maxAdvanceDaysByRole[user.role] != null
-    ? maxAdvanceDaysByRole[user.role]
-    : (maxAdvanceDaysByRole.user ?? 7);
+  const maxAdvanceDays = resolveMaxAdvanceDays(user, maxAdvanceDaysByRole);
 
   const steps = [
     { id: 1, name: t('bookingPage.steps.store'), icon: CalendarDaysIcon },
