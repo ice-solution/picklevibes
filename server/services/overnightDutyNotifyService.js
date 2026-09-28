@@ -317,11 +317,13 @@ async function runEveningDigestForStore(store, now = new Date()) {
     return { skipped: true, reason: 'no_valid_times' };
   }
   const msg = [buildAcHeader(store.name), ...timeLines].join('\n');
+  // Cloud template body 唔准換行（#132018）；OpenWA 仍用上方多行 msg
+  const timeLinesBlock = timeLines.join('、');
 
   return sendToStorePhones(store, msg, {
     kind: 'summary',
     storeName: store.name,
-    timeLinesBlock: timeLines.join('\n'),
+    timeLinesBlock,
   });
 }
 
@@ -349,11 +351,12 @@ async function runHolidayMorningDigestForStore(store, now = new Date()) {
     return { skipped: true, reason: 'no_bookings' };
   }
   const msg = [buildAcHeader(store.name), ...timeLines].join('\n');
+  const timeLinesBlock = timeLines.join('、');
 
   return sendToStorePhones(store, msg, {
     kind: 'summary',
     storeName: store.name,
-    timeLinesBlock: timeLines.join('\n'),
+    timeLinesBlock,
   });
 }
 

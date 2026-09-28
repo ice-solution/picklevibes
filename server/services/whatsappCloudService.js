@@ -45,10 +45,20 @@ function buildGraphUrl(path) {
   return path ? `${base}${path.startsWith('/') ? path : `/${path}`}` : base;
 }
 
+/**
+ * Meta template body params 唔准換行／tab／超過 4 個連續空格（error #132018）
+ */
+function sanitizeTemplateParamText(value) {
+  return String(value == null ? '' : value)
+    .replace(/[\r\n\t]+/g, ' ')
+    .replace(/ {5,}/g, '    ')
+    .trim();
+}
+
 function toBodyParameters(values) {
   return (values || []).map((text) => ({
     type: 'text',
-    text: text == null ? '' : String(text),
+    text: sanitizeTemplateParamText(text),
   }));
 }
 
