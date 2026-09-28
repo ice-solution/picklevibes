@@ -9,6 +9,7 @@ import {
   hasBookingVipDiscount,
   applyBookingVipDiscount,
   getBookingDiscountRate,
+  getVipBookingExtraFlatOff,
   membershipLevelLabelZh,
   bookingMembershipDiscountLabelZh,
 } from '../../utils/memberBenefits';
@@ -530,10 +531,19 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                     <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
                       {membershipLevelLabelZh(user?.membershipLevel)}
                     </span>
-                    {bookingMembershipDiscountLabelZh(user)}
+                    {bookingMembershipDiscountLabelZh(user).split('，')[0]}
                   </span>
                   <span className="font-medium">
                     -{Math.round(courtListPrice * (1 - getBookingDiscountRate(user)))} {t('common.currency')}
+                  </span>
+                </div>
+              )}
+
+              {getVipBookingExtraFlatOff(user) > 0 && (
+                <div className="flex justify-between text-green-600">
+                  <span>周年減價</span>
+                  <span className="font-medium">
+                    -{getVipBookingExtraFlatOff(user)} {t('common.currency')}
                   </span>
                 </div>
               )}
