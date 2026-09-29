@@ -172,7 +172,7 @@ async function createBookingViaBot(params) {
 
   const soloCourtFee = includeSoloCourt ? calculateSoloCourtFee(duration) : 0;
   let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
-  if (isVip) pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
+  if (isVip) pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser, new Date(), duration);
   pointsToDeduct += soloCourtFee;
 
   let redeemCodeData = null;
@@ -278,7 +278,7 @@ async function createBookingViaBot(params) {
       totalPrice: pointsToDeduct,
       originalPrice: tempBooking.pricing.totalPrice,
       pointsDeducted: pointsToDeduct,
-      vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice - applyBookingVipDiscount(tempBooking.pricing.totalPrice, bookingUser)) : 0,
+      vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice - applyBookingVipDiscount(tempBooking.pricing.totalPrice, bookingUser, new Date(), duration)) : 0,
       soloCourtFee,
     },
     createdAt: new Date(),
@@ -365,7 +365,7 @@ async function createBookingViaBot(params) {
         totalPrice: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.8) : tempSoloBooking.pricing.totalPrice,
         originalPrice: tempSoloBooking.pricing.totalPrice,
         pointsDeducted: 0,
-        vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice - applyBookingVipDiscount(tempSoloBooking.pricing.totalPrice, bookingUser)) : 0,
+        vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice - applyBookingVipDiscount(tempSoloBooking.pricing.totalPrice, bookingUser, new Date(), duration)) : 0,
         soloCourtFee: 0,
       },
     });

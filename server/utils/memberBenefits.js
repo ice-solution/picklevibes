@@ -10,9 +10,9 @@ const VIP_BOOKING_DISCOUNT_RATE = BOOKING_DISCOUNT_RATE_BY_LEVEL.vip;
 const ATHLETE_PAYMENT_LINK_RATE = 0.5;
 
 /**
- * 限時：VIP／會員價之後再減固定積分（唔使兌換碼）
+ * 限時：VIP／會員價之後再按小時減固定積分（唔使兌換碼；2 小時 = 2×）
  * env：
- *   VIP_BOOKING_EXTRA_OFF_POINTS=88
+ *   VIP_BOOKING_EXTRA_OFF_POINTS=88   （每小時）
  *   VIP_BOOKING_EXTRA_OFF_FROM=2026-09-29
  *   VIP_BOOKING_EXTRA_OFF_UNTIL=2026-10-29
  * 設 POINTS=0 即關閉。
@@ -56,10 +56,14 @@ function getVipBookingExtraFlatOffConfig(now = new Date()) {
   return { active, points: active ? points : 0, from, until };
 }
 
-/** 有 VIP／會員場租折扣時，限時再減嘅固定積分（否則 0） */
-function getVipBookingExtraFlatOff(user, now = new Date()) {
+/** 有 VIP／會員場租折扣時，限時再減嘅固定積分（按小時 × 單位；否則 0） */
+function getVipBookingExtraFlatOff(user, now = new Date(), durationMinutes = 60) {
   if (!hasBookingVipDiscount(user)) return 0;
-  return getVipBookingExtraFlatOffConfig(now).points;
+  const perHour = getVipBookingExtraFlatOffConfig(now).points;
+  if (perHour <= 0) return 0;
+  const minutes = Number(durationMinutes);
+  const hours = Number.isFinite(minutes) && minutes > 0 ? minutes / 60 : 1;
+  return Math.round(perHour * hours);
 }
 
 function isAthleteRole(user) {
@@ -86,10 +90,10 @@ function hasBookingVipDiscount(user) {
   return getBookingDiscountRate(user) < 1;
 }
 
-function bookingVipDiscountLabel(user) {
+function bookingVipDiscountLabel(user, durationMinutes = 60) {
   const level = resolveBookingDiscountLevel(user);
   const base = BOOKING_DISCOUNT_LABELS_ZH[level] || BOOKING_DISCOUNT_LABELS_ZH.basic;
-  const extra = getVipBookingExtraFlatOff(user);
+  const extra = getVipBookingExtraFlatOff(user, new Date(), durationMinutes);
   if (extra > 0) return `${base}，周年減價`;
   return base;
 }
@@ -101,12 +105,12 @@ function applyBookingVipRateOnly(amount, user) {
   return Math.round(n * getBookingDiscountRate(user));
 }
 
-/** 牌價 → VIP／會員價；限時再減固定積分（floor 0） */
-function applyBookingVipDiscount(amount, user, now = new Date()) {
+/** 牌價 → VIP／會員價；限時再按小時減固定積分（floor 0） */
+function applyBookingVipDiscount(amount, user, now = new Date(), durationMinutes = 60) {
   const n = Number(amount) || 0;
   if (!hasBookingVipDiscount(user) || n <= 0) return n;
   const afterRate = applyBookingVipRateOnly(n, user);
-  const extra = getVipBookingExtraFlatOff(user, now);
+  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes);
   return Math.max(0, afterRate - extra);
 }
 

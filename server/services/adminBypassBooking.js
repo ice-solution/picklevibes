@@ -97,7 +97,7 @@ async function createAdminBypassBooking({
   tempBooking.calculatePrice(courtDoc, isMember);
   let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
   if (isVip) {
-    pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
+    pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser, new Date(), duration);
   }
 
   const bypassRestrictions = true;

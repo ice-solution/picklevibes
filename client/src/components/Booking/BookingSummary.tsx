@@ -539,11 +539,11 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 </div>
               )}
 
-              {getVipBookingExtraFlatOff(user) > 0 && (
+              {getVipBookingExtraFlatOff(user, new Date(), durationMinutes) > 0 && (
                 <div className="flex justify-between text-green-600">
                   <span>周年減價</span>
                   <span className="font-medium">
-                    -{getVipBookingExtraFlatOff(user)} {t('common.currency')}
+                    -{getVipBookingExtraFlatOff(user, new Date(), durationMinutes)} {t('common.currency')}
                   </span>
                 </div>
               )}
@@ -573,7 +573,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                     {(() => {
                       let totalPrice = courtListPrice;
                       if (hasBookingVipDiscount(user)) {
-                        totalPrice = applyBookingVipDiscount(totalPrice, user);
+                        totalPrice = applyBookingVipDiscount(totalPrice, user, new Date(), durationMinutes);
                       }
                       totalPrice += soloCourtFee;
                       if (redeemData) {
@@ -584,7 +584,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   </span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1 text-right">
-                  {hasBookingVipDiscount(user) && `已享受${bookingMembershipDiscountLabelZh(user)}`}
+                  {hasBookingVipDiscount(user) && `已享受${bookingMembershipDiscountLabelZh(user, durationMinutes)}`}
                   {redeemData && t('bookingPage.bookingSummary.plusRedeem')}
                 </div>
               </div>

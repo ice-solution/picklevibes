@@ -308,17 +308,20 @@ const PendingSettleBookings: React.FC = () => {
               </select>
             </div>
           )}
-          <div className="flex items-end">
+          <div className="flex items-end gap-2">
             <button
               type="button"
               onClick={() => void fetchList()}
-              className="w-full md:w-auto px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700"
+              disabled={loading || !dateFrom || !dateTo}
+              className="w-full md:w-auto px-4 py-2 rounded-md bg-primary-600 text-white text-sm hover:bg-primary-700 disabled:opacity-50"
             >
-              重新整理
+              {loading ? '搜尋中…' : '搜尋'}
             </button>
           </div>
         </div>
-        <p className="text-xs text-gray-500 mt-3">預設：過去 14 日至未來 30 日（香港日期）。今天是 {today}。</p>
+        <p className="text-xs text-gray-500 mt-3">
+          更改日期後按「搜尋」；列表由最舊到最新排列。預設：過去 14 日至未來 30 日（香港日期）。今天是 {today}。
+        </p>
       </div>
 
       {error && (

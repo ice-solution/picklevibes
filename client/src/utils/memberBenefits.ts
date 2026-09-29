@@ -79,9 +79,17 @@ export function getVipBookingExtraFlatOffConfig(now: Date = new Date()): {
   return { active, points: active ? points : 0 };
 }
 
-export function getVipBookingExtraFlatOff(user: DiscountUser, now: Date = new Date()): number {
+export function getVipBookingExtraFlatOff(
+  user: DiscountUser,
+  now: Date = new Date(),
+  durationMinutes: number = 60
+): number {
   if (!hasBookingVipDiscount(user)) return 0;
-  return getVipBookingExtraFlatOffConfig(now).points;
+  const perHour = getVipBookingExtraFlatOffConfig(now).points;
+  if (perHour <= 0) return 0;
+  const minutes = Number(durationMinutes);
+  const hours = Number.isFinite(minutes) && minutes > 0 ? minutes / 60 : 1;
+  return Math.round(perHour * hours);
 }
 
 export function isAthleteRole(user: DiscountUser): boolean {
@@ -116,11 +124,16 @@ export function applyBookingVipRateOnly(amount: number, user: DiscountUser): num
   return Math.round(n * getBookingDiscountRate(user));
 }
 
-export function applyBookingVipDiscount(amount: number, user: DiscountUser, now: Date = new Date()): number {
+export function applyBookingVipDiscount(
+  amount: number,
+  user: DiscountUser,
+  now: Date = new Date(),
+  durationMinutes: number = 60
+): number {
   const n = Number(amount) || 0;
   if (!hasBookingVipDiscount(user) || n <= 0) return n;
   const afterRate = applyBookingVipRateOnly(n, user);
-  const extra = getVipBookingExtraFlatOff(user, now);
+  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes);
   return Math.max(0, afterRate - extra);
 }
 
@@ -158,10 +171,10 @@ export function membershipLevelLabelZh(level?: string | null): string {
   }
 }
 
-export function bookingMembershipDiscountLabelZh(user: DiscountUser): string {
+export function bookingMembershipDiscountLabelZh(user: DiscountUser, durationMinutes = 60): string {
   const level = resolveBookingDiscountLevel(user);
   const base = BOOKING_DISCOUNT_LABELS_ZH[level] || BOOKING_DISCOUNT_LABELS_ZH.basic;
-  const extra = getVipBookingExtraFlatOff(user);
+  const extra = getVipBookingExtraFlatOff(user, new Date(), durationMinutes);
   if (extra > 0) return `${base}，周年減價`;
   return base;
 }

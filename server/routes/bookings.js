@@ -316,7 +316,7 @@ router.post('/', [
     let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
 
     if (isVip) {
-      pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser);
+      pointsToDeduct = applyBookingVipDiscount(pointsToDeduct, bookingUser, new Date(), duration);
     }
 
     pointsToDeduct += soloCourtFee;
@@ -452,7 +452,7 @@ router.post('/', [
         totalPrice: chargePoints,
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
         pointsDeducted: bypassRestrictions ? 0 : chargePoints,
-        vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice - applyBookingVipDiscount(tempBooking.pricing.totalPrice, bookingUser)) : 0,
+        vipDiscount: isVip ? Math.round(tempBooking.pricing.totalPrice - applyBookingVipDiscount(tempBooking.pricing.totalPrice, bookingUser, new Date(), duration)) : 0,
         soloCourtFee,
         customPoints: customPointsFlag ? customPointsNum : undefined, // 自訂積分
         isCustomPoints: customPointsFlag // 是否使用自訂積分
@@ -575,7 +575,7 @@ router.post('/', [
           totalPrice: isVip ? Math.round(tempSoloBooking.pricing.totalPrice * 0.8) : tempSoloBooking.pricing.totalPrice, // 應用 VIP 折扣
           originalPrice: tempSoloBooking.pricing.totalPrice, // 保存原價
           pointsDeducted: 0, // 費用已包含在主預約中
-          vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice - applyBookingVipDiscount(tempSoloBooking.pricing.totalPrice, bookingUser)) : 0,
+          vipDiscount: isVip ? Math.round(tempSoloBooking.pricing.totalPrice - applyBookingVipDiscount(tempSoloBooking.pricing.totalPrice, bookingUser, new Date(), duration)) : 0,
           soloCourtFee: 0
         },
         createdAt: new Date(),
@@ -845,16 +845,24 @@ router.delete('/:id/admin-notes/:noteId', [
   }
 });
 
+/** YYYY-MM-DD → 香港日曆日起點／終點（避免 UTC 解讀偏移） */
+function hkDayStart(ymd) {
+  return new Date(`${String(ymd).slice(0, 10)}T00:00:00+08:00`);
+}
+function hkDayEndInclusive(ymd) {
+  return new Date(`${String(ymd).slice(0, 10)}T23:59:59.999+08:00`);
+}
+
 function buildAdminBookingDateQuery({ date, dateFrom, dateTo } = {}) {
   if (date) {
-    const startDate = new Date(date);
-    const endDate = new Date(date);
-    endDate.setDate(endDate.getDate() + 1);
+    const startDate = hkDayStart(date);
+    const endDate = new Date(hkDayStart(date));
+    endDate.setTime(endDate.getTime() + 86400000);
     return { date: { $gte: startDate, $lt: endDate } };
   }
   if (dateFrom && dateTo) {
-    const df = new Date(dateFrom);
-    const dt = new Date(dateTo);
+    const df = hkDayStart(dateFrom);
+    const dt = hkDayEndInclusive(dateTo);
     return {
       $or: [
         { date: { $gte: df, $lte: dt } },
@@ -1001,15 +1009,25 @@ router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
     }
 
     const dateQuery = buildAdminBookingDateQuery({ dateFrom, dateTo });
+    // 注意：dateQuery 可能含 $or；不可再被外層 $or 覆蓋，否則日期篩選失效
     let query = {
-      ...dateQuery,
       status: { $nin: ['cancelled', 'no_show'] },
       venueBundleKind: { $ne: 'activity_hold' },
-      relatedActivity: { $in: [null] },
-      $or: [
-        { noUserBalanceDebited: true },
-        { bypassRestrictions: true },
-        { 'payment.method': 'admin_waived' },
+      $and: [
+        ...(dateQuery ? [dateQuery] : []),
+        {
+          $or: [
+            { relatedActivity: null },
+            { relatedActivity: { $exists: false } },
+          ],
+        },
+        {
+          $or: [
+            { noUserBalanceDebited: true },
+            { bypassRestrictions: true },
+            { 'payment.method': 'admin_waived' },
+          ],
+        },
       ],
     };
     const scope = await applyAdminBookingStoreScope(query, req.tenantAccess, store);
@@ -1042,7 +1060,13 @@ router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
         if (seenBundles.has(bundleKey)) continue;
         seenBundles.add(bundleKey);
         const group = pending.filter((x) => String(x.venueBundleId) === bundleKey);
-        const leader = group.find((x) => x.isFullVenue) || group[0];
+        // 包場代表列用組內最早一筆（最舊在前）
+        const leader =
+          [...group].sort((a, c) => {
+            const dd = new Date(a.date) - new Date(c.date);
+            if (dd !== 0) return dd;
+            return String(a.startTime || '').localeCompare(String(c.startTime || ''));
+          })[0] || group[0];
         const suggestedPoints = group.reduce((sum, x) => sum + (suggestedSettlePoints(x) || 0), 0);
         items.push({
           ...leader,
@@ -1059,6 +1083,13 @@ router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
         });
       }
     }
+
+    // 合併包場後再按日期／時段由最舊到最新
+    items.sort((a, b) => {
+      const dd = new Date(a.date) - new Date(b.date);
+      if (dd !== 0) return dd;
+      return String(a.startTime || '').localeCompare(String(b.startTime || ''));
+    });
 
     res.json({ bookings: items, count: items.length });
   } catch (error) {
