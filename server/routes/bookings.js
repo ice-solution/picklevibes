@@ -1466,28 +1466,30 @@ router.put('/:id/cancel', [
       booking.specialRequests?.includes('包場預約') ||
       booking.specialRequests?.includes('🏢 包場預約');
 
-    // 建立時未從預約用戶扣積分（管理員繞過限制手動建單、活動佔場等）→ 取消時不可自動退回積分
-    const skipAutoPointsRefund =
-      booking.noUserBalanceDebited === true ||
-      booking.bypassRestrictions === true ||
-      booking.payment?.method === 'admin_waived';
+    // 實際扣過幾多積分（優先 payment；pricing.pointsDeducted=0 唔好用 ?? 蓋過）
+    const paymentPoints = Number(booking.payment?.pointsDeducted);
+    const pricingPoints = Number(booking.pricing?.pointsDeducted);
+    const pointsToRefund =
+      Number.isFinite(paymentPoints) && paymentPoints > 0
+        ? paymentPoints
+        : Number.isFinite(pricingPoints) && pricingPoints > 0
+          ? pricingPoints
+          : 0;
 
-    // 如為積分支付且實際有扣款，則退回積分（包場預約除外；免扣款建單除外）
+    // 只有實際冇扣分先跳過；bypassRestrictions / admin_waived 本身唔再阻擋
+    // （後台 bypass 建單後仍可能經結算扣分，取消時必須退）
+    const skipAutoPointsRefund = pointsToRefund <= 0;
+
+    // 如實際有扣款，則退回積分（包場預約除外）
     try {
       if (skipAutoPointsRefund) {
         console.log(
-          `📌 預約 ${booking._id} 建立時未扣用戶積分 (noUserBalanceDebited/bypass/admin_waived)，取消時跳過積分退回`
+          `📌 預約 ${booking._id} 無實際扣分可退，取消時跳過積分退回`
         );
       } else {
-      const pointsToRefund = Number(
-        booking.pricing?.pointsDeducted ??
-        booking.payment?.pointsDeducted ??
-        Math.round(booking.pricing?.totalPrice ?? 0)
-      );
-      const paidByPoints = booking.payment?.method === 'points' || booking.payment?.method === 'admin_created';
       const notRefundedYet = booking.payment?.status !== 'refunded';
       
-      if (paidByPoints && notRefundedYet && pointsToRefund > 0) {
+      if (notRefundedYet && pointsToRefund > 0) {
         if (isFullVenueBooking) {
           // 包場預約不自動退款，需要管理員手動處理
           console.log(`🏢 包場預約取消 - 不自動退款，需要管理員手動處理: ${booking._id}`);
@@ -1502,6 +1504,28 @@ router.put('/:id/cancel', [
           await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
           booking.payment.status = 'refunded';
           booking.payment.refundedAt = new Date();
+
+          // 沖銷結算／手動扣款產生的 Recharge，避免會計對帳不一致
+          try {
+            const Recharge = require('../models/Recharge');
+            const refundedAt = booking.payment.refundedAt;
+            await Recharge.updateMany(
+              {
+                booking: booking._id,
+                pointsDeducted: true,
+                status: { $ne: 'cancelled' },
+              },
+              {
+                $set: {
+                  status: 'cancelled',
+                  'payment.status': 'refunded',
+                  'payment.refundedAt': refundedAt,
+                },
+              }
+            );
+          } catch (rechargeErr) {
+            console.error('沖銷結算扣款記錄失敗（積分已退）:', rechargeErr);
+          }
         }
       }
       }
