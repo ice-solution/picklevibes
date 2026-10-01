@@ -143,6 +143,47 @@ const processStoreLogo = async (req, res, next) => {
   }
 };
 
+/** 店鋪公開頁 Banner（寬圖，最長邊 1920px） */
+const storeBannerUpload = createUploadConfig('stores', 'store-banner');
+const processStoreBanner = async (req, res, next) => {
+  try {
+    if (!req.file) return next();
+
+    const inputPath = req.file.path;
+    const inputExt = path.extname(inputPath).toLowerCase();
+    const outputPath = inputPath.replace(/\.[^/.]+$/, '.jpg');
+
+    let tempPath = inputPath;
+    if (inputExt === '.jpg' || inputExt === '.jpeg') {
+      tempPath = inputPath.replace(/\.(jpg|jpeg)$/i, '_temp.jpg');
+      fs.renameSync(inputPath, tempPath);
+    }
+
+    await sharp(tempPath)
+      .resize(1920, 1080, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .jpeg({ quality: 88, progressive: true })
+      .toFile(outputPath);
+
+    if (tempPath !== outputPath) {
+      fs.unlinkSync(tempPath);
+    }
+
+    req.file.path = outputPath;
+    req.file.filename = path.basename(outputPath);
+    next();
+  } catch (error) {
+    console.error('店鋪 Banner 處理錯誤:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Banner 處理失敗',
+      error: error.message,
+    });
+  }
+};
+
 // 場地上傳配置 (1920x1280)
 const courtUpload = createUploadConfig('courts', 'court');
 const processCourtImage = processImage(1920, 1280);
@@ -292,6 +333,10 @@ module.exports = {
   // 店鋪 Logo
   storeLogoUpload,
   processStoreLogo,
+
+  // 店鋪 Banner
+  storeBannerUpload,
+  processStoreBanner,
 
   // 場地上傳
   courtUpload,

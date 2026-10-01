@@ -14,6 +14,7 @@ export type StoreProfile = {
     tagline?: string;
     intro?: string;
     logoUrl?: string;
+    bannerUrl?: string;
     primaryColor?: string;
   };
 };

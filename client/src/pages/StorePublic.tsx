@@ -46,6 +46,7 @@ type StorePublicData = {
   intro?: string;
   tagline?: string | null;
   logoUrl?: string | null;
+  bannerUrl?: string | null;
   primaryColor?: string | null;
   enableRecharge?: boolean;
   courtCount?: number;
@@ -127,19 +128,39 @@ const StorePublic: React.FC = () => {
 
       <header
         className={`relative text-white overflow-hidden ${isConsumerHost ? 'pt-8' : 'pt-24 lg:pt-28'}`}
-        style={{
-          background: `linear-gradient(135deg, color-mix(in srgb, ${primary} 88%, black) 0%, ${primary} 45%, color-mix(in srgb, ${primary} 70%, #c9a227) 100%)`,
-        }}
+        style={
+          store.bannerUrl
+            ? undefined
+            : {
+                background: `linear-gradient(135deg, color-mix(in srgb, ${primary} 88%, black) 0%, ${primary} 45%, color-mix(in srgb, ${primary} 70%, #c9a227) 100%)`,
+              }
+        }
       >
-        <div className="absolute inset-0 opacity-20 pointer-events-none">
-          <div
-            className="absolute inset-0"
-            style={{
-              backgroundImage: `radial-gradient(circle at 15% 40%, rgba(255,255,255,0.35) 0%, transparent 45%),
+        {store.bannerUrl ? (
+          <>
+            <img
+              src={resolveMediaUrl(store.bannerUrl) || ''}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+            <div
+              className="absolute inset-0"
+              style={{
+                background: `linear-gradient(180deg, color-mix(in srgb, ${primary} 55%, black) 0%, color-mix(in srgb, ${primary} 72%, transparent) 100%)`,
+              }}
+            />
+          </>
+        ) : (
+          <div className="absolute inset-0 opacity-20 pointer-events-none">
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage: `radial-gradient(circle at 15% 40%, rgba(255,255,255,0.35) 0%, transparent 45%),
                 radial-gradient(circle at 85% 20%, rgba(201,162,39,0.4) 0%, transparent 40%)`,
-            }}
-          />
-        </div>
+              }}
+            />
+          </div>
+        )}
 
         <div className="relative max-w-5xl mx-auto px-4 sm:px-6 py-12 sm:py-16">
           {!isConsumerHost && (

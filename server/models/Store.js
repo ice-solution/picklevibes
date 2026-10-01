@@ -101,6 +101,8 @@ const storeSchema = new mongoose.Schema({
     tagline: { type: String, trim: true, default: '' },
     intro: { type: String, trim: true, default: '' },
     logoUrl: { type: String, trim: true, default: '' },
+    /** 公開頁 /:slug hero banner */
+    bannerUrl: { type: String, trim: true, default: '' },
     primaryColor: { type: String, trim: true, default: '' },
   },
   enableHikAccess: {

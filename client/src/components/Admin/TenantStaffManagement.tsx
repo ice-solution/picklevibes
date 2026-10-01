@@ -1,5 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { useSearchParams } from 'react-router-dom';
 import { PlusIcon, TrashIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface Membership {
@@ -14,6 +15,8 @@ interface StoreOption {
   _id: string;
   name: string;
   slug: string;
+  isActive?: boolean;
+  allianceEnabled?: boolean;
 }
 
 type AssignMode = 'create' | 'existing';
@@ -44,8 +47,11 @@ type EditForm = {
 };
 
 const TenantStaffManagement: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const storeIdFromUrl = searchParams.get('storeId') || '';
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [stores, setStores] = useState<StoreOption[]>([]);
+  const [filterStoreId, setFilterStoreId] = useState(storeIdFromUrl);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<AssignMode>('create');
@@ -54,18 +60,18 @@ const TenantStaffManagement: React.FC = () => {
   const [editing, setEditing] = useState<Membership | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = async (storeId?: string) => {
     try {
       setLoading(true);
+      const params = storeId ? { storeId } : undefined;
       const [mRes, sRes] = await Promise.all([
-        axios.get('/tenant-memberships'),
+        axios.get('/tenant-memberships', { params }),
         axios.get('/stores/admin/all'),
       ]);
       setMemberships(mRes.data.memberships || []);
+      // 平台超管可管理所有啟用店鋪的登入帳號（不限聯盟）
       setStores(
-        (sRes.data.stores || []).filter(
-          (s: StoreOption & { allianceEnabled?: boolean }) => s.allianceEnabled
-        )
+        (sRes.data.stores || []).filter((s: StoreOption) => s.isActive !== false)
       );
     } catch (e) {
       console.error(e);
@@ -76,8 +82,30 @@ const TenantStaffManagement: React.FC = () => {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    setFilterStoreId(storeIdFromUrl);
+  }, [storeIdFromUrl]);
+
+  useEffect(() => {
+    void fetchData(filterStoreId || undefined);
+    if (filterStoreId) {
+      setCreateForm((f) => ({ ...f, storeId: filterStoreId }));
+      setExistingForm((f) => ({ ...f, storeId: filterStoreId }));
+    }
+  }, [filterStoreId]);
+
+  const filteredLabel = useMemo(() => {
+    if (!filterStoreId) return null;
+    return stores.find((s) => s._id === filterStoreId)?.name || null;
+  }, [filterStoreId, stores]);
+
+  const onFilterStore = (storeId: string) => {
+    setFilterStoreId(storeId);
+    const next = new URLSearchParams(searchParams);
+    next.set('tab', 'tenant-staff');
+    if (storeId) next.set('storeId', storeId);
+    else next.delete('storeId');
+    setSearchParams(next);
+  };
 
   const openEdit = (m: Membership) => {
     setEditing(m);
@@ -212,12 +240,31 @@ const TenantStaffManagement: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-900">店鋪員工指派</h2>
+        <h2 className="text-2xl font-bold text-gray-900">店鋪登入帳號</h2>
         <p className="text-gray-600 mt-1">
-          <strong>新店鋪 admin／staff 請在此建立或指派</strong>，與「用戶管理」的球友列表分開。
-          可於列表編輯資料或重設密碼。平台超級管理員仍在用戶管理設定{' '}
-          <code className="text-sm">admin</code> 角色。
+          平台超級管理員可<strong>建立、修改 email／電話、重設密碼</strong>，管理各店後台登入帳號（
+          <code className="text-sm">staff</code>
+          ）。與「用戶管理」的球友列表分開。
         </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-sm text-gray-600">篩選店鋪</label>
+        <select
+          className="border rounded-md px-3 py-2 text-sm min-w-[12rem]"
+          value={filterStoreId}
+          onChange={(e) => onFilterStore(e.target.value)}
+        >
+          <option value="">全部店鋪</option>
+          {stores.map((s) => (
+            <option key={s._id} value={s._id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        {filteredLabel && (
+          <span className="text-sm text-gray-500">目前顯示：{filteredLabel}</span>
+        )}
       </div>
 
       <div className="flex gap-2">
@@ -408,7 +455,7 @@ const TenantStaffManagement: React.FC = () => {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between px-5 py-4 border-b">
-              <h3 className="font-semibold text-gray-900">編輯店鋪員工</h3>
+              <h3 className="font-semibold text-gray-900">編輯店鋪登入帳號</h3>
               <button type="button" onClick={closeEdit} className="text-gray-400 hover:text-gray-600">
                 <XMarkIcon className="w-5 h-5" />
               </button>

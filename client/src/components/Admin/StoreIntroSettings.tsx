@@ -4,6 +4,7 @@ import { useStoreAdmin } from '../../contexts/StoreAdminContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HK_DISTRICTS } from '../../constants/hkDistricts';
 import StoreLogoField from './StoreLogoField';
+import StoreBannerField from './StoreBannerField';
 
 const StoreIntroSettings: React.FC = () => {
   const { store, refresh } = useStoreAdmin();
@@ -19,6 +20,7 @@ const StoreIntroSettings: React.FC = () => {
     brandingTagline: '',
     brandingIntro: '',
     brandingLogoUrl: '',
+    brandingBannerUrl: '',
     brandingPrimaryColor: '',
   });
 
@@ -33,6 +35,7 @@ const StoreIntroSettings: React.FC = () => {
       brandingTagline: store.branding?.tagline || '',
       brandingIntro: store.branding?.intro || '',
       brandingLogoUrl: store.branding?.logoUrl || '',
+      brandingBannerUrl: store.branding?.bannerUrl || '',
       brandingPrimaryColor: store.branding?.primaryColor || '',
     });
   }, [store]);
@@ -52,6 +55,7 @@ const StoreIntroSettings: React.FC = () => {
           tagline: form.brandingTagline.trim(),
           intro: form.brandingIntro.trim(),
           logoUrl: form.brandingLogoUrl.trim(),
+          bannerUrl: form.brandingBannerUrl.trim(),
           primaryColor: form.brandingPrimaryColor.trim(),
         },
       });
@@ -110,8 +114,21 @@ const StoreIntroSettings: React.FC = () => {
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">店鋪介紹</label>
-          <textarea rows={5} className="w-full border rounded-md px-3 py-2" value={form.brandingIntro} onChange={(e) => setForm({ ...form, brandingIntro: e.target.value })} placeholder="場地特色、交通、設施說明…" />
+          <textarea
+            rows={5}
+            className="w-full border rounded-md px-3 py-2"
+            value={form.brandingIntro}
+            onChange={(e) => setForm({ ...form, brandingIntro: e.target.value })}
+            placeholder="場地特色、交通、設施說明…"
+          />
+          <p className="mt-1 text-xs text-gray-500">顯示於公開店鋪頁「場地介紹」區塊</p>
         </div>
+        <StoreBannerField
+          storeId={store._id}
+          bannerUrl={form.brandingBannerUrl}
+          onBannerUrlChange={(url) => setForm({ ...form, brandingBannerUrl: url })}
+          onUploaded={refresh}
+        />
         <StoreLogoField
           storeId={store._id}
           logoUrl={form.brandingLogoUrl}
@@ -142,8 +159,8 @@ const StoreIntroSettings: React.FC = () => {
 
       <p className="text-sm text-gray-500">
         公開介紹頁：
-        <a href={`/store/${store.slug}`} target="_blank" rel="noreferrer" className="text-primary-600 hover:underline ml-1">
-          /store/{store.slug}
+        <a href={`/${store.slug}`} target="_blank" rel="noreferrer" className="text-primary-600 hover:underline ml-1">
+          /{store.slug}
         </a>
       </p>
     </div>

@@ -8,7 +8,13 @@ const path = require('path');
 const { canAccessStore } = require('../utils/tenantAccess');
 const { normalizeDomain } = require('../utils/tenantResolver');
 const { HK_DISTRICTS, isValidDistrict } = require('../utils/hkDistricts');
-const { storeLogoUpload, processStoreLogo, deleteFile } = require('../middleware/upload');
+const {
+  storeLogoUpload,
+  processStoreLogo,
+  storeBannerUpload,
+  processStoreBanner,
+  deleteFile,
+} = require('../middleware/upload');
 
 const router = express.Router();
 
@@ -170,6 +176,7 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
     delete update.brandingTagline;
     delete update.brandingIntro;
     delete update.brandingLogoUrl;
+    delete update.brandingBannerUrl;
     delete update.brandingPrimaryColor;
 
     if (!req.tenantAccess?.isPlatformAdmin) {
@@ -277,6 +284,56 @@ router.post('/:id/upload-logo', [
     });
   } catch (error) {
     console.error('上傳店鋪 Logo 錯誤:', error);
+    if (req.file) {
+      await deleteFile(req.file.path);
+    }
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/stores/:id/upload-banner
+// @desc    上傳店鋪公開頁 Banner
+// @access  Private (Admin／店鋪 admin)
+router.post('/:id/upload-banner', [
+  auth,
+  adminAuth,
+  storeBannerUpload.single('banner'),
+  processStoreBanner,
+], async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: '請選擇要上傳的 Banner 圖片' });
+    }
+
+    const store = await Store.findById(req.params.id);
+    if (!store) {
+      await deleteFile(req.file.path);
+      return res.status(404).json({ message: '店鋪不存在' });
+    }
+    if (!canAccessStore(req.tenantAccess, store._id)) {
+      await deleteFile(req.file.path);
+      return res.status(403).json({ message: '無權限編輯此店鋪' });
+    }
+
+    const oldBannerUrl = store.branding?.bannerUrl || '';
+    const bannerUrl = `/uploads/stores/${req.file.filename}`;
+
+    if (!store.branding) store.branding = {};
+    store.branding.bannerUrl = bannerUrl;
+    await store.save();
+
+    if (oldBannerUrl.startsWith('/uploads/stores/')) {
+      const oldPath = path.join(__dirname, '../..', oldBannerUrl);
+      await deleteFile(oldPath);
+    }
+
+    res.json({
+      message: 'Banner 上傳成功',
+      bannerUrl,
+      store,
+    });
+  } catch (error) {
+    console.error('上傳店鋪 Banner 錯誤:', error);
     if (req.file) {
       await deleteFile(req.file.path);
     }

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { PlusIcon, PencilIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, PencilIcon, KeyIcon } from '@heroicons/react/24/outline';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { TUYA_BASE_URL_OPTIONS } from '../../constants/tuyaRegions';
 import { HK_DISTRICTS } from '../../constants/hkDistricts';
@@ -12,6 +13,7 @@ import {
 } from '../../constants/accessControlVendors';
 import StoreTuyaZonesModal from './StoreTuyaZonesModal';
 import StoreLogoField from './StoreLogoField';
+import StoreBannerField from './StoreBannerField';
 
 interface Store {
   _id: string;
@@ -53,6 +55,7 @@ interface Store {
     tagline?: string;
     intro?: string;
     logoUrl?: string;
+    bannerUrl?: string;
     primaryColor?: string;
   };
   enableTuyaAutomation?: boolean;
@@ -105,6 +108,7 @@ interface StoreForm {
   brandingTagline: string;
   brandingIntro: string;
   brandingLogoUrl: string;
+  brandingBannerUrl: string;
   brandingPrimaryColor: string;
   enableTuyaAutomation: boolean;
   tuyaAccessKey: string;
@@ -153,6 +157,7 @@ const emptyForm: StoreForm = {
   brandingTagline: '',
   brandingIntro: '',
   brandingLogoUrl: '',
+  brandingBannerUrl: '',
   brandingPrimaryColor: '',
   enableTuyaAutomation: false,
   tuyaAccessKey: '',
@@ -237,6 +242,7 @@ const StoreManagement: React.FC = () => {
       brandingTagline: s.branding?.tagline || '',
       brandingIntro: s.branding?.intro || '',
       brandingLogoUrl: s.branding?.logoUrl || '',
+      brandingBannerUrl: s.branding?.bannerUrl || '',
       brandingPrimaryColor: s.branding?.primaryColor || '',
       enableTuyaAutomation: Boolean(s.enableTuyaAutomation),
       tuyaAccessKey: s.tuyaAccessKey || '',
@@ -296,6 +302,7 @@ const StoreManagement: React.FC = () => {
           tagline: form.brandingTagline.trim(),
           intro: form.brandingIntro.trim(),
           logoUrl: form.brandingLogoUrl.trim(),
+          bannerUrl: form.brandingBannerUrl.trim(),
           primaryColor: form.brandingPrimaryColor.trim(),
         },
       };
@@ -399,6 +406,16 @@ const StoreManagement: React.FC = () => {
                     : '—'}
                 </td>
                 <td className="px-4 py-3 text-right space-x-2">
+                  {isPlatformAdmin && (
+                    <Link
+                      to={`/admin-v2?tab=tenant-staff&storeId=${s._id}`}
+                      className="text-amber-700 hover:text-amber-900 text-sm inline-flex items-center gap-1"
+                      title="管理此店登入帳號"
+                    >
+                      <KeyIcon className="w-4 h-4" />
+                      登入帳號
+                    </Link>
+                  )}
                   {s.enableTuyaAutomation && (
                     <button
                       type="button"
@@ -690,6 +707,21 @@ const StoreManagement: React.FC = () => {
                 value={form.brandingIntro}
                 onChange={(e) => setForm({ ...form, brandingIntro: e.target.value })}
               />
+              {editing && (
+                <StoreBannerField
+                  storeId={editing._id}
+                  bannerUrl={form.brandingBannerUrl}
+                  onBannerUrlChange={(url) => setForm({ ...form, brandingBannerUrl: url })}
+                />
+              )}
+              {!editing && (
+                <input
+                  className="w-full border rounded-md px-3 py-2 text-sm"
+                  placeholder="Banner URL（建立後可上傳）"
+                  value={form.brandingBannerUrl}
+                  onChange={(e) => setForm({ ...form, brandingBannerUrl: e.target.value })}
+                />
+              )}
               {editing && (
                 <StoreLogoField
                   storeId={editing._id}

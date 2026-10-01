@@ -101,7 +101,7 @@ const AdminV2: React.FC = () => {
       { id: 'coach-classes', name: '教練課堂', icon: AcademicCapIcon, element: <CoachClassManagement /> },
       { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: <StoreManagement /> },
       { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
-      { id: 'tenant-staff', name: '店鋪員工', icon: IdentificationIcon, element: <TenantStaffManagement />, platformOnly: true },
+      { id: 'tenant-staff', name: '店鋪登入帳號', icon: IdentificationIcon, element: <TenantStaffManagement />, platformOnly: true },
       { id: 'users', name: '用戶管理', icon: UsersIcon, element: <UserManagement />, platformOnly: true },
       { id: 'tiers', name: 'Tier 管理', icon: TagIcon, element: <TierManagement />, platformOnly: true },
       { id: 'vlogs', name: 'Vlog 管理', icon: DocumentChartBarIcon, element: <VlogManagement />, platformOnly: true },

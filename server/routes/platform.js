@@ -32,6 +32,7 @@ function serializeAllianceStore(store) {
     district: store.district || null,
     phone: store.phone,
     logoUrl: b.logoUrl || null,
+    bannerUrl: b.bannerUrl || null,
     tagline: b.tagline || null,
     intro: b.intro || null,
     primaryColor: b.primaryColor || null,
