@@ -1049,15 +1049,18 @@ router.put('/admin/:id', [
       update.commissionRate = Number(update.commissionRate);
     }
 
-    // 独立兌换码：強制使用次數限制
+    // 獨立兌換碼：維持一次性限制。編輯時絕不可自動換碼（否則改價錢會令已派發碼失效）
     if (update.isIndependentCode === true) {
       update.usageLimit = 1;
       update.userUsageLimit = 1;
-      // 若更新時未提供 code（前端也可能因勾選而不送），則改由系統生成獨立兌換碼
-      if (!update.code) {
-        update.code = await generateUniqueIndependentRedeemCode();
-      }
     }
+    // 更新時禁止無故重設／重生 code、batchId、用量統計
+    delete update.code;
+    delete update.batchId;
+    delete update.totalUsed;
+    delete update.totalDiscount;
+    delete update.createdBy;
+    delete update.createdAt;
 
     const redeemCode = await RedeemCode.findByIdAndUpdate(
       req.params.id,

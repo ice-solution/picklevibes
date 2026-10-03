@@ -19,21 +19,42 @@ function isRedeemCodeCurrentlyValid(redeemCode) {
 }
 
 function pocketDisplayStatus(pocket, redeemCode, canUse) {
-  if (pocket.status === 'removed') return 'removed';
-  if (!redeemCode || redeemCode.isActive === false) return 'expired';
+  if (pocket.status === 'removed') return { status: 'removed', reason: '已從口袋移除' };
+  if (!redeemCode) return { status: 'unavailable', reason: '兌換碼不存在或已刪除' };
+  if (redeemCode.isActive === false) {
+    return { status: 'inactive', reason: '兌換碼已在後台停用（並非到期）' };
+  }
+
   const now = new Date();
-  if (redeemCode.validUntil && new Date(redeemCode.validUntil) < now) return 'expired';
-  if (redeemCode.validFrom && new Date(redeemCode.validFrom) > now) return 'upcoming';
-  if (!canUse || pocket.status === 'used') return 'used';
-  if (!isRedeemCodeCurrentlyValid(redeemCode)) return 'unavailable';
-  return 'available';
+  if (redeemCode.validUntil && new Date(redeemCode.validUntil) < now) {
+    return { status: 'expired', reason: '已過兌換碼有效期' };
+  }
+  if (redeemCode.validFrom && new Date(redeemCode.validFrom) > now) {
+    return { status: 'upcoming', reason: '尚未到生效日期' };
+  }
+
+  if (pocket.status === 'used' || !canUse) {
+    return { status: 'used', reason: '此帳戶已使用過此兌換碼' };
+  }
+
+  const effectiveUsageLimit = redeemCode.isIndependentCode ? 1 : redeemCode.usageLimit;
+  if (effectiveUsageLimit != null && Number(redeemCode.totalUsed || 0) >= effectiveUsageLimit) {
+    return { status: 'exhausted', reason: '兌換碼使用次數已滿（獨立碼可能已被其他人使用）' };
+  }
+
+  if (!isRedeemCodeCurrentlyValid(redeemCode)) {
+    return { status: 'unavailable', reason: '兌換碼目前不可用' };
+  }
+
+  return { status: 'available', reason: '' };
 }
 
 function serializePocketItem(pocket, redeemCode, canUse) {
-  const displayStatus = pocketDisplayStatus(pocket, redeemCode, canUse);
+  const { status: displayStatus, reason } = pocketDisplayStatus(pocket, redeemCode, canUse);
   return {
     _id: pocket._id,
     status: displayStatus,
+    statusReason: reason || '',
     source: pocket.source,
     assignedAt: pocket.assignedAt,
     usedAt: pocket.usedAt,
@@ -209,8 +230,13 @@ async function listUserPocket(userId, { statusFilter } = {}) {
     if (!doc) continue;
     const canUse = await doc.canUserUse(userId);
     const item = serializePocketItem(pocket, doc, canUse);
-    if (statusFilter && statusFilter !== 'all' && item.status !== statusFilter) {
-      continue;
+    if (statusFilter && statusFilter !== 'all') {
+      // 「已過期」篩選同時包含後台停用（舊版會誤標為已過期）
+      if (statusFilter === 'expired') {
+        if (!['expired', 'inactive'].includes(item.status)) continue;
+      } else if (item.status !== statusFilter) {
+        continue;
+      }
     }
     items.push(item);
   }

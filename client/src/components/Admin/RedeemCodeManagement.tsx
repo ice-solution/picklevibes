@@ -633,11 +633,8 @@ const RedeemCodeManagement: React.FC = () => {
         validUntil: new Date(formData.validUntil).toISOString()
       };
 
-      // 獨立兌換碼由後端自動生成；前端不送 code，避免驗證失敗
-      if (formData.isIndependentCode) {
-        delete (submitData as any).code;
-      }
-      // 編輯模式不需要 quantity
+      // 編輯時保留原兌換碼；禁止因「獨立碼」邏輯而重生 code
+      delete (submitData as any).code;
       delete (submitData as any).quantity;
 
       await axios.put(`/redeem/admin/${editingCode._id}`, submitData);

@@ -8,6 +8,7 @@ import { TicketIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 interface PocketItem {
   _id: string;
   status: string;
+  statusReason?: string;
   source: string;
   assignedAt: string;
   usedAt?: string | null;
@@ -23,6 +24,7 @@ interface PocketItem {
     validUntil: string;
     applicableTypes: string[];
     applicablePricingSlots?: string[];
+    isActive?: boolean;
   } | null;
 }
 
@@ -30,6 +32,8 @@ const STATUS_LABEL: Record<string, string> = {
   available: '可使用',
   used: '已使用',
   expired: '已過期',
+  inactive: '已停用',
+  exhausted: '已用完',
   upcoming: '尚未生效',
   unavailable: '不可用',
   removed: '已移除',
@@ -185,9 +189,11 @@ const MyRedeemPocket: React.FC = () => {
                         className={`text-xs px-2 py-1 rounded h-fit ${
                           item.status === 'available'
                             ? 'bg-green-100 text-green-800'
-                            : item.status === 'used'
+                            : item.status === 'used' || item.status === 'exhausted'
                               ? 'bg-gray-100 text-gray-600'
-                              : 'bg-red-100 text-red-700'
+                              : item.status === 'inactive'
+                                ? 'bg-orange-100 text-orange-800'
+                                : 'bg-red-100 text-red-700'
                         }`}
                       >
                         {STATUS_LABEL[item.status] || item.status}
@@ -208,6 +214,9 @@ const MyRedeemPocket: React.FC = () => {
                       <p>
                         有效至：{new Date(rc.validUntil).toLocaleString('zh-HK')}
                       </p>
+                      {item.statusReason && item.status !== 'available' && (
+                        <p className="text-amber-700">原因：{item.statusReason}</p>
+                      )}
                       <p>
                         來源：{item.source === 'admin_assign' ? '後台派發' : '自行入袋'} ·{' '}
                         {new Date(item.assignedAt).toLocaleDateString('zh-HK')}
