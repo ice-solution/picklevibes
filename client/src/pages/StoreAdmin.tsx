@@ -13,6 +13,7 @@ import {
 import { canAccessStoreTab } from '../utils/storeAdminPermissions';
 
 import BookingManagement from '../components/Admin/BookingManagement';
+import PendingSettleBookings from '../components/Admin/PendingSettleBookings';
 import BookingCalendar from '../components/Admin/BookingCalendar';
 import CourtManagement from '../components/Admin/CourtManagement';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
@@ -69,6 +70,7 @@ function StoreAdminShell() {
   const allTabs: Tab[] = useMemo(
     () => [
       { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon, element: <BookingManagement /> },
+      { id: 'pending-settle', name: '待結算', icon: CalendarDaysIcon, element: <PendingSettleBookings /> },
       { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
       { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
       { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement /> },

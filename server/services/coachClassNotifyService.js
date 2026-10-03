@@ -222,6 +222,85 @@ async function notifyCoachClassAssigned(coachClassDoc) {
 }
 
 /**
+ * 管理員取消課堂後通知所有教練
+ */
+async function notifyCoachClassCancelled(coachClassDoc, { reason } = {}) {
+  const populated = await loadPopulatedForNotify(coachClassDoc);
+  if (!whatsappMessaging.isWhatsAppConfigured()) {
+    return {
+      success: false,
+      skipped: true,
+      reason: 'whatsapp_not_configured',
+      sent: 0,
+    };
+  }
+
+  const coaches = resolveCoachUsers(populated);
+  if (!coaches.length) {
+    return { success: false, skipped: true, reason: 'no_coach', sent: 0 };
+  }
+
+  const provider = whatsappMessaging.resolveProvider();
+  const useGap = provider === 'openwa';
+  const extraNotes = [populated.notes, reason ? `取消原因：${reason}` : '']
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .join('\n');
+
+  let sent = 0;
+  const errors = [];
+  let isFirstOutbound = true;
+
+  for (const coach of coaches) {
+    const phone = coach.phone;
+    if (!phone || coach.isActive === false) continue;
+    try {
+      if (useGap && !isFirstOutbound) {
+        await sleep(randomGapMs());
+      }
+      isFirstOutbound = false;
+
+      const dateLabel = formatDateLabel(populated.sessionDate);
+      const timeRange = `${populated.startTime} – ${populated.endTime}`;
+      const location = coachClassLocationLabel(populated);
+      const openWaText = buildClassMessage({
+        greeting: `${coach.name || '教練'}，您好：管理員已取消以下課堂。`,
+        title: populated.title,
+        dateLabel,
+        timeRange,
+        location,
+        notes: extraNotes,
+      });
+
+      const result = await whatsappMessaging.sendCoachClassCancelled(
+        phone,
+        {
+          coachName: coach.name || '教練',
+          title: populated.title,
+          dateLabel,
+          timeRange,
+          location,
+          notes: extraNotes || '—',
+        },
+        openWaText
+      );
+      if (result.success) sent += 1;
+      else if (result.error) errors.push({ coachId: String(coach._id), error: result.error });
+    } catch (err) {
+      errors.push({ coachId: String(coach._id), error: err.message });
+    }
+  }
+
+  return {
+    success: sent > 0,
+    sent,
+    skipped: sent === 0,
+    reason: sent === 0 ? 'no_phone' : undefined,
+    errors,
+  };
+}
+
+/**
  * 每日：通知「明日」（香港日曆）有課且尚未提醒的課堂（每位教練）
  * - Cron 以 Asia/Hong_Kong 觸發；「今日／明日」亦用香港日曆，唔跟 server UTC
  * - 隨機 3 套文案模板
@@ -342,6 +421,7 @@ async function sendDayBeforeReminders(now = new Date()) {
 
 module.exports = {
   notifyCoachClassAssigned,
+  notifyCoachClassCancelled,
   sendDayBeforeReminders,
   formatDateLabel,
   sessionStartEnd,

@@ -233,6 +233,7 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
   const [batchPaying, setBatchPaying] = useState(false);
   const [calendarSelected, setCalendarSelected] = useState<CoachClassRow | null>(null);
   const [resendingId, setResendingId] = useState<string | null>(null);
+  const [cancellingId, setCancellingId] = useState<string | null>(null);
   /** 開啟編輯時略過一次自動重算，保留已存堂費 */
   const skipPaymentRebuildRef = useRef(false);
 
@@ -581,16 +582,20 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
       alert('已付款課堂不可取消');
       return;
     }
-    const msg =
-      row.locationType !== 'custom'
-        ? '確定取消此教練課堂？相關場地預約亦會一併取消。'
-        : '確定取消此教練課堂？';
+    const coachNames = rowCoachNames(row);
+    const holdHint =
+      row.locationType !== 'custom' ? '相關場地預約亦會一併取消。\n' : '';
+    const msg = `確定取消此教練課堂並 WhatsApp 通知教練（${coachNames}）？\n${holdHint}課堂：${row.title}\n${formatDate(row.sessionDate)} ${row.startTime}–${row.endTime}`;
     if (!window.confirm(msg)) return;
+    setCancellingId(row._id);
     try {
-      await api.post(`/coach-classes/${row._id}/cancel`);
+      const res = await api.post(`/coach-classes/${row._id}/cancel`);
       await load();
+      alert(res.data?.message || '教練課堂已取消');
     } catch (err: any) {
       alert(err.response?.data?.message || '取消失敗');
+    } finally {
+      setCancellingId(null);
     }
   };
 
@@ -929,10 +934,12 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
                             <button
                               type="button"
                               onClick={() => handleCancel(row)}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100"
+                              disabled={cancellingId === row._id}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-red-200 bg-red-50 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                              title="取消課堂並 WhatsApp 通知教練"
                             >
                               <XCircleIcon className="h-3.5 w-3.5 shrink-0" />
-                              取消
+                              {cancellingId === row._id ? '取消中…' : '取消並通知'}
                             </button>
                           </>
                         )}
@@ -1011,6 +1018,18 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
                       className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-800"
                     >
                       標記已付款
+                    </button>
+                    <button
+                      type="button"
+                      disabled={cancellingId === calendarSelected._id}
+                      onClick={async () => {
+                        const row = calendarSelected;
+                        setCalendarSelected(null);
+                        await handleCancel(row);
+                      }}
+                      className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-700 disabled:opacity-50"
+                    >
+                      {cancellingId === calendarSelected._id ? '取消中…' : '取消並通知教練'}
                     </button>
                   </>
                 )}

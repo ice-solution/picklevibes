@@ -8,6 +8,7 @@ export type { StoreMembershipRole };
 export const MODULE_CATALOG: { key: string; label: string }[] = [
   { key: 'bookings', label: '預約管理' },
   { key: 'calendar', label: '預約日曆' },
+  { key: 'pendingSettle', label: '待結算' },
   { key: 'courts', label: '場地管理' },
   { key: 'activities', label: '活動管理' },
   { key: 'regularActivities', label: '恆常活動' },
@@ -28,7 +29,7 @@ export const MODULE_CATALOG: { key: string; label: string }[] = [
 
 const TAB_MODULE: Record<string, string> = {
   bookings: 'bookings',
-  'pending-settle': 'bookings',
+  'pending-settle': 'pendingSettle',
   calendar: 'calendar',
   courts: 'courts',
   activities: 'activities',
@@ -70,6 +71,7 @@ const PLATFORM_ONLY_TABS = new Set([
 const ROLE_MODULES: Record<string, Set<string> | null> = {
   staff: new Set([
     'calendar',
+    'pendingSettle',
     'shop',
     'orders',
     'pos',

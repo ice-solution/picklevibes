@@ -637,7 +637,27 @@ router.post('/:id/cancel', [auth, adminAuth], async (req, res) => {
       await cancelBookings([...(coachClass.bookings || []), coachClass.booking]);
     }
 
-    res.json({ message: '教練課堂已取消', coachClass });
+    const reason = String(req.body?.reason || '').trim().slice(0, 200);
+    const populated = await populateClass(coachClass._id);
+    let notify = { success: false, sent: 0 };
+    try {
+      notify = await coachClassNotifyService.notifyCoachClassCancelled(populated, { reason });
+    } catch (notifyErr) {
+      console.error('教練課堂取消通知失敗（課堂已取消）:', notifyErr.message);
+      notify = { success: false, error: notifyErr.message, sent: 0 };
+    }
+
+    const notifyLine = notify.success
+      ? `已通知教練（成功 ${notify.sent || 0} 則）`
+      : notify.reason === 'whatsapp_not_configured'
+        ? '課堂已取消，但 WhatsApp 尚未設定，未能通知教練'
+        : `課堂已取消，但教練通知未成功${notify.error ? `：${notify.error}` : ''}`;
+
+    res.json({
+      message: notify.success ? `教練課堂已取消，${notifyLine}` : notifyLine,
+      coachClass: populated,
+      notify,
+    });
   } catch (error) {
     console.error('coach-classes cancel:', error);
     res.status(500).json({ message: '服務器錯誤' });

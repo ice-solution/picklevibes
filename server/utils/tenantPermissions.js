@@ -19,6 +19,7 @@ const ROLE_LABELS = {
 const MODULE_CATALOG = [
   { key: 'bookings', label: '預約管理' },
   { key: 'calendar', label: '預約日曆' },
+  { key: 'pendingSettle', label: '待結算' },
   { key: 'courts', label: '場地管理' },
   { key: 'activities', label: '活動管理' },
   { key: 'regularActivities', label: '恆常活動' },
@@ -42,7 +43,7 @@ const ALL_MODULE_KEYS = MODULE_CATALOG.map((m) => m.key);
 /** 店鋪後台 tab id → 所需模組權限 */
 const TAB_MODULE = {
   bookings: 'bookings',
-  'pending-settle': 'bookings',
+  'pending-settle': 'pendingSettle',
   calendar: 'calendar',
   courts: 'courts',
   activities: 'activities',
@@ -66,6 +67,7 @@ const TAB_MODULE = {
 const ROLE_MODULES = {
   staff: new Set([
     'calendar',
+    'pendingSettle',
     'shop',
     'orders',
     'pos',

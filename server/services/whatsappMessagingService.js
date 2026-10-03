@@ -151,6 +151,21 @@ async function sendCoachClassReminder(to, { coachName, title, dateLabel, timeRan
   });
 }
 
+async function sendCoachClassCancelled(to, { coachName, title, dateLabel, timeRange, location, notes }, openWaText) {
+  return guardedSend(to, {
+    cloudSend: () =>
+      sendViaCloudTemplate(to, templates.coachClassCancelled, [
+        coachName || '教練',
+        title || '教練課堂',
+        dateLabel || '',
+        timeRange || '',
+        location || '—',
+        notes || '—',
+      ]),
+    openWaText,
+  });
+}
+
 async function sendOvernightNewBooking(to, { storeName, dateTimeLine }, openWaText) {
   return guardedSend(to, {
     cloudSend: () =>
@@ -216,6 +231,7 @@ module.exports = {
   sendBookingCancelled,
   sendCoachClassAssigned,
   sendCoachClassReminder,
+  sendCoachClassCancelled,
   sendOvernightNewBooking,
   sendOvernightAcSummary,
   sendApplicationNotify,
