@@ -1130,9 +1130,11 @@ const BookingCalendar: React.FC = () => {
                 <div>
                   <label className="block text-sm font-medium text-gray-700">場地</label>
                   <p className="text-sm text-gray-900">
-                    {selectedBooking.court
-                      ? `${selectedBooking.court.name}${selectedBooking.court.number != null ? ` (${selectedBooking.court.number}號場)` : ''}`
-                      : '已刪除場地'}
+                    {settleInfo?.isFullVenue && settleInfo.bundleBreakdown && settleInfo.bundleBreakdown.length > 1
+                      ? `包場（共 ${settleInfo.bundleCount} 場）：${settleInfo.bundleBreakdown.map((r) => r.courtName).join('、')}`
+                      : selectedBooking.court
+                        ? `${selectedBooking.court.name}${selectedBooking.court.number != null ? ` (${selectedBooking.court.number}號場)` : ''}`
+                        : '已刪除場地'}
                   </p>
                 </div>
                 <div>
@@ -1194,9 +1196,14 @@ const BookingCalendar: React.FC = () => {
                       </span>
                     )}
                   </div>
-                  <div className={`text-sm text-gray-900 mt-1 p-3 rounded-lg ${
+                  <div className={`text-sm text-gray-900 mt-1 p-3 rounded-lg whitespace-pre-wrap ${
                     selectedBooking.specialRequestsProcessed ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
                   }`}>
+                    {settleInfo?.isFullVenue && settleInfo.bundleBreakdown && settleInfo.bundleBreakdown.length > 1 && (
+                      <p className="font-medium mb-2 text-indigo-900">
+                        🏢 包場含場地：{settleInfo.bundleBreakdown.map((r) => r.courtName).join('、')}
+                      </p>
+                    )}
                     {selectedBooking.specialRequests}
                   </div>
                 </div>

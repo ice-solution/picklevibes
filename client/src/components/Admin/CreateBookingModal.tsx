@@ -15,6 +15,7 @@ import {
   AcademicCapIcon,
 } from '@heroicons/react/24/outline';
 import UserAutocomplete from '../Common/UserAutocomplete';
+import RedeemCodeInput from '../Common/RedeemCodeInput';
 import { isFullVenueEnabledForStoreSlug } from '../../constants/storeFeatures';
 import BookingCoachAssignPanel, {
   BookingCoachAssignValue,
@@ -38,6 +39,11 @@ interface Court {
   type: string;
   capacity: number;
   isActive?: boolean;
+  pricing?: {
+    peakHour?: number;
+    offPeak?: number;
+    timeSlots?: Array<{ name?: string; price?: number; startTime?: string; endTime?: string }>;
+  };
 }
 
 interface BookingConflictDetail {
@@ -130,6 +136,18 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
   const [coachSectionOpen, setCoachSectionOpen] = useState(false);
   const [coachAssign, setCoachAssign] = useState<BookingCoachAssignValue>(emptyCoachAssignValue());
 
+  /** 建立時兌換碼（口袋／輸入碼） */
+  const [redeemData, setRedeemData] = useState<{
+    id: string;
+    code?: string;
+    name: string;
+    discountAmount: number;
+    finalAmount: number;
+  } | null>(null);
+  /** 系統估算價（供兌換碼驗證基數） */
+  const [estimatedPrice, setEstimatedPrice] = useState<number | null>(null);
+  const [estimateHint, setEstimateHint] = useState<string | null>(null);
+
   // 數據選項
   const [stores, setStores] = useState<{ _id: string; name: string; slug?: string; isActive?: boolean; fullVenueHourlyRate?: number }[]>([]);
   const [storeId, setStoreId] = useState('');
@@ -192,6 +210,91 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       startTime: selectedTime || prev.startTime
     }));
   }, [selectedDate, selectedCourt, selectedTime]);
+
+  // 估算單場價格，供兌換碼驗證用（即使時段「不可用」仍應有牌價）
+  useEffect(() => {
+    const { courtId, date, startTime, endTime } = formData;
+    if (
+      !isOpen ||
+      !courtId ||
+      courtId === 'full_venue' ||
+      !date ||
+      !startTime ||
+      !endTime
+    ) {
+      setEstimatedPrice(null);
+      setEstimateHint(null);
+      return;
+    }
+
+    const hours = calcBookingHours(startTime, endTime);
+    const localCourt = courts.find((c) => c._id === courtId);
+    const fallbackFromCourt = (() => {
+      if (!localCourt?.pricing || hours <= 0) return null;
+      const hour = parseInt(startTime.split(':')[0], 10) || 0;
+      const d = new Date(`${date}T12:00:00`);
+      const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      const isPeak = isWeekend || (hour >= 18 && hour < 23);
+      const rate = Number(
+        isPeak
+          ? localCourt.pricing.peakHour ?? localCourt.pricing.offPeak
+          : localCourt.pricing.offPeak ?? localCourt.pricing.peakHour
+      ) || 0;
+      const slot = (localCourt.pricing.timeSlots || []).find((s) => {
+        if (!s.startTime || !s.endTime) return false;
+        return startTime >= s.startTime && startTime < s.endTime;
+      });
+      const slotPrice = Number(slot?.price);
+      const unit = Number.isFinite(slotPrice) && slotPrice > 0 ? slotPrice : rate;
+      return unit > 0 ? unit * hours : null;
+    })();
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await axios.get(`/courts/${courtId}/availability`, {
+          params: { date, startTime, endTime },
+        });
+        const price = Number(res.data?.pricing?.totalPrice ?? res.data?.price ?? 0);
+        if (cancelled) return;
+        if (Number.isFinite(price) && price > 0) {
+          setEstimatedPrice(price);
+          setEstimateHint(
+            res.data?.available === false && res.data?.reason
+              ? `參考牌價（${res.data.reason}）`
+              : null
+          );
+        } else if (fallbackFromCourt) {
+          setEstimatedPrice(fallbackFromCourt);
+          setEstimateHint('參考場地費率估算');
+        } else {
+          setEstimatedPrice(null);
+          setEstimateHint(null);
+        }
+      } catch {
+        if (cancelled) return;
+        if (fallbackFromCourt) {
+          setEstimatedPrice(fallbackFromCourt);
+          setEstimateHint('參考場地費率估算');
+        } else {
+          setEstimatedPrice(null);
+          setEstimateHint(null);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, formData.courtId, formData.date, formData.startTime, formData.endTime, courts]);
+
+  const redeemBaseAmount = formData.isCustomPoints
+    ? Math.max(0, Number(formData.customPoints) || 0)
+    : Math.max(0, estimatedPrice ?? 0);
+
+  const canShowRedeem =
+    Boolean(formData.userId) &&
+    formData.courtId !== 'full_venue' &&
+    Boolean(formData.courtId);
 
   // 生成所有時間選項
   const generateTimeOptions = () => {
@@ -296,6 +399,9 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
     if (['date', 'startTime', 'endTime', 'courtId'].includes(field)) {
       setConflictDetails([]);
       if (field !== 'courtId') setError(null);
+    }
+    if (field === 'courtId' && value === 'full_venue') {
+      setRedeemData(null);
     }
     setFormData(prev => ({
       ...prev,
@@ -435,6 +541,15 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
       }
 
       // 創建預約
+      const bypass = formData.bypassRestrictions;
+      // hold 場不即時消耗兌換碼，改掛 pending；即時扣款則送 redeemCodeId
+      const useImmediateRedeem = Boolean(redeemData?.id) && !bypass;
+      let chargeCustomPoints = formData.customPoints;
+      if (formData.isCustomPoints && redeemData && useImmediateRedeem) {
+        // 自訂積分同時套兌換：以「自訂 − 折扣」扣款，並仍記錄兌換碼
+        chargeCustomPoints = Math.max(0, formData.customPoints - (redeemData.discountAmount || 0));
+      }
+
       const bookingRes = await axios.post('/bookings', {
         user: formData.userId,
         court: formData.courtId,
@@ -448,17 +563,36 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
           phone: formData.playerPhone.trim()
         }],
         specialRequests: formData.specialRequests,
-        bypassRestrictions: formData.bypassRestrictions, // 管理員 bypass 所有限制
-        isCustomPoints: formData.isCustomPoints, // 自訂積分選項
-        customPoints: formData.customPoints, // 自訂積分數量
+        bypassRestrictions: bypass,
+        isCustomPoints: formData.isCustomPoints,
+        customPoints: chargeCustomPoints,
+        ...(useImmediateRedeem ? { redeemCodeId: redeemData!.id } : {}),
         payment: {
           method: 'admin_created',
           status: 'completed',
-          amount: 0 // 管理員創建的預約可以設為免費
+          amount: 0
         }
       });
 
       const createdBooking = bookingRes.data?.booking;
+
+      // hold 場：建立後掛載兌換碼，結算時才消耗（與詳情／待結算一致）
+      if (bypass && redeemData?.id && createdBooking?._id) {
+        try {
+          await axios.post(`/bookings/${createdBooking._id}/pending-redeems`, {
+            redeemCodeId: redeemData.id,
+            forUserId: formData.userId,
+            baseAmount: formData.isCustomPoints
+              ? formData.customPoints
+              : redeemBaseAmount || undefined,
+          });
+        } catch (redeemErr: any) {
+          alert(
+            redeemErr.response?.data?.message ||
+              '預約已建立，但掛載兌換碼失敗，請至預約詳情／待結算再掛'
+          );
+        }
+      }
       let coachMsg = '';
       if (
         canAssignCoaches &&
@@ -505,6 +639,9 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
         customPoints: 0
       });
       setSelectedUser(null);
+      setRedeemData(null);
+      setEstimatedPrice(null);
+      setEstimateHint(null);
       setCoachSectionOpen(false);
       setCoachAssign(emptyCoachAssignValue());
 
@@ -880,6 +1017,78 @@ const CreateBookingModal: React.FC<CreateBookingModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* 建立時兌換碼：查用戶口袋或輸入碼 */}
+          {formData.courtId !== 'full_venue' && (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-4 space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold text-emerald-900">兌換碼</h4>
+                <p className="text-xs text-emerald-800 mt-1">
+                  可查看用戶口袋內可用券，或輸入／提供兌換碼。
+                  {formData.bypassRestrictions
+                    ? ' Hold 場會先掛載，結算時才消耗。'
+                    : ' 即時扣款時會於建單時套用並消耗。'}
+                </p>
+              </div>
+              {!formData.userId ? (
+                <p className="text-xs text-amber-700">請先選擇用戶，方可查看其口袋或代用兌換碼。</p>
+              ) : !formData.courtId || !formData.date || !formData.startTime || !formData.endTime ? (
+                <p className="text-xs text-gray-600">請先選擇場地與時段，以便驗證兌換碼適用範圍。</p>
+              ) : (
+                <>
+                  {redeemBaseAmount > 0 ? (
+                    <p className="text-xs text-emerald-800">
+                      兌換基數：{redeemBaseAmount} 積分
+                      {formData.isCustomPoints ? '（自訂）' : estimateHint ? `（${estimateHint}）` : '（系統估價）'}
+                    </p>
+                  ) : (
+                    <p className="text-xs text-amber-700">
+                      未能自動估價。可勾選上方「自訂積分」填基數後再套用兌換碼。
+                    </p>
+                  )}
+                  {(redeemBaseAmount > 0 || formData.isCustomPoints) && (
+                    <>
+                      <RedeemCodeInput
+                        key={`${formData.userId}-${redeemBaseAmount}-${formData.courtId}-${formData.date}-${formData.startTime}`}
+                        amount={Math.max(redeemBaseAmount, 1)}
+                        orderType="booking"
+                        forUserId={formData.userId}
+                        restrictedCode="booking"
+                        bookingContext={{
+                          courtId: formData.courtId,
+                          date: formData.date,
+                          startTime: formData.startTime,
+                        }}
+                        onRedeemApplied={(data) =>
+                          setRedeemData({
+                            id: data.id,
+                            code: data.code,
+                            name: data.name,
+                            discountAmount: data.discountAmount,
+                            finalAmount: data.finalAmount,
+                          })
+                        }
+                        onRedeemRemoved={() => setRedeemData(null)}
+                      />
+                      {redeemData && (
+                        <p className="text-sm text-emerald-900 font-medium">
+                          已選：{redeemData.name}
+                          {redeemData.discountAmount > 0
+                            ? `（折扣 ${redeemData.discountAmount}，應付約 ${redeemData.finalAmount}）`
+                            : ''}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+              {canShowRedeem && formData.isCustomPoints && redeemData && (
+                <p className="text-xs text-blue-800">
+                  自訂積分 + 兌換碼：建單扣款為 {Math.max(0, formData.customPoints - redeemData.discountAmount)}（自訂 − 折扣）。
+                </p>
+              )}
+            </div>
+          )}
 
           {/* 可選教練設定 */}
           {canAssignCoaches && (

@@ -135,9 +135,10 @@ function allocateChargeAcrossCourts(chargeTotal, courtPrices) {
 
 const SPECIAL_REQUESTS_MAX = 500;
 
-/** 合併用戶特殊要求與包場系統資訊，優先保留用戶輸入 */
+/** 合併用戶特殊要求與包場系統資訊，優先保留用戶輸入；場地列清楚寫齊包場含哪些場 */
 function buildFullVenueSpecialRequests({
   court,
+  allCourts,
   bookingData,
   courtCharge,
   useCustomCharge,
@@ -147,7 +148,11 @@ function buildFullVenueSpecialRequests({
   const adminNotes = String(bookingData.notes || '').trim();
   const dateLabel = bookingData.date.toLocaleDateString('zh-TW');
 
-  const systemLine = `🏢 包場預約 - ${court.name} | ${dateLabel} ${bookingData.startTime}-${bookingData.endTime} | ${courtCharge}積分${useCustomCharge ? `（議價總額 ${chargeTotal}）` : ''}`;
+  const courtList = Array.isArray(allCourts) && allCourts.length > 0 ? allCourts : [court];
+  const courtNames = courtList.map((c) => c?.name).filter(Boolean);
+  const courtsLabel = courtNames.length ? courtNames.join('、') : court?.name || '場地';
+  const thisCourt = court?.name ? `（本筆：${court.name}）` : '';
+  const systemLine = `🏢 包場預約（共 ${courtNames.length || 1} 場）：${courtsLabel}${thisCourt} | ${dateLabel} ${bookingData.startTime}-${bookingData.endTime} | ${courtCharge}積分${useCustomCharge ? `（議價總額 ${chargeTotal}）` : ''}`;
 
   const segments = [];
   if (userSpecial) segments.push(userSpecial);
@@ -301,6 +306,7 @@ class FullVenueService {
           },
           specialRequests: buildFullVenueSpecialRequests({
             court,
+            allCourts: courts,
             bookingData,
             courtCharge,
             useCustomCharge,

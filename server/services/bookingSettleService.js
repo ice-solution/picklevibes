@@ -20,6 +20,7 @@ function isActivityVenueHold(booking) {
 
 function isBookingEligibleForSettle(booking) {
   if (!booking || ['cancelled', 'no_show'].includes(booking.status)) return false;
+  if (booking.settleVoided === true) return false;
   if (isActivityVenueHold(booking)) return false;
 
   const method = booking.payment?.method;
@@ -581,6 +582,90 @@ async function settleBookingWithExternalPayment({
   };
 }
 
+/**
+ * Void 待結算：不取消預約、不扣積分；整組包場離開待結算，並寫入 remark／管理員留言。
+ */
+async function voidPendingSettle({ bookingId, remark, adminUser }) {
+  const remarkTrim = String(remark || '').trim();
+  if (!remarkTrim) {
+    const err = new Error('請填寫 Void 原因／用途說明（例如已用於哪個活動）');
+    err.status = 400;
+    throw err;
+  }
+  if (remarkTrim.length > 500) {
+    const err = new Error('備註不能超過 500 字');
+    err.status = 400;
+    throw err;
+  }
+
+  const booking = await Booking.findById(bookingId);
+  if (!booking) {
+    const err = new Error('預約不存在');
+    err.status = 404;
+    throw err;
+  }
+  if (['cancelled', 'no_show'].includes(booking.status)) {
+    const err = new Error('已取消／缺席的預約無法 Void');
+    err.status = 400;
+    throw err;
+  }
+  if (booking.settleVoided) {
+    const err = new Error('此預約已 Void，無需重複操作');
+    err.status = 400;
+    throw err;
+  }
+  if (await bundleAlreadySettled(booking)) {
+    const err = new Error('此預約已結算，無法 Void');
+    err.status = 400;
+    throw err;
+  }
+  if (!isBookingEligibleForSettle(booking)) {
+    const err = new Error('此預約不在待結算範圍');
+    err.status = 400;
+    throw err;
+  }
+
+  const bundle = await loadBundledBookings(booking);
+  const voidedAt = new Date();
+  const adminNoteContent = `待結算 Void：${remarkTrim}`;
+  const adminId = adminUser?._id || adminUser?.id || null;
+  if (!adminId) {
+    const err = new Error('缺少管理員身份，無法 Void');
+    err.status = 401;
+    throw err;
+  }
+
+  for (const b of bundle) {
+    b.settleVoided = true;
+    b.settleVoidRemark = remarkTrim;
+    b.settleVoidedAt = voidedAt;
+    b.settleVoidedBy = adminId;
+    b.adminNotes = b.adminNotes || [];
+    b.adminNotes.push({
+      content: adminNoteContent,
+      createdBy: adminId,
+      createdAt: voidedAt,
+    });
+    await b.save();
+  }
+
+  await booking.populate('user', 'name email phone');
+  await booking.populate('store', 'name slug');
+  await booking.populate({
+    path: 'court',
+    select: 'name number type store',
+    populate: { path: 'store', select: 'name slug' },
+  });
+  await booking.populate('adminNotes.createdBy', 'name email');
+
+  return {
+    booking,
+    remark: remarkTrim,
+    bundleCount: bundle.length,
+    courtNames: bundle.map((b) => b.court?.name || '場地'),
+  };
+}
+
 module.exports = {
   isActivityVenueHold,
   isBookingEligibleForSettle,
@@ -590,6 +675,7 @@ module.exports = {
   getSettlePreview,
   settleBookingWithPoints,
   settleBookingWithExternalPayment,
+  voidPendingSettle,
   BOOKING_EXTERNAL_PAYMENT_METHODS,
   bookingPaymentMethodLabel,
 };

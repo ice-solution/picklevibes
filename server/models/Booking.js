@@ -219,6 +219,22 @@ const bookingSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  /** 待結算已 Void（例如活動包場已在他處扣數），不取消預約、不再出現於待結算 */
+  settleVoided: {
+    type: Boolean,
+    default: false,
+  },
+  settleVoidRemark: {
+    type: String,
+    maxlength: [500, 'Void 備註不能超過500個字符'],
+  },
+  settleVoidedAt: {
+    type: Date,
+  },
+  settleVoidedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+  },
   /**
    * 待結算預約可預先掛載的兌換碼（結算時才 consume）。
    * 折扣以結算基數（customPoints / suggestedSettlePoints）計算，多券各自對同一基數折扣後加總。

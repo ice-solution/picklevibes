@@ -34,6 +34,7 @@ const {
   getSettlePreview,
   isBookingEligibleForSettle,
   suggestedSettlePoints,
+  voidPendingSettle,
   BOOKING_EXTERNAL_PAYMENT_METHODS,
 } = require('../services/bookingSettleService');
 const {
@@ -1012,6 +1013,7 @@ router.get('/admin/pending-settle', [auth, adminAuth], async (req, res) => {
     // 注意：dateQuery 可能含 $or；不可再被外層 $or 覆蓋，否則日期篩選失效
     let query = {
       status: { $nin: ['cancelled', 'no_show'] },
+      settleVoided: { $ne: true },
       venueBundleKind: { $ne: 'activity_hold' },
       $and: [
         ...(dateQuery ? [dateQuery] : []),
@@ -1298,6 +1300,47 @@ router.post('/:id/settle', [
       return res.status(error.status).json({ message: error.message });
     }
     console.error('預約結算錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
+// @route   POST /api/bookings/:id/void-pending-settle
+// @desc    Void 待結算（不取消預約、不扣積分；寫入 remark／管理員留言）
+// @access  Private (Admin)
+router.post('/:id/void-pending-settle', [
+  auth,
+  adminAuth,
+  body('remark').trim().notEmpty().withMessage('請填寫 Void 原因／用途說明').isLength({ max: 500 }).withMessage('備註不能超過500字'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: errors.array()[0]?.msg || '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const result = await voidPendingSettle({
+      bookingId: req.params.id,
+      remark: req.body.remark,
+      adminUser: req.user,
+    });
+
+    res.json({
+      message: result.bundleCount > 1
+        ? `已 Void 包場（${result.bundleCount} 場），備註已寫入`
+        : '已 Void 待結算，備註已寫入',
+      booking: result.booking,
+      remark: result.remark,
+      bundleCount: result.bundleCount,
+      courtNames: result.courtNames,
+    });
+  } catch (error) {
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
+    console.error('Void 待結算錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });
   }
 });

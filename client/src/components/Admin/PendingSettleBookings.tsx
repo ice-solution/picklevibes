@@ -91,6 +91,22 @@ const PendingSettleBookings: React.FC = () => {
   const [externalNote, setExternalNote] = useState('');
   const [redeemPreview, setRedeemPreview] = useState<PendingRedeemPreview | null>(null);
 
+  /** 預約詳情（按場地名開啟，類似日曆詳情） */
+  const [detailBooking, setDetailBooking] = useState<Record<string, unknown> | null>(null);
+  const [detailSettleInfo, setDetailSettleInfo] = useState<{
+    isFullVenue?: boolean;
+    bundleCount?: number;
+    suggestedPoints?: number;
+    eligible?: boolean;
+    bundleBreakdown?: Array<{ id: string; courtName: string; pointsDeducted: number }>;
+  } | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailSource, setDetailSource] = useState<PendingBooking | null>(null);
+
+  const [voidRemark, setVoidRemark] = useState('');
+  const [voiding, setVoiding] = useState(false);
+  const [showVoidForm, setShowVoidForm] = useState(false);
+
   const settleBase = parseInt(settlePoints || '0', 10) || 0;
   const netPayable =
     redeemPreview && redeemPreview.baseAmount === settleBase
@@ -141,6 +157,64 @@ const PendingSettleBookings: React.FC = () => {
     setExternalAmount(String(b.suggestedPoints || 0));
     setExternalNote('');
     setRedeemPreview(null);
+    setShowVoidForm(false);
+    setVoidRemark('');
+  };
+
+  const openDetail = async (b: PendingBooking) => {
+    setDetailSource(b);
+    setDetailBooking(null);
+    setDetailSettleInfo(null);
+    setDetailLoading(true);
+    setShowVoidForm(false);
+    setVoidRemark('');
+    try {
+      const res = await axios.get(`/bookings/${b._id}`);
+      setDetailBooking(res.data.booking || null);
+      setDetailSettleInfo(res.data.settleInfo || null);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      alert(msg || '載入預約詳情失敗');
+      setDetailSource(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  const closeDetail = () => {
+    setDetailSource(null);
+    setDetailBooking(null);
+    setDetailSettleInfo(null);
+    setShowVoidForm(false);
+    setVoidRemark('');
+  };
+
+  const handleVoid = async (bookingId: string) => {
+    const remark = voidRemark.trim();
+    if (!remark) {
+      alert('請填寫 Void 原因，例如「活動 XXX 已在他處扣數」');
+      return;
+    }
+    if (
+      !window.confirm(
+        `確認 Void 此待結算？\n不會取消預約、不會扣積分，但會離開待結算列表。\n備註：${remark}`
+      )
+    ) {
+      return;
+    }
+    try {
+      setVoiding(true);
+      const res = await axios.post(`/bookings/${bookingId}/void-pending-settle`, { remark });
+      alert(res.data.message || '已 Void');
+      setSelected(null);
+      closeDetail();
+      await fetchList();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
+      alert(msg || 'Void 失敗');
+    } finally {
+      setVoiding(false);
+    }
   };
 
   const handleSettleUserChange = async (
@@ -268,7 +342,7 @@ const PendingSettleBookings: React.FC = () => {
           <div>
             <h3 className="font-semibold text-gray-900">待結算 Hold 場</h3>
             <p className="text-sm text-gray-600 mt-1">
-              列出日期範圍內已預先佔場、尚未扣積分結算的預約（不含活動佔場）。結算後會從列表移除。
+              列出日期範圍內已預先佔場、尚未扣積分結算的預約（不含活動佔場）。結算或 Void 後會從列表移除。按場地名可查看詳情。
             </p>
           </div>
         </div>
@@ -343,7 +417,7 @@ const PendingSettleBookings: React.FC = () => {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">日期</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">時段</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">店鋪</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">場地</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase min-w-[14rem] w-[28%]">場地</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">現時戶口</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">建議積分</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
@@ -356,6 +430,10 @@ const PendingSettleBookings: React.FC = () => {
                     isBundle && b.courtNames?.length
                       ? `${b.courtNames.join('、')}（${b.bundleCount} 場）`
                       : b.court?.name || '—';
+                  const specialText = String(b.specialRequests || '').trim();
+                  const hasSpecial = specialText.length > 0;
+                  const specialPreview =
+                    specialText.length > 48 ? `${specialText.slice(0, 48)}…` : specialText;
                   return (
                     <tr key={b._id} className="hover:bg-gray-50">
                       <td className="px-4 py-3 text-sm text-gray-900 whitespace-nowrap">{formatDate(b.date)}</td>
@@ -363,10 +441,37 @@ const PendingSettleBookings: React.FC = () => {
                         {b.startTime}–{b.endTime}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">{storeName(b)}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
-                        {courts}
-                        {isBundle && (
-                          <span className="ml-2 text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">包場</span>
+                      <td className="px-4 py-3 text-sm text-gray-700 min-w-[14rem] max-w-md">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => void openDetail(b)}
+                            className="text-left text-primary-700 hover:text-primary-900 hover:underline font-medium"
+                            title="查看預約詳情"
+                          >
+                            {courts}
+                          </button>
+                          {isBundle && (
+                            <span className="text-xs text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded shrink-0">
+                              包場
+                            </span>
+                          )}
+                          {hasSpecial && (
+                            <span
+                              className="text-xs text-red-700 bg-red-50 border border-red-200 px-1.5 py-0.5 rounded shrink-0"
+                              title={specialText}
+                            >
+                              特殊要求
+                            </span>
+                          )}
+                        </div>
+                        {hasSpecial && (
+                          <p
+                            className="mt-1.5 text-xs text-gray-500 line-clamp-2 break-words"
+                            title={specialText}
+                          >
+                            {specialPreview}
+                          </p>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-700">
@@ -374,7 +479,14 @@ const PendingSettleBookings: React.FC = () => {
                         <div className="text-xs text-gray-400">{b.user?.email}</div>
                       </td>
                       <td className="px-4 py-3 text-sm font-medium text-amber-800">{b.suggestedPoints ?? 0}</td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="px-4 py-3 text-right space-x-3 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => void openDetail(b)}
+                          className="text-sm text-gray-600 hover:text-gray-900"
+                        >
+                          詳情
+                        </button>
                         <button
                           type="button"
                           onClick={() => openSettle(b)}
@@ -578,7 +690,260 @@ const PendingSettleBookings: React.FC = () => {
                   </button>
                 </>
               )}
+
+              <div className="border-t border-gray-200 pt-4 mt-2">
+                {!showVoidForm ? (
+                  <button
+                    type="button"
+                    onClick={() => setShowVoidForm(true)}
+                    className="w-full py-2 rounded-md border border-gray-300 text-gray-700 text-sm hover:bg-gray-50"
+                  >
+                    Void（已他處扣數／無需結算）
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Void 備註 <span className="text-red-500">*</span>
+                      <span className="text-gray-400 font-normal">（寫清用途，例如活動名稱）</span>
+                    </label>
+                    <textarea
+                      className="w-full border rounded-md px-3 py-2 text-sm"
+                      rows={3}
+                      value={voidRemark}
+                      onChange={(e) => setVoidRemark(e.target.value)}
+                      placeholder="例：活動「XXX」包場，已在活動／其他單扣數"
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowVoidForm(false);
+                          setVoidRemark('');
+                        }}
+                        className="flex-1 py-2 rounded-md border border-gray-300 text-sm text-gray-700"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleVoid(selected._id)}
+                        disabled={voiding || !voidRemark.trim()}
+                        className="flex-1 py-2 rounded-md bg-gray-800 text-white text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
+                      >
+                        {voiding ? '處理中…' : '確認 Void'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {detailSource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40" onClick={closeDetail} />
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">預約詳情</h3>
+              <button type="button" onClick={closeDetail} className="p-1 text-gray-500">
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+
+            {detailLoading ? (
+              <div className="flex justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600" />
+              </div>
+            ) : detailBooking ? (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">日期</label>
+                    <p className="text-sm text-gray-900 mt-0.5">
+                      {formatDate(String(detailBooking.date || detailSource.date))}
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">時間</label>
+                    <p className="text-sm text-gray-900 mt-0.5">
+                      {String(detailBooking.startTime || detailSource.startTime)} –{' '}
+                      {String(detailBooking.endTime || detailSource.endTime)}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">店鋪</label>
+                  <p className="text-sm text-gray-900 mt-0.5">{storeName(detailSource)}</p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">場地</label>
+                  <p className="text-sm text-gray-900 mt-0.5">
+                    {detailSettleInfo?.isFullVenue &&
+                    detailSettleInfo.bundleBreakdown &&
+                    detailSettleInfo.bundleBreakdown.length > 1
+                      ? `包場（共 ${detailSettleInfo.bundleCount} 場）：${detailSettleInfo.bundleBreakdown
+                          .map((r) => r.courtName)
+                          .join('、')}`
+                      : (detailSource.bundleCount || 1) > 1
+                        ? `包場：${(detailSource.courtNames || []).join('、')}`
+                        : (detailBooking.court as { name?: string } | undefined)?.name ||
+                          detailSource.court?.name ||
+                          '—'}
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">狀態</label>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 text-amber-900 mt-0.5">
+                    待結算
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">用戶信息</label>
+                  <div className="mt-1 text-sm text-gray-900">
+                    <p>
+                      {(detailBooking.user as { name?: string } | undefined)?.name ||
+                        detailSource.user?.name ||
+                        '—'}
+                    </p>
+                    <p className="text-gray-600">
+                      {(detailBooking.user as { email?: string } | undefined)?.email ||
+                        detailSource.user?.email}
+                    </p>
+                    {((detailBooking.user as { phone?: string } | undefined)?.phone ||
+                      detailSource.user?.phone) && (
+                      <p>
+                        {(detailBooking.user as { phone?: string } | undefined)?.phone ||
+                          detailSource.user?.phone}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {Boolean(detailBooking.specialRequests) && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">特殊要求</label>
+                    <div className="text-sm text-gray-900 p-3 rounded-lg bg-red-50 border border-red-200 whitespace-pre-wrap">
+                      {detailSettleInfo?.isFullVenue &&
+                        detailSettleInfo.bundleBreakdown &&
+                        detailSettleInfo.bundleBreakdown.length > 1 && (
+                          <p className="font-medium mb-2 text-indigo-900">
+                            🏢 包場含場地：
+                            {detailSettleInfo.bundleBreakdown.map((r) => r.courtName).join('、')}
+                          </p>
+                        )}
+                      {String(detailBooking.specialRequests)}
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    管理員留言 (
+                    {Array.isArray(detailBooking.adminNotes) ? detailBooking.adminNotes.length : 0})
+                  </label>
+                  {Array.isArray(detailBooking.adminNotes) && detailBooking.adminNotes.length > 0 ? (
+                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                      {(
+                        detailBooking.adminNotes as Array<{
+                          _id?: string;
+                          content: string;
+                          createdAt?: string;
+                          createdBy?: { name?: string };
+                        }>
+                      ).map((note, idx) => (
+                        <div
+                          key={note._id || idx}
+                          className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm"
+                        >
+                          <p className="text-gray-900 whitespace-pre-wrap">{note.content}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {note.createdBy?.name || '管理員'}
+                            {note.createdAt
+                              ? ` · ${new Date(note.createdAt).toLocaleString('zh-HK')}`
+                              : ''}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400 italic bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
+                      暫無留言
+                    </p>
+                  )}
+                </div>
+
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm">
+                  <p className="font-medium text-amber-900">
+                    建議結算：{detailSettleInfo?.suggestedPoints ?? detailSource.suggestedPoints ?? 0}{' '}
+                    積分
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-2 pt-2 border-t border-gray-200">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeDetail();
+                      openSettle(detailSource);
+                    }}
+                    className="w-full py-2 rounded-md bg-primary-600 text-white text-sm font-medium hover:bg-primary-700"
+                  >
+                    前往結算
+                  </button>
+
+                  {!showVoidForm ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowVoidForm(true)}
+                      className="w-full py-2 rounded-md border border-gray-300 text-gray-700 text-sm hover:bg-gray-50"
+                    >
+                      Void（已他處扣數／無需結算）
+                    </button>
+                  ) : (
+                    <div className="space-y-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Void 備註 <span className="text-red-500">*</span>
+                      </label>
+                      <textarea
+                        className="w-full border rounded-md px-3 py-2 text-sm"
+                        rows={3}
+                        value={voidRemark}
+                        onChange={(e) => setVoidRemark(e.target.value)}
+                        placeholder="例：活動「XXX」包場，已在活動／其他單扣數"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowVoidForm(false);
+                            setVoidRemark('');
+                          }}
+                          className="flex-1 py-2 rounded-md border border-gray-300 text-sm text-gray-700"
+                        >
+                          取消
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void handleVoid(detailSource._id)}
+                          disabled={voiding || !voidRemark.trim()}
+                          className="flex-1 py-2 rounded-md bg-gray-800 text-white text-sm font-medium hover:bg-gray-900 disabled:opacity-50"
+                        >
+                          {voiding ? '處理中…' : '確認 Void'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-8 text-sm">無法載入詳情</p>
+            )}
           </div>
         </div>
       )}

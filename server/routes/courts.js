@@ -293,21 +293,48 @@ router.get('/:id/availability', [
     if (!court) {
       return res.status(404).json({ message: '場地不存在' });
     }
+
+    const bookingDate = parseBookingDate(date);
+    const startParts = String(startTime).split(':').map(Number);
+    const endParts = String(endTime).split(':').map(Number);
+    let durationMins =
+      (endParts[0] * 60 + (endParts[1] || 0)) - (startParts[0] * 60 + (startParts[1] || 0));
+    // 結束 24:00 或跨日
+    if (durationMins <= 0 && (String(endTime) === '24:00' || endParts[0] === 24)) {
+      durationMins = 24 * 60 - (startParts[0] * 60 + (startParts[1] || 0));
+    }
+    if (durationMins <= 0) {
+      durationMins = calculateDuration(String(startTime), String(endTime));
+    }
+    const basePrice = court.getPriceForTime(startTime, bookingDate);
+    const totalPrice = (basePrice * durationMins) / 60;
+    const slotName = court.getTimeSlotName(startTime, bookingDate);
+    const hour = startParts[0] || 0;
+    const isWeekend = bookingDate.getDay() === 0 || bookingDate.getDay() === 6;
+    const isPeakHour = isWeekend || (hour >= 18 && hour < 23);
+    const pricing = {
+      basePrice,
+      totalPrice,
+      duration: durationMins,
+      isPeakHour,
+      slotName,
+    };
     
-    // 檢查場地是否可用
+    // 檢查場地是否可用（仍回傳 pricing，方便後台估價／兌換碼）
     if (!court.isAvailable()) {
       return res.json({ 
         available: false, 
-        reason: '場地正在維護中' 
+        reason: '場地正在維護中',
+        pricing,
       });
     }
     
     // 檢查場地是否在營業時間內開放（須含開始+結束，避免 9pm 訂 2 小時超出收場）
-    const bookingDate = parseBookingDate(date);
     if (!court.isOpenAt(bookingDate, startTime, endTime)) {
       return res.json({ 
         available: false, 
-        reason: '場地在該時間段不開放' 
+        reason: '場地在該時間段不開放',
+        pricing,
       });
     }
     
@@ -322,31 +349,14 @@ router.get('/:id/availability', [
     if (hasConflict) {
       return res.json({ 
         available: false, 
-        reason: '該時間段已被預約' 
+        reason: '該時間段已被預約',
+        pricing,
       });
     }
     
-    // 計算價格
-    const basePrice = court.getPriceForTime(startTime, bookingDate);
-    const duration = (parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1])) - 
-                    (parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]));
-    const totalPrice = (basePrice * duration) / 60;
-    const slotName = court.getTimeSlotName(startTime, bookingDate);
-    
-    // 判斷是否為高峰時段（用於顯示）
-    const hour = parseInt(startTime.split(':')[0]);
-    const isWeekend = bookingDate.getDay() === 0 || bookingDate.getDay() === 6;
-    const isPeakHour = isWeekend || (hour >= 18 && hour < 23);
-    
     res.json({ 
       available: true,
-      pricing: {
-        basePrice,
-        totalPrice,
-        duration: duration,
-        isPeakHour,
-        slotName
-      }
+      pricing,
     });
   } catch (error) {
     console.error('檢查場地可用性錯誤:', error);
