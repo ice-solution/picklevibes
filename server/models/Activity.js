@@ -73,18 +73,24 @@ const activitySchema = new mongoose.Schema({
   },
   /**
    * 當 location 等於所屬店鋪 Store.address 時有效：
-   * full_venue=該店全部場地檢查；single_court=僅檢查 venueHoldCourtId
+   * full_venue=該店全部場地檢查；single_court=僅檢查選定場地（venueHoldCourtIds／venueHoldCourtId）
    */
   venueHoldMode: {
     type: String,
     enum: ['full_venue', 'single_court'],
     default: 'full_venue'
   },
+  /** @deprecated 改用 venueHoldCourtIds；保留作舊資料相容（等同第一個選定場） */
   venueHoldCourtId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Court',
     default: null
   },
+  /** 選定場地（可多選）；single_court 模式使用 */
+  venueHoldCourtIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Court'
+  }],
   organizer: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

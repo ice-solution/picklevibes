@@ -52,6 +52,7 @@ interface Activity {
   createdAt: string;
   venueHoldMode?: 'full_venue' | 'single_court';
   venueHoldCourtId?: string | { _id: string; name?: string };
+  venueHoldCourtIds?: Array<string | { _id: string; name?: string }>;
 }
 
 interface StoreOption {
@@ -169,7 +170,8 @@ const ActivityManagement: React.FC = () => {
     coaches: [] as any[],
     storeId: '',
     venueHoldMode: 'full_venue' as 'full_venue' | 'single_court',
-    venueHoldCourtId: ''
+    venueHoldCourtId: '',
+    venueHoldCourtIds: [] as string[]
   });
   /** 活動地點選項：店鋪 _id，或 __custom__ */
   const [locationOption, setLocationOption] = useState<string>('');
@@ -333,7 +335,8 @@ const ActivityManagement: React.FC = () => {
       coaches: [],
       storeId: first?._id || '',
       venueHoldMode: 'full_venue',
-      venueHoldCourtId: ''
+      venueHoldCourtId: '',
+      venueHoldCourtIds: []
     });
     setSelectedFile(null);
     setImagePreview('');
@@ -400,13 +403,18 @@ const ActivityManagement: React.FC = () => {
   };
 
   const handleEditActivity = (activity: Activity) => {
-    let courtId = '';
-    if (activity.venueHoldCourtId) {
-      courtId =
-        typeof activity.venueHoldCourtId === 'object' && activity.venueHoldCourtId._id
-          ? String(activity.venueHoldCourtId._id)
-          : String(activity.venueHoldCourtId);
+    const courtIds: string[] = [];
+    const pushCourtId = (raw: string | { _id: string } | undefined | null) => {
+      if (!raw) return;
+      const id =
+        typeof raw === 'object' && raw._id ? String(raw._id) : String(raw);
+      if (id && !courtIds.includes(id)) courtIds.push(id);
+    };
+    if (Array.isArray(activity.venueHoldCourtIds)) {
+      activity.venueHoldCourtIds.forEach(pushCourtId);
     }
+    pushCourtId(activity.venueHoldCourtId);
+    const courtId = courtIds[0] || '';
     let storeId = resolveActivityStoreId(activity);
     const byAddress = stores.find(
       (s) => s.address && s.address === (activity.location || '').trim()
@@ -435,7 +443,8 @@ const ActivityManagement: React.FC = () => {
       coaches: activity.coaches || [],
       storeId: isStoreVenue ? matchedStore!._id : storeId,
       venueHoldMode: activity.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue',
-      venueHoldCourtId: courtId
+      venueHoldCourtId: courtId,
+      venueHoldCourtIds: courtIds
     });
     setSelectedFile(null);
     setImagePreview(activity.poster ? getImageUrl(activity.poster) : '');
@@ -478,8 +487,11 @@ const ActivityManagement: React.FC = () => {
       }
 
       if (isStoreVenue) {
-        if (formData.venueHoldMode === 'single_court' && !formData.venueHoldCourtId) {
-          alert('請選擇要檢查的場地');
+        if (
+          formData.venueHoldMode === 'single_court' &&
+          formData.venueHoldCourtIds.length === 0
+        ) {
+          alert('請至少選擇一個要檢查的場地');
           return;
         }
       }
@@ -497,7 +509,13 @@ const ActivityManagement: React.FC = () => {
       const buildFormData = (confirmVenueConflict = false) => {
         const formDataToSend = new FormData();
         Object.keys(submitPayload).forEach(key => {
-          if (key === 'location' || key === 'venueHoldMode' || key === 'venueHoldCourtId' || key === 'storeId') {
+          if (
+            key === 'location' ||
+            key === 'venueHoldMode' ||
+            key === 'venueHoldCourtId' ||
+            key === 'venueHoldCourtIds' ||
+            key === 'storeId'
+          ) {
             return;
           }
           const value = submitPayload[key as keyof typeof submitPayload];
@@ -517,8 +535,13 @@ const ActivityManagement: React.FC = () => {
         formDataToSend.append('storeId', finalStoreId);
         if (isStoreVenue) {
           formDataToSend.append('venueHoldMode', formData.venueHoldMode);
-          if (formData.venueHoldMode === 'single_court' && formData.venueHoldCourtId) {
-            formDataToSend.append('venueHoldCourtId', formData.venueHoldCourtId);
+          if (formData.venueHoldMode === 'single_court') {
+            formData.venueHoldCourtIds.forEach((id, index) => {
+              formDataToSend.append(`venueHoldCourtIds[${index}]`, id);
+            });
+            if (formData.venueHoldCourtIds[0]) {
+              formDataToSend.append('venueHoldCourtId', formData.venueHoldCourtIds[0]);
+            }
           }
         }
         if (confirmVenueConflict) {
@@ -1643,6 +1666,7 @@ const ActivityManagement: React.FC = () => {
                             storeId: '',
                             venueHoldMode: 'full_venue',
                             venueHoldCourtId: '',
+                            venueHoldCourtIds: [],
                             location: '',
                           }));
                         } else {
@@ -1653,6 +1677,7 @@ const ActivityManagement: React.FC = () => {
                             location: store?.address || '',
                             venueHoldMode: 'full_venue',
                             venueHoldCourtId: '',
+                            venueHoldCourtIds: [],
                           }));
                           setCustomLocation('');
                         }
@@ -1719,34 +1744,95 @@ const ActivityManagement: React.FC = () => {
                             setFormData((prev) => ({
                               ...prev,
                               venueHoldMode: mode,
-                              venueHoldCourtId: mode === 'full_venue' ? '' : prev.venueHoldCourtId
+                              venueHoldCourtId: mode === 'full_venue' ? '' : prev.venueHoldCourtId,
+                              venueHoldCourtIds: mode === 'full_venue' ? [] : prev.venueHoldCourtIds
                             }));
                           }}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                         >
                           <option value="full_venue">包場（該店全部場地）</option>
-                          <option value="single_court">單一場地</option>
+                          <option value="single_court">選定場地（可多選）</option>
                         </select>
                         {formData.venueHoldMode === 'single_court' && (
-                          <div>
-                            <label className="block text-xs font-medium text-gray-600 mb-1">
-                              選擇場地 <span className="text-red-500">*</span>
-                            </label>
-                            <select
-                              value={formData.venueHoldCourtId}
-                              onChange={(e) =>
-                                setFormData({ ...formData, venueHoldCourtId: e.target.value })
-                              }
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-                              required={formData.venueHoldMode === 'single_court'}
-                            >
-                              <option value="">請選擇場地</option>
-                              {courtsForSelectedStore.map((c) => (
-                                <option key={c._id} value={c._id}>
-                                  {c.name}
-                                </option>
-                              ))}
-                            </select>
+                          <div className="space-y-2">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs font-medium text-gray-700">
+                                選擇場地 <span className="text-red-500">*</span>
+                                <span className="ml-2 font-normal text-gray-500">
+                                  已選 {formData.venueHoldCourtIds.length}／
+                                  {courtsForSelectedStore.length} 個場
+                                </span>
+                              </p>
+                              {courtsForSelectedStore.length > 0 && (
+                                <label className="inline-flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={
+                                      courtsForSelectedStore.length > 0 &&
+                                      courtsForSelectedStore.every((c) =>
+                                        formData.venueHoldCourtIds.includes(c._id)
+                                      )
+                                    }
+                                    onChange={(e) => {
+                                      const nextIds = e.target.checked
+                                        ? courtsForSelectedStore.map((c) => c._id)
+                                        : [];
+                                      setFormData((prev) => ({
+                                        ...prev,
+                                        venueHoldCourtIds: nextIds,
+                                        venueHoldCourtId: nextIds[0] || ''
+                                      }));
+                                    }}
+                                    className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                  />
+                                  全選
+                                </label>
+                              )}
+                            </div>
+                            {courtsForSelectedStore.length === 0 ? (
+                              <p className="text-xs text-red-600">
+                                此店鋪目前沒有可用場地，請先在「場地管理」建立／啟用場地。
+                              </p>
+                            ) : (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {courtsForSelectedStore.map((court) => {
+                                  const checked = formData.venueHoldCourtIds.includes(court._id);
+                                  return (
+                                    <label
+                                      key={court._id}
+                                      className={`flex items-center gap-2 rounded-md border px-3 py-2 text-sm cursor-pointer ${
+                                        checked
+                                          ? 'border-amber-400 bg-white text-gray-900'
+                                          : 'border-amber-100 bg-white/50 text-gray-600'
+                                      }`}
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={checked}
+                                        onChange={() => {
+                                          setFormData((prev) => {
+                                            const nextIds = checked
+                                              ? prev.venueHoldCourtIds.filter((id) => id !== court._id)
+                                              : [...prev.venueHoldCourtIds, court._id];
+                                            return {
+                                              ...prev,
+                                              venueHoldCourtIds: nextIds,
+                                              venueHoldCourtId: nextIds[0] || ''
+                                            };
+                                          });
+                                        }}
+                                        className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                                      />
+                                      <span>{court.name}</span>
+                                    </label>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            {formData.venueHoldCourtIds.length === 0 &&
+                              courtsForSelectedStore.length > 0 && (
+                                <p className="text-xs text-red-600">請至少勾選一個場地</p>
+                              )}
                           </div>
                         )}
                         <p className="text-xs text-amber-800">

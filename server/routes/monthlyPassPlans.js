@@ -4,6 +4,8 @@ const { body, validationResult } = require('express-validator');
 const MonthlyPassPlan = require('../models/MonthlyPassPlan');
 const UserEntitlement = require('../models/UserEntitlement');
 const User = require('../models/User');
+const PaymentLink = require('../models/PaymentLink');
+const PaymentLinkPayment = require('../models/PaymentLinkPayment');
 const { auth, adminAuth } = require('../middleware/auth');
 const {
   isValidHhMm,
@@ -13,6 +15,19 @@ const {
 } = require('../services/monthlyPassService');
 
 const router = express.Router();
+
+const PLAN_TYPES = ['reclub_unlimited', 'off_peak'];
+
+function emptyPlanBucket() {
+  return {
+    paymentCount: 0,
+    adminCount: 0,
+    purchaseCount: 0,
+    expiresAt: null,
+    isActive: false,
+    history: [],
+  };
+}
 
 // 確保預設兩種方案存在
 router.use(async (req, res, next) => {
@@ -77,6 +92,151 @@ router.get('/me', auth, async (req, res) => {
     });
   } catch (error) {
     console.error('my monthly pass entitlements:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   GET /api/monthly-pass-plans/holders
+// @desc    全部曾買過／獲發月卡用戶（付款 + 管理員），含次數、狀態、購買史
+router.get('/holders', [auth, adminAuth], async (req, res) => {
+  try {
+    const sellPassLinks = await PaymentLink.find({ purpose: 'sell_pass' })
+      .select('_id passPlan')
+      .populate('passPlan', 'type name')
+      .lean();
+    const linkMeta = new Map(
+      sellPassLinks.map((l) => [
+        String(l._id),
+        {
+          planType: l.passPlan?.type || null,
+          planName: l.passPlan?.name || '',
+        },
+      ])
+    );
+    const sellPassLinkIds = sellPassLinks.map((l) => l._id);
+
+    const payments =
+      sellPassLinkIds.length === 0
+        ? []
+        : await PaymentLinkPayment.find({
+            link: { $in: sellPassLinkIds },
+            status: 'completed',
+            entitlementGranted: true,
+            user: { $ne: null },
+          })
+            .select('user link amount method payment refundedAt createdAt')
+            .populate('user', 'name email phone')
+            .sort({ 'payment.paidAt': -1, createdAt: -1 })
+            .lean();
+
+    const entitlements = await UserEntitlement.find()
+      .populate('user', 'name email phone')
+      .populate('plan', 'name type')
+      .populate('adjustedBy', 'name email')
+      .lean();
+
+    /** @type {Map<string, any>} */
+    const byUser = new Map();
+
+    const ensureHolder = (userDoc) => {
+      if (!userDoc?._id) return null;
+      const uid = String(userDoc._id);
+      let row = byUser.get(uid);
+      if (!row) {
+        row = {
+          user: {
+            _id: uid,
+            name: userDoc.name || '',
+            email: userDoc.email || '',
+            phone: userDoc.phone || '',
+          },
+          plans: {
+            reclub_unlimited: emptyPlanBucket(),
+            off_peak: emptyPlanBucket(),
+          },
+        };
+        byUser.set(uid, row);
+      }
+      return row;
+    };
+
+    for (const pay of payments) {
+      const meta = linkMeta.get(String(pay.link));
+      const planType = meta?.planType;
+      if (!planType || !PLAN_TYPES.includes(planType)) continue;
+      const row = ensureHolder(pay.user);
+      if (!row) continue;
+      const bucket = row.plans[planType];
+      bucket.paymentCount += 1;
+      bucket.history.push({
+        at: pay.payment?.paidAt || pay.createdAt,
+        source: 'payment',
+        amount: pay.amount,
+        method: pay.method,
+        planType,
+        planName: meta?.planName || '',
+        paymentId: String(pay._id),
+        refunded: Boolean(pay.refundedAt),
+      });
+    }
+
+    const now = new Date();
+    for (const ent of entitlements) {
+      if (!ent.user?._id || !PLAN_TYPES.includes(ent.planType)) continue;
+      const row = ensureHolder(ent.user);
+      if (!row) continue;
+      const bucket = row.plans[ent.planType];
+      bucket.expiresAt = ent.expiresAt;
+      bucket.isActive = new Date(ent.expiresAt) > now;
+      bucket.planName = ent.plan?.name || '';
+
+      // 管理員發／調：無完整審計日誌，最多以最新一筆代表（adjustedBy 或純權益無付款）
+      const hasAdminTouch = Boolean(ent.adjustedBy);
+      const noPayments = bucket.paymentCount === 0;
+      if (hasAdminTouch || noPayments) {
+        bucket.adminCount = 1;
+        bucket.history.push({
+          at: hasAdminTouch ? ent.updatedAt || ent.createdAt : ent.createdAt,
+          source: 'admin',
+          planType: ent.planType,
+          planName: ent.plan?.name || '',
+          note: ent.note || (noPayments && !hasAdminTouch ? '權益紀錄（非付款連結）' : ''),
+          adjustedByName: ent.adjustedBy?.name || ent.adjustedBy?.email || '',
+        });
+      }
+    }
+
+    const holders = Array.from(byUser.values())
+      .map((row) => {
+        for (const planType of PLAN_TYPES) {
+          const bucket = row.plans[planType];
+          bucket.purchaseCount = bucket.paymentCount + bucket.adminCount;
+          bucket.history.sort(
+            (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()
+          );
+        }
+        const totalPurchases =
+          row.plans.reclub_unlimited.purchaseCount +
+          row.plans.off_peak.purchaseCount;
+        const anyActive =
+          row.plans.reclub_unlimited.isActive || row.plans.off_peak.isActive;
+        const latestAt = Math.max(
+          0,
+          ...PLAN_TYPES.flatMap((t) =>
+            row.plans[t].history.map((h) => new Date(h.at).getTime() || 0)
+          )
+        );
+        return { ...row, totalPurchases, anyActive, latestAt };
+      })
+      .filter((row) => row.totalPurchases > 0 || row.plans.reclub_unlimited.expiresAt || row.plans.off_peak.expiresAt)
+      .sort((a, b) => {
+        if (a.anyActive !== b.anyActive) return a.anyActive ? -1 : 1;
+        return (b.latestAt || 0) - (a.latestAt || 0);
+      });
+
+    res.json({ holders, total: holders.length });
+  } catch (error) {
+    console.error('list monthly pass holders:', error);
     res.status(500).json({ message: '服務器錯誤' });
   }
 });

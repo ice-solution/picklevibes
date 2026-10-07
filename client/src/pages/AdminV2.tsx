@@ -35,6 +35,7 @@ import AccountingManagement from '../components/Admin/AccountingManagement';
 import ApplicationFormManagement from '../components/Admin/ApplicationFormManagement';
 import PaymentLinkManagement from '../components/Admin/PaymentLinkManagement';
 import MonthlyPassPlanManagement from '../components/Admin/MonthlyPassPlanManagement';
+import MonthlyPassHolders from '../components/Admin/MonthlyPassHolders';
 import EdmSend from '../components/Admin/EdmSend';
 import TenantStaffManagement from '../components/Admin/TenantStaffManagement';
 import FoodOrderManagement from '../components/Admin/FoodOrderManagement';
@@ -102,6 +103,7 @@ const AdminV2: React.FC = () => {
     { id: 'redeem', name: '兌換碼管理', icon: TicketIcon, element: <RedeemCodeManagement /> },
     { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
     { id: 'monthly-pass-plans', name: '月卡方案', icon: TicketIcon, element: <MonthlyPassPlanManagement /> },
+    { id: 'monthly-pass-holders', name: '月卡持卡人', icon: TicketIcon, element: <MonthlyPassHolders /> },
     { id: 'payment-links', name: '收款連結', icon: LinkIcon, element: <PaymentLinkManagement /> },
     { id: 'food', name: '訂餐系統', icon: CakeIcon, element: <FoodOrderManagement /> },
     { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement /> },

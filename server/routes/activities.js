@@ -190,19 +190,53 @@ async function getActivityVenueBookingIdList(activityId, previousTitle) {
     .map((row) => row._id);
 }
 
-/** 店鋪場地活動：要檢查的場地清單（包場=該店全部；單一場地=一場） */
+/** 由 body／activity 解析選定場地 ID 清單（相容舊單一 venueHoldCourtId） */
+function resolveVenueHoldCourtIdList(source = {}) {
+  const ids = [];
+  const pushId = (raw) => {
+    if (raw == null || raw === '') return;
+    const s = typeof raw === 'object' && raw._id != null ? String(raw._id) : String(raw).trim();
+    if (s && mongoose.Types.ObjectId.isValid(s) && !ids.includes(s)) ids.push(s);
+  };
+
+  if (Array.isArray(source.venueHoldCourtIds)) {
+    source.venueHoldCourtIds.forEach(pushId);
+  } else if (typeof source.venueHoldCourtIds === 'string' && source.venueHoldCourtIds.trim()) {
+    try {
+      const parsed = JSON.parse(source.venueHoldCourtIds);
+      if (Array.isArray(parsed)) parsed.forEach(pushId);
+      else pushId(source.venueHoldCourtIds);
+    } catch {
+      pushId(source.venueHoldCourtIds);
+    }
+  }
+
+  Object.keys(source)
+    .filter((key) => /^venueHoldCourtIds\[\d+\]$/.test(key))
+    .sort()
+    .forEach((key) => pushId(source[key]));
+
+  pushId(source.venueHoldCourtId);
+  return ids;
+}
+
+function toObjectIds(idStrings) {
+  return idStrings.map((id) => new mongoose.Types.ObjectId(id));
+}
+
+/** 店鋪場地活動：要檢查的場地清單（包場=該店全部；選定場地=可多場） */
 async function getActivityTargetCourts(activity) {
   const storeFilter = activity.store ? { store: activity.store } : {};
   const mode = activity.venueHoldMode || 'full_venue';
   if (mode === 'single_court') {
-    if (!activity.venueHoldCourtId) return [];
-    const c = await Court.findOne({
-      _id: activity.venueHoldCourtId,
+    const idList = resolveVenueHoldCourtIdList(activity);
+    if (!idList.length) return [];
+    return Court.find({
+      _id: { $in: idList },
       isActive: true,
       type: { $in: ['competition', 'training', 'solo'] },
       ...storeFilter,
     });
-    return c ? [c] : [];
   }
   return Court.find({
     isActive: true,
@@ -218,7 +252,7 @@ async function findFixedVenueConflicts(activityLike, { excludeBookingIds = [] } 
   const targetCourts = await getActivityTargetCourts(activityLike);
   if (!targetCourts.length) {
     return {
-      error: '找不到可用場地，請確認已選擇有效場地（單一場地模式須選場）',
+      error: '找不到可用場地，請確認已選擇有效場地（選定場地模式須至少選一場）',
       conflicts: [],
     };
   }
@@ -932,7 +966,12 @@ router.post('/:id/duplicate', [auth, adminAuth], async (req, res) => {
       coaches: source.coaches ? [...source.coaches] : [],
       isActive: source.isActive,
       venueHoldMode: source.venueHoldMode || 'full_venue',
-      venueHoldCourtId: source.venueHoldCourtId || null
+      venueHoldCourtId: source.venueHoldCourtId || null,
+      venueHoldCourtIds: Array.isArray(source.venueHoldCourtIds)
+        ? [...source.venueHoldCourtIds]
+        : source.venueHoldCourtId
+          ? [source.venueHoldCourtId]
+          : []
     };
     const activity = new Activity(doc);
     await activity.save();
@@ -1035,10 +1074,9 @@ router.post('/', [
 
     const venueHoldMode =
       req.body.venueHoldMode === 'single_court' ? 'single_court' : 'full_venue';
-    let venueHoldCourtId = null;
-    if (req.body.venueHoldCourtId && String(req.body.venueHoldCourtId).trim() !== '') {
-      venueHoldCourtId = new mongoose.Types.ObjectId(String(req.body.venueHoldCourtId));
-    }
+    const venueHoldCourtIdStrings = resolveVenueHoldCourtIdList(req.body);
+    const venueHoldCourtIds = toObjectIds(venueHoldCourtIdStrings);
+    const venueHoldCourtId = venueHoldCourtIds[0] || null;
 
     const resolvedStoreId = await resolveActivityStoreId({
       storeId: req.body.storeId || req.body.store,
@@ -1051,8 +1089,8 @@ router.post('/', [
 
     // 店鋪管理地址：只做衝突檢查，不 hold 場；有衝突需 admin confirm
     if (storeVenue) {
-      if (venueHoldMode === 'single_court' && !venueHoldCourtId) {
-        return res.status(400).json({ message: '請選擇要檢查的場地' });
+      if (venueHoldMode === 'single_court' && !venueHoldCourtIds.length) {
+        return res.status(400).json({ message: '請至少選擇一個要檢查的場地' });
       }
       const { conflicts, error } = await findFixedVenueConflicts({
         startDate: start,
@@ -1061,6 +1099,7 @@ router.post('/', [
         store: resolvedStoreId,
         venueHoldMode,
         venueHoldCourtId,
+        venueHoldCourtIds,
       });
       if (error) {
         return res.status(400).json({ message: error });
@@ -1093,6 +1132,8 @@ router.post('/', [
       venueHoldMode: storeVenue ? venueHoldMode : 'full_venue',
       venueHoldCourtId:
         storeVenue && venueHoldMode === 'single_court' ? venueHoldCourtId : null,
+      venueHoldCourtIds:
+        storeVenue && venueHoldMode === 'single_court' ? venueHoldCourtIds : [],
     });
 
     await activity.save();
@@ -1769,12 +1810,24 @@ router.put('/:id', [
       }
     });
 
-    if (updates.venueHoldCourtId !== undefined) {
+    const bodyHasVenueHoldCourts =
+      updates.venueHoldCourtId !== undefined ||
+      updates.venueHoldCourtIds !== undefined ||
+      Object.keys(req.body).some((key) => /^venueHoldCourtIds\[\d+\]$/.test(key));
+
+    if (bodyHasVenueHoldCourts) {
+      const courtIdStrings = resolveVenueHoldCourtIdList(req.body);
+      updates.venueHoldCourtIds = toObjectIds(courtIdStrings);
+      updates.venueHoldCourtId = updates.venueHoldCourtIds[0] || null;
+    } else if (updates.venueHoldCourtId !== undefined) {
       const raw = updates.venueHoldCourtId;
       updates.venueHoldCourtId =
         raw && String(raw).trim() !== ''
           ? new mongoose.Types.ObjectId(String(raw))
           : null;
+      updates.venueHoldCourtIds = updates.venueHoldCourtId
+        ? [updates.venueHoldCourtId]
+        : [];
     }
     if (updates.venueHoldMode !== undefined) {
       if (!['full_venue', 'single_court'].includes(updates.venueHoldMode)) {
@@ -1801,10 +1854,13 @@ router.put('/:id', [
       updates.venueHoldMode !== undefined
         ? updates.venueHoldMode
         : activity.venueHoldMode || 'full_venue';
+    const effectiveVenueHoldCourtIds = bodyHasVenueHoldCourts
+      ? updates.venueHoldCourtIds
+      : resolveVenueHoldCourtIdList(activity).map(
+          (id) => new mongoose.Types.ObjectId(id)
+        );
     const effectiveVenueHoldCourtId =
-      updates.venueHoldCourtId !== undefined
-        ? updates.venueHoldCourtId
-        : activity.venueHoldCourtId;
+      effectiveVenueHoldCourtIds[0] || null;
 
     const bodyStoreRaw = req.body.storeId || req.body.store;
     const resolvedStoreForCheck =
@@ -1829,10 +1885,14 @@ router.put('/:id', [
       tMs(effectiveStart) !== tMs(activity.startDate) ||
       tMs(effectiveEnd) !== tMs(activity.endDate);
     const venueScopeChanged =
-      updates.venueHoldMode !== undefined || updates.venueHoldCourtId !== undefined;
+      updates.venueHoldMode !== undefined || bodyHasVenueHoldCourts;
 
-    if (nextIsStoreVenue && effectiveVenueHoldMode === 'single_court' && !effectiveVenueHoldCourtId) {
-      return res.status(400).json({ message: '請選擇要檢查的場地' });
+    if (
+      nextIsStoreVenue &&
+      effectiveVenueHoldMode === 'single_court' &&
+      !effectiveVenueHoldCourtIds.length
+    ) {
+      return res.status(400).json({ message: '請至少選擇一個要檢查的場地' });
     }
 
     // 店鋪管理地址：只檢查衝突，不 hold／不取消既有佔場
@@ -1852,6 +1912,7 @@ router.put('/:id', [
           store: resolvedStoreForCheck,
           venueHoldMode: effectiveVenueHoldMode,
           venueHoldCourtId: effectiveVenueHoldCourtId,
+          venueHoldCourtIds: effectiveVenueHoldCourtIds,
         },
         { excludeBookingIds: excludeIds }
       );
@@ -1875,10 +1936,12 @@ router.put('/:id', [
 
     if (activity.venueHoldMode === 'full_venue') {
       activity.venueHoldCourtId = null;
+      activity.venueHoldCourtIds = [];
     }
     if (!nextIsStoreVenue) {
       activity.venueHoldMode = 'full_venue';
       activity.venueHoldCourtId = null;
+      activity.venueHoldCourtIds = [];
     }
 
     if (bodyStoreRaw !== undefined || updates.location !== undefined) {
