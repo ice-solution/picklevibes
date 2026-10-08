@@ -495,22 +495,6 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.pricingTitle')}</h3>
             
-            {/* VIP折扣提示框 */}
-            {!hasBookingVipDiscount(user) && (
-              <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-400 rounded-lg shadow-md">
-                <div className="flex items-center justify-center gap-2 mb-2">
-                  <span className="text-2xl animate-bounce">🎉</span>
-                  <span className="text-lg font-bold text-red-600">
-                    {t('bookingPage.courtSelector.vipBanner')}
-                  </span>
-                  <span className="text-2xl animate-bounce">🎉</span>
-                </div>
-                <p className="text-center text-sm text-gray-600">
-                  {t('bookingPage.courtSelector.vipBannerSub')}
-                </p>
-              </div>
-            )}
-            
             <div className="space-y-3">
               <div className="flex justify-between">
                 <span className="text-gray-600">{t('bookingPage.bookingSummary.courtFee')}</span>

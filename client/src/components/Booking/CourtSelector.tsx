@@ -1,5 +1,5 @@
 import { useAuth } from '../../contexts/AuthContext';
-import { getBookingDiscountRate, hasBookingVipDiscount } from '../../utils/memberBenefits';
+import { applyBookingVipRateOnly } from '../../utils/memberBenefits';
 import React from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -17,10 +17,11 @@ interface CourtSelectorProps {
 
 const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }) => {
   const { user } = useAuth();
-  const memberRate = hasBookingVipDiscount(user) ? getBookingDiscountRate(user) : 0.8;
-
   const { courts, loading } = useBooking();
   const { t } = useTranslation();
+
+  /** 依用戶會籍顯示單價；未登入／無折扣則為牌價 */
+  const displayPrice = (listPrice: number) => applyBookingVipRateOnly(listPrice, user);
 
   const getCourtTypeText = (type: string) => {
     switch (type) {
@@ -73,18 +74,6 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
         {t('bookingPage.courtSelector.subtitle')}
       </p>
 
-      {/* VIP 提示：desktop 完整；mobile 一行精簡 */}
-      <div className="mb-4 sm:mb-6 bg-gradient-to-r from-red-500 via-pink-500 to-red-500 text-white px-4 sm:px-6 py-2.5 sm:py-4 rounded-xl shadow-lg">
-        <div className="flex items-center justify-center gap-2 sm:gap-3">
-          <span className="hidden sm:inline text-2xl">🎉</span>
-          <span className="text-sm sm:text-xl font-bold">{t('bookingPage.courtSelector.vipBanner')}</span>
-          <span className="hidden sm:inline text-2xl">🎉</span>
-        </div>
-        <p className="hidden sm:block text-center text-sm mt-2 text-red-100">
-          {t('bookingPage.courtSelector.vipBannerSub')}
-        </p>
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-6">
         {courts
           .filter(court => court.type !== 'full_venue')
@@ -135,12 +124,12 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                 <h3 className="text-base sm:text-xl font-bold text-gray-900">
                   {court.name}
                 </h3>
-                {/* mobile：只顯示由某價起 */}
+                {/* mobile：由某價起（依會籍） */}
                 {fromPrice != null && (
                   <div className="sm:hidden text-right shrink-0">
                     <div className="text-xs text-gray-500">由</div>
                     <div className="text-sm font-bold text-primary-600">
-                      {fromPrice} {t('common.currency')}
+                      {displayPrice(fromPrice)} {t('common.currency')}
                     </div>
                   </div>
                 )}
@@ -179,56 +168,34 @@ const CourtSelector: React.FC<CourtSelectorProps> = ({ onSelect, selectedCourt }
                 </div>
               )}
 
-              {/* VIP 小框：僅 desktop */}
-              <div className="hidden sm:block mb-4 p-3 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-400 rounded-lg shadow-md">
-                <div className="flex items-center justify-center gap-2">
-                  <span className="text-xl">🎉</span>
-                  <span className="text-base font-bold text-red-600">
-                    {t('bookingPage.courtSelector.vipBanner')}
-                  </span>
-                  <span className="text-xl">🎉</span>
-                </div>
-              </div>
-
-              {/* 完整價表：僅 desktop */}
+              {/* 完整價表：僅 desktop；只顯示用戶會籍對應價錢 */}
               <div className="hidden sm:block space-y-2">
                 {court.pricing.timeSlots && court.pricing.timeSlots.length > 0 ? (
                   court.pricing.timeSlots.map((slot: any, idx: number) => (
                     <div key={idx} className="flex items-center justify-between">
                       <span className="text-sm text-gray-500">{slot.name}</span>
-                      <div className="flex flex-col items-end">
-                        <span className="text-sm font-bold text-primary-600">
-                          {t('common.perHourPoints', { n: slot.price })}
-                        </span>
-                        <span className="text-xs text-red-600 font-semibold">
-                          會員: {t('common.perHourPoints', { n: Math.round(slot.price * memberRate) })}
-                        </span>
-                      </div>
+                      <span className="text-sm font-bold text-primary-600">
+                        {t('common.perHourPoints', { n: displayPrice(slot.price) })}
+                      </span>
                     </div>
                   ))
                 ) : (
                   <>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-500">{t('bookingPage.courtSelector.offPeak')}</span>
-                      <div className="flex flex-col items-end">
-                        <span className="text-sm font-bold text-primary-600">
-                          {t('common.perHourPoints', { n: court.pricing.offPeak })}
-                        </span>
-                        <span className="text-xs text-red-600 font-semibold">
-                          會員: {t('common.perHourPoints', { n: Math.round(court.pricing.offPeak * memberRate) })}
-                        </span>
-                      </div>
+                      <span className="text-sm font-bold text-primary-600">
+                        {t('common.perHourPoints', {
+                          n: displayPrice(court.pricing.offPeak),
+                        })}
+                      </span>
                     </div>
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-gray-500">{t('bookingPage.courtSelector.peak')}</span>
-                      <div className="flex flex-col items-end">
-                        <span className="text-sm font-bold text-primary-600">
-                          {t('common.perHourPoints', { n: court.pricing.peakHour })}
-                        </span>
-                        <span className="text-xs text-red-600 font-semibold">
-                          會員: {t('common.perHourPoints', { n: Math.round(court.pricing.peakHour * memberRate) })}
-                        </span>
-                      </div>
+                      <span className="text-sm font-bold text-primary-600">
+                        {t('common.perHourPoints', {
+                          n: displayPrice(court.pricing.peakHour),
+                        })}
+                      </span>
                     </div>
                   </>
                 )}

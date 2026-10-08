@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useBooking } from '../contexts/BookingContext';
-import { resolveMaxAdvanceDays } from '../utils/memberBenefits';
+import { applyBookingVipDiscount, resolveMaxAdvanceDays } from '../utils/memberBenefits';
 import { useAuth } from '../contexts/AuthContext';
 import api from '../services/api';
 import StoreSelector from '../components/Booking/StoreSelector';
@@ -496,7 +496,25 @@ const Booking: React.FC = () => {
                       <div className="flex justify-between items-baseline">
                         <span className="text-sm text-gray-500">{t('bookingPage.sidebar.total')}</span>
                         <span className="font-bold text-lg text-primary-600">
-                          {availability.pricing.totalPrice} {t('common.currency')}
+                          {(() => {
+                            const list = Number(availability.pricing.totalPrice) || 0;
+                            const mins =
+                              selectedTimeSlot?.start && selectedTimeSlot?.end
+                                ? (() => {
+                                    const toMin = (t: string) => {
+                                      if (t === '24:00') return 24 * 60;
+                                      const [h, m] = t.split(':').map(Number);
+                                      return (h || 0) * 60 + (m || 0);
+                                    };
+                                    let end = toMin(selectedTimeSlot.end);
+                                    const start = toMin(selectedTimeSlot.start);
+                                    if (end <= start) end += 24 * 60;
+                                    return Math.max(60, end - start);
+                                  })()
+                                : 60;
+                            return applyBookingVipDiscount(list, user, new Date(), mins);
+                          })()}{' '}
+                          {t('common.currency')}
                         </span>
                       </div>
                     </div>

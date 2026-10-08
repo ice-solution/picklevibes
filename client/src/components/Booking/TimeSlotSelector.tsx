@@ -2,6 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useBooking } from '../../contexts/BookingContext';
+import { useAuth } from '../../contexts/AuthContext';
+import { applyBookingVipDiscount } from '../../utils/memberBenefits';
 import { ClockIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 
 interface TimeSlotSelectorProps {
@@ -20,12 +22,20 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   onAvailabilityChange
 }) => {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { checkAvailability, checkBatchAvailability } = useBooking();
   const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number; slotName?: string }>>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(60); // 默認1小時
   const [currentTime, setCurrentTime] = useState(new Date()); // 添加當前時間狀態
   const [forceUpdate, setForceUpdate] = useState(0); // 強制更新計數器
+
+  /** 時段格顯示：依會籍折算（VIP／銀金白金等），未登入／無折扣則正價 */
+  const displaySlotPrice = useCallback(
+    (listPrice: number) =>
+      applyBookingVipDiscount(listPrice, user, new Date(), selectedDuration),
+    [user, selectedDuration]
+  );
 
   const durations = [
     { value: 60, label: t('bookingPage.timeSlotSelector.durations.1h') },
@@ -336,7 +346,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               
               {slot.available && slot.price > 0 && (
                 <div className="text-xs sm:text-xs font-bold sm:font-semibold mt-1">
-                  {slot.price} {t('common.currency')}
+                  {displaySlotPrice(slot.price)} {t('common.currency')}
                   <span className="hidden sm:inline">{slot.slotName === '貓頭鷹時間' ? ' 🦉' : ''}</span>
                 </div>
               )}
@@ -380,7 +390,7 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
               )?.price;
               return p != null && p > 0 ? (
                 <span className="shrink-0 font-bold text-primary-700">
-                  {p} {t('common.currency')}
+                  {displaySlotPrice(p)} {t('common.currency')}
                 </span>
               ) : null;
             })()}
