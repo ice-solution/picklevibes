@@ -42,6 +42,9 @@ const {
   removePendingRedeem,
   computePendingRedeemPreview,
 } = require('../services/bookingPendingRedeemService');
+const {
+  refundPointsOnBookingCancel,
+} = require('../services/bookingCancelRefundService');
 
 const router = express.Router();
 
@@ -1499,78 +1502,29 @@ router.put('/:id/cancel', [
       reason
     };
 
-    // 更新預約狀態（先寫入主預約，退款邏輯僅針對 URL 上這一筆）
+    // 更新預約狀態；退款以整組實際已扣積分為準（包場成組只退一次）
     booking.status = 'cancelled';
     booking.cancellation = cancellation;
 
-    // 檢查是否為包場預約，如果是包場則不自動退款
-    const isFullVenueBooking =
-      booking.venueBundleKind === 'full_venue' ||
-      booking.specialRequests?.includes('包場預約') ||
-      booking.specialRequests?.includes('🏢 包場預約');
-
-    // 實際扣過幾多積分（優先 payment；pricing.pointsDeducted=0 唔好用 ?? 蓋過）
-    const paymentPoints = Number(booking.payment?.pointsDeducted);
-    const pricingPoints = Number(booking.pricing?.pointsDeducted);
-    const pointsToRefund =
-      Number.isFinite(paymentPoints) && paymentPoints > 0
-        ? paymentPoints
-        : Number.isFinite(pricingPoints) && pricingPoints > 0
-          ? pricingPoints
-          : 0;
-
-    // 只有實際冇扣分先跳過；bypassRestrictions / admin_waived 本身唔再阻擋
-    // （後台 bypass 建單後仍可能經結算扣分，取消時必須退）
-    const skipAutoPointsRefund = pointsToRefund <= 0;
-
-    // 如實際有扣款，則退回積分（包場預約除外）
+    let refundResult = { refunded: 0, skipped: true };
     try {
-      if (skipAutoPointsRefund) {
+      // 確保 bundle 內主預約狀態與 cancellation 一致再計退款
+      const refundBundle = bundleBookings.map((b) =>
+        String(b._id) === String(booking._id) ? booking : b
+      );
+      refundResult = await refundPointsOnBookingCancel(refundBundle, {
+        courtName: booking.court?.name,
+      });
+      if (refundResult.skipped && refundResult.reason === 'no_points') {
         console.log(
           `📌 預約 ${booking._id} 無實際扣分可退，取消時跳過積分退回`
         );
-      } else {
-      const notRefundedYet = booking.payment?.status !== 'refunded';
-      
-      if (notRefundedYet && pointsToRefund > 0) {
-        if (isFullVenueBooking) {
-          // 包場預約不自動退款，需要管理員手動處理
-          console.log(`🏢 包場預約取消 - 不自動退款，需要管理員手動處理: ${booking._id}`);
-          booking.payment.status = 'pending_refund'; // 標記為待退款
-          booking.payment.requiresManualRefund = true; // 需要手動退款
-        } else {
-          // 普通預約自動退款
-          let userBalance = await UserBalance.findOne({ user: booking.user });
-          if (!userBalance) {
-            userBalance = new UserBalance({ user: booking.user, balance: 0, totalRecharged: 0, totalSpent: 0, transactions: [] });
-          }
-          await userBalance.refund(pointsToRefund, `預約取消退款 - ${booking.court?.name || ''} ${booking.startTime}-${booking.endTime}`, booking._id);
-          booking.payment.status = 'refunded';
-          booking.payment.refundedAt = new Date();
-
-          // 沖銷結算／手動扣款產生的 Recharge，避免會計對帳不一致
-          try {
-            const Recharge = require('../models/Recharge');
-            const refundedAt = booking.payment.refundedAt;
-            await Recharge.updateMany(
-              {
-                booking: booking._id,
-                pointsDeducted: true,
-                status: { $ne: 'cancelled' },
-              },
-              {
-                $set: {
-                  status: 'cancelled',
-                  'payment.status': 'refunded',
-                  'payment.refundedAt': refundedAt,
-                },
-              }
-            );
-          } catch (rechargeErr) {
-            console.error('沖銷結算扣款記錄失敗（積分已退）:', rechargeErr);
-          }
-        }
-      }
+      } else if (!refundResult.skipped) {
+        console.log(
+          `✅ 取消退款 ${refundResult.refunded} 積分（booking ${booking._id}${
+            refundResult.fullVenue ? '，包場成組' : ''
+          }）`
+        );
       }
     } catch (refundError) {
       console.error('退款處理失敗（不影響取消）:', refundError);
@@ -1579,17 +1533,21 @@ router.put('/:id/cancel', [
     // 使用關閉驗證的保存方式，避免舊資料因缺欄位而無法更新
     await booking.save({ validateBeforeSave: false });
 
-    // 包場／活動佔用：同組其他場地一併取消（不重複退款）
+    // 包場／活動佔用：同組其他場地一併取消；若已退款則同步 payment 狀態
     const otherIds = bundledIds.filter((oid) => !oid.equals(booking._id));
     if (otherIds.length > 0) {
+      const siblingSet = {
+        status: 'cancelled',
+        cancellation,
+      };
+      if (!refundResult.skipped && refundResult.refundedAt) {
+        siblingSet['payment.status'] = 'refunded';
+        siblingSet['payment.refundedAt'] = refundResult.refundedAt;
+        siblingSet['payment.requiresManualRefund'] = false;
+      }
       await Booking.updateMany(
         { _id: { $in: otherIds } },
-        {
-          $set: {
-            status: 'cancelled',
-            cancellation
-          }
-        }
+        { $set: siblingSet }
       );
     }
 

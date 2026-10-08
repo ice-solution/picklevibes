@@ -437,6 +437,9 @@ class FullVenueService {
   async cancelFullVenueBooking(mainBookingId) {
     try {
       console.log('🗑️ 開始取消包場預約...');
+      const {
+        refundPointsOnBookingCancel,
+      } = require('./bookingCancelRefundService');
 
       const mainBooking = await Booking.findById(mainBookingId);
       if (!mainBooking) {
@@ -449,41 +452,74 @@ class FullVenueService {
         reason: '包場預約取消'
       };
 
+      let bundle = [];
       if (mainBooking.venueBundleId) {
-        const cancelResult = await Booking.updateMany(
-          {
-            venueBundleId: mainBooking.venueBundleId,
-            status: { $in: ['pending', 'confirmed'] }
-          },
-          { $set: { status: 'cancelled', cancellation } }
-        );
-        console.log(`✅ 包場預約取消成功: ${cancelResult.modifiedCount} 個場地`);
-        return {
-          success: true,
-          cancelledCount: cancelResult.modifiedCount,
-          message: `包場預約取消成功，共取消 ${cancelResult.modifiedCount} 個預約`
-        };
-      }
-
-      if (!mainBooking.isFullVenue) {
+        bundle = await Booking.find({
+          venueBundleId: mainBooking.venueBundleId,
+          status: { $in: ['pending', 'confirmed'] },
+        });
+      } else if (mainBooking.isFullVenue) {
+        const siblingIds = Array.isArray(mainBooking.fullVenueBookings)
+          ? mainBooking.fullVenueBookings
+          : [];
+        bundle = await Booking.find({
+          _id: { $in: [mainBooking._id, ...siblingIds] },
+          status: { $in: ['pending', 'confirmed'] },
+        });
+      } else {
         throw new Error('找不到包場預約或不是包場預約');
       }
 
+      if (!bundle.length) {
+        return {
+          success: true,
+          cancelledCount: 0,
+          refundedPoints: 0,
+          message: '沒有可取消的包場預約',
+        };
+      }
+
+      let refundedPoints = 0;
+      try {
+        const refundResult = await refundPointsOnBookingCancel(bundle);
+        refundedPoints = refundResult.refunded || 0;
+      } catch (refundError) {
+        console.error('包場取消退款失敗（仍會取消預約）:', refundError);
+      }
+
+      const ids = bundle.map((b) => b._id);
+      const paymentPatch =
+        refundedPoints > 0
+          ? {
+              'payment.status': 'refunded',
+              'payment.refundedAt': new Date(),
+              'payment.requiresManualRefund': false,
+            }
+          : {};
+
       const cancelResult = await Booking.updateMany(
-        { _id: { $in: mainBooking.fullVenueBookings } },
-        { $set: { status: 'cancelled', cancellation } }
+        { _id: { $in: ids } },
+        {
+          $set: {
+            status: 'cancelled',
+            cancellation,
+            ...paymentPatch,
+          },
+        }
       );
 
-      mainBooking.status = 'cancelled';
-      mainBooking.cancellation = cancellation;
-      await mainBooking.save();
-
-      console.log(`✅ 包場預約取消成功: ${cancelResult.modifiedCount} 個場地`);
+      console.log(
+        `✅ 包場預約取消成功: ${cancelResult.modifiedCount} 個場地` +
+          (refundedPoints > 0 ? `，已退 ${refundedPoints} 積分` : '')
+      );
 
       return {
         success: true,
-        cancelledCount: cancelResult.modifiedCount + 1,
-        message: `包場預約取消成功，共取消 ${cancelResult.modifiedCount + 1} 個預約`
+        cancelledCount: cancelResult.modifiedCount,
+        refundedPoints,
+        message:
+          `包場預約取消成功，共取消 ${cancelResult.modifiedCount} 個預約` +
+          (refundedPoints > 0 ? `，已退回 ${refundedPoints} 積分` : ''),
       };
     } catch (error) {
       console.error('❌ 取消包場預約失敗:', error);

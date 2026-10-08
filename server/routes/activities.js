@@ -139,20 +139,30 @@ function formatHHMMHK(dateObj) {
 
 /**
  * 與一般場地預約 / Booking.checkTimeConflict 一致的 date／時間欄位（香港時間）
+ * duration 以當日 startTime～endTime 計算（跨夜加一日），唔好用活動系列 start～end 絕對差。
  */
 function computeActivityVenueBookingFields(activity) {
+  const {
+    sessionDurationMinutes,
+    bookingRangeUtcMs,
+  } = require('../utils/bookingDateTime');
+
   const startDate = new Date(activity.startDate);
   const endDate = new Date(activity.endDate);
-  const durationMs = endDate.getTime() - startDate.getTime();
-  const durationMinutes = Math.max(1, Math.round(durationMs / (1000 * 60)));
 
   const startYmd = getHKCalendarYMD(startDate);
-  const endYmd = getHKCalendarYMD(endDate);
   const bookingDate = hkYmdToBookingUtcMidnight(startYmd);
-  const calculatedEndDate = startYmd === endYmd ? bookingDate : hkYmdToBookingUtcMidnight(endYmd);
 
   const startTime = formatHHMMHK(startDate);
   const endTime = formatHHMMHK(endDate);
+
+  const durationMinutes =
+    sessionDurationMinutes(startTime, endTime, startYmd) ||
+    Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60)));
+
+  const { endMs } = bookingRangeUtcMs(startYmd, startTime, endTime);
+  const endCalendarYmd = getHKCalendarYMD(new Date(endMs - 1));
+  const calculatedEndDate = hkYmdToBookingUtcMidnight(endCalendarYmd || startYmd);
 
   return {
     bookingDate,

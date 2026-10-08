@@ -98,23 +98,105 @@ function normalizeHm(t) {
   return `${pad2(Number(a))}:${pad2(Number(b || 0))}`;
 }
 
-/** 預約在香港時間下的 [start, end) 絕對時間 */
+const {
+  bookingRangeUtcMs: bookingRangeUtcMsUtil,
+  getHKCalendarYMD: getHkYmdUtil
+} = require('../utils/bookingDateTime');
+
+/** 預約在香港時間下的 [start, end) 絕對時間（以 start/endTime，唔靠可能錯誤嘅 duration） */
 function bookingIntervalMs(booking) {
-  const startYmd = booking.date.toLocaleString('en-CA', {
-    timeZone: HK_TZ,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit'
-  });
+  const startYmd =
+    booking.date instanceof Date
+      ? getHkYmdUtil(booking.date)
+      : String(booking.date).slice(0, 10);
   const st = normalizeHm(booking.startTime);
+  const et = normalizeHm(booking.endTime);
+  if (booking.startTime && booking.endTime) {
+    const { startMs, endMs } = bookingRangeUtcMsUtil(startYmd, st, et);
+    return { bStart: new Date(startMs), bEnd: new Date(endMs) };
+  }
   const bStart = new Date(`${startYmd}T${st}:00+08:00`);
-  const durMin = Math.max(1, Number(booking.duration) || 60);
+  const durMin = Math.min(24 * 60, Math.max(1, Number(booking.duration) || 60));
   const bEnd = new Date(bStart.getTime() + durMin * 60 * 1000);
   return { bStart, bEnd };
 }
 
 function intervalsOverlap(a0, a1, b0, b1) {
   return a1 > b0 && a0 < b1;
+}
+
+/** Aggregation：$addFields 以 startTime/endTime 計當節分鐘（跨夜 +1440） */
+function sessionMinutesAddFieldsStage() {
+  const startParts = { $split: [{ $ifNull: ['$startTime', '00:00'] }, ':'] };
+  const endParts = { $split: [{ $ifNull: ['$endTime', '00:00'] }, ':'] };
+  return {
+    $addFields: {
+      _startMin: {
+        $add: [
+          {
+            $multiply: [
+              { $toInt: { $ifNull: [{ $arrayElemAt: [startParts, 0] }, '0'] } },
+              60
+            ]
+          },
+          { $toInt: { $ifNull: [{ $arrayElemAt: [startParts, 1] }, '0'] } }
+        ]
+      },
+      _endMinRaw: {
+        $cond: [
+          { $eq: ['$endTime', '24:00'] },
+          1440,
+          {
+            $add: [
+              {
+                $multiply: [
+                  { $toInt: { $ifNull: [{ $arrayElemAt: [endParts, 0] }, '0'] } },
+                  60
+                ]
+              },
+              { $toInt: { $ifNull: [{ $arrayElemAt: [endParts, 1] }, '0'] } }
+            ]
+          }
+        ]
+      }
+    }
+  };
+}
+
+function sessionMinutesProjectStage() {
+  return {
+    $addFields: {
+      sessionMinutes: {
+        $let: {
+          vars: {
+            fromTimes: {
+              $cond: [
+                { $lte: ['$_endMinRaw', '$_startMin'] },
+                { $subtract: [{ $add: ['$_endMinRaw', 1440] }, '$_startMin'] },
+                { $subtract: ['$_endMinRaw', '$_startMin'] }
+              ]
+            },
+            fromDuration: {
+              $min: [24 * 60, { $max: [1, { $ifNull: ['$duration', 60] }] }]
+            }
+          },
+          in: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: [{ $ifNull: ['$startTime', ''] }, ''] },
+                  { $ne: [{ $ifNull: ['$endTime', ''] }, ''] },
+                  { $gt: ['$$fromTimes', 0] }
+                ]
+              },
+              { $min: [24 * 60, '$$fromTimes'] },
+              '$$fromDuration'
+            ]
+          }
+        }
+      }
+    }
+  };
 }
 
 async function rentalHoursForHkDay(ymd, storeId = null) {
@@ -129,7 +211,9 @@ async function rentalHoursForHkDay(ymd, storeId = null) {
   }
   const agg = await Booking.aggregate([
     { $match: match },
-    { $group: { _id: null, minutes: { $sum: '$duration' } } }
+    sessionMinutesAddFieldsStage(),
+    sessionMinutesProjectStage(),
+    { $group: { _id: null, minutes: { $sum: '$sessionMinutes' } } }
   ]);
   const minutes = agg[0]?.minutes || 0;
   return Math.round((minutes / 60) * 100) / 100;
@@ -940,10 +1024,12 @@ router.get('/dashboard-series', [auth, adminAuth], async (req, res) => {
     const [rentalAgg, rechargeAgg, spendAgg, activityAgg] = await Promise.all([
       Booking.aggregate([
         { $match: bookingMatch },
+        sessionMinutesAddFieldsStage(),
+        sessionMinutesProjectStage(),
         {
           $group: {
             _id: { $dateToString: { date: '$date', format: '%Y-%m-%d', timezone: HK_TZ } },
-            minutes: { $sum: '$duration' }
+            minutes: { $sum: '$sessionMinutes' }
           }
         },
         {

@@ -79,6 +79,22 @@ function bookingRangeUtcMs(ymdHk, startTime, endTime) {
   return { startMs, endMs };
 }
 
+/**
+ * 單節時長（分鐘）：以 startTime／endTime 牆鐘計算，跨夜自動加一日。
+ * 勿用活動／系列的 startDate～endDate 絕對差（會把數週恆常班算成過萬分鐘）。
+ */
+function sessionDurationMinutes(startTime, endTime, ymdHk = '2000-01-01') {
+  if (!startTime || !endTime) return null;
+  try {
+    const { startMs, endMs } = bookingRangeUtcMs(ymdHk, startTime, endTime);
+    const mins = Math.round((endMs - startMs) / (1000 * 60));
+    if (!Number.isFinite(mins) || mins <= 0) return null;
+    return mins;
+  } catch {
+    return null;
+  }
+}
+
 function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && aEnd > bStart;
 }
@@ -92,5 +108,6 @@ module.exports = {
   normalizeBookingDateInput,
   resolveHKYmd,
   bookingRangeUtcMs,
+  sessionDurationMinutes,
   rangesOverlap
 };
