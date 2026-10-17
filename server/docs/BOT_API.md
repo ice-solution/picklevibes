@@ -140,8 +140,10 @@ GET /api/bot/activities?store={可選店名或別名}&limit={1-30}
 一次查詢指定店鋪、日期、時段內**所有場地**嘅可否預約狀態。
 
 ```http
-GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endTime={結束}
+GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endTime={結束}&phone={WhatsApp電話}
 ```
+
+價錢跟網站：有 `phone` 且對到 VIP／會籍 → `finalCost`／`totalPrice` 已含 8 折同限時周年 −88×小時；搵唔到會員 → 正價，並回 `registerUrl`／`courtsUrl` 提示。
 
 ### Query
 
@@ -151,6 +153,7 @@ GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endT
 | `date` | ✅ | `YYYY-MM-DD` |
 | `startTime` | ✅ | `HH:MM`，例如 `18:00` |
 | `endTime` | ✅ | `HH:MM` 或 `24:00` |
+| `phone` | ❌ | WhatsApp 電話（建議必傳）；用來計會員最終價 |
 | `courtType` | ❌ | 篩選場地類型：`competition` / `training` / `solo` / `dink` / `full_venue` |
 
 ### 成功回應示例
@@ -173,11 +176,19 @@ GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endT
         "courtType": "competition",
         "available": true,
         "pricing": {
-          "basePrice": 200,
-          "totalPrice": 400,
+          "basePrice": 780,
+          "listPrice": 1560,
+          "finalCost": 1072,
+          "totalPrice": 1072,
+          "vipRatePrice": 1248,
+          "extraOff": 176,
+          "vipDiscount": 488,
+          "memberMatched": true,
+          "hasMemberDiscount": true,
+          "discountLabel": "VIP會員8折，周年減價",
           "duration": 120,
           "isPeakHour": true,
-          "slotName": "高峰時段"
+          "slotName": "繁忙時間"
         }
       }
     ],

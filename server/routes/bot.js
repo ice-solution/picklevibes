@@ -173,6 +173,7 @@ router.get(
     query('startTime').matches(timePattern).withMessage('請提供有效的 startTime'),
     query('endTime').matches(timePattern).withMessage('請提供有效的 endTime'),
     query('courtType').optional().isIn(['competition', 'training', 'solo', 'dink', 'full_venue']).withMessage('courtType 無效'),
+    query('phone').optional().trim(),
   ],
   async (req, res) => {
     try {
@@ -185,13 +186,14 @@ router.get(
         });
       }
 
-      const { store, date, startTime, endTime, courtType } = req.query;
+      const { store, date, startTime, endTime, courtType, phone } = req.query;
       const data = await searchAvailability({
         storeId: store,
         date,
         startTime,
         endTime,
         courtType,
+        phone,
       });
 
       res.json({ success: true, data });

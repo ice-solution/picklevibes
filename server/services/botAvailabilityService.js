@@ -1,6 +1,14 @@
 const Court = require('../models/Court');
 const Booking = require('../models/Booking');
 const Store = require('../models/Store');
+const { findUserByPhone } = require('./botUserService');
+const {
+  hasBookingVipDiscount,
+  applyBookingVipDiscount,
+  applyBookingVipRateOnly,
+  getVipBookingExtraFlatOff,
+  bookingVipDiscountLabel,
+} = require('../utils/memberBenefits');
 
 function calculateDuration(startTime, endTime) {
   const [startHour, startMin] = startTime.split(':').map(Number);
@@ -16,7 +24,56 @@ function calculateDuration(startTime, endTime) {
   return endTotalMin - startTotalMin;
 }
 
-async function checkCourtSlotAvailability(court, date, startTime, endTime) {
+function siteBaseUrl() {
+  const raw = String(
+    process.env.PUBLIC_SITE_URL || process.env.PICKLEVIBES_REGISTER_URL || ''
+  ).trim();
+  if (raw) return raw.replace(/\/$/, '').replace(/\/register$/i, '');
+  const client = String(process.env.CLIENT_URL || '').trim().replace(/\/$/, '');
+  if (client && !/localhost|127\.0\.0\.1/i.test(client)) return client;
+  return 'https://picklevibes.hk';
+}
+
+function buildPricingForUser(listTotal, durationMinutes, user) {
+  const listPrice = Math.round(Number(listTotal) || 0);
+  const memberMatched = Boolean(user);
+  const hasVip = hasBookingVipDiscount(user);
+
+  if (!memberMatched || !hasVip) {
+    return {
+      listPrice,
+      finalCost: listPrice,
+      /** 兼容舊 Bot／LLM：報價用最終應付 */
+      totalPrice: listPrice,
+      vipRatePrice: null,
+      extraOff: 0,
+      vipDiscount: 0,
+      memberMatched,
+      hasMemberDiscount: false,
+      membershipLevel: user?.membershipLevel || null,
+      discountLabel: memberMatched ? '無會員場租折扣（正價）' : null,
+    };
+  }
+
+  const vipRatePrice = applyBookingVipRateOnly(listPrice, user);
+  const extraOff = getVipBookingExtraFlatOff(user, new Date(), durationMinutes);
+  const finalCost = applyBookingVipDiscount(listPrice, user, new Date(), durationMinutes);
+
+  return {
+    listPrice,
+    finalCost,
+    totalPrice: finalCost,
+    vipRatePrice,
+    extraOff,
+    vipDiscount: Math.max(0, listPrice - finalCost),
+    memberMatched: true,
+    hasMemberDiscount: true,
+    membershipLevel: user.membershipLevel || null,
+    discountLabel: bookingVipDiscountLabel(user, durationMinutes),
+  };
+}
+
+async function checkCourtSlotAvailability(court, date, startTime, endTime, user = null) {
   if (!court.isAvailable()) {
     return {
       courtId: court._id,
@@ -54,11 +111,12 @@ async function checkCourtSlotAvailability(court, date, startTime, endTime) {
 
   const duration = calculateDuration(startTime, endTime);
   const basePrice = court.getPriceForTime(startTime, bookingDate);
-  const totalPrice = Math.round(basePrice * (duration / 60));
+  const listTotal = Math.round(basePrice * (duration / 60));
   const slotName = court.getTimeSlotName(startTime, bookingDate);
   const hour = parseInt(startTime.split(':')[0], 10);
   const isWeekend = bookingDate.getDay() === 0 || bookingDate.getDay() === 6;
   const isPeakHour = isWeekend || (hour >= 18 && hour < 23);
+  const memberPricing = buildPricingForUser(listTotal, duration, user);
 
   return {
     courtId: court._id,
@@ -68,18 +126,19 @@ async function checkCourtSlotAvailability(court, date, startTime, endTime) {
     available: true,
     pricing: {
       basePrice,
-      totalPrice,
       duration,
       isPeakHour,
       slotName,
+      ...memberPricing,
     },
   };
 }
 
 /**
- * 查詢指定店鋪、日期、時段內所有場地空缺
+ * 查詢指定店鋪、日期、時段內所有場地空缺。
+ * 可選 phone：對應 WhatsApp 會員後回傳同網站嘅 finalCost（VIP／周年減價）。
  */
-async function searchAvailability({ storeId, date, startTime, endTime, courtType }) {
+async function searchAvailability({ storeId, date, startTime, endTime, courtType, phone } = {}) {
   const store = await Store.findById(storeId).select('name slug isActive');
   if (!store) {
     const err = new Error('店鋪不存在');
@@ -101,12 +160,34 @@ async function searchAvailability({ storeId, date, startTime, endTime, courtType
     .populate('store', 'name slug')
     .sort({ number: 1 });
 
+  let user = null;
+  if (phone) {
+    user = await findUserByPhone(phone);
+  }
+
   const results = await Promise.all(
-    courts.map((court) => checkCourtSlotAvailability(court, date, startTime, endTime))
+    courts.map((court) => checkCourtSlotAvailability(court, date, startTime, endTime, user))
   );
 
   const availableCourts = results.filter((r) => r.available);
   const unavailableCourts = results.filter((r) => !r.available);
+
+  const base = siteBaseUrl();
+  const registerUrl = `${base}/register`;
+  const courtsUrl = `${base}/courts`;
+  const memberMatched = Boolean(user);
+  const hasMemberDiscount = hasBookingVipDiscount(user);
+
+  let pricingNote;
+  if (!phone) {
+    pricingNote = '未提供電話，以下為正價（牌價）。';
+  } else if (!memberMatched) {
+    pricingNote = `搵唔到呢個 WhatsApp 電話嘅會員帳戶，以下為正價。登記做會員可享場租 8 折：${registerUrl}。亦可上網站查價／訂場：${courtsUrl}`;
+  } else if (hasMemberDiscount) {
+    pricingNote = `已對應會員（${bookingVipDiscountLabel(user, calculateDuration(startTime, endTime))}）。finalCost／totalPrice 為實際應付積分，同網站一致。`;
+  } else {
+    pricingNote = `已對應會員，但目前無場租折扣，以下為正價。詳情可上網站：${courtsUrl}`;
+  }
 
   return {
     store: {
@@ -118,6 +199,23 @@ async function searchAvailability({ storeId, date, startTime, endTime, courtType
     startTime,
     endTime,
     duration: calculateDuration(startTime, endTime),
+    member: memberMatched
+      ? {
+          matched: true,
+          name: user.name,
+          membershipLevel: user.membershipLevel,
+          hasMemberDiscount,
+          discountLabel: hasMemberDiscount
+            ? bookingVipDiscountLabel(user, calculateDuration(startTime, endTime))
+            : null,
+        }
+      : {
+          matched: false,
+          phoneProvided: Boolean(phone),
+        },
+    pricingNote,
+    registerUrl,
+    courtsUrl,
     summary: {
       total: results.length,
       available: availableCourts.length,
@@ -132,4 +230,5 @@ module.exports = {
   searchAvailability,
   checkCourtSlotAvailability,
   calculateDuration,
+  buildPricingForUser,
 };
