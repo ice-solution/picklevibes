@@ -211,13 +211,18 @@ router.post(
   [
     body('phone').notEmpty().withMessage('請提供 phone'),
     body('court').isMongoId().withMessage('請提供有效的 court ID'),
-    body('date').isISO8601().withMessage('請提供有效的 date'),
+    body('date')
+      .matches(/^\d{4}-\d{2}-\d{2}$/)
+      .withMessage('請提供有效的 date（YYYY-MM-DD）'),
     body('startTime').matches(timePattern).withMessage('請提供有效的 startTime'),
     body('endTime').matches(timePattern).withMessage('請提供有效的 endTime'),
-    body('totalPlayers').isInt({ min: 1, max: 8 }).withMessage('totalPlayers 必須是 1-8'),
+    body('totalPlayers')
+      .optional({ nullable: true })
+      .isInt({ min: 1, max: 8 })
+      .withMessage('totalPlayers 必須是 1-8'),
     body('specialRequests').optional().trim().isLength({ max: 500 }),
     body('includeSoloCourt').optional().isBoolean(),
-    body('redeemCodeId').optional().isMongoId(),
+    body('redeemCodeId').optional({ nullable: true }).isMongoId(),
     body('source')
       .optional()
       .isIn(['web', 'admin', 'whatsapp_bot', 'bot', 'api', 'other'])
@@ -229,13 +234,15 @@ router.post(
       if (!errors.isEmpty()) {
         return res.status(400).json({
           success: false,
-          message: '輸入驗證失敗',
+          message: errors.array()[0]?.msg || '輸入驗證失敗',
+          code: 'VALIDATION_ERROR',
           errors: errors.array(),
         });
       }
 
       const data = await createBookingViaBot({
         ...req.body,
+        totalPlayers: req.body.totalPlayers != null ? Number(req.body.totalPlayers) : 1,
         source: req.body.source || 'whatsapp_bot',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
