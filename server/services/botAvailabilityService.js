@@ -9,6 +9,7 @@ const {
   getVipBookingExtraFlatOff,
   bookingVipDiscountLabel,
 } = require('../utils/memberBenefits');
+const { normalizeBookingDateYmd } = require('../utils/bookingDate');
 
 function calculateDuration(startTime, endTime) {
   const [startHour, startMin] = startTime.split(':').map(Number);
@@ -85,7 +86,8 @@ async function checkCourtSlotAvailability(court, date, startTime, endTime, user 
     };
   }
 
-  const bookingDate = new Date(date);
+  // 用香港正午避免 UTC 午夜令 getDay 錯日
+  const bookingDate = new Date(`${String(date).trim()}T12:00:00+08:00`);
   if (!court.isOpenAt(bookingDate, startTime, endTime)) {
     return {
       courtId: court._id,
@@ -151,6 +153,9 @@ async function searchAvailability({ storeId, date, startTime, endTime, courtType
     throw err;
   }
 
+  const dateNorm = normalizeBookingDateYmd(date);
+  const resolvedDate = dateNorm.date;
+
   const query = { store: storeId, isActive: true };
   if (courtType) {
     query.type = courtType;
@@ -166,7 +171,9 @@ async function searchAvailability({ storeId, date, startTime, endTime, courtType
   }
 
   const results = await Promise.all(
-    courts.map((court) => checkCourtSlotAvailability(court, date, startTime, endTime, user))
+    courts.map((court) =>
+      checkCourtSlotAvailability(court, resolvedDate, startTime, endTime, user)
+    )
   );
 
   const availableCourts = results.filter((r) => r.available);
@@ -188,6 +195,9 @@ async function searchAvailability({ storeId, date, startTime, endTime, courtType
   } else {
     pricingNote = `已對應會員，但目前無場租折扣，以下為正價。詳情可上網站：${courtsUrl}`;
   }
+  if (dateNorm.adjusted) {
+    pricingNote = `日期已由 ${dateNorm.original} 更正為 ${resolvedDate}（避免過去年份）。${pricingNote}`;
+  }
 
   return {
     store: {
@@ -195,7 +205,9 @@ async function searchAvailability({ storeId, date, startTime, endTime, courtType
       name: store.name,
       slug: store.slug,
     },
-    date,
+    date: resolvedDate,
+    dateOriginal: dateNorm.original,
+    dateAdjusted: dateNorm.adjusted,
     startTime,
     endTime,
     duration: calculateDuration(startTime, endTime),
