@@ -48,6 +48,12 @@ const paymentLinkSchema = new mongoose.Schema(
       default: false,
       index: true,
     },
+    /** 活動日期 YYYY-MM-DD（香港日曆；非繁忙月卡判斷平日／假日用） */
+    sessionDate: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     /** 活動時段 HH:mm（香港本地鐘面時間） */
     sessionStart: {
       type: String,

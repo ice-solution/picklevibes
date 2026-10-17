@@ -33,6 +33,7 @@ type PaymentLinkDoc = {
   store: StoreOption | string;
   purpose?: 'activity' | 'sell_pass';
   isReclub?: boolean;
+  sessionDate?: string;
   sessionStart?: string;
   sessionEnd?: string;
   passPlan?: PassPlanOption | string | null;
@@ -94,6 +95,7 @@ const PaymentLinkManagement: React.FC = () => {
     purpose: 'activity' as 'activity' | 'sell_pass',
     passPlanId: '',
     isReclub: false,
+    sessionDate: '',
     sessionStart: '',
     sessionEnd: '',
   });
@@ -153,6 +155,7 @@ const PaymentLinkManagement: React.FC = () => {
       purpose: 'activity',
       passPlanId: passPlans[0]?._id || '',
       isReclub: false,
+      sessionDate: '',
       sessionStart: '',
       sessionEnd: '',
     });
@@ -182,6 +185,7 @@ const PaymentLinkManagement: React.FC = () => {
       purpose: link.purpose === 'sell_pass' ? 'sell_pass' : 'activity',
       passPlanId: planId,
       isReclub: Boolean(link.isReclub),
+      sessionDate: link.sessionDate || '',
       sessionStart: link.sessionStart || '',
       sessionEnd: link.sessionEnd || '',
     });
@@ -197,8 +201,21 @@ const PaymentLinkManagement: React.FC = () => {
       alert('賣月卡連結請選擇月卡方案');
       return;
     }
-    if (form.purpose === 'activity' && form.isReclub && (!form.sessionStart || !form.sessionEnd)) {
-      alert('Reclub 活動請填寫時段');
+    if (
+      form.purpose === 'activity' &&
+      form.isReclub &&
+      (!form.sessionDate || !form.sessionStart || !form.sessionEnd)
+    ) {
+      alert('Reclub 活動請填寫日期與時段');
+      return;
+    }
+    if (
+      form.purpose === 'activity' &&
+      !form.isReclub &&
+      (form.sessionStart || form.sessionEnd || form.sessionDate) &&
+      (!form.sessionDate || !form.sessionStart || !form.sessionEnd)
+    ) {
+      alert('請同時填寫活動日期、開始與結束時段，或全部留空');
       return;
     }
     setBusy(true);
@@ -214,6 +231,7 @@ const PaymentLinkManagement: React.FC = () => {
         purpose: form.purpose,
         passPlan: form.purpose === 'sell_pass' ? form.passPlanId : null,
         isReclub: form.purpose === 'activity' ? form.isReclub : false,
+        sessionDate: form.purpose === 'activity' ? form.sessionDate : '',
         sessionStart: form.purpose === 'activity' ? form.sessionStart : '',
         sessionEnd: form.purpose === 'activity' ? form.sessionEnd : '',
       };
@@ -285,6 +303,7 @@ const PaymentLinkManagement: React.FC = () => {
         purpose,
         passPlan: purpose === 'sell_pass' ? planId : null,
         isReclub: purpose === 'activity' ? Boolean(link.isReclub) : false,
+        sessionDate: purpose === 'activity' ? link.sessionDate || '' : '',
         sessionStart: purpose === 'activity' ? link.sessionStart || '' : '',
         sessionEnd: purpose === 'activity' ? link.sessionEnd || '' : '',
       });
@@ -475,14 +494,16 @@ const PaymentLinkManagement: React.FC = () => {
                         {link.isReclub && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700">
                             Reclub
-                            {link.sessionStart && link.sessionEnd
-                              ? ` ${link.sessionStart}-${link.sessionEnd}`
+                            {link.sessionDate || link.sessionStart
+                              ? ` ${[link.sessionDate, link.sessionStart && link.sessionEnd ? `${link.sessionStart}-${link.sessionEnd}` : ''].filter(Boolean).join(' ')}`
                               : ''}
                           </span>
                         )}
-                        {!link.isReclub && link.sessionStart && link.sessionEnd && (
+                        {!link.isReclub && (link.sessionDate || (link.sessionStart && link.sessionEnd)) && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-800">
-                            {link.sessionStart}-{link.sessionEnd}
+                            {[link.sessionDate, link.sessionStart && link.sessionEnd ? `${link.sessionStart}-${link.sessionEnd}` : '']
+                              .filter(Boolean)
+                              .join(' ')}
                           </span>
                         )}
                       </div>
@@ -672,32 +693,48 @@ const PaymentLinkManagement: React.FC = () => {
                     />
                     Reclub 活動（任打月卡可免單，唔查時段）
                   </label>
-                  {(form.isReclub || form.sessionStart || form.sessionEnd) && (
-                    <div className="grid grid-cols-2 gap-3">
+                  {(form.isReclub || form.sessionDate || form.sessionStart || form.sessionEnd) && (
+                    <div className="space-y-3">
                       <label className="block text-sm">
                         <span className="font-medium text-gray-700">
-                          開始時段 {form.isReclub ? '*' : ''}（24小時制）
+                          活動日期 {form.isReclub ? '*' : ''}（用以判斷平日／假日）
                         </span>
-                        <div className="mt-1">
-                          <Time24Input
-                            value={form.sessionStart}
-                            onChange={(v) => setForm((f) => ({ ...f, sessionStart: v }))}
-                            required={form.isReclub}
-                          />
-                        </div>
+                        <input
+                          type="date"
+                          value={form.sessionDate}
+                          onChange={(e) =>
+                            setForm((f) => ({ ...f, sessionDate: e.target.value }))
+                          }
+                          required={form.isReclub}
+                          className="mt-1 w-full border rounded-lg px-3 py-2"
+                        />
                       </label>
-                      <label className="block text-sm">
-                        <span className="font-medium text-gray-700">
-                          結束時段 {form.isReclub ? '*' : ''}（24小時制）
-                        </span>
-                        <div className="mt-1">
-                          <Time24Input
-                            value={form.sessionEnd}
-                            onChange={(v) => setForm((f) => ({ ...f, sessionEnd: v }))}
-                            required={form.isReclub}
-                          />
-                        </div>
-                      </label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <label className="block text-sm">
+                          <span className="font-medium text-gray-700">
+                            開始時段 {form.isReclub ? '*' : ''}（24小時制）
+                          </span>
+                          <div className="mt-1">
+                            <Time24Input
+                              value={form.sessionStart}
+                              onChange={(v) => setForm((f) => ({ ...f, sessionStart: v }))}
+                              required={form.isReclub}
+                            />
+                          </div>
+                        </label>
+                        <label className="block text-sm">
+                          <span className="font-medium text-gray-700">
+                            結束時段 {form.isReclub ? '*' : ''}（24小時制）
+                          </span>
+                          <div className="mt-1">
+                            <Time24Input
+                              value={form.sessionEnd}
+                              onChange={(v) => setForm((f) => ({ ...f, sessionEnd: v }))}
+                              required={form.isReclub}
+                            />
+                          </div>
+                        </label>
+                      </div>
                     </div>
                   )}
                   {!form.isReclub && (
@@ -707,12 +744,13 @@ const PaymentLinkManagement: React.FC = () => {
                       onClick={() =>
                         setForm((f) => ({
                           ...f,
+                          sessionDate: f.sessionDate || '',
                           sessionStart: f.sessionStart || '10:00',
                           sessionEnd: f.sessionEnd || '16:00',
                         }))
                       }
                     >
-                      ＋ 設定活動時段（非繁忙月卡免單用）
+                      ＋ 設定活動日期／時段（非繁忙月卡免單用）
                     </button>
                   )}
                 </>

@@ -9,6 +9,7 @@ const PaymentLinkPayment = require('../models/PaymentLinkPayment');
 const { auth, adminAuth } = require('../middleware/auth');
 const {
   isValidHhMm,
+  normalizeAllowedWeekdays,
   ensureDefaultPlans,
   grantOrExtendEntitlement,
   getActiveEntitlementsForUser,
@@ -73,7 +74,10 @@ router.get('/me', auth, async (req, res) => {
   try {
     const userId = req.user.id || req.user._id;
     const entitlements = await UserEntitlement.find({ user: userId })
-      .populate('plan', 'name type durationDays offPeakStart offPeakEnd description')
+      .populate(
+        'plan',
+        'name type durationDays offPeakStart offPeakEnd allowedWeekdays excludeHolidays description'
+      )
       .sort({ planType: 1 })
       .lean();
     const now = new Date();
@@ -85,6 +89,11 @@ router.get('/me', auth, async (req, res) => {
       isActive: new Date(e.expiresAt) > now,
       offPeakStart: e.planType === 'off_peak' ? e.plan?.offPeakStart || '10:00' : null,
       offPeakEnd: e.planType === 'off_peak' ? e.plan?.offPeakEnd || '16:00' : null,
+      allowedWeekdays:
+        e.planType === 'off_peak'
+          ? normalizeAllowedWeekdays(e.plan?.allowedWeekdays)
+          : null,
+      excludeHolidays: e.planType === 'off_peak' ? e.plan?.excludeHolidays !== false : null,
     }));
     res.json({
       entitlements: items,
@@ -353,6 +362,8 @@ router.patch(
     body('durationDays').optional().isInt({ min: 1, max: 3660 }),
     body('offPeakStart').optional().trim(),
     body('offPeakEnd').optional().trim(),
+    body('allowedWeekdays').optional().isArray(),
+    body('excludeHolidays').optional().isBoolean(),
     body('isActive').optional().isBoolean(),
     body('sortOrder').optional().isInt({ min: 0 }),
   ],
@@ -393,6 +404,16 @@ router.patch(
             return res.status(400).json({ message: '非繁忙結束時間格式須為 HH:mm' });
           }
           plan.offPeakEnd = v;
+        }
+        if (req.body.allowedWeekdays != null) {
+          const days = normalizeAllowedWeekdays(req.body.allowedWeekdays);
+          if (!days.length) {
+            return res.status(400).json({ message: '請至少勾選一個可用星期' });
+          }
+          plan.allowedWeekdays = days;
+        }
+        if (typeof req.body.excludeHolidays === 'boolean') {
+          plan.excludeHolidays = req.body.excludeHolidays;
         }
       }
 

@@ -12,9 +12,23 @@ type PassPlan = {
   durationDays: number;
   offPeakStart?: string;
   offPeakEnd?: string;
+  allowedWeekdays?: number[];
+  excludeHolidays?: boolean;
   isActive: boolean;
   sortOrder: number;
 };
+
+const WEEKDAY_OPTIONS: { value: number; label: string }[] = [
+  { value: 1, label: '一' },
+  { value: 2, label: '二' },
+  { value: 3, label: '三' },
+  { value: 4, label: '四' },
+  { value: 5, label: '五' },
+  { value: 6, label: '六' },
+  { value: 0, label: '日' },
+];
+
+const DEFAULT_WEEKDAYS = [1, 2, 3, 4, 5];
 
 function errMsg(e: unknown) {
   return (e as { response?: { data?: { message?: string } } })?.response?.data?.message || '操作失敗';
@@ -22,6 +36,13 @@ function errMsg(e: unknown) {
 
 const typeLabel = (t: string) =>
   t === 'reclub_unlimited' ? '任打 Reclub' : t === 'off_peak' ? '非繁忙時間' : t;
+
+function formatWeekdays(days?: number[]) {
+  const set = new Set(days?.length ? days : DEFAULT_WEEKDAYS);
+  return WEEKDAY_OPTIONS.filter((o) => set.has(o.value))
+    .map((o) => o.label)
+    .join('、');
+}
 
 const MonthlyPassPlanManagement: React.FC = () => {
   const [plans, setPlans] = useState<PassPlan[]>([]);
@@ -35,6 +56,8 @@ const MonthlyPassPlanManagement: React.FC = () => {
     durationDays: '30',
     offPeakStart: '10:00',
     offPeakEnd: '16:00',
+    allowedWeekdays: [...DEFAULT_WEEKDAYS] as number[],
+    excludeHolidays: true,
     isActive: true,
     sortOrder: '0',
   });
@@ -64,8 +87,23 @@ const MonthlyPassPlanManagement: React.FC = () => {
       durationDays: String(plan.durationDays || 30),
       offPeakStart: plan.offPeakStart || '10:00',
       offPeakEnd: plan.offPeakEnd || '16:00',
+      allowedWeekdays:
+        Array.isArray(plan.allowedWeekdays) && plan.allowedWeekdays.length
+          ? [...plan.allowedWeekdays]
+          : [...DEFAULT_WEEKDAYS],
+      excludeHolidays: plan.excludeHolidays !== false,
       isActive: plan.isActive,
       sortOrder: String(plan.sortOrder ?? 0),
+    });
+  };
+
+  const toggleWeekday = (day: number) => {
+    setForm((f) => {
+      const has = f.allowedWeekdays.includes(day);
+      const next = has
+        ? f.allowedWeekdays.filter((d) => d !== day)
+        : [...f.allowedWeekdays, day].sort((a, b) => a - b);
+      return { ...f, allowedWeekdays: next };
     });
   };
 
@@ -73,6 +111,10 @@ const MonthlyPassPlanManagement: React.FC = () => {
     if (!editing) return;
     if (!form.name.trim() || !form.durationDays) {
       alert('請填寫名稱與日數');
+      return;
+    }
+    if (editing.type === 'off_peak' && form.allowedWeekdays.length === 0) {
+      alert('請至少勾選一個可用星期');
       return;
     }
     setBusy(true);
@@ -84,6 +126,8 @@ const MonthlyPassPlanManagement: React.FC = () => {
         durationDays: Number(form.durationDays),
         offPeakStart: form.offPeakStart,
         offPeakEnd: form.offPeakEnd,
+        allowedWeekdays: form.allowedWeekdays,
+        excludeHolidays: form.excludeHolidays,
         isActive: form.isActive,
         sortOrder: Number(form.sortOrder) || 0,
       });
@@ -101,7 +145,7 @@ const MonthlyPassPlanManagement: React.FC = () => {
       <div>
         <h2 className="text-xl font-bold text-gray-900">月卡方案</h2>
         <p className="text-sm text-gray-500 mt-1">
-          兩種固定權益：任打 Reclub（活動收款免單、不限時段）、非繁忙時間（活動時段須完全落在設定窗內）。用「收款連結 →
+          兩種固定權益：任打 Reclub（活動收款免單、不限時段）、非繁忙時間（須落在可用星期＋非繁忙窗；預設一至五、公眾假期除外）。用「收款連結 →
           賣月卡」售賣。
         </p>
       </div>
@@ -117,7 +161,7 @@ const MonthlyPassPlanManagement: React.FC = () => {
                 <th className="px-4 py-2 text-left">類型</th>
                 <th className="px-4 py-2 text-right">建議售價</th>
                 <th className="px-4 py-2 text-right">日數</th>
-                <th className="px-4 py-2 text-left">非繁忙窗</th>
+                <th className="px-4 py-2 text-left">非繁忙規則</th>
                 <th className="px-4 py-2 text-left">狀態</th>
                 <th className="px-4 py-2 text-right">操作</th>
               </tr>
@@ -135,9 +179,19 @@ const MonthlyPassPlanManagement: React.FC = () => {
                   <td className="px-4 py-3 text-right">HK${Number(p.price).toFixed(0)}</td>
                   <td className="px-4 py-3 text-right">{p.durationDays}</td>
                   <td className="px-4 py-3">
-                    {p.type === 'off_peak'
-                      ? `${p.offPeakStart || '10:00'} – ${p.offPeakEnd || '16:00'}`
-                      : '—'}
+                    {p.type === 'off_peak' ? (
+                      <div className="text-xs text-gray-700 space-y-0.5">
+                        <p>
+                          {p.offPeakStart || '10:00'} – {p.offPeakEnd || '16:00'}
+                        </p>
+                        <p>可用：星期{formatWeekdays(p.allowedWeekdays)}</p>
+                        <p>
+                          {p.excludeHolidays !== false ? '公眾假期不可用' : '公眾假期可用'}
+                        </p>
+                      </div>
+                    ) : (
+                      '—'
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {p.isActive ? (
@@ -212,28 +266,68 @@ const MonthlyPassPlanManagement: React.FC = () => {
                 </label>
               </div>
               {editing.type === 'off_peak' && (
-                <div className="grid grid-cols-2 gap-3">
-                  <label className="block text-sm">
-                    <span className="font-medium text-gray-700">非繁忙開始（24小時制）</span>
-                    <div className="mt-1">
-                      <Time24Input
-                        value={form.offPeakStart}
-                        onChange={(v) => setForm((f) => ({ ...f, offPeakStart: v }))}
-                        required
-                      />
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block text-sm">
+                      <span className="font-medium text-gray-700">非繁忙開始（24小時制）</span>
+                      <div className="mt-1">
+                        <Time24Input
+                          value={form.offPeakStart}
+                          onChange={(v) => setForm((f) => ({ ...f, offPeakStart: v }))}
+                          required
+                        />
+                      </div>
+                    </label>
+                    <label className="block text-sm">
+                      <span className="font-medium text-gray-700">非繁忙結束（24小時制）</span>
+                      <div className="mt-1">
+                        <Time24Input
+                          value={form.offPeakEnd}
+                          onChange={(v) => setForm((f) => ({ ...f, offPeakEnd: v }))}
+                          required
+                        />
+                      </div>
+                    </label>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">可用星期 *</p>
+                    <p className="text-xs text-gray-500 mt-0.5 mb-2">
+                      勾選「可以用」嘅日子（建議一至五）；未勾＝該日不可用。
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {WEEKDAY_OPTIONS.map((o) => {
+                        const checked = form.allowedWeekdays.includes(o.value);
+                        return (
+                          <label
+                            key={o.value}
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-sm cursor-pointer ${
+                              checked
+                                ? 'bg-primary-50 border-primary-300 text-primary-800'
+                                : 'bg-white border-gray-200 text-gray-600'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleWeekday(o.value)}
+                            />
+                            星期{o.label}
+                          </label>
+                        );
+                      })}
                     </div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.excludeHolidays}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, excludeHolidays: e.target.checked }))
+                      }
+                    />
+                    公眾假期／紅日不可用（跟後台「假期管理」）
                   </label>
-                  <label className="block text-sm">
-                    <span className="font-medium text-gray-700">非繁忙結束（24小時制）</span>
-                    <div className="mt-1">
-                      <Time24Input
-                        value={form.offPeakEnd}
-                        onChange={(v) => setForm((f) => ({ ...f, offPeakEnd: v }))}
-                        required
-                      />
-                    </div>
-                  </label>
-                </div>
+                </>
               )}
               <label className="inline-flex items-center gap-2 text-sm">
                 <input

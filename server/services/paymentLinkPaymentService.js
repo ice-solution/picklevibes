@@ -355,7 +355,7 @@ async function completeMemberGatewayPayment(payment, link, transactionId) {
 async function completeGatewayPayment(paymentId, transactionId) {
   const payment = await PaymentLinkPayment.findById(paymentId).populate(
     'link',
-    'title code pointsAmount amount store createdBy purpose passPlan isReclub sessionStart sessionEnd'
+    'title code pointsAmount amount store createdBy purpose passPlan isReclub sessionDate sessionStart sessionEnd'
   );
   if (!payment) {
     throw new Error(`找不到收款付款記錄: ${paymentId}`);
@@ -620,6 +620,7 @@ async function serializePublicLink(link, store, user = null) {
     monthlyPassApplied: prices.monthlyPassApplied,
     purpose: link.purpose || 'activity',
     isReclub: Boolean(link.isReclub),
+    sessionDate: link.sessionDate || '',
     sessionStart: link.sessionStart || '',
     sessionEnd: link.sessionEnd || '',
     passPlan: link.passPlan || null,

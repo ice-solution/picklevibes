@@ -46,6 +46,26 @@ const monthlyPassPlanSchema = new mongoose.Schema(
       default: '16:00',
       trim: true,
     },
+    /**
+     * 可用星期（僅 off_peak；0=日 … 6=六，JS getDay）
+     * 預設一至五；未勾＝該日不可用
+     */
+    allowedWeekdays: {
+      type: [Number],
+      default: () => [1, 2, 3, 4, 5],
+      validate: {
+        validator(arr) {
+          if (!Array.isArray(arr) || arr.length === 0) return false;
+          return arr.every((n) => Number.isInteger(n) && n >= 0 && n <= 6);
+        },
+        message: 'allowedWeekdays 須為 0–6 且至少一日',
+      },
+    },
+    /** 公眾假期／紅日不可用（僅 off_peak；對齊後台假期管理） */
+    excludeHolidays: {
+      type: Boolean,
+      default: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

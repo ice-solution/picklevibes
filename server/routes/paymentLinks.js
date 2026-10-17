@@ -20,7 +20,7 @@ const {
   retryWonderRefundPayment,
 } = require('../services/paymentLinkPaymentService');
 const { getPaymentProvider } = require('../config/paymentProvider');
-const { isValidHhMm } = require('../services/monthlyPassService');
+const { isValidHhMm, isValidYmd } = require('../services/monthlyPassService');
 const { normalizePaymentLinkPassFields } = require('../utils/paymentLinkPassFields');
 const MonthlyPassPlan = require('../models/MonthlyPassPlan');
 const UserEntitlement = require('../models/UserEntitlement');
@@ -342,7 +342,7 @@ router.post(
       }
 
       const code = await PaymentLink.generateUniqueCode();
-      const passNorm = normalizePaymentLinkPassFields(req.body, { isValidHhMm });
+      const passNorm = normalizePaymentLinkPassFields(req.body, { isValidHhMm, isValidYmd });
       if (passNorm.error) {
         return res.status(400).json({ message: passNorm.error });
       }
@@ -420,6 +420,7 @@ router.patch(
       if (
         req.body.purpose != null ||
         req.body.isReclub != null ||
+        req.body.sessionDate != null ||
         req.body.sessionStart != null ||
         req.body.sessionEnd != null ||
         req.body.passPlan != null ||
@@ -429,6 +430,8 @@ router.patch(
           {
             purpose: req.body.purpose != null ? req.body.purpose : link.purpose,
             isReclub: req.body.isReclub != null ? req.body.isReclub : link.isReclub,
+            sessionDate:
+              req.body.sessionDate != null ? req.body.sessionDate : link.sessionDate,
             sessionStart:
               req.body.sessionStart != null ? req.body.sessionStart : link.sessionStart,
             sessionEnd: req.body.sessionEnd != null ? req.body.sessionEnd : link.sessionEnd,
@@ -437,7 +440,7 @@ router.patch(
                 ? req.body.passPlan || req.body.passPlanId
                 : link.passPlan,
           },
-          { isValidHhMm }
+          { isValidHhMm, isValidYmd }
         );
         if (passNorm.error) {
           return res.status(400).json({ message: passNorm.error });

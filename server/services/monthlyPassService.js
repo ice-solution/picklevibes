@@ -1,7 +1,11 @@
 const UserEntitlement = require('../models/UserEntitlement');
 const MonthlyPassPlan = require('../models/MonthlyPassPlan');
+const weekendService = require('./weekendService');
 
 const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+const YMD_RE = /^(\d{4})-(\d{2})-(\d{2})$/;
+/** 0=日 … 6=六；非繁忙預設一至五 */
+const DEFAULT_OFF_PEAK_WEEKDAYS = [1, 2, 3, 4, 5];
 
 function parseHhMmToMinutes(value) {
   const s = String(value || '').trim();
@@ -14,6 +18,36 @@ function isValidHhMm(value) {
   return parseHhMmToMinutes(value) != null;
 }
 
+function isValidYmd(value) {
+  const s = String(value || '').trim();
+  if (!YMD_RE.test(s)) return false;
+  const d = new Date(`${s}T12:00:00+08:00`);
+  if (Number.isNaN(d.getTime())) return false;
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}` === s;
+}
+
+function weekdayFromYmd(ymd) {
+  if (!isValidYmd(ymd)) return null;
+  return new Date(`${String(ymd).trim()}T12:00:00+08:00`).getDay();
+}
+
+function normalizeAllowedWeekdays(value) {
+  if (!Array.isArray(value) || value.length === 0) {
+    return [...DEFAULT_OFF_PEAK_WEEKDAYS];
+  }
+  const cleaned = [
+    ...new Set(
+      value
+        .map((n) => Number(n))
+        .filter((n) => Number.isInteger(n) && n >= 0 && n <= 6)
+    ),
+  ].sort((a, b) => a - b);
+  return cleaned.length ? cleaned : [...DEFAULT_OFF_PEAK_WEEKDAYS];
+}
+
 /** 活動時段須完全落在非繁忙窗內（不支援跨日） */
 function isSessionWithinOffPeak(sessionStart, sessionEnd, offPeakStart, offPeakEnd) {
   const s = parseHhMmToMinutes(sessionStart);
@@ -23,6 +57,27 @@ function isSessionWithinOffPeak(sessionStart, sessionEnd, offPeakStart, offPeakE
   if (s == null || e == null || os == null || oe == null) return false;
   if (e <= s || oe <= os) return false;
   return s >= os && e <= oe;
+}
+
+/**
+ * 活動日期是否落在可用星期，且（可選）唔係公眾假期
+ */
+async function isSessionDateAllowedForOffPeak(sessionDate, plan) {
+  const ymd = String(sessionDate || '').trim();
+  if (!isValidYmd(ymd)) return false;
+
+  const allowed = normalizeAllowedWeekdays(plan?.allowedWeekdays);
+  const weekday = weekdayFromYmd(ymd);
+  if (weekday == null || !allowed.includes(weekday)) return false;
+
+  const excludeHolidays = plan?.excludeHolidays !== false;
+  if (excludeHolidays) {
+    await weekendService.initialize();
+    if (weekendService.isHoliday(new Date(`${ymd}T12:00:00+08:00`))) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function isEntitlementActive(entitlement, now = new Date()) {
@@ -68,7 +123,9 @@ async function doesUserPassCoverLink(userId, link, now = new Date()) {
     const plan = plans.off_peak;
     const offStart = plan?.offPeakStart || '10:00';
     const offEnd = plan?.offPeakEnd || '16:00';
+    const dateOk = await isSessionDateAllowedForOffPeak(link.sessionDate, plan);
     if (
+      dateOk &&
       link.sessionStart &&
       link.sessionEnd &&
       isSessionWithinOffPeak(link.sessionStart, link.sessionEnd, offStart, offEnd)
@@ -141,16 +198,21 @@ async function ensureDefaultPlans(createdBy = null) {
       durationDays: 30,
       offPeakStart: '10:00',
       offPeakEnd: '16:00',
+      allowedWeekdays: [0, 1, 2, 3, 4, 5, 6],
+      excludeHolidays: false,
       sortOrder: 0,
     },
     {
       type: 'off_peak',
       name: '非繁忙時間月卡',
-      description: '活動時段完全落在非繁忙窗內的收款連結免費',
+      description:
+        '平日非繁忙時段（預設一至五、公眾假期除外）活動收款連結免費；時段須完全落在非繁忙窗內',
       price: 0,
       durationDays: 30,
       offPeakStart: '10:00',
       offPeakEnd: '16:00',
+      allowedWeekdays: [...DEFAULT_OFF_PEAK_WEEKDAYS],
+      excludeHolidays: true,
       sortOrder: 1,
     },
   ];
@@ -162,14 +224,34 @@ async function ensureDefaultPlans(createdBy = null) {
       created.push(doc);
     }
   }
+
+  // 舊 off_peak 方案補齊可用星期／假期（只補 DB 缺欄，唔覆寫已設定）
+  await MonthlyPassPlan.updateOne(
+    {
+      type: 'off_peak',
+      $or: [{ allowedWeekdays: { $exists: false } }, { allowedWeekdays: { $size: 0 } }],
+    },
+    { $set: { allowedWeekdays: [...DEFAULT_OFF_PEAK_WEEKDAYS] } }
+  );
+  await MonthlyPassPlan.updateOne(
+    { type: 'off_peak', excludeHolidays: { $exists: false } },
+    { $set: { excludeHolidays: true } }
+  );
+
   return created;
 }
 
 module.exports = {
   HHMM_RE,
+  YMD_RE,
+  DEFAULT_OFF_PEAK_WEEKDAYS,
   parseHhMmToMinutes,
   isValidHhMm,
+  isValidYmd,
+  weekdayFromYmd,
+  normalizeAllowedWeekdays,
   isSessionWithinOffPeak,
+  isSessionDateAllowedForOffPeak,
   isEntitlementActive,
   getActiveEntitlementsForUser,
   doesUserPassCoverLink,

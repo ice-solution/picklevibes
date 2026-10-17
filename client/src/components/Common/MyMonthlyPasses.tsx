@@ -10,7 +10,28 @@ export type MonthlyPassItem = {
   isActive: boolean;
   offPeakStart?: string | null;
   offPeakEnd?: string | null;
+  allowedWeekdays?: number[] | null;
+  excludeHolidays?: boolean | null;
 };
+
+const WEEKDAY_LABELS: Record<number, string> = {
+  0: '日',
+  1: '一',
+  2: '二',
+  3: '三',
+  4: '四',
+  5: '五',
+  6: '六',
+};
+
+function formatAllowedWeekdays(days?: number[] | null) {
+  const list = days?.length ? days : [1, 2, 3, 4, 5];
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  return order
+    .filter((d) => list.includes(d))
+    .map((d) => WEEKDAY_LABELS[d])
+    .join('、');
+}
 
 function formatExpiry(iso: string) {
   try {
@@ -123,7 +144,9 @@ const MyMonthlyPasses: React.FC<Props> = ({ variant = 'full', className = '' }) 
                   ) : null}
                   {p.planType === 'off_peak' && p.offPeakStart && p.offPeakEnd ? (
                     <p className="text-xs text-gray-500 mt-0.5">
-                      非繁忙窗：{p.offPeakStart} – {p.offPeakEnd}（24小時制）
+                      非繁忙：星期{formatAllowedWeekdays(p.allowedWeekdays)}{' '}
+                      {p.offPeakStart} – {p.offPeakEnd}
+                      {p.excludeHolidays !== false ? '；公眾假期除外' : ''}
                     </p>
                   ) : null}
                 </div>
