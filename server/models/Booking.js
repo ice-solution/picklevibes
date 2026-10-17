@@ -121,6 +121,13 @@ const bookingSchema = new mongoose.Schema({
     enum: ['pending', 'confirmed', 'cancelled', 'completed', 'no_show'],
     default: 'pending'
   },
+  /** 預約來源（報表／客服追蹤） */
+  source: {
+    type: String,
+    enum: ['web', 'admin', 'whatsapp_bot', 'bot', 'api', 'other'],
+    default: 'web',
+    index: true,
+  },
   googleEventId: {
     type: String,
     required: false,

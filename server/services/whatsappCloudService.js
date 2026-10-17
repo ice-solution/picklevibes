@@ -144,10 +144,72 @@ async function sendTemplateToMany(phones, options) {
   return results;
 }
 
+/**
+ * 發送一般文字訊息（客戶 24 小時服務視窗內）
+ * @param {object} opts
+ * @param {string} opts.to
+ * @param {string} opts.body
+ * @param {boolean} [opts.previewUrl]
+ */
+async function sendTextMessage({ to, body, previewUrl = false }) {
+  if (!isWhatsAppCloudConfigured()) {
+    const err = new Error(
+      'WhatsApp Cloud API 未設定：請設定 WHATSAPP_CLOUD_TOKEN 及 WHATSAPP_PHONE_NUMBER_ID'
+    );
+    err.code = 'WHATSAPP_CLOUD_NOT_CONFIGURED';
+    throw err;
+  }
+
+  const recipient = normalizePhoneE164(to);
+  if (!recipient) {
+    const err = new Error('無效的通知電話號碼');
+    err.code = 'INVALID_PHONE';
+    throw err;
+  }
+
+  const text = String(body == null ? '' : body).trim();
+  if (!text) {
+    const err = new Error('訊息內容不可為空');
+    err.code = 'EMPTY_MESSAGE';
+    throw err;
+  }
+
+  const url = buildGraphUrl('/messages');
+  const token = String(process.env.WHATSAPP_CLOUD_TOKEN).trim();
+  const timeout = Number(process.env.WHATSAPP_CLOUD_TIMEOUT_MS) || 15000;
+
+  const payload = {
+    messaging_product: 'whatsapp',
+    to: recipient,
+    type: 'text',
+    text: {
+      preview_url: Boolean(previewUrl),
+      body: text.slice(0, 4096),
+    },
+  };
+
+  const res = await axios.post(url, payload, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    timeout,
+  });
+
+  return {
+    success: true,
+    provider: 'whatsapp_cloud',
+    to: recipient,
+    messageId: res.data?.messages?.[0]?.id || null,
+    data: res.data,
+  };
+}
+
 module.exports = {
   isWhatsAppCloudConfigured,
   isValidPhoneNumber,
   normalizePhoneE164,
   sendTemplateMessage,
   sendTemplateToMany,
+  sendTextMessage,
 };

@@ -199,13 +199,12 @@ async function sendApplicationNotify(to, { submissionId, body }, openWaText) {
   });
 }
 
-/** Legacy: 純文字（OpenWA only） */
+/** 純文字：Cloud（24h 視窗）或 OpenWA */
 async function sendTextMessage(to, text) {
   return guardedSend(to, {
     cloudSend: async () => {
-      const err = new Error('純文字訊息需使用 template；請改用對應 sendXxx 方法');
-      err.code = 'CLOUD_TEXT_NOT_SUPPORTED';
-      throw err;
+      const result = await cloud.sendTextMessage({ to, body: text });
+      return { success: true, ...result };
     },
     openWaText: text,
   });
@@ -216,8 +215,17 @@ async function sendTextToMany(phones, text) {
   if (!provider) return { skipped: true, reason: 'not_configured' };
   if (provider === 'openwa') return openWa.sendTextToMany(phones, text);
   const results = [];
-  for (const phone of phones) {
-    results.push({ phone, ok: false, error: 'batch text not supported on cloud; use template' });
+  for (const phone of phones || []) {
+    try {
+      const r = await cloud.sendTextMessage({ to: phone, body: text });
+      results.push({ phone, ok: true, ...r });
+    } catch (error) {
+      results.push({
+        phone,
+        ok: false,
+        error: error.response?.data?.error?.message || error.message,
+      });
+    }
   }
   return results;
 }

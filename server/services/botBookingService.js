@@ -50,9 +50,15 @@ async function createBookingViaBot(params) {
     specialRequests = '',
     includeSoloCourt = false,
     redeemCodeId,
+    source: sourceRaw,
     ipAddress,
     userAgent,
   } = params;
+
+  const allowedSources = new Set(['web', 'admin', 'whatsapp_bot', 'bot', 'api', 'other']);
+  const source = allowedSources.has(String(sourceRaw || '').trim())
+    ? String(sourceRaw).trim()
+    : 'whatsapp_bot';
 
   const user = await findUserByPhone(phone);
   if (!user) {
@@ -259,6 +265,7 @@ async function createBookingViaBot(params) {
     totalPlayers,
     specialRequests,
     includeSoloCourt,
+    source,
     bypassRestrictions: false,
     noUserBalanceDebited: false,
     status: 'confirmed',
@@ -348,6 +355,7 @@ async function createBookingViaBot(params) {
       totalPlayers,
       specialRequests: '單人場租用 - 與主場地同時段使用',
       includeSoloCourt: false,
+      source,
       bypassRestrictions: false,
       noUserBalanceDebited: false,
       status: 'confirmed',

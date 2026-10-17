@@ -107,6 +107,9 @@ require('./sockets/gameSockets')(io);
 
 // Stripe webhook 需要原始請求體（Wonder 與 checkinSystem 相同，用 JSON body）
 app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+// WhatsApp Cloud webhook：HMAC 驗簽需要 raw body
+app.use('/api/whatsapp/webhook', express.raw({ type: 'application/json' }));
+app.use('/api/whatsapp/webhook', require('./routes/whatsappWebhook'));
 
 // 解析JSON（其他路由）
 app.use(express.json({ limit: '10mb' }));

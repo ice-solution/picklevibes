@@ -1,5 +1,15 @@
 /** 手動收支類別（與 admin_picklevibes_upload_data 一致） */
-const ACCOUNTING_CATEGORIES = ['場租', '器材', '營運', '課程收入', '活動', '薪資', '其他'];
+const ACCOUNTING_CATEGORIES = [
+  '場租',
+  '器材',
+  '營運',
+  '課程收入',
+  '學校課程收入',
+  '活動',
+  '公司活動',
+  '薪資',
+  '其他',
+];
 
 function isAllowedAccountingCategory(value) {
   return ACCOUNTING_CATEGORIES.includes(String(value || '').trim());

@@ -1,5 +1,8 @@
 # WhatsApp Delivery Webhook
 
+> ✅ 已實作：`server/routes/whatsappWebhook.js`（掛載於 `/api/whatsapp/webhook`）。  
+> 可選轉發 inbound 去 n8n：`WHATSAPP_N8N_FORWARD_URL`。詳見 `server/docs/WHATSAPP_LLM_N8N.md`。
+
 ## 背景
 
 WhatsApp Cloud API send 成功只代表 Meta **接受 request**（`message_status: accepted`），  

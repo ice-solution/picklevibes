@@ -5,6 +5,8 @@ const { botAuth } = require('../middleware/botAuth');
 const { getUserBalanceByPhone, getUserBalanceByEmail } = require('../services/botUserService');
 const { searchAvailability } = require('../services/botAvailabilityService');
 const { createBookingViaBot } = require('../services/botBookingService');
+const { listStoresForBot, resolveStoreId } = require('../services/botStoreService');
+const { listActivitiesForBot } = require('../services/botActivityService');
 
 const router = express.Router();
 
@@ -26,6 +28,7 @@ function handleServiceError(res, error) {
   const statusMap = {
     USER_NOT_FOUND: 404,
     STORE_NOT_FOUND: 404,
+    STORE_QUERY_REQUIRED: 400,
     STORE_INACTIVE: 400,
     COURT_NOT_FOUND: 404,
     COURT_UNAVAILABLE: 400,
@@ -92,6 +95,73 @@ router.get(
   }
 );
 
+// @route   GET /api/bot/stores
+// @desc    店鋪列表（含別名，供 LLM／n8n 對應自然語言店名）
+// @access  Bot API Key
+router.get('/stores', async (req, res) => {
+  try {
+    const data = await listStoresForBot();
+    res.json({ success: true, data });
+  } catch (error) {
+    handleServiceError(res, error);
+  }
+});
+
+// @route   GET /api/bot/stores/resolve
+// @desc    用名稱／別名解析 storeId
+// @access  Bot API Key
+router.get(
+  '/stores/resolve',
+  [query('q').notEmpty().withMessage('請提供 q（店名、slug 或別名）')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: errors.array()[0].msg,
+          errors: errors.array(),
+        });
+      }
+      const data = await resolveStoreId(req.query.q);
+      res.json({ success: true, data });
+    } catch (error) {
+      handleServiceError(res, error);
+    }
+  }
+);
+
+// @route   GET /api/bot/activities
+// @desc    活動中心即將開始／進行中活動（可選 store 別名篩選）
+// @access  Bot API Key
+router.get(
+  '/activities',
+  [
+    query('store').optional().trim(),
+    query('limit').optional().isInt({ min: 1, max: 30 }).withMessage('limit 必須是 1-30'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({
+          success: false,
+          message: errors.array()[0].msg,
+          errors: errors.array(),
+        });
+      }
+
+      const data = await listActivitiesForBot({
+        storeQuery: req.query.store || '',
+        limit: req.query.limit,
+      });
+      res.json({ success: true, data });
+    } catch (error) {
+      handleServiceError(res, error);
+    }
+  }
+);
+
 // @route   GET /api/bot/availability
 // @desc    查詢指定店鋪、日期、時段的所有場地空缺
 // @access  Bot API Key
@@ -146,6 +216,10 @@ router.post(
     body('specialRequests').optional().trim().isLength({ max: 500 }),
     body('includeSoloCourt').optional().isBoolean(),
     body('redeemCodeId').optional().isMongoId(),
+    body('source')
+      .optional()
+      .isIn(['web', 'admin', 'whatsapp_bot', 'bot', 'api', 'other'])
+      .withMessage('source 無效'),
   ],
   async (req, res) => {
     try {
@@ -160,6 +234,7 @@ router.post(
 
       const data = await createBookingViaBot({
         ...req.body,
+        source: req.body.source || 'whatsapp_bot',
         ipAddress: req.ip,
         userAgent: req.get('User-Agent'),
       });

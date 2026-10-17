@@ -7,16 +7,19 @@
 
 | 文件 | 摘要 | 優先級 |
 |------|------|--------|
-| [whatsapp-delivery-webhook.md](./whatsapp-delivery-webhook.md) | Meta WhatsApp 訊息狀態 webhook（`delivered` / `failed` / `read`） | 高 |
+| [whatsapp-delivery-webhook.md](./whatsapp-delivery-webhook.md) | Meta WhatsApp 訊息狀態 webhook（`delivered` / `failed` / `read`） | ✅ 已實作（見 `whatsappWebhook.js`） |
+| [whatsapp-llm-n8n.md](./whatsapp-llm-n8n.md) | Meta Cloud + n8n LLM 自動回覆／訂場 | ✅ 已實作（接線見文件） |
 | [whatsapp-meta-account-todos.md](./whatsapp-meta-account-todos.md) | Meta 後台帳號設定（Display Name、OTP 重驗等） | 中 |
 | [whatsapp-booking-page-notice.md](./whatsapp-booking-page-notice.md) | 訂場成功頁 WhatsApp 提示文案（可選 UX） | 低 |
 | [athlete-role.md](./athlete-role.md) | 選手 role（21 日訂場、VIP 8 折、收款連結半價） | ✅ 已實作 |
 
 ## 相關已存在程式（WhatsApp Cloud）
 
-- `server/services/whatsappCloudService.js` — Graph API send
+- `server/services/whatsappCloudService.js` — Graph API send（template + text）
 - `server/services/whatsappMessagingService.js` — 統一入口（cloud / openwa）
+- `server/routes/whatsappWebhook.js` — inbound／status webhook（可轉發 n8n）
 - `server/config/whatsappTemplates.js` — template 名稱
+- `n8n/workflows/` — Echo／LLM Booking workflows
 - `env.example` — `WHATSAPP_*` 變數
 
 ## 使用方式

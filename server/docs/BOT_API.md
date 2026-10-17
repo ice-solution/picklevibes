@@ -98,7 +98,44 @@ GET /api/bot/balance?phone={電話}
 
 ---
 
-## 2. 查場地空缺
+## 2. 店鋪列表／解析（LLM 友善）
+
+```http
+GET /api/bot/stores
+GET /api/bot/stores/resolve?q={店名或別名}
+```
+
+### `GET /api/bot/stores`
+
+回傳上線店鋪，每間附 `aliases`（例如「荔枝角」「LCK」「iSQUARE」「TST」），方便自然語言對應。
+
+### `GET /api/bot/stores/resolve?q=`
+
+用名稱／slug／別名解析出 `id`。亦接受直接傳 Mongo `_id`。
+
+| code | HTTP | 說明 |
+|------|------|------|
+| `STORE_NOT_FOUND` | 404 | 對應唔到店鋪 |
+| `STORE_QUERY_REQUIRED` | 400 | 未提供 `q` |
+
+---
+
+## 3. 活動中心列表
+
+```http
+GET /api/bot/activities?store={可選店名或別名}&limit={1-30}
+```
+
+回傳即將開始／進行中（`upcoming`／`ongoing`）且未完結嘅活動，含時間、地點、費用、剩餘名額、`detailUrl`。
+
+| 參數 | 必填 | 說明 |
+|------|------|------|
+| `store` | ❌ | 店名／地址／別名（例如 `尖沙咀`、`iSQUARE`） |
+| `limit` | ❌ | 預設 15，最多 30 |
+
+---
+
+## 4. 查場地空缺
 
 一次查詢指定店鋪、日期、時段內**所有場地**嘅可否預約狀態。
 
@@ -110,7 +147,7 @@ GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endT
 
 | 參數 | 必填 | 說明 |
 |------|------|------|
-| `store` | ✅ | 店鋪 MongoDB `_id`（可先 call `GET /api/stores`） |
+| `store` | ✅ | 店鋪 MongoDB `_id`（可先 call `GET /api/bot/stores`） |
 | `date` | ✅ | `YYYY-MM-DD` |
 | `startTime` | ✅ | `HH:MM`，例如 `18:00` |
 | `endTime` | ✅ | `HH:MM` 或 `24:00` |
@@ -165,7 +202,7 @@ GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endT
 
 ---
 
-## 3. 簡化預約
+## 5. 簡化預約
 
 以電話識別用戶，自動用帳戶資料作聯絡人，即時扣積分並建立 `confirmed` 預約。
 
@@ -188,6 +225,7 @@ X-Bot-Key: <BOT_API_KEY>
 | `specialRequests` | ❌ | 特殊要求，最多 500 字 |
 | `includeSoloCourt` | ❌ | 是否加租單人場（每小時 +100 積分，不享 VIP 8 折；2 小時 = +200），預設 `false` |
 | `redeemCodeId` | ❌ | 兌換碼 ID |
+| `source` | ❌ | 來源標記：`whatsapp_bot`（預設）／`bot`／`api`／`web`／`admin`／`other` |
 
 ### 關於 `players`（聯絡人）
 
@@ -272,17 +310,22 @@ X-Bot-Key: <BOT_API_KEY>
 
 ---
 
-## n8n 建議流程
+## n8n + LLM 建議流程
+
+完整設定見 [`WHATSAPP_LLM_N8N.md`](./WHATSAPP_LLM_N8N.md)；可匯入 workflows：`n8n/workflows/`。
 
 ```
-WhatsApp 收到訊息
+WhatsApp 收到訊息（Meta Cloud）
     │
     ├─ 查積分 → GET /api/bot/balance?phone=...
     │
-    ├─ 查空缺 → GET /api/stores（拎 storeId）
-    │           → GET /api/bot/availability?store=...&date=...&startTime=...&endTime=...
+    ├─ 分店   → GET /api/bot/stores 或 /api/bot/stores/resolve?q=...
     │
-    └─ 預約   → POST /api/bot/booking（用 availability 返嘅 courtId）
+    ├─ 查空缺 → GET /api/bot/availability?store=...&date=...&startTime=...&endTime=...
+    │
+    ├─ 摘要確認（用戶回「確認」）
+    │
+    └─ 預約   → POST /api/bot/booking（source=whatsapp_bot）
 ```
 
 ### 輔助公開 API（唔使 Bot Key）
@@ -302,6 +345,9 @@ WhatsApp 收到訊息
 | `server/routes/bot.js` | 路由 |
 | `server/middleware/botAuth.js` | API Key 驗證 |
 | `server/services/botUserService.js` | 電話查用戶／積分 |
+| `server/services/botStoreService.js` | 店鋪列表／別名解析 |
 | `server/services/botAvailabilityService.js` | 空缺查詢 |
 | `server/services/botBookingService.js` | 預約建立 |
+| `server/routes/whatsappWebhook.js` | Meta webhook（驗簽／轉發 n8n） |
 | `server/utils/phoneUtils.js` | 電話正規化 |
+| `server/docs/WHATSAPP_LLM_N8N.md` | Meta + n8n + LLM 設定 |
