@@ -27,6 +27,7 @@ type PaymentLinkDoc = {
   description?: string;
   amount: number;
   pointsAmount?: number | null;
+  allowPointsPayment?: boolean;
   code: string;
   isActive: boolean;
   expiresAt?: string | null;
@@ -99,6 +100,7 @@ const PaymentLinkManagement: React.FC = () => {
     description: '',
     amount: '',
     pointsAmount: '',
+    allowPointsPayment: true,
     expiresAt: '',
     isActive: true,
     purpose: 'activity' as 'activity' | 'sell_pass',
@@ -189,6 +191,7 @@ const PaymentLinkManagement: React.FC = () => {
       description: '',
       amount: '',
       pointsAmount: '',
+      allowPointsPayment: true,
       expiresAt: '',
       isActive: true,
       purpose: 'activity',
@@ -219,6 +222,7 @@ const PaymentLinkManagement: React.FC = () => {
           ? link.pointsAmount
           : link.amount
       ),
+      allowPointsPayment: link.allowPointsPayment !== false,
       expiresAt: toDatetimeLocalValue(link.expiresAt),
       isActive: link.isActive,
       purpose: link.purpose === 'sell_pass' ? 'sell_pass' : 'activity',
@@ -232,8 +236,12 @@ const PaymentLinkManagement: React.FC = () => {
   };
 
   const save = async () => {
-    if (!form.store || !form.title.trim() || !form.amount || !form.pointsAmount) {
-      alert('請填寫店鋪、標題、正價與積分價');
+    if (!form.store || !form.title.trim() || !form.amount) {
+      alert('請填寫店鋪、標題與正價');
+      return;
+    }
+    if (form.allowPointsPayment && !form.pointsAmount) {
+      alert('允許積分付款時請填寫積分價');
       return;
     }
     if (form.purpose === 'sell_pass' && !form.passPlanId) {
@@ -264,7 +272,12 @@ const PaymentLinkManagement: React.FC = () => {
         title: form.title.trim(),
         description: form.description.trim(),
         amount: Number(form.amount),
-        pointsAmount: Number(form.pointsAmount),
+        pointsAmount: Number(
+          form.allowPointsPayment
+            ? form.pointsAmount
+            : form.pointsAmount || form.amount
+        ),
+        allowPointsPayment: form.allowPointsPayment,
         expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
         isActive: form.isActive,
         purpose: form.purpose,
@@ -337,6 +350,7 @@ const PaymentLinkManagement: React.FC = () => {
         pointsAmount: Number(
           link.pointsAmount != null && link.pointsAmount > 0 ? link.pointsAmount : link.amount
         ),
+        allowPointsPayment: link.allowPointsPayment !== false,
         expiresAt: link.expiresAt ? new Date(link.expiresAt).toISOString() : null,
         isActive: true,
         purpose,
@@ -588,6 +602,11 @@ const PaymentLinkManagement: React.FC = () => {
                         {link.purpose === 'sell_pass' && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700">
                             賣月卡
+                          </span>
+                        )}
+                        {link.allowPointsPayment === false && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-50 text-sky-800">
+                            只接受線上付款
                           </span>
                         )}
                         {link.isReclub && (
@@ -865,17 +884,42 @@ const PaymentLinkManagement: React.FC = () => {
                   className="mt-1 w-full border rounded-lg px-3 py-2"
                 />
               </label>
-              <label className="block text-sm">
-                <span className="font-medium text-gray-700">積分價（積分付款）</span>
+              <label className="inline-flex items-start gap-2 text-sm">
                 <input
-                  type="number"
-                  min={1}
-                  step={1}
-                  value={form.pointsAmount}
-                  onChange={(e) => setForm((f) => ({ ...f, pointsAmount: e.target.value }))}
-                  className="mt-1 w-full border rounded-lg px-3 py-2"
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={!form.allowPointsPayment}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      allowPointsPayment: !e.target.checked,
+                      pointsAmount:
+                        e.target.checked && !f.pointsAmount && f.amount
+                          ? f.amount
+                          : f.pointsAmount,
+                    }))
+                  }
                 />
+                <span>
+                  <span className="font-medium text-gray-700">只接受線上付款</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    勾選後公開頁只顯示 Wonder／Stripe，唔可以選積分付款
+                  </span>
+                </span>
               </label>
+              {form.allowPointsPayment && (
+                <label className="block text-sm">
+                  <span className="font-medium text-gray-700">積分價（積分付款）</span>
+                  <input
+                    type="number"
+                    min={1}
+                    step={1}
+                    value={form.pointsAmount}
+                    onChange={(e) => setForm((f) => ({ ...f, pointsAmount: e.target.value }))}
+                    className="mt-1 w-full border rounded-lg px-3 py-2"
+                  />
+                </label>
+              )}
               <label className="block text-sm">
                 <span className="font-medium text-gray-700">過期時間（可留空）</span>
                 <input

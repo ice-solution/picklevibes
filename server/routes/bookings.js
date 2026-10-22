@@ -172,7 +172,8 @@ router.post('/', [
       includeSoloCourt
     });
 
-    // 將 24:00 轉換為下一天的 00:00
+    // 營業時間檢查須用原始 endTime（可為 24:00）；其後再把 24:00 normalize 成翌日 00:00 入庫
+    const rawEndTimeForOpenCheck = endTime;
     const normalizedEndTime = normalizeDateTime(date, endTime);
     const normalizedStartTime = { date: new Date(date), time: startTime };
     
@@ -206,7 +207,11 @@ router.post('/', [
     const bookingDate = new Date(date);
 
     // 未勾選管理員權限之後台建單：可超出營業時段；勾選則一併略過
-    if (!bypassRestrictions && !adminRelaxRules && !courtDoc.isOpenAt(bookingDate, startTime, endTime)) {
+    if (
+      !bypassRestrictions &&
+      !adminRelaxRules &&
+      !courtDoc.isOpenAt(bookingDate, startTime, rawEndTimeForOpenCheck)
+    ) {
       return res.status(400).json({ message: '場地在該時間段不開放' });
     }
 

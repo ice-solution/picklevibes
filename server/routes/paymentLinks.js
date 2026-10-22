@@ -392,6 +392,7 @@ router.post(
         description: String(req.body.description || '').trim(),
         amount: Number(req.body.amount),
         pointsAmount: Number(req.body.pointsAmount),
+        allowPointsPayment: req.body.allowPointsPayment !== false,
         code,
         isActive: req.body.isActive !== false,
         expiresAt,
@@ -438,6 +439,9 @@ router.patch(
       }
       if (req.body.amount != null) link.amount = Number(req.body.amount);
       if (req.body.pointsAmount != null) link.pointsAmount = Number(req.body.pointsAmount);
+      if (typeof req.body.allowPointsPayment === 'boolean') {
+        link.allowPointsPayment = req.body.allowPointsPayment;
+      }
       if (req.body.expiresAt === null || req.body.expiresAt === '') {
         link.expiresAt = null;
       } else if (req.body.expiresAt != null) {

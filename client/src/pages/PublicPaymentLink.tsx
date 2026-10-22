@@ -10,6 +10,7 @@ type PublicLink = {
   description: string;
   amount: number;
   pointsAmount: number;
+  allowPointsPayment?: boolean;
   listAmount?: number;
   listPointsAmount?: number;
   athleteDiscountApplied?: boolean;
@@ -48,7 +49,11 @@ const PublicPaymentLink: React.FC = () => {
       setBlocked(false);
       try {
         const res = await axios.get(`/payment-links/public/${encodeURIComponent(code)}`);
-        setLink(res.data.link);
+        const nextLink = res.data.link as PublicLink;
+        setLink(nextLink);
+        if (nextLink.allowPointsPayment === false) {
+          setPayMethod('gateway');
+        }
       } catch (e: any) {
         const msg = e.response?.data?.message || '找不到收款連結';
         setError(msg);
@@ -111,7 +116,14 @@ const PublicPaymentLink: React.FC = () => {
 
     const isFree = Number(displayPrice) <= 0;
 
-    if (isAuthenticated && (payMethod === 'points' || isFree)) {
+    if (
+      isAuthenticated &&
+      ((payMethod === 'points' && link.allowPointsPayment !== false) || isFree)
+    ) {
+      if (payMethod === 'points' && link.allowPointsPayment === false) {
+        alert('此連結只接受線上付款');
+        return;
+      }
       if (
         !window.confirm(
           isFree
@@ -238,16 +250,18 @@ const PublicPaymentLink: React.FC = () => {
               {!isAuthenticated && link.purpose !== 'sell_pass' && (
                 <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-sm text-gray-700">
                   未登入亦可線上付款。請填寫電郵與電話，我們會把付款記錄與發票寄給你。
-                  <p className="text-xs text-gray-500 mt-1">
-                    已有帳戶？
-                    <Link
-                      to="/login"
-                      state={{ from: { pathname: `/pay/${link.code}` } }}
-                      className="text-primary-600 hover:underline ml-1"
-                    >
-                      登入後可用積分付款
-                    </Link>
-                  </p>
+                  {link.allowPointsPayment !== false && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      已有帳戶？
+                      <Link
+                        to="/login"
+                        state={{ from: { pathname: `/pay/${link.code}` } }}
+                        className="text-primary-600 hover:underline ml-1"
+                      >
+                        登入後可用積分付款
+                      </Link>
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -275,23 +289,31 @@ const PublicPaymentLink: React.FC = () => {
 
               {isAuthenticated && Number(link.amount) > 0 ? (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    付款方式
-                  </label>
-                  <select
-                    value={payMethod}
-                    onChange={(e) => setPayMethod(e.target.value as PayMethod)}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white"
-                  >
-                    <option value="gateway">
-                      線上付款（HK${Number(link.amount).toFixed(2)}）
-                    </option>
-                    <option value="points">
-                      積分付款（{Number(link.pointsAmount)} 積分）
-                    </option>
-                  </select>
-                  {payMethod === 'points' && balance != null && (
-                    <p className="text-xs text-gray-500 mt-1.5">目前餘額：{balance} 積分</p>
+                  {link.allowPointsPayment === false ? (
+                    <p className="text-sm font-medium text-gray-700">
+                      付款方式：線上付款（HK${Number(link.amount).toFixed(2)}）
+                    </p>
+                  ) : (
+                    <>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        付款方式
+                      </label>
+                      <select
+                        value={payMethod}
+                        onChange={(e) => setPayMethod(e.target.value as PayMethod)}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white"
+                      >
+                        <option value="gateway">
+                          線上付款（HK${Number(link.amount).toFixed(2)}）
+                        </option>
+                        <option value="points">
+                          積分付款（{Number(link.pointsAmount)} 積分）
+                        </option>
+                      </select>
+                      {payMethod === 'points' && balance != null && (
+                        <p className="text-xs text-gray-500 mt-1.5">目前餘額：{balance} 積分</p>
+                      )}
+                    </>
                   )}
                   <p className="text-xs text-gray-500 mt-1.5">
                     將以帳戶資料付款：{user?.name}

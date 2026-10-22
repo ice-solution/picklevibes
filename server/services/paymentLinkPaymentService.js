@@ -253,7 +253,9 @@ async function completeMemberGatewayPayment(payment, link, transactionId) {
 
   const creditPoints = Math.round(payAmount);
   const prices = await resolvePaymentLinkPrices(link, await User.findById(payment.user));
-  const debitPoints = prices.pointsAmount;
+  // 只接受線上付款：以實付金額 1:1 結算（充值後即扣），唔用積分價
+  const debitPoints =
+    link.allowPointsPayment === false ? creditPoints : prices.pointsAmount;
 
   let recharge = payment.recharge
     ? await Recharge.findById(payment.recharge)
@@ -355,7 +357,7 @@ async function completeMemberGatewayPayment(payment, link, transactionId) {
 async function completeGatewayPayment(paymentId, transactionId) {
   const payment = await PaymentLinkPayment.findById(paymentId).populate(
     'link',
-    'title code pointsAmount amount store createdBy purpose passPlan isReclub sessionDate sessionStart sessionEnd'
+    'title code pointsAmount amount allowPointsPayment store createdBy purpose passPlan isReclub sessionDate sessionStart sessionEnd'
   );
   if (!payment) {
     throw new Error(`找不到收款付款記錄: ${paymentId}`);
@@ -388,6 +390,10 @@ async function completeGatewayPayment(paymentId, transactionId) {
 async function payWithPoints({ link, userId, payerNote = '', user = null }) {
   const check = await assertLinkPayable(link);
   if (check.error) return check;
+
+  if (link.allowPointsPayment === false) {
+    return { error: '此連結只接受線上付款，不可使用積分', status: 400 };
+  }
 
   if (String(link.purpose || '') === 'sell_pass' && !userId) {
     return { error: '購買月卡請先登入', status: 401 };
@@ -614,6 +620,7 @@ async function serializePublicLink(link, store, user = null) {
     description: link.description || '',
     amount: prices.amount,
     pointsAmount: prices.pointsAmount,
+    allowPointsPayment: link.allowPointsPayment !== false,
     listAmount: prices.listAmount,
     listPointsAmount: prices.listPointsAmount,
     athleteDiscountApplied: prices.athleteDiscountApplied,
@@ -635,10 +642,13 @@ async function serializePublicLink(link, store, user = null) {
 async function refundMemberPoints(payment, link, reason) {
   const linkTitle = link?.title || '收款連結';
   // 退款時以原 payment.amount 為準（已付金額）；Gateway 流程用列表價推算扣點
+  // 只接受線上付款：完成時以實付 1:1 扣分，退款亦按實付退回
   const debitPoints =
     payment.method === 'points'
       ? Number(payment.amount) || 0
-      : resolvePointsPrice(link, payment.amount);
+      : link.allowPointsPayment === false
+        ? Math.round(Number(payment.amount) || 0)
+        : resolvePointsPrice(link, payment.amount);
 
   if (payment.user && payment.pointsDebited) {
     let userBalance = await UserBalance.findOne({ user: payment.user });
@@ -779,7 +789,7 @@ async function refundPaymentLinkPayment({
 }) {
   const payment = await PaymentLinkPayment.findById(paymentId).populate(
     'link',
-    'title code pointsAmount amount store createdBy'
+    'title code pointsAmount amount allowPointsPayment store createdBy'
   );
   if (!payment) {
     return { error: '付款記錄不存在', status: 404 };
@@ -842,7 +852,7 @@ async function retryWonderRefundPayment({
 }) {
   const payment = await PaymentLinkPayment.findById(paymentId).populate(
     'link',
-    'title code pointsAmount amount store createdBy'
+    'title code pointsAmount amount allowPointsPayment store createdBy'
   );
   if (!payment) {
     return { error: '付款記錄不存在', status: 404 };

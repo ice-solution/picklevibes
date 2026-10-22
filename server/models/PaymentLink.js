@@ -26,6 +26,11 @@ const paymentLinkSchema = new mongoose.Schema(
       default: null,
       min: [1, '積分價必須大於 0'],
     },
+    /** false = 只接受線上付款（隱藏／拒絕積分付款） */
+    allowPointsPayment: {
+      type: Boolean,
+      default: true,
+    },
     /**
      * activity = 活動／一般收款（可被月卡免單）
      * sell_pass = 賣月卡（永不免單；付款後發／續權益）

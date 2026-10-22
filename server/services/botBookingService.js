@@ -84,6 +84,7 @@ async function createBookingViaBot(params) {
 
   let startTime = startTimeRaw;
   let endTime = endTimeRaw;
+  const rawEndTimeForOpenCheck = endTime;
 
   const normalizedEndTime = normalizeDateTime(date, endTime);
   endTime = normalizedEndTime.time;
@@ -103,7 +104,7 @@ async function createBookingViaBot(params) {
 
   const bookingDate = new Date(date);
 
-  if (!courtDoc.isOpenAt(bookingDate, startTime, endTime)) {
+  if (!courtDoc.isOpenAt(bookingDate, startTime, rawEndTimeForOpenCheck)) {
     const err = new Error('場地在該時間段不開放');
     err.code = 'COURT_CLOSED';
     throw err;

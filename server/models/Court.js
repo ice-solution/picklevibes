@@ -174,40 +174,54 @@ courtSchema.methods.isOpenAt = function(date, startTime = null, endTime = null) 
   if (startTime && endTime) {
     const startTimeStr = startTime.substring(0, 5); // 格式：HH:MM
     let endTimeStr = endTime.substring(0, 5);
-    
+    // 入單流程常把 24:00 normalize 成 00:00；結束於午夜等同當天開到 24:00
+    const endsAtMidnight =
+      endTime === '24:00' ||
+      endTimeStr === '24:00' ||
+      (endTimeStr === '00:00' && startTimeStr !== '00:00');
+
     // 檢查開始時間是否在營業時間範圍內
-    const isStartInRange = startTimeStr >= daySchedule.start && startTimeStr < daySchedule.end;
-    
+    // 若營業結束寫成 00:00（代表午夜），開始時間比較時視為 24:00
+    const dayEndForStartCmp =
+      daySchedule.end === '00:00' ? '24:00' : daySchedule.end;
+    const isStartInRange =
+      startTimeStr >= daySchedule.start && startTimeStr < dayEndForStartCmp;
+
     // 檢查結束時間是否在營業時間範圍內
     let isEndInRange;
-    
-    // 處理 24:00 的特殊情況
-    if (endTime === '24:00') {
-      // 24:00 應該被視為當天的結束時間，檢查是否在營業時間內
-      isEndInRange = '24:00' <= daySchedule.end;
+
+    if (endsAtMidnight) {
+      // 23:00–00:00／24:00：只要求當日營業至午夜，唔好誤查「翌日 00:00 是否開門」
+      isEndInRange = daySchedule.end === '24:00' || daySchedule.end === '00:00';
     } else {
-      // 判斷是否跨天：結束時間小於開始時間
+      // 判斷是否跨天：結束時間小於開始時間（例如 22:00–02:00）
       const isOvernight = endTimeStr < startTimeStr;
-      
+
       if (isOvernight) {
-        // 跨天情況：檢查隔天的營業時間
+        const openUntilMidnight =
+          daySchedule.end === '24:00' || daySchedule.end === '00:00';
         const nextDay = new Date(dateObj);
         nextDay.setDate(nextDay.getDate() + 1);
         const nextDayOfWeek = dayNames[nextDay.getDay()];
         const nextDaySchedule = this.operatingHours[nextDayOfWeek];
-        
-        if (!nextDaySchedule || !nextDaySchedule.isOpen) {
+
+        if (!openUntilMidnight || !nextDaySchedule || !nextDaySchedule.isOpen) {
           isEndInRange = false;
         } else {
-          // 隔天的結束時間應該在隔天的營業時間內
-          isEndInRange = endTimeStr >= nextDaySchedule.start && endTimeStr <= nextDaySchedule.end;
+          // 翌日須由 00:00 起開，且涵蓋結束時間
+          isEndInRange =
+            nextDaySchedule.start === '00:00' &&
+            endTimeStr > nextDaySchedule.start &&
+            endTimeStr <= nextDaySchedule.end;
         }
       } else {
         // 非跨天情況：正常檢查當天的營業時間
-        isEndInRange = endTimeStr > daySchedule.start && endTimeStr <= daySchedule.end;
+        const dayEndForEndCmp =
+          daySchedule.end === '00:00' ? '24:00' : daySchedule.end;
+        isEndInRange = endTimeStr > daySchedule.start && endTimeStr <= dayEndForEndCmp;
       }
     }
-    
+
     return isStartInRange && isEndInRange;
   }
   
