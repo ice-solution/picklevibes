@@ -267,6 +267,19 @@ function requirePaymentLinksAccess(req, res, storeId) {
   return null;
 }
 
+function escapeRegex(s) {
+  return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** YYYY-MM-DD → 香港當日開始／結束（UTC Date） */
+function hkDayBound(ymd, endOfDay) {
+  const s = String(ymd || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const iso = endOfDay ? `${s}T23:59:59.999+08:00` : `${s}T00:00:00.000+08:00`;
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 router.get('/', async (req, res) => {
   try {
     const filter = {};
@@ -289,6 +302,25 @@ router.get('/', async (req, res) => {
 
     if (req.query.isActive === 'true') filter.isActive = true;
     if (req.query.isActive === 'false') filter.isActive = false;
+
+    const titleQ = String(req.query.q || req.query.title || '').trim();
+    if (titleQ) {
+      filter.title = { $regex: escapeRegex(titleQ), $options: 'i' };
+    }
+
+    const createdFrom = hkDayBound(req.query.createdFrom, false);
+    const createdTo = hkDayBound(req.query.createdTo, true);
+    if (req.query.createdFrom && !createdFrom) {
+      return res.status(400).json({ message: 'createdFrom 須為 YYYY-MM-DD' });
+    }
+    if (req.query.createdTo && !createdTo) {
+      return res.status(400).json({ message: 'createdTo 須為 YYYY-MM-DD' });
+    }
+    if (createdFrom || createdTo) {
+      filter.createdAt = {};
+      if (createdFrom) filter.createdAt.$gte = createdFrom;
+      if (createdTo) filter.createdAt.$lte = createdTo;
+    }
 
     const links = await PaymentLink.find(filter)
       .populate('store', 'name slug')

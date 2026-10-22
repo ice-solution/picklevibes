@@ -173,10 +173,10 @@ const FinanceReportManagement: React.FC = () => {
         </div>
         <ul className="list-disc list-inside space-y-1 text-blue-800">
           <li>
-            <strong>管理員手動充值</strong>（用戶管理內派送）：整筆視為無現金價值，不計入有價池。
+            <strong>管理員派送</strong>（用戶管理選「派送積分」）：整筆視為無現金價值，不計入有價池。
           </li>
           <li>
-            <strong>付費充值優惠</strong>：實付 HK$ 為有價部分；若獲得積分 &gt; 實付金額，差額視為贈送積分。
+            <strong>付費充值</strong>（線上／門市現金／轉帳）：實付 HK$ 為有價部分；若獲得積分 &gt; 實付金額，差額視為贈送積分。
           </li>
           <li>
             <strong>積分訂場</strong>：認列收入 = 扣款積分 ×（累計有價積分 ÷ 有價+派送積分）。

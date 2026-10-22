@@ -58,7 +58,8 @@ const rechargeSchema = new mongoose.Schema({
   payment: {
     method: {
       type: String,
-      enum: ['stripe', 'wonder', 'alipay', 'wechat', 'manual'],
+      // cash / bank_transfer：門市現金或轉帳入帳（有價）；manual：管理員派送（無現金）
+      enum: ['stripe', 'wonder', 'alipay', 'wechat', 'manual', 'cash', 'bank_transfer'],
       required: true
     },
     transactionId: String,

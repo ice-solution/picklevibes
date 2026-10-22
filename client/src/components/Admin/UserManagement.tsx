@@ -103,6 +103,9 @@ const UserManagement: React.FC = () => {
   const [newValue, setNewValue] = useState('');
   const [showRechargeModal, setShowRechargeModal] = useState(false);
   const [showAssignRedeemModal, setShowAssignRedeemModal] = useState(false);
+  const [rechargeKind, setRechargeKind] = useState<'gift' | 'paid'>('gift');
+  const [rechargePaymentMethod, setRechargePaymentMethod] = useState<'cash' | 'bank_transfer'>('cash');
+  const [rechargeAmount, setRechargeAmount] = useState('');
   const [rechargePoints, setRechargePoints] = useState('');
   const [rechargeReason, setRechargeReason] = useState('');
   const [rechargeStoreId, setRechargeStoreId] = useState('');
@@ -354,6 +357,9 @@ const UserManagement: React.FC = () => {
 
   const handleRechargeUser = (user: User) => {
     setSelectedUser(user);
+    setRechargeKind('gift');
+    setRechargePaymentMethod('cash');
+    setRechargeAmount('');
     setRechargePoints('');
     setRechargeReason('');
     setRechargeStoreId('');
@@ -395,21 +401,44 @@ const UserManagement: React.FC = () => {
 
   const handleSubmitRecharge = async () => {
     if (!selectedUser || !rechargePoints || !rechargeReason || !rechargeStoreId) return;
+
+    const points = parseInt(rechargePoints, 10);
+    if (!Number.isFinite(points) || points < 1) {
+      alert('請輸入有效的充值積分');
+      return;
+    }
+
+    const payload: Record<string, unknown> = {
+      points,
+      reason: rechargeReason,
+      storeId: rechargeStoreId,
+      courtId: rechargeCourtId || undefined,
+      kind: rechargeKind,
+    };
+
+    if (rechargeKind === 'paid') {
+      const amount = Number(rechargeAmount);
+      if (!Number.isFinite(amount) || amount < 1) {
+        alert('請輸入實收金額（≥ 1）');
+        return;
+      }
+      if (points < amount) {
+        alert('入帳積分不可少於實收金額（例：收 30000 元可入帳 38888 分）');
+        return;
+      }
+      payload.amount = amount;
+      payload.paymentMethod = rechargePaymentMethod;
+    }
     
     try {
-      await axios.post(`/users/${selectedUser._id}/manual-recharge`, {
-        points: parseInt(rechargePoints),
-        reason: rechargeReason,
-        storeId: rechargeStoreId,
-        courtId: rechargeCourtId || undefined,
-      });
+      await axios.post(`/users/${selectedUser._id}/manual-recharge`, payload);
       
       setShowRechargeModal(false);
       fetchUsers(); // 刷新用戶列表
-      alert('充值成功！');
-    } catch (error) {
+      alert(rechargeKind === 'paid' ? '現金／轉帳充值成功！' : '派送充值成功！');
+    } catch (error: any) {
       console.error('充值失敗:', error);
-      alert('充值失敗，請稍後再試');
+      alert(error.response?.data?.message || '充值失敗，請稍後再試');
     }
   };
 
@@ -1452,7 +1481,7 @@ const UserManagement: React.FC = () => {
       {/* 充值模態框 */}
       {showRechargeModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-semibold text-gray-900">手動充值</h3>
               <button
@@ -1473,6 +1502,41 @@ const UserManagement: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  充值類型 <span className="text-red-500">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setRechargeKind('gift')}
+                    className={`px-3 py-2 text-sm rounded-lg border ${
+                      rechargeKind === 'gift'
+                        ? 'border-primary-600 bg-primary-50 text-primary-800'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    派送積分
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRechargeKind('paid')}
+                    className={`px-3 py-2 text-sm rounded-lg border ${
+                      rechargeKind === 'paid'
+                        ? 'border-primary-600 bg-primary-50 text-primary-800'
+                        : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    現金／轉帳入帳
+                  </button>
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  {rechargeKind === 'gift'
+                    ? '無現金價值，會計不計入有價池（補償／活動獎勵）'
+                    : '有實收款項；例：收 30000 元入帳 38888 分（有價 30000 + 贈送 8888）'}
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   歸屬店鋪 <span className="text-red-500">*</span>
                 </label>
                 <select
@@ -1488,7 +1552,7 @@ const UserManagement: React.FC = () => {
                     <option key={store._id} value={store._id}>{store.name}</option>
                   ))}
                 </select>
-                <p className="mt-1 text-xs text-gray-500">用於損益報表歸屬追蹤（派送積分不計收入）</p>
+                <p className="mt-1 text-xs text-gray-500">用於損益報表歸屬追蹤</p>
               </div>
 
               {rechargeCourts.length > 0 && (
@@ -1509,18 +1573,63 @@ const UserManagement: React.FC = () => {
                 </div>
               )}
 
+              {rechargeKind === 'paid' && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      付款方式 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={rechargePaymentMethod}
+                      onChange={(e) =>
+                        setRechargePaymentMethod(e.target.value as 'cash' | 'bank_transfer')
+                      }
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                    >
+                      <option value="cash">現金</option>
+                      <option value="bank_transfer">銀行轉帳</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      實收金額（HK$） <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="number"
+                      value={rechargeAmount}
+                      onChange={(e) => setRechargeAmount(e.target.value)}
+                      placeholder="例：30000"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
+                      min="1"
+                      step="0.01"
+                    />
+                  </div>
+                </>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  充值積分
+                  入帳積分 <span className="text-red-500">*</span>
                 </label>
                 <input
                   type="number"
                   value={rechargePoints}
                   onChange={(e) => setRechargePoints(e.target.value)}
-                  placeholder="輸入充值積分數量"
+                  placeholder={rechargeKind === 'paid' ? '例：38888' : '輸入充值積分數量'}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   min="1"
                 />
+                {rechargeKind === 'paid' && rechargeAmount && rechargePoints && (() => {
+                  const amt = Number(rechargeAmount);
+                  const pts = parseInt(rechargePoints, 10);
+                  if (!Number.isFinite(amt) || !Number.isFinite(pts) || pts < amt) return null;
+                  const gift = pts - amt;
+                  return (
+                    <p className="mt-1 text-xs text-emerald-700">
+                      有價 HK${amt.toLocaleString()} · 贈送 {gift.toLocaleString()} 分
+                    </p>
+                  );
+                })()}
               </div>
 
               <div>
@@ -1530,7 +1639,11 @@ const UserManagement: React.FC = () => {
                 <textarea
                   value={rechargeReason}
                   onChange={(e) => setRechargeReason(e.target.value)}
-                  placeholder="請輸入充值原因（如：補償用戶、活動獎勵等）"
+                  placeholder={
+                    rechargeKind === 'paid'
+                      ? '請輸入原因（如：門市現金充值 3萬送38888）'
+                      : '請輸入充值原因（如：補償用戶、活動獎勵等）'
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
                   rows={3}
                 />
@@ -1545,7 +1658,12 @@ const UserManagement: React.FC = () => {
                 </button>
                 <button
                   onClick={handleSubmitRecharge}
-                  disabled={!rechargePoints || !rechargeReason || !rechargeStoreId}
+                  disabled={
+                    !rechargePoints ||
+                    !rechargeReason ||
+                    !rechargeStoreId ||
+                    (rechargeKind === 'paid' && !rechargeAmount)
+                  }
                   className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   確認充值
@@ -1926,10 +2044,14 @@ const UserManagement: React.FC = () => {
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-600">
                         {record.payment.method === 'manual'
-                          ? (record.pointsDeducted ? '手動扣款' : '手動充值')
+                          ? (record.pointsDeducted ? '手動扣款' : '手動派送')
+                          : record.payment.method === 'cash' ? '現金'
+                          : record.payment.method === 'bank_transfer' ? '銀行轉帳'
                           : record.payment.method === 'wonder' ? 'Wonder'
                           : record.payment.method === 'stripe' ? 'Stripe'
-                          : record.payment.method === 'alipay' ? '支付寶' : '微信支付'}
+                          : record.payment.method === 'alipay' ? '支付寶'
+                          : record.payment.method === 'wechat' ? '微信支付'
+                          : record.payment.method || '—'}
                       </td>
                       <td className="px-4 py-2 text-sm text-gray-600">{record.description}</td>
                       <td className="px-4 py-2 text-sm text-gray-500">

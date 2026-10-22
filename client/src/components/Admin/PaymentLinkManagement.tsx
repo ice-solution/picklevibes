@@ -78,6 +78,15 @@ function toDatetimeLocalValue(iso?: string | null) {
 const PaymentLinkManagement: React.FC = () => {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [filterStore, setFilterStore] = useState('');
+  const [filterTitle, setFilterTitle] = useState('');
+  const [filterCreatedFrom, setFilterCreatedFrom] = useState('');
+  const [filterCreatedTo, setFilterCreatedTo] = useState('');
+  const [appliedFilters, setAppliedFilters] = useState({
+    store: '',
+    title: '',
+    createdFrom: '',
+    createdTo: '',
+  });
   const [links, setLinks] = useState<PaymentLinkDoc[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -123,15 +132,45 @@ const PaymentLinkManagement: React.FC = () => {
   const loadLinks = useCallback(async () => {
     setLoading(true);
     try {
-      const params = filterStore ? `?store=${filterStore}` : '';
-      const res = await axios.get(`/payment-links${params}`);
+      const params = new URLSearchParams();
+      if (appliedFilters.store) params.set('store', appliedFilters.store);
+      if (appliedFilters.title.trim()) params.set('q', appliedFilters.title.trim());
+      if (appliedFilters.createdFrom) params.set('createdFrom', appliedFilters.createdFrom);
+      if (appliedFilters.createdTo) params.set('createdTo', appliedFilters.createdTo);
+      const qs = params.toString();
+      const res = await axios.get(`/payment-links${qs ? `?${qs}` : ''}`);
       setLinks(res.data.links || []);
     } catch (e) {
       alert(errMsg(e));
     } finally {
       setLoading(false);
     }
-  }, [filterStore]);
+  }, [appliedFilters]);
+
+  const applySearch = useCallback(() => {
+    if (
+      filterCreatedFrom &&
+      filterCreatedTo &&
+      filterCreatedFrom > filterCreatedTo
+    ) {
+      alert('建立日期：開始日不可晚於結束日');
+      return;
+    }
+    setAppliedFilters({
+      store: filterStore,
+      title: filterTitle.trim(),
+      createdFrom: filterCreatedFrom,
+      createdTo: filterCreatedTo,
+    });
+  }, [filterStore, filterTitle, filterCreatedFrom, filterCreatedTo]);
+
+  const clearSearch = useCallback(() => {
+    setFilterStore('');
+    setFilterTitle('');
+    setFilterCreatedFrom('');
+    setFilterCreatedTo('');
+    setAppliedFilters({ store: '', title: '', createdFrom: '', createdTo: '' });
+  }, []);
 
   useEffect(() => {
     void loadStores();
@@ -442,26 +481,86 @@ const PaymentLinkManagement: React.FC = () => {
         </button>
       </div>
 
-      <div className="flex gap-2 items-center">
-        <label className="text-sm text-gray-600">店鋪</label>
-        <select
-          value={filterStore}
-          onChange={(e) => setFilterStore(e.target.value)}
-          className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
-        >
-          <option value="">全部</option>
-          {stores.map((s) => (
-            <option key={s._id} value={s._id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+      <div className="flex flex-wrap gap-3 items-end bg-white border rounded-xl p-3">
+        <label className="text-sm text-gray-600">
+          <span className="block mb-1">店鋪</span>
+          <select
+            value={filterStore}
+            onChange={(e) => setFilterStore(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm min-w-[140px]"
+          >
+            <option value="">全部</option>
+            {stores.map((s) => (
+              <option key={s._id} value={s._id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="text-sm text-gray-600 flex-1 min-w-[180px]">
+          <span className="block mb-1">標題搜尋</span>
+          <input
+            type="search"
+            value={filterTitle}
+            onChange={(e) => setFilterTitle(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                applySearch();
+              }
+            }}
+            placeholder="關鍵字…"
+            className="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-sm text-gray-600">
+          <span className="block mb-1">建立由</span>
+          <input
+            type="date"
+            value={filterCreatedFrom}
+            onChange={(e) => setFilterCreatedFrom(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-sm text-gray-600">
+          <span className="block mb-1">建立至</span>
+          <input
+            type="date"
+            value={filterCreatedTo}
+            min={filterCreatedFrom || undefined}
+            onChange={(e) => setFilterCreatedTo(e.target.value)}
+            className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm"
+          />
+        </label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={applySearch}
+            className="px-4 py-1.5 rounded-lg bg-primary-600 text-white text-sm"
+          >
+            搜尋
+          </button>
+          <button
+            type="button"
+            onClick={clearSearch}
+            className="px-3 py-1.5 rounded-lg bg-gray-100 text-gray-700 text-sm"
+          >
+            清除
+          </button>
+        </div>
       </div>
 
       {loading ? (
         <p className="text-gray-500 py-10 text-center">載入中…</p>
       ) : links.length === 0 ? (
-        <div className="text-center py-12 text-gray-500 bg-white border rounded-xl">尚未有收款連結</div>
+        <div className="text-center py-12 text-gray-500 bg-white border rounded-xl">
+          {appliedFilters.title ||
+          appliedFilters.createdFrom ||
+          appliedFilters.createdTo ||
+          appliedFilters.store
+            ? '找不到符合條件的收款連結'
+            : '尚未有收款連結'}
+        </div>
       ) : (
         <div className="bg-white border rounded-xl overflow-hidden">
           <table className="min-w-full text-sm divide-y divide-gray-200">

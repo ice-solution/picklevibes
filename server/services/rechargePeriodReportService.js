@@ -161,7 +161,9 @@ async function listRechargesInPeriod(opts) {
 function methodLabel(method) {
   if (method === 'stripe') return 'Stripe';
   if (method === 'wonder') return 'Wonder';
-  if (method === 'manual') return '手動';
+  if (method === 'manual') return '手動派送';
+  if (method === 'cash') return '現金';
+  if (method === 'bank_transfer') return '銀行轉帳';
   if (method === 'alipay') return '支付寶';
   if (method === 'wechat') return '微信';
   return method || '—';

@@ -51,7 +51,9 @@ function defaultToYmd() {
 function methodLabel(method?: string) {
   if (method === 'stripe') return 'Stripe';
   if (method === 'wonder') return 'Wonder';
-  if (method === 'manual') return '手動';
+  if (method === 'manual') return '手動派送';
+  if (method === 'cash') return '現金';
+  if (method === 'bank_transfer') return '銀行轉帳';
   if (method === 'alipay') return '支付寶';
   if (method === 'wechat') return '微信';
   return method || '—';
@@ -187,7 +189,9 @@ const RechargePeriodPanel: React.FC = () => {
             <option value="">全部</option>
             <option value="stripe">Stripe</option>
             <option value="wonder">Wonder</option>
-            <option value="manual">手動</option>
+            <option value="cash">現金</option>
+            <option value="bank_transfer">銀行轉帳</option>
+            <option value="manual">手動派送</option>
             <option value="alipay">支付寶</option>
             <option value="wechat">微信</option>
           </select>

@@ -479,6 +479,7 @@ router.put('/:id/status', [
 
 // @route   POST /api/users/:id/manual-recharge
 // @desc    管理員手動為用戶充值積分 (僅管理員)
+//        kind=gift（預設）：派送，無現金價值；kind=paid：現金／轉帳入帳（amount=實收，points=入帳積分）
 // @access  Private (Admin)
 router.post('/:id/manual-recharge', [
   auth,
@@ -487,6 +488,9 @@ router.post('/:id/manual-recharge', [
   body('reason').trim().isLength({ min: 1, max: 200 }).withMessage('充值原因必須在1-200個字符之間'),
   body('storeId').notEmpty().withMessage('請選擇歸屬店鋪'),
   body('courtId').optional({ nullable: true }),
+  body('kind').optional().isIn(['gift', 'paid']).withMessage('kind 須為 gift 或 paid'),
+  body('amount').optional({ nullable: true }),
+  body('paymentMethod').optional().isIn(['cash', 'bank_transfer']).withMessage('付款方式須為 cash 或 bank_transfer'),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -497,8 +501,39 @@ router.post('/:id/manual-recharge', [
       });
     }
     
-    const { points, reason, storeId, courtId } = req.body;
+    const {
+      points,
+      reason,
+      storeId,
+      courtId,
+      kind: kindRaw,
+      amount: amountRaw,
+      paymentMethod: paymentMethodRaw,
+    } = req.body;
+    const kind = kindRaw === 'paid' ? 'paid' : 'gift';
     const userId = req.params.id;
+
+    let paymentMethod = 'manual';
+    let amount = Number(points);
+    let descPrefix = '管理員手動充值';
+
+    if (kind === 'paid') {
+      const cashAmount = Number(amountRaw);
+      if (!Number.isFinite(cashAmount) || cashAmount < 1) {
+        return res.status(400).json({ message: '現金／轉帳入帳須填寫實收金額（≥ 1）' });
+      }
+      if (!['cash', 'bank_transfer'].includes(paymentMethodRaw)) {
+        return res.status(400).json({ message: '請選擇付款方式：現金或銀行轉帳' });
+      }
+      if (Number(points) < cashAmount) {
+        return res.status(400).json({
+          message: '入帳積分不可少於實收金額（例：收 30000 元可入帳 38888 分）',
+        });
+      }
+      paymentMethod = paymentMethodRaw;
+      amount = Math.round(cashAmount * 100) / 100;
+      descPrefix = paymentMethod === 'cash' ? '管理員現金充值' : '管理員轉帳充值';
+    }
     
     const { store, court } = await resolveManualAdjustStoreCourt(storeId, courtId || null);
     
@@ -513,23 +548,25 @@ router.post('/:id/manual-recharge', [
     if (!userBalance) {
       userBalance = new UserBalance({ user: userId });
     }
+
+    const txId = `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // 創建充值記錄（模擬完整支付流程）
     const recharge = new Recharge({
       user: userId,
       points: points,
-      amount: points, // 1積分 = 1港幣
+      amount,
       status: 'completed', // 直接完成
-      paymentIntentId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, // 生成唯一ID
-      description: `管理員手動充值 - ${reason}`,
+      paymentIntentId: txId,
+      description: `${descPrefix} - ${reason}`,
       store: store._id,
       court: court?._id || null,
       adjustedBy: req.user._id,
       payment: {
         status: 'paid',
-        method: 'manual',
+        method: paymentMethod,
         paidAt: new Date(),
-        transactionId: `manual_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        transactionId: txId,
       },
       pointsAdded: true, // 手動充值直接標記為已添加
       pointsDeducted: false
@@ -539,7 +576,7 @@ router.post('/:id/manual-recharge', [
     // 增加用戶積分
     await userBalance.addBalance(
       points, 
-      `管理員手動充值 - ${reason} (管理員: ${req.user.name})`
+      `${descPrefix} - ${reason} (管理員: ${req.user.name})`
     );
     
     // 更新充值記錄的關聯
@@ -547,13 +584,18 @@ router.post('/:id/manual-recharge', [
     if (latestTransaction) {
       latestTransaction.relatedBooking = null; // 手動充值不關聯預約
     }
+
+    const giftPoints = Math.max(0, Number(points) - amount);
     
     res.json({
-      message: '手動充值成功',
+      message: kind === 'paid' ? '現金／轉帳充值成功' : '手動充值成功',
       recharge: {
         id: recharge._id,
+        kind,
         points: points,
-        amount: points,
+        amount,
+        giftPoints,
+        paymentMethod,
         reason: reason,
         store: { id: store._id, name: store.name },
         court: court ? { id: court._id, name: court.name } : null,

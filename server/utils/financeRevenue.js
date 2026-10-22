@@ -10,7 +10,8 @@ require('../models/Court');
 require('../models/User');
 
 const HK_TZ = 'Asia/Hong_Kong';
-const PAID_RECHARGE_METHODS = ['stripe', 'wonder', 'alipay', 'wechat'];
+/** 付費充值：實付 amount 為有價積分；points − amount 為贈送 */
+const PAID_RECHARGE_METHODS = ['stripe', 'wonder', 'alipay', 'wechat', 'cash', 'bank_transfer'];
 
 /** 會計 API 預設查詢起日：當月 1 日（避免預設全年掃描） */
 function defaultFinanceFromYmd(today = formatHkYmd()) {
@@ -761,7 +762,7 @@ async function computeFinanceSummary(opts) {
       pointsRecognition:
         '積分預約認列收入 = 扣款積分 × 用戶累計有價充值積分 ÷（有價 + 派送／贈送積分）',
       giftPointsDefinition:
-        '派送積分 = 管理員手動充值（payment.method=manual）+ 付費充值中超出實付金額的贈送積分（points − amount）',
+        '派送積分 = 管理員派送（payment.method=manual）+ 付費充值（含門市現金／轉帳）中超出實付金額的贈送積分（points − amount）',
       excludedFromRecognized:
         '管理員免扣款（admin_waived / noUserBalanceDebited）不計入認列收入',
       shopDateBasis: '網店以 pointsChargedAt（後台確認扣款日）為準'
