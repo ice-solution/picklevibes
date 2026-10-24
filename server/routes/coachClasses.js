@@ -1,6 +1,7 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const CoachClass = require('../models/CoachClass');
+const Booking = require('../models/Booking');
 const User = require('../models/User');
 const Activity = require('../models/Activity');
 const RegularActivity = require('../models/RegularActivity');
@@ -357,6 +358,17 @@ router.post('/', writeValidators, async (req, res) => {
       paymentStatus: 'unpaid',
     });
 
+    if (bookingIds.length) {
+      try {
+        await Booking.updateMany(
+          { _id: { $in: bookingIds } },
+          { $set: { needsCoach: false } }
+        );
+      } catch (clearErr) {
+        console.error('清除 needsCoach 失敗（課堂已建立）:', clearErr.message);
+      }
+    }
+
     try {
       await syncLinkedActivity(coachClass);
     } catch (syncErr) {
@@ -412,6 +424,11 @@ router.put('/:id', writeValidators, async (req, res) => {
     if (coachClass.paymentStatus === 'paid') {
       return res.status(400).json({ message: '已付款課堂不可編輯，請先處理會計紀錄' });
     }
+
+    const previousCoachIds = uniqueIds([
+      ...(coachClass.coaches || []),
+      coachClass.coach,
+    ]);
 
     const payload = await buildCoachClassPayload(req.body, { existing: coachClass });
     const linkedBookingIds = await resolveLinkedBookingIds(req.body);
@@ -472,6 +489,17 @@ router.put('/:id', writeValidators, async (req, res) => {
     coachClass.reminderSentAt = null;
     await coachClass.save();
 
+    if (bookingIds.length) {
+      try {
+        await Booking.updateMany(
+          { _id: { $in: bookingIds } },
+          { $set: { needsCoach: false } }
+        );
+      } catch (clearErr) {
+        console.error('清除 needsCoach 失敗（課堂已更新）:', clearErr.message);
+      }
+    }
+
     try {
       await syncLinkedActivity(coachClass);
     } catch (syncErr) {
@@ -481,14 +509,27 @@ router.put('/:id', writeValidators, async (req, res) => {
     const populated = await populateClass(coachClass._id);
     let notify = { success: false };
     try {
-      notify = await coachClassNotifyService.notifyCoachClassAssigned(populated);
+      notify = await coachClassNotifyService.notifyCoachClassReassignment(populated, {
+        previousCoachIds,
+        reason: '管理員已更新課堂教練',
+      });
+      // 若教練名單無變動，仍可選擇通知全部（略過）；此處唔重發
     } catch (notifyErr) {
       console.error('教練課堂更新通知失敗:', notifyErr.message);
       notify = { success: false, error: notifyErr.message };
     }
 
+    const notifyLine =
+      notify.reason === 'no_coach_change'
+        ? ''
+        : notify.success
+          ? `（新教練通知 ${notify.assigned?.sent || 0}、舊教練取消通知 ${notify.cancelled?.sent || 0}）`
+          : notify.reason === 'whatsapp_not_configured'
+            ? '（WhatsApp 未設定，未能通知教練）'
+            : `（教練通知未完全成功${notify.error ? `：${notify.error}` : ''}）`;
+
     res.json({
-      message: '教練課堂已更新',
+      message: `教練課堂已更新${notifyLine}`,
       coachClass: populated,
       notify,
       hours: payload.hours,
@@ -502,6 +543,105 @@ router.put('/:id', writeValidators, async (req, res) => {
     res.status(error.status || 400).json({ message: error.message || '更新失敗' });
   }
 });
+
+// @route   PUT /api/coach-classes/:id/reassign-coaches
+// @desc    僅更換教練（未付款／已付款均可）；新教練派課通知、舊教練取消通知
+router.put(
+  '/:id/reassign-coaches',
+  [auth, adminAuth, body('coachIds').isArray({ min: 1 }).withMessage('請至少選擇一位教練')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg });
+      }
+
+      const coachClass = await CoachClass.findById(req.params.id);
+      if (!coachClass) {
+        return res.status(404).json({ message: '教練課堂不存在' });
+      }
+      if (coachClass.status === 'cancelled') {
+        return res.status(400).json({ message: '已取消的課堂不可更換教練' });
+      }
+
+      const previousCoachIds = uniqueIds([
+        ...(coachClass.coaches || []),
+        coachClass.coach,
+      ]);
+
+      // 重用 payload 組裝（其餘欄位沿用現有課堂）
+      const payload = await buildCoachClassPayload(
+        {
+          store: coachClass.store,
+          coachIds: req.body.coachIds,
+          coachPayments: req.body.coachPayments,
+          locationType: coachClass.locationType,
+          courtIds: coachClass.courts?.length
+            ? coachClass.courts
+            : coachClass.court
+              ? [coachClass.court]
+              : [],
+          customLocation: coachClass.customLocation,
+          sessionDate: coachClass.sessionDate,
+          startTime: coachClass.startTime,
+          endTime: coachClass.endTime,
+          title: coachClass.title,
+          notes: coachClass.notes,
+          activityId: coachClass.activity,
+          regularActivityId: coachClass.regularActivity,
+        },
+        { existing: coachClass }
+      );
+
+      coachClass.coaches = payload.coachIds;
+      coachClass.coach = payload.coachIds[0];
+      coachClass.coachPayments = payload.coachPayments;
+      coachClass.reminderSentAt = null;
+      await coachClass.save();
+
+      try {
+        await syncLinkedActivity(coachClass);
+      } catch (syncErr) {
+        console.error('同步活動教練失敗（更換教練）:', syncErr.message);
+      }
+
+      const populated = await populateClass(coachClass._id);
+      let notify = { success: false };
+      try {
+        notify = await coachClassNotifyService.notifyCoachClassReassignment(populated, {
+          previousCoachIds,
+          reason: '管理員已更換此課堂教練',
+        });
+      } catch (notifyErr) {
+        console.error('更換教練通知失敗:', notifyErr.message);
+        notify = { success: false, error: notifyErr.message };
+      }
+
+      const notifyLine =
+        notify.reason === 'no_coach_change'
+          ? '（教練名單無變更）'
+          : notify.success
+            ? `；已通知新教練 ${notify.assigned?.sent || 0} 則、舊教練取消 ${notify.cancelled?.sent || 0} 則`
+            : notify.reason === 'whatsapp_not_configured'
+              ? '；WhatsApp 未設定，未能通知'
+              : `；通知未完全成功${notify.error ? `：${notify.error}` : ''}`;
+
+      res.json({
+        message: `已更新教練${notifyLine}`,
+        coachClass: {
+          ...populated.toObject(),
+          locationLabel: coachClassLocationLabel(populated),
+          totalPay: totalPay(populated.coachPayments),
+        },
+        notify,
+        previousCoachIds,
+      });
+    } catch (error) {
+      console.error('coach-classes reassign-coaches:', error);
+      res.status(error.status || 400).json({ message: error.message || '更換教練失敗' });
+    }
+  }
+);
 
 // @route   POST /api/coach-classes/:id/resend-notify
 // 管理員手動重發 OpenWA（不論是否已提醒過，都會再發一次給該堂所有教練）

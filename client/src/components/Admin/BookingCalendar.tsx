@@ -61,6 +61,7 @@ interface CalendarBooking {
   status: 'pending' | 'confirmed' | 'cancelled';
   specialRequests?: string;
   specialRequestsProcessed?: boolean;
+  needsCoach?: boolean;
   adminNoteCount?: number;
   createdAt: string;
   venueBundleId?: string | null;
@@ -95,6 +96,8 @@ interface Booking extends CalendarBooking {
   relatedActivity?: string | { _id: string } | null;
   isFullVenue?: boolean;
   specialRequests?: string;
+  specialRequestsProcessed?: boolean;
+  needsCoach?: boolean;
   pricing: {
     totalPrice: number;
     duration: number;
@@ -212,6 +215,11 @@ const BookingCalendar: React.FC = () => {
   const [eventsLoading, setEventsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedBooking, setSelectedBooking] = useState<Booking | null>(null);
+  const [assignedCoaches, setAssignedCoaches] = useState<
+    Array<{ _id: string; name?: string }>
+  >([]);
+  const [assignedCoachesLoading, setAssignedCoachesLoading] = useState(false);
+  const [togglingNeedsCoach, setTogglingNeedsCoach] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -377,10 +385,11 @@ const BookingCalendar: React.FC = () => {
     const hasSpecialRequests = booking.specialRequests && booking.specialRequests.trim().length > 0;
     const hasAdminNotes = (booking.adminNoteCount ?? 0) > 0;
     const isSpecialRequestsProcessed = booking.specialRequestsProcessed === true;
+    const needsCoach = booking.needsCoach === true;
     
     // 計算邊框顏色和樣式
     // 如果特殊要求已處理，使用綠色；否則如果有特殊要求，使用紅色
-    // 如果有留言，使用藍色
+    // 如果有留言，使用藍色；需要安排教練用紫色
     // 如果有多個狀態，使用漸變色
     let borderColor = isCollapsedFullVenue
       ? '#6366F1'
@@ -398,6 +407,9 @@ const BookingCalendar: React.FC = () => {
     if (hasAdminNotes) {
       states.push('has-notes');
     }
+    if (needsCoach) {
+      states.push('needs-coach');
+    }
     
     // 包場：彩色橫向平滑漸層（左→右 藍→綠→紫→橙）
     if (isCollapsedFullVenue) {
@@ -412,33 +424,41 @@ const BookingCalendar: React.FC = () => {
       } else if (hasAdminNotes) {
         classNames.push('booking-full-venue-notes');
       }
-    } else if (states.length === 1) {
-      // 單一狀態
-      if (states[0] === 'special-request') {
-        borderColor = '#DC2626'; // 紅色 - 特殊要求未處理
-        classNames.push('booking-red-border');
-      } else if (states[0] === 'processed') {
-        borderColor = '#10B981'; // 綠色 - 已處理
-        classNames.push('booking-green-border');
-      } else if (states[0] === 'has-notes') {
-        borderColor = '#3B82F6'; // 藍色 - 有留言
-        classNames.push('booking-blue-border');
+      if (needsCoach) {
+        classNames.push('booking-full-venue-needs-coach');
       }
-    } else if (!isCollapsedFullVenue && states.length === 2) {
-      // 兩個狀態，使用漸變色
-      classNames.push('booking-gradient-border');
-      // 根據狀態組合決定漸變方向
-      if (states.includes('special-request') && states.includes('has-notes')) {
-        classNames.push('gradient-red-blue');
-      } else if (states.includes('special-request') && states.includes('processed')) {
-        classNames.push('gradient-red-green');
-      } else if (states.includes('processed') && states.includes('has-notes')) {
-        classNames.push('gradient-green-blue');
+    } else {
+      const visualStates = states.filter((s) => s !== 'needs-coach');
+      if (visualStates.length === 1) {
+        if (visualStates[0] === 'special-request') {
+          borderColor = '#DC2626';
+          classNames.push('booking-red-border');
+        } else if (visualStates[0] === 'processed') {
+          borderColor = '#10B981';
+          classNames.push('booking-green-border');
+        } else if (visualStates[0] === 'has-notes') {
+          borderColor = '#3B82F6';
+          classNames.push('booking-blue-border');
+        }
+      } else if (visualStates.length === 2) {
+        classNames.push('booking-gradient-border');
+        if (visualStates.includes('special-request') && visualStates.includes('has-notes')) {
+          classNames.push('gradient-red-blue');
+        } else if (visualStates.includes('special-request') && visualStates.includes('processed')) {
+          classNames.push('gradient-red-green');
+        } else if (visualStates.includes('processed') && visualStates.includes('has-notes')) {
+          classNames.push('gradient-green-blue');
+        }
+      } else if (visualStates.length === 3) {
+        classNames.push('booking-gradient-border');
+        classNames.push('gradient-red-blue-green');
       }
-    } else if (!isCollapsedFullVenue && states.length === 3) {
-      // 三個狀態，使用三色漸變
-      classNames.push('booking-gradient-border');
-      classNames.push('gradient-red-blue-green');
+      if (needsCoach) {
+        classNames.push('booking-purple-border');
+        if (visualStates.length === 0) {
+          borderColor = '#7C3AED';
+        }
+      }
     }
 
     const createdMs = booking.createdAt ? new Date(booking.createdAt).getTime() : NaN;
@@ -761,6 +781,8 @@ const BookingCalendar: React.FC = () => {
     setShowDetailModal(true);
     setDetailLoading(true);
     setSelectedBooking(null);
+    setAssignedCoaches([]);
+    setAssignedCoachesLoading(true);
     setNewNoteContent('');
     setEditingNoteId(null);
     setEditingNoteContent('');
@@ -774,12 +796,77 @@ const BookingCalendar: React.FC = () => {
       if (isBookingPendingSettle(booking, settlePreview || undefined)) {
         initSettleForm(booking, settlePreview || undefined);
       }
+      try {
+        const coachRes = await axios.get(`/coach-classes/by-booking/${bookingId}`);
+        const row = coachRes.data?.coachClass;
+        const coaches =
+          row?.coaches?.length
+            ? row.coaches
+            : row?.coach
+              ? [row.coach]
+              : [];
+        setAssignedCoaches(
+          (coaches || []).map((c: { _id: string; name?: string }) => ({
+            _id: c._id,
+            name: c.name,
+          }))
+        );
+      } catch {
+        setAssignedCoaches([]);
+      } finally {
+        setAssignedCoachesLoading(false);
+      }
     } catch (error: any) {
       console.error('獲取預約詳情失敗:', error);
       alert(error.response?.data?.message || '獲取預約詳情失敗');
       setShowDetailModal(false);
+      setAssignedCoachesLoading(false);
     } finally {
       setDetailLoading(false);
+    }
+  };
+
+  const refreshAssignedCoaches = async (bookingId: string) => {
+    setAssignedCoachesLoading(true);
+    try {
+      const coachRes = await axios.get(`/coach-classes/by-booking/${bookingId}`);
+      const row = coachRes.data?.coachClass;
+      const coaches =
+        row?.coaches?.length
+          ? row.coaches
+          : row?.coach
+            ? [row.coach]
+            : [];
+      setAssignedCoaches(
+        (coaches || []).map((c: { _id: string; name?: string }) => ({
+          _id: c._id,
+          name: c.name,
+        }))
+      );
+    } catch {
+      setAssignedCoaches([]);
+    } finally {
+      setAssignedCoachesLoading(false);
+    }
+  };
+
+  const handleToggleNeedsCoach = async (next: boolean) => {
+    if (!selectedBooking) return;
+    setTogglingNeedsCoach(true);
+    try {
+      const response = await axios.put(`/bookings/${selectedBooking._id}/needs-coach`, {
+        needsCoach: next,
+      });
+      setSelectedBooking({
+        ...selectedBooking,
+        ...response.data.booking,
+        needsCoach: response.data.booking?.needsCoach === true,
+      });
+      refetchBookings();
+    } catch (error: any) {
+      alert(error.response?.data?.message || '更新失敗');
+    } finally {
+      setTogglingNeedsCoach(false);
     }
   };
 
@@ -1017,6 +1104,10 @@ const BookingCalendar: React.FC = () => {
               <span className="text-sm text-gray-600">有管理員留言</span>
             </div>
             <div className="flex items-center">
+              <div className="w-3 h-3 border-2 border-violet-600 rounded-full mr-2"></div>
+              <span className="text-sm text-gray-600">需要安排教練</span>
+            </div>
+            <div className="flex items-center">
               <div className="w-3 h-3 rounded mr-2" style={{
                 borderWidth: '2px',
                 borderStyle: 'solid',
@@ -1175,6 +1266,44 @@ const BookingCalendar: React.FC = () => {
                   ))}
                 </div>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 flex items-center gap-1.5">
+                  <AcademicCapIcon className="w-4 h-4 text-violet-600" />
+                  派課教練
+                </label>
+                <div className="mt-1 text-sm text-gray-900">
+                  {assignedCoachesLoading ? (
+                    <p className="text-gray-400">載入中…</p>
+                  ) : assignedCoaches.length > 0 ? (
+                    <ul className="space-y-1">
+                      {assignedCoaches.map((c) => (
+                        <li key={c._id}>{c.name || c._id}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-gray-400 italic">未添加</p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-gray-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    className="rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    checked={selectedBooking.needsCoach === true}
+                    disabled={
+                      togglingNeedsCoach || selectedBooking.status === 'cancelled'
+                    }
+                    onChange={(e) => void handleToggleNeedsCoach(e.target.checked)}
+                  />
+                  安排教練
+                  <span className="text-xs font-normal text-gray-500">
+                    （標記需要教練但未派課；日曆會顯示紫圈）
+                  </span>
+                </label>
+              </div>
               
               {selectedBooking.specialRequests && selectedBooking.specialRequests.trim() && (
                 <div>
@@ -1197,7 +1326,13 @@ const BookingCalendar: React.FC = () => {
                     )}
                   </div>
                   <div className={`text-sm text-gray-900 mt-1 p-3 rounded-lg whitespace-pre-wrap ${
-                    selectedBooking.specialRequestsProcessed ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
+                    selectedBooking.specialRequestsProcessed
+                      ? 'bg-green-50 border border-green-200'
+                      : 'bg-red-50 border border-red-200'
+                  } ${
+                    selectedBooking.needsCoach
+                      ? 'ring-2 ring-violet-500 ring-offset-1'
+                      : ''
                   }`}>
                     {settleInfo?.isFullVenue && settleInfo.bundleBreakdown && settleInfo.bundleBreakdown.length > 1 && (
                       <p className="font-medium mb-2 text-indigo-900">
@@ -1589,20 +1724,27 @@ const BookingCalendar: React.FC = () => {
                     <button
                       onClick={async () => {
                         const isAdminWaived = selectedBooking.payment?.method === 'admin_waived';
+                        const hasAssignedCoach = assignedCoaches.length > 0;
                         if (
                           !window.confirm(
-                            isAdminWaived
+                            (isAdminWaived
                               ? '確認要取消此預約嗎？'
-                              : '確認要取消此預約並退回積分嗎？'
+                              : '確認要取消此預約並退回積分嗎？') +
+                              (hasAssignedCoach
+                                ? '\n\n此場次已派課，將一併取消教練課堂並 WhatsApp 通知教練。'
+                                : '')
                           )
                         )
                           return;
                         try {
-                          await axios.put(`/bookings/${selectedBooking._id}/cancel`, { reason: 'Admin cancel via calendar' });
+                          const res = await axios.put(`/bookings/${selectedBooking._id}/cancel`, {
+                            reason: 'Admin cancel via calendar',
+                          });
                           alert(
-                            isAdminWaived
-                              ? '預約已取消，因管理員權限故不會補回積分。'
-                              : '預約已取消，積分已退回'
+                            res.data?.message ||
+                              (isAdminWaived
+                                ? '預約已取消，因管理員權限故不會補回積分。'
+                                : '預約已取消，積分已退回')
                           );
                           setShowDetailModal(false);
                           refetchBookings();
@@ -1627,6 +1769,15 @@ const BookingCalendar: React.FC = () => {
         isOpen={showAssignCoachesModal}
         booking={selectedBooking}
         onClose={() => setShowAssignCoachesModal(false)}
+        onSaved={() => {
+          if (selectedBooking?._id) {
+            void refreshAssignedCoaches(selectedBooking._id);
+            setSelectedBooking((prev) =>
+              prev ? { ...prev, needsCoach: false } : prev
+            );
+          }
+          refetchBookings();
+        }}
       />
 
       {/* 關閉時卸載，避免與 FullCalendar 連動重繪時子元件重複掛載／effect 洗版 */}

@@ -193,6 +193,12 @@ const bookingSchema = new mongoose.Schema({
     default: false,
     description: '特殊要求是否已處理'
   },
+  /** 預約日曆：標記需要安排教練但尚未派課 */
+  needsCoach: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
   adminNotes: [{
     content: {
       type: String,

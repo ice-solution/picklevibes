@@ -903,7 +903,7 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
 
     const bookings = await Booking.find(query)
       .select(
-        'date startTime endTime status store court user specialRequests specialRequestsProcessed adminNotes createdAt venueBundleId venueBundleKind isFullVenue fullVenueBookings'
+        'date startTime endTime status store court user specialRequests specialRequestsProcessed needsCoach adminNotes createdAt venueBundleId venueBundleKind isFullVenue fullVenueBookings'
       )
       .populate('user', 'name email')
       .populate('store', 'name slug')
@@ -926,6 +926,7 @@ router.get('/admin/calendar', [auth, adminAuth], async (req, res) => {
       user: b.user,
       specialRequests: b.specialRequests || '',
       specialRequestsProcessed: b.specialRequestsProcessed === true,
+      needsCoach: b.needsCoach === true,
       adminNoteCount: Array.isArray(b.adminNotes) ? b.adminNotes.length : 0,
       createdAt: b.createdAt,
       venueBundleId: b.venueBundleId || null,
@@ -1257,6 +1258,43 @@ router.put('/:id/special-requests-processed', [
   }
 });
 
+// @route   PUT /api/bookings/:id/needs-coach
+// @desc    標記／取消「需要安排教練」（管理員日曆）
+// @access  Private (Admin)
+router.put('/:id/needs-coach', [
+  auth,
+  adminAuth,
+  body('needsCoach').isBoolean().withMessage('needsCoach 必須是布林值'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        message: '輸入驗證失敗',
+        errors: errors.array(),
+      });
+    }
+
+    const booking = await Booking.findByIdAndUpdate(
+      req.params.id,
+      { needsCoach: Boolean(req.body.needsCoach) },
+      { new: true, runValidators: true }
+    );
+
+    if (!booking) {
+      return res.status(404).json({ message: '預約不存在' });
+    }
+
+    res.json({
+      message: booking.needsCoach ? '已標記需要安排教練' : '已取消「需要安排教練」標記',
+      booking,
+    });
+  } catch (error) {
+    console.error('更新 needsCoach 錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
+  }
+});
+
 // @route   POST /api/bookings/:id/settle
 // @desc    指派用戶並扣積分結算（admin 留場 → 客戶充值後結算，計入 T&L）
 // @access  Private (Admin)
@@ -1571,17 +1609,42 @@ router.put('/:id/cancel', [
       // 不影響預約取消，只記錄錯誤
     }
 
+    // 已派課：一併取消教練課堂並通知教練
+    let coachClassCancel = { cancelled: 0, notified: 0 };
+    try {
+      const coachClassNotifyService = require('../services/coachClassNotifyService');
+      coachClassCancel = await coachClassNotifyService.cancelLinkedCoachClassesAndNotify(
+        bundledIds,
+        { reason: reason || '關聯場地預約已取消' }
+      );
+      if (coachClassCancel.cancelled > 0) {
+        console.log(
+          `✅ 已取消 ${coachClassCancel.cancelled} 堂關聯教練課堂，通知 ${coachClassCancel.notified} 則`
+        );
+      }
+    } catch (coachCancelErr) {
+      console.error('取消關聯教練課堂失敗（場地已取消）:', coachCancelErr);
+    }
+
     scheduleTuyaCourtsSync(
       bundleBookings.map((b) => b.court),
       'booking_cancelled'
     );
 
+    const coachHint =
+      coachClassCancel.cancelled > 0
+        ? `；已取消 ${coachClassCancel.cancelled} 堂教練派課${
+            coachClassCancel.notified > 0 ? `並通知教練（${coachClassCancel.notified} 則）` : ''
+          }`
+        : '';
+
     res.json({
       message:
-        bundledIds.length > 1
+        (bundledIds.length > 1
           ? `已取消 ${bundledIds.length} 筆關聯場地預約（包場／活動佔用）`
-          : '預約取消成功',
+          : '預約取消成功') + coachHint,
       cancelledCount: bundledIds.length,
+      coachClassCancel,
       booking
     });
   } catch (error) {

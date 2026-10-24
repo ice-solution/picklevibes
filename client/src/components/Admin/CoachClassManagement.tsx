@@ -232,6 +232,9 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [batchPaying, setBatchPaying] = useState(false);
   const [calendarSelected, setCalendarSelected] = useState<CoachClassRow | null>(null);
+  const [calendarReassignMode, setCalendarReassignMode] = useState(false);
+  const [calendarReassignCoachIds, setCalendarReassignCoachIds] = useState<string[]>([]);
+  const [calendarReassignSaving, setCalendarReassignSaving] = useState(false);
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   /** 開啟編輯時略過一次自動重算，保留已存堂費 */
@@ -657,6 +660,8 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
   const handleCalendarEventClick = (arg: EventClickArg) => {
     const row = arg.event.extendedProps?.row as CoachClassRow | undefined;
     if (!row) return;
+    setCalendarReassignMode(false);
+    setCalendarReassignCoachIds([]);
     setCalendarSelected(row);
   };
 
@@ -956,12 +961,15 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
 
       {calendarSelected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-3">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-5 space-y-3 max-h-[90vh] overflow-y-auto">
             <div className="flex items-start justify-between gap-3">
               <h3 className="text-lg font-semibold text-gray-900">{calendarSelected.title}</h3>
               <button
                 type="button"
-                onClick={() => setCalendarSelected(null)}
+                onClick={() => {
+                  setCalendarSelected(null);
+                  setCalendarReassignMode(false);
+                }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 ✕
@@ -972,7 +980,45 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
                 {formatDate(calendarSelected.sessionDate)} · {calendarSelected.startTime} –{' '}
                 {calendarSelected.endTime}
               </p>
-              <p>教練：{rowCoachNames(calendarSelected)}</p>
+              {!calendarReassignMode ? (
+                <p>教練：{rowCoachNames(calendarSelected)}</p>
+              ) : (
+                <div className="rounded-lg border border-violet-200 bg-violet-50/50 p-3 space-y-2">
+                  <p className="text-sm font-medium text-violet-900">選擇教練</p>
+                  <p className="text-xs text-violet-700">
+                    儲存後：新教練會收到派課通知，被移除嘅舊教練會收到取消通知。
+                  </p>
+                  {calendarSelected.paymentStatus === 'paid' && (
+                    <p className="text-xs text-amber-700">
+                      此課堂已標記付款；更換教練唔會自動調整會計紀錄。
+                    </p>
+                  )}
+                  <div className="max-h-48 overflow-y-auto space-y-1.5">
+                    {coachOptions.map((c) => (
+                      <label
+                        key={c._id}
+                        className="flex items-center gap-2 text-sm text-gray-800 cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={calendarReassignCoachIds.includes(c._id)}
+                          onChange={() => {
+                            setCalendarReassignCoachIds((ids) =>
+                              ids.includes(c._id)
+                                ? ids.filter((x) => x !== c._id)
+                                : [...ids, c._id]
+                            );
+                          }}
+                        />
+                        {c.name}
+                        {!c.phone ? (
+                          <span className="text-xs text-red-600">（未設電話）</span>
+                        ) : null}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p>店鋪：{rowStoreName(calendarSelected) || '—'}</p>
               <p>地點：{rowLocationLabel(calendarSelected)}</p>
               <p>
@@ -995,24 +1041,105 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
               )}
             </div>
             <div className="flex flex-wrap gap-2 pt-2">
+              {calendarSelected.status === 'scheduled' && calendarReassignMode && (
+                <>
+                  <button
+                    type="button"
+                    disabled={calendarReassignSaving || !calendarReassignCoachIds.length}
+                    onClick={async () => {
+                      if (!calendarReassignCoachIds.length) {
+                        alert('請至少選擇一位教練');
+                        return;
+                      }
+                      setCalendarReassignSaving(true);
+                      try {
+                        const h = sessionHours(
+                          calendarSelected.startTime,
+                          calendarSelected.endTime
+                        );
+                        const coachPayments = calendarReassignCoachIds.map((id) => {
+                          const fromRow = (calendarSelected.coachPayments || []).find(
+                            (p) =>
+                              String(
+                                typeof p.coach === 'object' ? p.coach._id : p.coach
+                              ) === id
+                          );
+                          const coach = coachOptions.find((c) => c._id === id);
+                          const hourlyRate =
+                            fromRow?.hourlyRate ?? Number(coach?.coachHourlyRate) ?? 0;
+                          const amount =
+                            fromRow?.amount ?? Math.round(hourlyRate * h * 100) / 100;
+                          return { coach: id, hourlyRate, amount };
+                        });
+                        const res = await api.put(
+                          `/coach-classes/${calendarSelected._id}/reassign-coaches`,
+                          {
+                            coachIds: calendarReassignCoachIds,
+                            coachPayments,
+                          }
+                        );
+                        alert(res.data?.message || '已更新教練');
+                        setCalendarReassignMode(false);
+                        setCalendarSelected(null);
+                        await load();
+                      } catch (err: any) {
+                        alert(err.response?.data?.message || '更換教練失敗');
+                      } finally {
+                        setCalendarReassignSaving(false);
+                      }
+                    }}
+                    className="rounded-lg bg-violet-600 hover:bg-violet-700 disabled:opacity-50 px-3 py-1.5 text-sm text-white"
+                  >
+                    {calendarReassignSaving ? '儲存中…' : '儲存並通知'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={calendarReassignSaving}
+                    onClick={() => setCalendarReassignMode(false)}
+                    className="rounded-lg border px-3 py-1.5 text-sm text-gray-700"
+                  >
+                    取消改教練
+                  </button>
+                </>
+              )}
+              {calendarSelected.status === 'scheduled' && !calendarReassignMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const ids =
+                      calendarSelected.coaches?.map((c) => c._id) ||
+                      (calendarSelected.coach?._id
+                        ? [calendarSelected.coach._id]
+                        : []);
+                    setCalendarReassignCoachIds(ids);
+                    setCalendarReassignMode(true);
+                  }}
+                  className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm text-violet-800"
+                >
+                  改教練
+                </button>
+              )}
               {calendarSelected.status === 'scheduled' &&
-                calendarSelected.paymentStatus !== 'paid' && (
+                calendarSelected.paymentStatus !== 'paid' &&
+                !calendarReassignMode && (
                   <>
                     <button
                       type="button"
                       onClick={() => {
                         setCalendarSelected(null);
+                        setCalendarReassignMode(false);
                         openEdit(calendarSelected);
                       }}
-                      className="rounded-lg border border-violet-200 bg-violet-50 px-3 py-1.5 text-sm text-violet-800"
+                      className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-800"
                     >
-                      編輯
+                      編輯全部
                     </button>
                     <button
                       type="button"
                       onClick={async () => {
                         const row = calendarSelected;
                         setCalendarSelected(null);
+                        setCalendarReassignMode(false);
                         await handleMarkPaid(row);
                       }}
                       className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-800"
@@ -1025,6 +1152,7 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
                       onClick={async () => {
                         const row = calendarSelected;
                         setCalendarSelected(null);
+                        setCalendarReassignMode(false);
                         await handleCancel(row);
                       }}
                       className="rounded-lg border border-red-200 bg-red-50 px-3 py-1.5 text-sm text-red-700 disabled:opacity-50"
@@ -1033,13 +1161,18 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
                     </button>
                   </>
                 )}
-              <button
-                type="button"
-                onClick={() => setCalendarSelected(null)}
-                className="rounded-lg border px-3 py-1.5 text-sm text-gray-700"
-              >
-                關閉
-              </button>
+              {!calendarReassignMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCalendarSelected(null);
+                    setCalendarReassignMode(false);
+                  }}
+                  className="rounded-lg border px-3 py-1.5 text-sm text-gray-700"
+                >
+                  關閉
+                </button>
+              )}
             </div>
           </div>
         </div>

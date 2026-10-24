@@ -145,34 +145,28 @@ async function loadPopulatedForNotify(coachClassDoc) {
     });
 }
 
-/**
- * 課堂指派後即時 OpenWA 通知所有教練
- * （多教練時同樣加隨機間隔，避免一次連發）
- */
-async function notifyCoachClassAssigned(coachClassDoc) {
-  const populated = await loadPopulatedForNotify(coachClassDoc);
+async function sendAssignToCoaches(populated, coaches) {
   if (!whatsappMessaging.isWhatsAppConfigured()) {
     return {
       success: false,
       skipped: true,
       reason: 'whatsapp_not_configured',
       sent: 0,
+      errors: [],
     };
   }
-
-  const coaches = resolveCoachUsers(populated);
-  if (!coaches.length) {
-    return { success: false, skipped: true, reason: 'no_coach', sent: 0 };
+  const list = (coaches || []).filter(Boolean);
+  if (!list.length) {
+    return { success: false, skipped: true, reason: 'no_coach', sent: 0, errors: [] };
   }
 
   const provider = whatsappMessaging.resolveProvider();
   const useGap = provider === 'openwa';
-
   let sent = 0;
   const errors = [];
   let isFirstOutbound = true;
 
-  for (const coach of coaches) {
+  for (const coach of list) {
     const phone = coach.phone;
     if (!phone || coach.isActive === false) continue;
     try {
@@ -221,23 +215,19 @@ async function notifyCoachClassAssigned(coachClassDoc) {
   };
 }
 
-/**
- * 管理員取消課堂後通知所有教練
- */
-async function notifyCoachClassCancelled(coachClassDoc, { reason } = {}) {
-  const populated = await loadPopulatedForNotify(coachClassDoc);
+async function sendCancelToCoaches(populated, coaches, { reason } = {}) {
   if (!whatsappMessaging.isWhatsAppConfigured()) {
     return {
       success: false,
       skipped: true,
       reason: 'whatsapp_not_configured',
       sent: 0,
+      errors: [],
     };
   }
-
-  const coaches = resolveCoachUsers(populated);
-  if (!coaches.length) {
-    return { success: false, skipped: true, reason: 'no_coach', sent: 0 };
+  const list = (coaches || []).filter(Boolean);
+  if (!list.length) {
+    return { success: false, skipped: true, reason: 'no_coach', sent: 0, errors: [] };
   }
 
   const provider = whatsappMessaging.resolveProvider();
@@ -251,7 +241,7 @@ async function notifyCoachClassCancelled(coachClassDoc, { reason } = {}) {
   const errors = [];
   let isFirstOutbound = true;
 
-  for (const coach of coaches) {
+  for (const coach of list) {
     const phone = coach.phone;
     if (!phone || coach.isActive === false) continue;
     try {
@@ -297,6 +287,77 @@ async function notifyCoachClassCancelled(coachClassDoc, { reason } = {}) {
     skipped: sent === 0,
     reason: sent === 0 ? 'no_phone' : undefined,
     errors,
+  };
+}
+
+/**
+ * 課堂指派後即時 OpenWA 通知所有教練
+ * （多教練時同樣加隨機間隔，避免一次連發）
+ */
+async function notifyCoachClassAssigned(coachClassDoc) {
+  const populated = await loadPopulatedForNotify(coachClassDoc);
+  return sendAssignToCoaches(populated, resolveCoachUsers(populated));
+}
+
+/**
+ * 管理員取消課堂後通知所有教練
+ */
+async function notifyCoachClassCancelled(coachClassDoc, { reason } = {}) {
+  const populated = await loadPopulatedForNotify(coachClassDoc);
+  return sendCancelToCoaches(populated, resolveCoachUsers(populated), { reason });
+}
+
+/**
+ * 更換教練：新教練收「安排課堂」、舊教練收「取消課堂」；未變動嘅教練唔再通知
+ */
+async function notifyCoachClassReassignment(coachClassDoc, { previousCoachIds, reason } = {}) {
+  const populated = await loadPopulatedForNotify(coachClassDoc);
+  const prevIds = new Set(
+    (previousCoachIds || []).map((id) => String(id || '').trim()).filter(Boolean)
+  );
+  const current = resolveCoachUsers(populated);
+  const currentIds = new Set(current.map((c) => String(c._id)));
+
+  const added = current.filter((c) => !prevIds.has(String(c._id)));
+  const removedIds = [...prevIds].filter((id) => !currentIds.has(id));
+
+  let removed = [];
+  if (removedIds.length) {
+    const User = require('../models/User');
+    removed = await User.find({ _id: { $in: removedIds } })
+      .select('name phone isActive')
+      .lean();
+  }
+
+  if (!added.length && !removed.length) {
+    return {
+      success: true,
+      skipped: true,
+      reason: 'no_coach_change',
+      assigned: { sent: 0 },
+      cancelled: { sent: 0 },
+      sent: 0,
+    };
+  }
+
+  const cancelReason = String(reason || '管理員已更換此課堂教練').trim().slice(0, 200);
+  const cancelled = await sendCancelToCoaches(populated, removed, { reason: cancelReason });
+  const assigned = await sendAssignToCoaches(populated, added);
+  const sent = (cancelled.sent || 0) + (assigned.sent || 0);
+
+  return {
+    success: sent > 0,
+    sent,
+    assigned,
+    cancelled,
+    addedCount: added.length,
+    removedCount: removed.length,
+    skipped: sent === 0,
+    reason: !whatsappMessaging.isWhatsAppConfigured()
+      ? 'whatsapp_not_configured'
+      : sent === 0
+        ? 'no_phone'
+        : undefined,
   };
 }
 
@@ -419,9 +480,54 @@ async function sendDayBeforeReminders(now = new Date()) {
   };
 }
 
+/**
+ * 場地預約取消時：一併取消已連結的教練課堂並 WhatsApp 通知教練
+ * （唔再取消場地預約——呼叫端已處理）
+ */
+async function cancelLinkedCoachClassesAndNotify(bookingIds, { reason } = {}) {
+  const ids = [
+    ...new Set(
+      (bookingIds || [])
+        .map((id) => String(id || '').trim())
+        .filter((id) => /^[a-f\d]{24}$/i.test(id))
+    ),
+  ];
+  if (!ids.length) {
+    return { cancelled: 0, notified: 0, results: [] };
+  }
+
+  const classes = await CoachClass.find({
+    status: { $ne: 'cancelled' },
+    $or: [{ bookings: { $in: ids } }, { booking: { $in: ids } }],
+  });
+
+  let cancelled = 0;
+  let notified = 0;
+  const results = [];
+  const cancelReason = String(reason || '關聯場地預約已取消').trim().slice(0, 200);
+
+  for (const cc of classes) {
+    cc.status = 'cancelled';
+    await cc.save();
+    cancelled += 1;
+    try {
+      const notify = await notifyCoachClassCancelled(cc, { reason: cancelReason });
+      if (notify.success) notified += notify.sent || 0;
+      results.push({ coachClassId: String(cc._id), notify });
+    } catch (err) {
+      console.error('取消關聯教練課堂通知失敗:', err.message);
+      results.push({ coachClassId: String(cc._id), error: err.message });
+    }
+  }
+
+  return { cancelled, notified, results };
+}
+
 module.exports = {
   notifyCoachClassAssigned,
   notifyCoachClassCancelled,
+  notifyCoachClassReassignment,
+  cancelLinkedCoachClassesAndNotify,
   sendDayBeforeReminders,
   formatDateLabel,
   sessionStartEnd,
