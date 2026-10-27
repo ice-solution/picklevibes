@@ -206,11 +206,20 @@ router.get('/', [auth, adminAuth, requireInternalAdminAccess], async (req, res) 
   }
 });
 
+function receiptUploadSingle(req, res, next) {
+  receiptUpload.single('receipt')(req, res, (err) => {
+    if (!err) return next();
+    console.error('會計單據上傳錯誤:', err.message || err);
+    return res.status(400).json({ message: err.message || '單據上傳失敗' });
+  });
+}
+
 // @route   POST /api/accounting/ledger
 router.post('/', [
   auth,
   adminAuth,
-  receiptUpload.single('receipt'),
+  requireInternalAdminAccess,
+  receiptUploadSingle,
   body('store').notEmpty().withMessage('請選擇店鋪'),
   body('type').isIn(['income', 'expense']).withMessage('類型須為 income 或 expense'),
   body('amount').notEmpty().withMessage('請填寫金額'),
@@ -250,6 +259,11 @@ router.post('/', [
     }
 
     const imagePath = req.file ? `/uploads/receipts/${req.file.filename}` : '';
+    const createdBy = req.user.id || req.user._id;
+    if (!createdBy) {
+      if (req.file) await deleteFile(req.file.path);
+      return res.status(401).json({ message: '無法識別操作者，請重新登入' });
+    }
 
     const tx = await AccountingTransaction.create({
       store: storeDoc._id,
@@ -259,7 +273,7 @@ router.post('/', [
       category: String(req.body.category).trim(),
       note: req.body.note ? String(req.body.note).trim() : '',
       imagePath,
-      createdBy: req.user.id,
+      createdBy,
     });
 
     const populated = await AccountingTransaction.findById(tx._id)
@@ -281,7 +295,8 @@ router.post('/', [
 router.put('/:id', [
   auth,
   adminAuth,
-  receiptUpload.single('receipt'),
+  requireInternalAdminAccess,
+  receiptUploadSingle,
 ], async (req, res) => {
   try {
     const tx = await AccountingTransaction.findById(req.params.id);

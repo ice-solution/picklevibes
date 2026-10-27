@@ -217,20 +217,17 @@ const AccountingLedgerPanel: React.FC = () => {
 
     try {
       setSaving(true);
+      // FormData：唔好手動設 Content-Type（api interceptor 會清走，留低 boundary）
       if (editing) {
-        await api.put(`/accounting/ledger/${editing._id}`, fd, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await api.put(`/accounting/ledger/${editing._id}`, fd);
       } else {
-        await api.post('/accounting/ledger', fd, {
-          headers: { 'Content-Type': 'multipart/form-data' },
-        });
+        await api.post('/accounting/ledger', fd);
       }
       setShowModal(false);
       load();
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e.response?.data?.message || '儲存失敗');
+      const e = err as { response?: { data?: { message?: string } }; message?: string };
+      alert(e.response?.data?.message || e.message || '儲存失敗');
     } finally {
       setSaving(false);
     }

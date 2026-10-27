@@ -8,6 +8,8 @@ const ACCOUNTING_CATEGORIES = [
   '活動',
   '公司活動',
   '薪資',
+  '水電煤',
+  '租金',
   '其他',
 ];
 
