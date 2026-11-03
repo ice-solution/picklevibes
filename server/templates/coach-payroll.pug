@@ -1,0 +1,144 @@
+doctype html
+html(lang="zh-Hant")
+  head
+    meta(charset="utf-8")
+    meta(name="viewport", content="width=device-width, initial-scale=1")
+    title 教練薪資結算 · #{payoutNumber}
+    style.
+      :root {
+        --bg: #f8fafc;
+        --paper: #ffffff;
+        --ink: #0f172a;
+        --muted: #64748b;
+        --line: #e2e8f0;
+        --accent: #7c3aed;
+        --accent-soft: #ede9fe;
+        --display: "PickleVibes CJK", "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+        --body: "PickleVibes CJK", "Noto Sans TC", "Noto Sans CJK TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+        --mono: "PickleVibes CJK", "Noto Sans TC", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 13px; line-height: 1.55; }
+      .sheet { width: 210mm; max-width: 100%; margin: 0 auto; background: var(--paper); padding: 16mm 14mm; }
+      header { display: flex; justify-content: space-between; gap: 20px; padding-bottom: 16px; border-bottom: 3px solid var(--accent); }
+      .brand { display: flex; align-items: center; gap: 10px; }
+      .brand-mark { width: 44px; height: 44px; border-radius: 10px; overflow: hidden; background: #111; display: flex; align-items: center; justify-content: center; color: #fff; font-weight: 700; }
+      .brand-mark img { width: 44px; height: 44px; object-fit: contain; }
+      .brand-name { font-size: 18px; font-weight: 800; }
+      .brand-meta { font-size: 11px; color: var(--muted); }
+      .doc-block { text-align: right; }
+      .doc-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+      .doc-num { font-family: var(--mono); font-size: 18px; font-weight: 700; margin: 4px 0; }
+      .doc-dates { font-size: 12px; color: var(--muted); }
+      .parties { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 18px 0; }
+      .party h4 { margin: 0 0 6px; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accent); font-family: var(--mono); }
+      .party .name { font-size: 16px; font-weight: 700; }
+      .party .lines { font-size: 12px; color: var(--muted); margin-top: 4px; }
+      .summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 18px; }
+      .summary .card { background: var(--accent-soft); border-radius: 8px; padding: 12px 14px; }
+      .summary .label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; font-family: var(--mono); }
+      .summary .value { font-size: 18px; font-weight: 700; margin-top: 4px; }
+      table { width: 100%; border-collapse: collapse; }
+      thead th { text-align: left; padding: 8px 6px; border-bottom: 2px solid var(--ink); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-family: var(--mono); font-weight: 500; }
+      tbody td { padding: 10px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+      td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+      td.desc strong { display: block; }
+      td.desc small { color: var(--muted); font-size: 11px; }
+      .badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: #fef3c7; color: #92400e; font-size: 10px; }
+      .totals { margin-top: 16px; display: flex; justify-content: flex-end; }
+      .totals .box { min-width: 220px; background: var(--accent); color: #fff; border-radius: 8px; padding: 12px 16px; }
+      .totals .row { display: flex; justify-content: space-between; font-size: 13px; }
+      .totals .grand { font-size: 18px; font-weight: 800; margin-top: 6px; }
+      .note { margin-top: 20px; font-size: 11px; color: var(--muted); padding: 10px 12px; background: var(--bg); border-radius: 6px; border-left: 3px solid var(--accent); }
+      .footer { margin-top: 28px; text-align: center; font-size: 11px; color: var(--muted); }
+      @media print {
+        body { background: white; }
+        .sheet { padding: 0; }
+      }
+  body
+    .sheet
+      header
+        .brand
+          .brand-mark
+            if logoSrc
+              img(src=logoSrc, alt="logo")
+            else
+              | PV
+          div
+            .brand-name PickleVibes
+            .brand-meta 教練薪資結算明細
+        .doc-block
+          .doc-label Payroll Statement
+          .doc-num= payoutNumber
+          .doc-dates
+            | 期間：#{periodLabel}
+            br
+            | 結算日：#{settledAtLabel}
+
+      .parties
+        .party
+          h4 收款教練
+          .name= coach.name || '—'
+          .lines
+            if coach.email
+              div= coach.email
+            if coach.phone
+              div= coach.phone
+            if coach.coachPaymentInfo
+              div= coach.coachPaymentInfo
+        .party
+          h4 結算摘要
+          .lines
+            div 課堂數：#{classCount} 堂
+            div 總時數：#{totalHours} 小時
+            if multiCoachClassCount
+              div 含多教練課堂：#{multiCoachClassCount} 堂（已整堂標為已付）
+
+      .summary
+        .card
+          .label 課堂
+          .value= classCount
+        .card
+          .label 時數
+          .value= totalHours
+        .card
+          .label 應付合計
+          .value= formatCurrency(totalAmount)
+
+      table
+        thead
+          tr
+            th 日期
+            th 時間
+            th 課堂／地點
+            th.num 時數
+            th.num 時薪
+            th.num 金額
+        tbody
+          each line in lines
+            tr
+              td= line.dateLabel
+              td= line.timeLabel
+              td.desc
+                strong
+                  = line.title
+                  if line.multiCoach
+                    span.badge 多教練
+                if line.locationLabel
+                  small= line.locationLabel
+              td.num= line.hours
+              td.num= formatCurrency(line.hourlyRate)
+              td.num= formatCurrency(line.amount)
+
+      .totals
+        .box
+          .row
+            span 合計
+            span.grand= formatCurrency(totalAmount)
+
+      .note
+        | 本文件列示該教練於結算期間已教課堂之應付薪資明細。標記付款會將相關課堂整堂設為已付並寫入會計「薪資」支出。
+        if multiCoachClassCount
+          |  其中 #{multiCoachClassCount} 堂為多教練課堂，整堂已一併標記已付。
+
+      .footer PickleVibes · Coach Payroll · #{payoutNumber}

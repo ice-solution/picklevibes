@@ -21,6 +21,7 @@ import {
   coachClassAdminStatusBadgeClass,
   coachClassAdminStatusLabel,
 } from '../../utils/coachEventFormat';
+import { getThisMonthRangeHK } from '../../utils/coachDateRange';
 
 interface CoachInfo {
   _id: string;
@@ -226,8 +227,9 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
   const [filter, setFilter] = useState('scheduled');
   const [paymentFilter, setPaymentFilter] = useState<'all' | 'unpaid' | 'paid'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const initialMonth = useMemo(() => getThisMonthRangeHK(), []);
+  const [dateFrom, setDateFrom] = useState(initialMonth.from);
+  const [dateTo, setDateTo] = useState(initialMonth.to);
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [batchPaying, setBatchPaying] = useState(false);
@@ -284,7 +286,10 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = filter ? { status: filter } : {};
+      const params: Record<string, string> = {};
+      if (filter) params.status = filter;
+      if (dateFrom) params.dateFrom = dateFrom;
+      if (dateTo) params.dateTo = dateTo;
       const res = await api.get('/coach-classes', { params });
       setClasses(res.data?.classes || []);
     } catch (e) {
@@ -293,7 +298,7 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [filter]);
+  }, [filter, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchCourts();
@@ -744,18 +749,17 @@ const CoachClassManagement: React.FC<CoachClassManagementProps> = ({
             onChange={(e) => setDateTo(e.target.value)}
             className="border border-gray-300 rounded-lg px-2 py-1.5 text-sm"
           />
-          {(dateFrom || dateTo) && (
-            <button
-              type="button"
-              onClick={() => {
-                setDateFrom('');
-                setDateTo('');
-              }}
-              className="text-xs text-violet-700 hover:underline whitespace-nowrap"
-            >
-              清除日期
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => {
+              const r = getThisMonthRangeHK();
+              setDateFrom(r.from);
+              setDateTo(r.to);
+            }}
+            className="text-xs text-violet-700 hover:underline whitespace-nowrap"
+          >
+            本月
+          </button>
         </div>
         <div className="relative flex-1 min-w-[200px] max-w-md">
           <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />

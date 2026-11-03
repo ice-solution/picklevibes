@@ -24,6 +24,13 @@ const {
   resolveLinkedBookingIds,
   shouldManageHoldBookings,
 } = require('../services/coachClassWriteService');
+const {
+  applySessionDateRange,
+  buildUnpaidSummary,
+  settleCoachPayroll,
+  listPayouts,
+  getPayoutPdfBuffer,
+} = require('../services/coachPayrollService');
 const { getHKCalendarYMD, hkYmdToBookingUtcMidnight } = require('../utils/bookingDateTime');
 
 const router = express.Router();
@@ -198,10 +205,84 @@ router.patch('/coaches/:userId', [auth, adminAuth], async (req, res) => {
   }
 });
 
+// @route   GET /api/coach-classes/unpaid-summary
+router.get('/unpaid-summary', [auth, adminAuth], async (req, res) => {
+  try {
+    const summary = await buildUnpaidSummary({
+      dateFrom: req.query.dateFrom,
+      dateTo: req.query.dateTo,
+      store: req.query.store || undefined,
+    });
+    res.json(summary);
+  } catch (error) {
+    console.error('coach-classes unpaid-summary:', error);
+    res.status(500).json({ message: error.message || '一鍵計數失敗' });
+  }
+});
+
+// @route   GET /api/coach-classes/payouts
+router.get('/payouts', [auth, adminAuth], async (req, res) => {
+  try {
+    const payouts = await listPayouts({ limit: req.query.limit });
+    res.json({
+      payouts: payouts.map((p) => ({
+        ...p,
+        pdfUrl: p.pdfPath ? `/uploads/${p.pdfPath}` : '',
+      })),
+    });
+  } catch (error) {
+    console.error('coach-classes payouts:', error);
+    res.status(500).json({ message: error.message || '讀取結算紀錄失敗' });
+  }
+});
+
+// @route   GET /api/coach-classes/payouts/:id/pdf
+router.get('/payouts/:id/pdf', [auth, adminAuth], async (req, res) => {
+  try {
+    const buffer = await getPayoutPdfBuffer(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename="coach-payout-${req.params.id}.pdf"`
+    );
+    res.send(buffer);
+  } catch (error) {
+    console.error('coach-classes payout pdf:', error);
+    res.status(error.status || 500).json({ message: error.message || '下載 PDF 失敗' });
+  }
+});
+
+// @route   POST /api/coach-classes/settle-coach
+router.post('/settle-coach', [auth, adminAuth], async (req, res) => {
+  try {
+    const { coachId, dateFrom, dateTo, store, classIds } = req.body || {};
+    const result = await settleCoachPayroll({
+      coachId,
+      dateFrom,
+      dateTo,
+      store: store || undefined,
+      classIds: Array.isArray(classIds) ? classIds : undefined,
+      adminUserId: req.user.id || req.user._id,
+    });
+    res.json({
+      message: `已結算 ${result.succeeded.length} 堂並產生明細 PDF${
+        result.failed.length ? `（${result.failed.length} 堂失敗）` : ''
+      }`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('coach-classes settle-coach:', error);
+    res.status(error.status || 500).json({
+      message: error.message || '結算失敗',
+      failed: error.failed || undefined,
+    });
+  }
+});
+
 // @route   GET /api/coach-classes
 router.get('/', [auth, adminAuth], async (req, res) => {
   try {
-    const { coach, status, store, paymentStatus } = req.query;
+    const { coach, status, store, paymentStatus, dateFrom, dateTo } = req.query;
     const q = {};
     if (coach) {
       q.$or = [{ coaches: coach }, { coach }];
@@ -211,6 +292,7 @@ router.get('/', [auth, adminAuth], async (req, res) => {
     if (paymentStatus && ['unpaid', 'paid'].includes(paymentStatus)) {
       q.paymentStatus = paymentStatus;
     }
+    applySessionDateRange(q, dateFrom, dateTo);
 
     const classes = await CoachClass.find(q)
       .populate('coaches', 'name email phone coachHourlyRate coachPaymentInfo')
@@ -240,6 +322,8 @@ router.get('/', [auth, adminAuth], async (req, res) => {
         locationLabel: coachClassLocationLabel(c),
         totalPay: totalPay(c.coachPayments),
       })),
+      dateFrom: dateFrom || '',
+      dateTo: dateTo || '',
     });
   } catch (error) {
     console.error('coach-classes list:', error);

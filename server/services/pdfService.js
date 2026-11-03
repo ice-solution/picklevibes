@@ -26,6 +26,7 @@ class PDFService {
   constructor() {
     this.invoiceTemplatePath = path.join(__dirname, '..', 'templates', 'invoice.pug');
     this.bookingTemplatePath = path.join(__dirname, '..', 'templates', 'booking-confirmation.pug');
+    this.coachPayrollTemplatePath = path.join(__dirname, '..', 'templates', 'coach-payroll.pug');
     this.logoSrc = null;
     this.cjkFontReady = null; // Promise<boolean>
   }
@@ -356,6 +357,61 @@ html, body, .sheet {
         amount,
       },
     };
+  }
+
+  /**
+   * 教練薪資結算 PDF
+   * @param {{ payout: object, coach?: object }} payload
+   */
+  async generateCoachPayrollPDF({ payout, coach } = {}) {
+    try {
+      console.log('📄 開始生成教練薪資 PDF...');
+      const logoSrc = await this.ensureLogoSrc();
+      const coachDoc = coach || payout?.coach || {};
+      const payoutId = String(payout?._id || '');
+      const payoutNumber = payoutId
+        ? `PAY-${payoutId.slice(-8).toUpperCase()}`
+        : 'PAY';
+      const lines = (payout?.lines || []).map((line) => ({
+        dateLabel: this.formatDateOnly(line.sessionDate),
+        timeLabel: `${line.startTime || ''}–${line.endTime || ''}`.trim(),
+        title: line.title || '教練課堂',
+        locationLabel: line.locationLabel || '',
+        hours: Number(line.hours) || 0,
+        hourlyRate: Number(line.hourlyRate) || 0,
+        amount: Number(line.amount) || 0,
+        multiCoach: Boolean(line.multiCoach),
+      }));
+      const periodLabel =
+        payout?.dateFrom && payout?.dateTo
+          ? `${payout.dateFrom} ～ ${payout.dateTo}`
+          : '—';
+      const compiled = pug.compileFile(this.coachPayrollTemplatePath);
+      const html = compiled({
+        logoSrc,
+        payoutNumber,
+        periodLabel,
+        settledAtLabel: this.formatDate(payout?.settledAt || new Date()),
+        coach: {
+          name: coachDoc.name || '',
+          email: coachDoc.email || '',
+          phone: coachDoc.phone || '',
+          coachPaymentInfo: coachDoc.coachPaymentInfo || '',
+        },
+        classCount: Number(payout?.classCount) || lines.length,
+        totalHours: Number(payout?.totalHours) || 0,
+        totalAmount: Number(payout?.totalAmount) || 0,
+        multiCoachClassCount: Number(payout?.multiCoachClassCount) || 0,
+        lines,
+        formatCurrency: this.formatCurrency.bind(this),
+      });
+      const pdfBuffer = await this.renderPdfFromHtml(html);
+      console.log('✅ 教練薪資 PDF 生成成功');
+      return pdfBuffer;
+    } catch (error) {
+      console.error('❌ 生成教練薪資 PDF 失敗:', error.message);
+      throw error;
+    }
   }
 }
 
