@@ -7,7 +7,20 @@ const {
   BOOKING_CANCELLATION_POLICY_HTML,
   BOOKING_CANCELLATION_POLICY_TEXT,
 } = require('../constants/bookingCancellationPolicy');
+const {
+  resolveStoreBookingPolicies,
+  buildCancellationPolicyHtml,
+  buildCancellationPolicyText,
+} = require('../utils/storeBookingPolicies');
 const { getEmailBrand } = require('../utils/emailBrand');
+
+function cancellationBlocksForStore(store) {
+  const policies = resolveStoreBookingPolicies(store);
+  return {
+    html: buildCancellationPolicyHtml(policies.cancellationLines),
+    text: buildCancellationPolicyText(policies.cancellationLines),
+  };
+}
 
 function orderItemDisplayName(item) {
   if (!item || !item.name) return '';
@@ -451,7 +464,8 @@ class EmailService {
     const { name, email, phone } = visitorData;
     const { date, startTime, endTime, courtName, bookingId } = bookingData;
     const deviceUserId = options.deviceUserId ? String(options.deviceUserId) : null;
-    
+    const cancelBlocks = cancellationBlocksForStore(options.store || null);
+
     const bookingDate = new Date(date).toLocaleDateString('zh-TW', {
       year: 'numeric',
       month: 'long',
@@ -625,7 +639,7 @@ class EmailService {
               </ul>
             </div>
 
-            ${BOOKING_CANCELLATION_POLICY_HTML}
+            ${cancelBlocks.html}
 
             <p>感謝您選擇 ${getEmailBrand().name}，祝您運動愉快！</p>
 
@@ -669,7 +683,7 @@ class EmailService {
         - 請準時到達，遲到超過 15 分鐘將視為取消預約
         - 請保持場地整潔，使用完畢後請清理現場
         
-        ${BOOKING_CANCELLATION_POLICY_TEXT}
+        ${cancelBlocks.text}
         
         感謝您選擇 ${getEmailBrand().name}，祝您運動愉快！
         
@@ -750,6 +764,7 @@ class EmailService {
   async generateBookingConfirmationEmailTemplate(visitorData, bookingData, store = null) {
     const { name } = visitorData;
     const { date, startTime, endTime, courtName, storeName, storeAddress, storePhone } = bookingData;
+    const cancelBlocks = cancellationBlocksForStore(store);
 
     const bookingDate = new Date(date).toLocaleDateString('zh-TW', {
       year: 'numeric',
@@ -783,7 +798,7 @@ class EmailService {
             <p style="background:#f8f9fa;padding:15px;border-radius:8px;margin:20px 0">
               請於預約時段準時到場。此店鋪暫不提供自動門禁密碼，如有疑問請聯絡場地。
             </p>
-            ${BOOKING_CANCELLATION_POLICY_HTML}
+            ${cancelBlocks.html}
             <p style="text-align:center;color:#666;font-size:14px;margin-top:30px">
               感謝您選擇 ${getEmailBrand().name}<br>${getEmailBrand().supportEmail}
             </p>
@@ -791,7 +806,7 @@ class EmailService {
         </body>
         </html>
       `,
-      text: `${getEmailBrand().name} 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。\n\n${BOOKING_CANCELLATION_POLICY_TEXT}`,
+      text: `${getEmailBrand().name} 預約確認\n\n店鋪：${locationLine}\n場地：${courtName}\n日期：${bookingDate}\n時間：${startTime} - ${endTime}\n\n請於預約時段準時到場。\n\n${cancelBlocks.text}`,
     };
   }
 

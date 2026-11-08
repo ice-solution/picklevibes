@@ -1,7 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
 const Recharge = require('../models/Recharge');
-const { auth } = require('../middleware/auth');
+const { auth, adminAuth } = require('../middleware/auth');
+const User = require('../models/User');
 const { getPaymentProvider } = require('../config/paymentProvider');
 const wonderPaymentService = require('../services/wonderPaymentService');
 const { completeRechargePayment } = require('../services/rechargePaymentService');
@@ -313,6 +314,55 @@ router.post('/success', async (req, res) => {
     res.json({ message: '充值成功處理' });
   } catch (error) {
     console.error('處理充值成功回調錯誤:', error);
+    res.status(500).json({ message: '服務器錯誤' });
+  }
+});
+
+// @route   GET /api/recharge/admin/records
+router.get('/admin/records', [auth, adminAuth], async (req, res) => {
+  try {
+    const { page = 1, limit = 30, status, q } = req.query;
+    const filter = {};
+    if (status && ['pending', 'completed', 'failed', 'cancelled'].includes(String(status))) {
+      filter.status = status;
+    }
+    if (q && String(q).trim()) {
+      const needle = String(q).trim();
+      const users = await User.find({
+        $or: [
+          { email: { $regex: needle, $options: 'i' } },
+          { name: { $regex: needle, $options: 'i' } },
+        ],
+      })
+        .select('_id')
+        .limit(50)
+        .lean();
+      filter.user = { $in: users.map((u) => u._id) };
+    }
+
+    const lim = Math.min(100, Math.max(1, parseInt(limit, 10) || 30));
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const [recharges, total] = await Promise.all([
+      Recharge.find(filter)
+        .populate('user', 'name email phone')
+        .populate('store', 'name slug branding.displayName')
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * lim)
+        .limit(lim)
+        .lean(),
+      Recharge.countDocuments(filter),
+    ]);
+
+    res.json({
+      recharges,
+      pagination: {
+        current: pageNum,
+        pages: Math.ceil(total / lim) || 1,
+        total,
+      },
+    });
+  } catch (error) {
+    console.error('admin recharge records:', error);
     res.status(500).json({ message: '服務器錯誤' });
   }
 });

@@ -6,9 +6,9 @@ const Privacy: React.FC = () => {
   return (
     <>
       <SEO
-        title="隱私政策 | Picklevibes"
-        description="Picklevibes 智能匹克球室個人資料收集聲明與隱私政策。了解我們如何收集、使用和保護您的個人資料。"
-        keywords="隱私政策,個人資料保護,資料收集聲明"
+        title="隱私政策 | PickCourt"
+        description="PickCourt 聯盟平台個人資料收集聲明與隱私政策。了解我們如何收集、使用和保護您的個人資料。"
+        keywords="隱私政策,個人資料保護,資料收集聲明,PickCourt"
         url="/privacy"
         noindex={true}
       />
@@ -25,7 +25,7 @@ const Privacy: React.FC = () => {
               隱私政策
             </h1>
             <p className="text-xl text-gray-600 max-w-3xl mx-auto">
-              Picklevibes 智能匹克球室個人資料收集聲明
+              PickCourt 聯盟平台個人資料收集聲明
             </p>
           </motion.div>
         </div>

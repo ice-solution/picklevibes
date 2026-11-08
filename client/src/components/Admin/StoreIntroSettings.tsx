@@ -1,16 +1,22 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { useStoreAdmin } from '../../contexts/StoreAdminContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { HK_DISTRICTS } from '../../constants/hkDistricts';
 import StoreLogoField from './StoreLogoField';
 import StoreBannerField from './StoreBannerField';
+import {
+  DEFAULT_CANCELLATION_LINES,
+  DEFAULT_IMPORTANT_REMINDERS_LINES,
+  DEFAULT_USAGE_NOTICE,
+} from '../../utils/storeBookingPolicies';
 
 const StoreIntroSettings: React.FC = () => {
   const { store, refresh } = useStoreAdmin();
   const { user } = useAuth();
   const isPlatformAdmin = user?.isPlatformAdmin || user?.role === 'admin';
   const [saving, setSaving] = useState(false);
+  const hydratedStoreIdRef = useRef<string | null>(null);
   const [form, setForm] = useState({
     name: '',
     phone: '',
@@ -22,10 +28,23 @@ const StoreIntroSettings: React.FC = () => {
     brandingLogoUrl: '',
     brandingBannerUrl: '',
     brandingPrimaryColor: '',
+    cancellationText: '',
+    importantRemindersText: '',
+    usageNoticeText: '',
   });
 
   useEffect(() => {
     if (!store) return;
+    // 上傳 banner／logo 會 refresh store；唔好整表重置，以免沖掉未儲存文字
+    if (hydratedStoreIdRef.current === store._id) {
+      setForm((prev) => ({
+        ...prev,
+        brandingLogoUrl: store.branding?.logoUrl || prev.brandingLogoUrl,
+        brandingBannerUrl: store.branding?.bannerUrl || prev.brandingBannerUrl,
+      }));
+      return;
+    }
+    hydratedStoreIdRef.current = store._id;
     setForm({
       name: store.name || '',
       phone: store.phone || '',
@@ -37,6 +56,12 @@ const StoreIntroSettings: React.FC = () => {
       brandingLogoUrl: store.branding?.logoUrl || '',
       brandingBannerUrl: store.branding?.bannerUrl || '',
       brandingPrimaryColor: store.branding?.primaryColor || '',
+      cancellationText:
+        store.bookingPolicies?.cancellationText || DEFAULT_CANCELLATION_LINES.join('\n'),
+      importantRemindersText:
+        store.bookingPolicies?.importantRemindersText ||
+        DEFAULT_IMPORTANT_REMINDERS_LINES.join('\n'),
+      usageNoticeText: store.bookingPolicies?.usageNoticeText || DEFAULT_USAGE_NOTICE,
     });
   }, [store]);
 
@@ -57,6 +82,11 @@ const StoreIntroSettings: React.FC = () => {
           logoUrl: form.brandingLogoUrl.trim(),
           bannerUrl: form.brandingBannerUrl.trim(),
           primaryColor: form.brandingPrimaryColor.trim(),
+        },
+        bookingPolicies: {
+          cancellationText: form.cancellationText.trim(),
+          importantRemindersText: form.importantRemindersText.trim(),
+          usageNoticeText: form.usageNoticeText.trim(),
         },
       });
       await refresh();
@@ -152,6 +182,38 @@ const StoreIntroSettings: React.FC = () => {
             />
           </div>
         </div>
+
+        <hr />
+        <h3 className="text-base font-semibold text-gray-900">預約政策（顯示於確認頁／電郵）</h3>
+        <p className="text-xs text-gray-500 -mt-2">每行一條；留空儲存後系統會用預設文案。</p>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">取消及惡劣天氣政策</label>
+          <textarea
+            rows={5}
+            className="w-full border rounded-md px-3 py-2 text-sm"
+            value={form.cancellationText}
+            onChange={(e) => setForm({ ...form, cancellationText: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">重要提醒</label>
+          <textarea
+            rows={4}
+            className="w-full border rounded-md px-3 py-2 text-sm"
+            value={form.importantRemindersText}
+            onChange={(e) => setForm({ ...form, importantRemindersText: e.target.value })}
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">場地使用須知（確認預約前彈窗）</label>
+          <textarea
+            rows={4}
+            className="w-full border rounded-md px-3 py-2 text-sm"
+            value={form.usageNoticeText}
+            onChange={(e) => setForm({ ...form, usageNoticeText: e.target.value })}
+          />
+        </div>
+
         <button type="submit" disabled={saving} className="bg-primary-600 text-white px-6 py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50">
           {saving ? '儲存中…' : '儲存設定'}
         </button>

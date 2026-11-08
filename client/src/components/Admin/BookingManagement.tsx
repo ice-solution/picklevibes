@@ -178,6 +178,9 @@ const BookingManagement: React.FC = () => {
                     用戶信息
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    店鋪名稱
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     場地信息
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -222,6 +225,15 @@ const BookingManagement: React.FC = () => {
                       )}
                     </td>
                     
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {(booking as any).store?.branding?.displayName ||
+                          (booking as any).store?.name ||
+                          (booking.court as any)?.store?.name ||
+                          '—'}
+                      </div>
+                    </td>
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
                         {booking.court.name}

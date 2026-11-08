@@ -63,7 +63,7 @@ router.get('/', async (req, res) => {
   try {
     const stores = await Store.find({ isActive: true })
       .sort({ sortOrder: 1, name: 1 })
-      .select('name slug address phone district operatingHours sortOrder enableHikAccess enableRecharge isChainStore allianceEnabled');
+      .select('name slug address phone district operatingHours sortOrder enableHikAccess enableRecharge enableVipDiscount enableSoloAddon isChainStore allianceEnabled bookingPolicies');
     res.json({ stores });
   } catch (error) {
     console.error('獲取店鋪列表錯誤:', error);
@@ -416,7 +416,7 @@ router.get('/by-slug/:slug', async (req, res) => {
     const filter = { slug };
     if (!forLogin) filter.isActive = true;
     const store = await Store.findOne(filter)
-      .select('name slug address phone district allianceEnabled branding operatingHours sortOrder enableHikAccess enableRecharge isChainStore');
+      .select('name slug address phone district allianceEnabled branding operatingHours sortOrder enableHikAccess enableRecharge enableVipDiscount enableSoloAddon isChainStore bookingPolicies');
     if (!store) {
       return res.status(404).json({ message: '店鋪不存在' });
     }

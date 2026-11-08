@@ -115,12 +115,32 @@ const storeSchema = new mongoose.Schema({
     default: true,
   },
   /**
+   * 是否套用平台 VIP 8 折（預設關）。
+   * 注意：連鎖店（isChainStore）價目已係 VIP 價，永遠唔再套 8 折／唔顯示 VIP 提示。
+   */
+  enableVipDiscount: {
+    type: Boolean,
+    default: false,
+  },
+  /** 是否開放比賽場加購單人場（額外服務） */
+  enableSoloAddon: {
+    type: Boolean,
+    default: false,
+  },
+  /**
    * 連鎖店：店鋪 admin 用戶管理可看全部會員，
-   * 不受「必須曾在本店預約」限制
+   * 不受「必須曾在本店預約」限制；
+   * 遠端價目視為已含 VIP，唔再套 8 折。
    */
   isChainStore: {
     type: Boolean,
     default: false,
+  },
+  /** 預約確認頁／電郵：取消政策、重要提醒、場地使用須知（可後台編輯） */
+  bookingPolicies: {
+    cancellationText: { type: String, trim: true, default: '' },
+    importantRemindersText: { type: String, trim: true, default: '' },
+    usageNoticeText: { type: String, trim: true, default: '' },
   },
   /**
    * 平台向該店收取的抽成％（店充值 + 積分預約場地）

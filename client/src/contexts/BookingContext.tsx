@@ -12,6 +12,15 @@ export interface StoreSummary {
   address: string;
   phone?: string;
   enableHikAccess?: boolean;
+  enableVipDiscount?: boolean;
+  enableSoloAddon?: boolean;
+  enableRecharge?: boolean;
+  isChainStore?: boolean;
+  bookingPolicies?: {
+    cancellationText?: string;
+    importantRemindersText?: string;
+    usageNoticeText?: string;
+  };
   branding?: { primaryColor?: string; displayName?: string };
 }
 
@@ -276,7 +285,13 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
   const checkSoloCourtAvailability = useCallback(async (date: string, startTime: string, endTime: string) => {
     try {
       console.log('🔍 檢查單人場可用性:', { date, startTime, endTime });
-      
+
+      // 店鋪未開放單人場加購
+      if (selectedStore && selectedStore.enableSoloAddon !== true) {
+        setSoloCourtAvailable(false);
+        return false;
+      }
+
       // 找到單人場
       const selectedStoreId = selectedCourt
         ? (typeof selectedCourt.store === 'object' ? selectedCourt.store?._id : selectedCourt.store)
@@ -321,7 +336,7 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
       setSoloCourtAvailable(false);
       return false;
     }
-  }, [courts, selectedCourt, selectedStore?._id]);
+  }, [courts, selectedCourt, selectedStore?._id, selectedStore?.enableSoloAddon]);
 
   const createBooking = useCallback(async (bookingData: CreateBookingData): Promise<Booking> => {
     try {

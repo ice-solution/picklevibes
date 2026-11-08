@@ -319,10 +319,12 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
             };
           }
           
-          // 計算價格
+          // 計算價格（跨價位按小時加總）
           const duration = calculateDuration(slot.startTime, slot.endTime);
+          const totalPrice = Math.round(
+            court.calculateRangePrice(slot.startTime, slot.endTime, bookingDate)
+          );
           const basePrice = court.getPriceForTime(slot.startTime, bookingDate);
-          const totalPrice = Math.round(basePrice * (duration / 60));
           const slotName = court.getTimeSlotName(slot.startTime, bookingDate);
           
           // 判斷是否為高峰時段（用於顯示）
@@ -436,11 +438,11 @@ router.get('/:id/availability', [
       });
     }
     
-    // 計算價格
-    const basePrice = court.getPriceForTime(startTime, bookingDate);
+    // 計算價格（跨價位按小時加總）
     const duration = (parseInt(endTime.split(':')[0]) * 60 + parseInt(endTime.split(':')[1])) - 
                     (parseInt(startTime.split(':')[0]) * 60 + parseInt(startTime.split(':')[1]));
-    const totalPrice = (basePrice * duration) / 60;
+    const totalPrice = court.calculateRangePrice(startTime, endTime, bookingDate);
+    const basePrice = court.getPriceForTime(startTime, bookingDate);
     const slotName = court.getTimeSlotName(startTime, bookingDate);
     
     // 判斷是否為高峰時段（用於顯示）

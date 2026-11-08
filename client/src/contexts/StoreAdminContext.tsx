@@ -9,6 +9,15 @@ export type StoreProfile = {
   district?: string | null;
   phone?: string;
   allianceEnabled?: boolean;
+  enableRecharge?: boolean;
+  enableVipDiscount?: boolean;
+  enableSoloAddon?: boolean;
+  isChainStore?: boolean;
+  bookingPolicies?: {
+    cancellationText?: string;
+    importantRemindersText?: string;
+    usageNoticeText?: string;
+  };
   branding?: {
     displayName?: string;
     tagline?: string;

@@ -359,35 +359,35 @@ bookingSchema.statics.checkTimeConflict = async function(
 
 // 計算總價格
 bookingSchema.methods.calculatePrice = function(court, isMember = false) {
-  // 使用新的價格結構，傳遞日期以判斷是否為週末
-  const hourlyPrice = court.getPriceForTime(this.startTime, this.date);
-  
   // 計算實際時長（小時）
   const startMinutes = parseInt(this.startTime.split(':')[0]) * 60 + parseInt(this.startTime.split(':')[1]);
   let endMinutes = parseInt(this.endTime.split(':')[0]) * 60 + parseInt(this.endTime.split(':')[1]);
-  
+
   // 處理 24:00 的情況
   if (this.endTime === '24:00') {
     endMinutes = 24 * 60; // 1440 分鐘
   }
-  
+
   // 如果結束時間小於開始時間，表示跨天（例如 22:00 到 00:00）
   if (endMinutes <= startMinutes) {
     endMinutes += 24 * 60; // 加上 24 小時
   }
-  
+
   const durationHours = (endMinutes - startMinutes) / 60;
-  
-  // 計算基礎價格（每小時價格 × 時長）
-  const basePrice = hourlyPrice * durationHours;
-  
+
+  // 跨價位：按每小時分別取價再加總
+  const basePrice =
+    typeof court.calculateRangePrice === 'function'
+      ? court.calculateRangePrice(this.startTime, this.endTime, this.date)
+      : (Number(court.getPriceForTime(this.startTime, this.date)) || 0) * durationHours;
+
   // 會員折扣（如果用戶是會員）
   const memberDiscount = isMember ? court.pricing.memberDiscount : 0;
-  
+
   this.pricing.basePrice = basePrice;
   this.pricing.memberDiscount = memberDiscount;
   this.pricing.totalPrice = basePrice * (1 - memberDiscount / 100);
-  
+
   return this.pricing.totalPrice;
 };
 

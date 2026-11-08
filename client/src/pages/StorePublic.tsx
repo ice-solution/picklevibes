@@ -27,6 +27,8 @@ type StoreCourt = {
   type: string;
   capacity: number;
   description?: string;
+  images?: Array<string | { url?: string; path?: string }>;
+  operatingHours?: any;
 };
 
 type GameHall = {
@@ -143,12 +145,8 @@ const StorePublic: React.FC = () => {
               alt=""
               className="absolute inset-0 w-full h-full object-cover"
             />
-            <div
-              className="absolute inset-0"
-              style={{
-                background: `linear-gradient(180deg, color-mix(in srgb, ${primary} 55%, black) 0%, color-mix(in srgb, ${primary} 72%, transparent) 100%)`,
-              }}
-            />
+            {/* 輕量暗角方便讀白字，唔用品牌主色蓋住 banner */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/55 via-black/25 to-black/20" />
           </>
         ) : (
           <div className="absolute inset-0 opacity-20 pointer-events-none">
@@ -259,6 +257,20 @@ const StorePublic: React.FC = () => {
                   className="flex flex-col rounded-xl border border-slate-200 p-4 hover:border-[var(--store-primary-border)] hover:shadow-sm transition-all"
                   style={{ backgroundColor: 'var(--store-primary-soft)' }}
                 >
+                  {(() => {
+                    const raw = Array.isArray(court.images) ? court.images[0] : null;
+                    const imgUrl =
+                      typeof raw === 'string'
+                        ? resolveMediaUrl(raw)
+                        : resolveMediaUrl(raw?.url || raw?.path || '');
+                    return imgUrl ? (
+                      <img
+                        src={imgUrl}
+                        alt={court.name}
+                        className="w-full h-36 object-cover rounded-lg mb-3"
+                      />
+                    ) : null;
+                  })()}
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="font-bold text-gray-900">{court.name}</p>

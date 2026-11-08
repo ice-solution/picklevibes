@@ -35,6 +35,7 @@
     "migrate-store-district": "node server/scripts/migrateStoreDistrict.js",
     "migrate-game-hall-store": "node server/scripts/migrateGameHallStore.js",
     "migrate-platform-membership": "node server/scripts/migratePlatformMembership.js",
+    "seed-store-booking-policies": "node server/scripts/seedStoreBookingPolicies.js",
     "migrate-store-balance": "node server/scripts/migrateStoreBalance.js",
     "fix-store-domain-indexes": "node server/scripts/fixStoreDomainIndexes.js",
     "verify-tenant-domains": "node server/scripts/verifyTenantDomains.js",

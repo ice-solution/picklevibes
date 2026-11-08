@@ -4,7 +4,10 @@ import { buildAccountRechargeUrl } from '../../utils/pickcourtRoutes';
 import { useAuth } from '../../contexts/AuthContext';
 import RedeemCodeInput from '../Common/RedeemCodeInput';
 import apiConfig from '../../config/api';
-import { BOOKING_CANCELLATION_POLICY_LINES } from '../../constants/bookingCancellationPolicy';
+import {
+  resolveStoreBookingPolicies,
+  storeAppliesVipDiscount,
+} from '../../utils/storeBookingPolicies';
 import { 
   CalendarDaysIcon, 
   ClockIcon, 
@@ -55,6 +58,10 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
 }) => {
   const { createBooking, selectedStore } = useBooking();
   const { user } = useAuth();
+  const enableVipDiscount = storeAppliesVipDiscount(selectedStore);
+  const showVipPromo = enableVipDiscount && user?.membershipLevel !== 'vip';
+  const applyVipDiscount = enableVipDiscount && user?.membershipLevel === 'vip';
+  const storePolicies = resolveStoreBookingPolicies(selectedStore?.bookingPolicies);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [specialRequests, setSpecialRequests] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -63,12 +70,9 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   // 兌換碼相關狀態
   const [redeemData, setRedeemData] = useState<any>(null);
 
-  /** 確認預約前：鞋底政策 lightbox */
+  /** 確認預約前：場地使用須知 lightbox */
   const [showSoleNoticeModal, setShowSoleNoticeModal] = useState(false);
   const [soleNoticeAcknowledged, setSoleNoticeAcknowledged] = useState(false);
-
-  const SOLE_NOTICE_MESSAGE =
-    '通知各位波友：場地禁止穿著黑色鞋底的運動鞋。如因黑底鞋在場地上留下黑色痕跡，每條痕跡場方將收取港幣100元清潔費。';
 
   // 預約現在使用積分支付，不再需要支付狀態追蹤
   
@@ -466,8 +470,8 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">價格詳情</h3>
             
-            {/* VIP折扣提示框 */}
-            {user?.membershipLevel !== 'vip' && (
+            {/* VIP折扣提示框（僅店鋪開啟 VIP 折扣時） */}
+            {showVipPromo && (
               <div className="mb-4 p-4 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-400 rounded-lg shadow-md">
                 <div className="flex items-center justify-center gap-2 mb-2">
                   <span className="text-2xl animate-bounce">🎉</span>
@@ -496,7 +500,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               )}
               
               {/* VIP 會員折扣 */}
-              {user?.membershipLevel === 'vip' && (
+              {applyVipDiscount && (
                 <div className="flex justify-between text-green-600">
                   <span className="flex items-center gap-2">
                     <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">VIP</span>
@@ -533,8 +537,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                     {(() => {
                       let totalPrice = (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0);
                       
-                      // 應用 VIP 折扣
-                      if (user?.membershipLevel === 'vip') {
+                      if (applyVipDiscount) {
                         totalPrice = Math.round(totalPrice * 0.8);
                       }
                       
@@ -548,7 +551,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   </span>
                 </div>
                 <div className="text-sm text-gray-500 mt-1 text-right">
-                  {user?.membershipLevel === 'vip' && '已享受 VIP 會員 8 折優惠'}
+                  {applyVipDiscount && '已享受 VIP 會員 8 折優惠'}
                   {redeemData && ' + 兌換碼折扣'}
                 </div>
               </div>
@@ -556,14 +559,14 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           </div>
         )}
 
-        {/* 取消及惡劣天氣政策 */}
+        {/* 取消及惡劣天氣政策（店鋪後台可編輯） */}
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-6">
           <div className="flex items-start gap-3">
             <ExclamationTriangleIcon className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
             <div>
               <h4 className="font-semibold text-amber-900 mb-2">取消及惡劣天氣政策</h4>
               <ul className="text-sm text-amber-900 space-y-1 list-disc list-inside">
-                {BOOKING_CANCELLATION_POLICY_LINES.map((line) => (
+                {storePolicies.cancellationLines.map((line) => (
                   <li key={line}>{line}</li>
                 ))}
               </ul>
@@ -571,20 +574,16 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           </div>
         </div>
 
-        {/* 重要提醒 */}
+        {/* 重要提醒（店鋪後台可編輯） */}
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6">
           <div className="flex items-start gap-3">
             <ExclamationTriangleIcon className="w-5 h-5 text-yellow-600 mt-0.5" />
             <div>
               <h4 className="font-semibold text-yellow-800 mb-2">重要提醒</h4>
               <ul className="text-sm text-yellow-700 space-y-1">
-                <li>• 請提前15分鐘到達場地</li>
-                <li>
-                  • ‼️避免穿著黑底運動鞋，造成污漬將會收取每一條鞋痕
-                  <span className="text-red-600 font-semibold text-[1.2em]">$100</span>
-                  清潔費‼️
-                </li>
-                <li>• 場地內禁止吸煙和飲酒</li>
+                {storePolicies.importantRemindersLines.map((line) => (
+                  <li key={line}>• {line}</li>
+                ))}
               </ul>
             </div>
           </div>
@@ -657,7 +656,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
               場地使用須知
             </h3>
             <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-line border border-gray-200 rounded-lg p-4 bg-gray-50 mb-5">
-              {SOLE_NOTICE_MESSAGE}
+              {storePolicies.usageNoticeText}
             </p>
             <label className="flex items-start gap-3 cursor-pointer mb-6">
               <input

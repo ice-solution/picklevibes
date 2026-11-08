@@ -26,6 +26,8 @@ interface Store {
   isActive: boolean;
   enableHikAccess: boolean;
   enableRecharge?: boolean;
+  enableVipDiscount?: boolean;
+  enableSoloAddon?: boolean;
   isChainStore?: boolean;
   platformFeePercent?: number;
   accessControlVendor?: AccessControlVendor;
@@ -80,6 +82,8 @@ interface StoreForm {
   isActive: boolean;
   enableHikAccess: boolean;
   enableRecharge: boolean;
+  enableVipDiscount: boolean;
+  enableSoloAddon: boolean;
   isChainStore: boolean;
   platformFeePercent: number;
   accessControlVendor: AccessControlVendor;
@@ -129,6 +133,8 @@ const emptyForm: StoreForm = {
   isActive: true,
   enableHikAccess: false,
   enableRecharge: true,
+  enableVipDiscount: false,
+  enableSoloAddon: false,
   isChainStore: false,
   platformFeePercent: 0,
   accessControlVendor: 'hik',
@@ -214,6 +220,8 @@ const StoreManagement: React.FC = () => {
       isActive: s.isActive,
       enableHikAccess: s.enableHikAccess,
       enableRecharge: s.enableRecharge !== false,
+      enableVipDiscount: s.enableVipDiscount === true,
+      enableSoloAddon: s.enableSoloAddon === true,
       isChainStore: Boolean(s.isChainStore),
       platformFeePercent: Number(s.platformFeePercent) || 0,
       accessControlVendor: (s.accessControlVendor || 'hik') as AccessControlVendor,
@@ -268,6 +276,8 @@ const StoreManagement: React.FC = () => {
         isActive: form.isActive,
         enableHikAccess: form.enableHikAccess,
         enableRecharge: form.enableRecharge,
+        enableVipDiscount: form.enableVipDiscount,
+        enableSoloAddon: form.enableSoloAddon,
         isChainStore: form.isChainStore,
         platformFeePercent: Number(form.platformFeePercent) || 0,
         accessControlVendor: form.enableHikAccess ? form.accessControlVendor : 'hik',
@@ -475,6 +485,28 @@ const StoreManagement: React.FC = () => {
               </label>
               <p className="text-xs text-gray-500 -mt-1">
                 關閉後會員無法自助充值到此店；平台充值與管理員手動充值不受影響。
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.enableVipDiscount}
+                  onChange={(e) => setForm({ ...form, enableVipDiscount: e.target.checked })}
+                />
+                開放 VIP 8 折（非連鎖店）
+              </label>
+              <p className="text-xs text-gray-500 -mt-1">
+                預設關閉：一律用店鋪牌價。連鎖店價目已當 VIP 價，即使勾選亦唔會再 8 折／唔顯示 VIP 提示。
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.enableSoloAddon}
+                  onChange={(e) => setForm({ ...form, enableSoloAddon: e.target.checked })}
+                />
+                開放單人場加購（額外服務）
+              </label>
+              <p className="text-xs text-gray-500 -mt-1">
+                關閉時確認預約頁唔顯示「同時租用單人場」。
               </p>
               <label className="flex items-center gap-2 text-sm">
                 <input

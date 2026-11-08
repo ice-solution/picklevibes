@@ -44,6 +44,7 @@ interface RechargeRecord {
 const StoreMemberManagement: React.FC = () => {
   const storeAdmin = useOptionalStoreAdmin();
   const lockedStoreId = useLockedStoreId();
+  const showRechargeUi = storeAdmin?.store?.enableRecharge !== false;
   const [members, setMembers] = useState<StoreMember[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -255,8 +256,12 @@ const StoreMemberManagement: React.FC = () => {
                 <tr>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">會員</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">聯絡</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">本店餘額</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">累計充值</th>
+                  {showRechargeUi && (
+                    <>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">本店餘額</th>
+                      <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">累計充值</th>
+                    </>
+                  )}
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
                 </tr>
               </thead>
@@ -274,39 +279,50 @@ const StoreMemberManagement: React.FC = () => {
                       <div>{member.email}</div>
                       <div>{member.phone || '—'}</div>
                     </td>
-                    <td className="px-4 py-3 text-right">
-                      <div className="font-semibold text-gray-900">{member.balance} 分</div>
-                      {typeof member.platformBalance === 'number' && (
-                        <div className="text-xs text-gray-400">平台 {member.platformBalance}</div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-right text-gray-600">{member.totalRecharged} 分</td>
+                    {showRechargeUi && (
+                      <>
+                        <td className="px-4 py-3 text-right">
+                          <div className="font-semibold text-gray-900">{member.balance} 分</div>
+                          {typeof member.platformBalance === 'number' && (
+                            <div className="text-xs text-gray-400">平台 {member.platformBalance}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right text-gray-600">{member.totalRecharged} 分</td>
+                      </>
+                    )}
                     <td className="px-4 py-3 text-right">
                       <div className="flex justify-end gap-2 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => void openRecords(member)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-pickcourt-navy bg-slate-100 rounded-lg hover:bg-slate-200"
-                        >
-                          <ClipboardDocumentListIcon className="w-4 h-4" />
-                          記錄
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openRecharge(member)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100"
-                        >
-                          <PlusIcon className="w-4 h-4" />
-                          充值
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => openDeduct(member)}
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100"
-                        >
-                          <MinusIcon className="w-4 h-4" />
-                          扣除
-                        </button>
+                        {showRechargeUi && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => void openRecords(member)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-pickcourt-navy bg-slate-100 rounded-lg hover:bg-slate-200"
+                            >
+                              <ClipboardDocumentListIcon className="w-4 h-4" />
+                              記錄
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openRecharge(member)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100"
+                            >
+                              <PlusIcon className="w-4 h-4" />
+                              充值
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => openDeduct(member)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-red-700 bg-red-50 rounded-lg hover:bg-red-100"
+                            >
+                              <MinusIcon className="w-4 h-4" />
+                              扣除
+                            </button>
+                          </>
+                        )}
+                        {!showRechargeUi && (
+                          <span className="text-xs text-gray-400">本店未開放充值</span>
+                        )}
                       </div>
                     </td>
                   </tr>

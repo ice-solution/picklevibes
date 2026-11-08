@@ -233,12 +233,32 @@ const CourtManagement: React.FC = () => {
   };
 
   const getOperatingHoursText = (court: Court) => {
-    if (court.type === 'competition' || court.type === 'training') {
-      return '24小時';
-    } else if (court.type === 'solo') {
-      return '08:00-23:00';
+    const hours = court.operatingHours;
+    if (!hours || typeof hours !== 'object') return '未設定';
+    const days = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'] as const;
+    const labels: string[] = [];
+    const seen = new Set<string>();
+    for (const day of days) {
+      const d = (hours as any)[day];
+      if (!d || d.isOpen === false) continue;
+      const start = d.start || d.open || '';
+      const end = d.end || d.close || '';
+      if (!start || !end) continue;
+      const key = `${start}-${end}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        labels.push(key);
+      }
     }
-    return '營業時間';
+    if (labels.length === 0) return '未設定';
+    if (labels.length === 1) {
+      const [start, end] = labels[0].split('-');
+      if ((start === '00:00' && (end === '24:00' || end === '23:59')) || (start === '00:00' && end === '00:00')) {
+        return '24小時';
+      }
+      return labels[0];
+    }
+    return labels.join('／');
   };
 
   const handleImageUpload = async (courtId: string, file: File) => {

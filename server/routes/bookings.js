@@ -177,7 +177,7 @@ router.post('/', [
       let chainLocalStore = null;
       if (courtDoc?.store) {
         chainLocalStore = await Store.findById(courtDoc.store).select(
-          'name slug address isActive isChainStore'
+          'name slug address isActive isChainStore enableVipDiscount enableSoloAddon'
         );
       }
 
@@ -240,7 +240,11 @@ router.post('/', [
       }
 
       const membership = await resolveMembership(bookingUserDoc);
-      const isVip = membership.isVipActive;
+      const { storeAppliesVipDiscount } = require('../utils/storeBookingPolicies');
+      const isVip = membership.isVipActive && storeAppliesVipDiscount(localStore);
+      if (includeSoloCourt && localStore.enableSoloAddon !== true) {
+        return res.status(400).json({ message: '此店鋪未開放單人場加購' });
+      }
 
       let pointsToDeduct = Math.round(Number(availability.pricing?.totalPrice) || 0);
       if (includeSoloCourt) pointsToDeduct += 100;
@@ -613,9 +617,16 @@ router.post('/', [
     }
     
     const membership = await resolveMembership(bookingUser);
-    const isVip = membership.isVipActive;
+    const storeForFlags = await Store.findById(courtDoc.store)
+      .select('enableVipDiscount enableSoloAddon isChainStore name slug')
+      .lean();
+    const { storeAppliesVipDiscount } = require('../utils/storeBookingPolicies');
+    const isVip = membership.isVipActive && storeAppliesVipDiscount(storeForFlags);
     const isMember = membership.tier !== 'basic';
-    
+    if (includeSoloCourt && storeForFlags?.enableSoloAddon !== true) {
+      return res.status(400).json({ message: '此店鋪未開放單人場加購' });
+    }
+
     // 創建預約對象來計算價格
     const tempBooking = new Booking({
       user: req.user.id,
@@ -633,7 +644,7 @@ router.post('/', [
     // 計算價格
     tempBooking.calculatePrice(courtDoc, isMember);
     
-    // 計算實際需要扣除的積分（VIP會員8折）
+    // 計算實際需要扣除的積分（僅店鋪開啟 VIP 折扣時套用 8 折）
     let pointsToDeduct = Math.round(tempBooking.pricing.totalPrice);
     
     // 如果包含單人場租用，添加100積分
@@ -642,7 +653,7 @@ router.post('/', [
     }
     
     if (isVip) {
-      pointsToDeduct = Math.round(pointsToDeduct * 0.8); // VIP會員8折
+      pointsToDeduct = Math.round(pointsToDeduct * 0.8);
     }
     
     // 處理兌換碼折扣

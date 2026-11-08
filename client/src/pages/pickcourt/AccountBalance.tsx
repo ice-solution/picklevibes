@@ -126,34 +126,6 @@ const AccountBalance: React.FC = () => {
               </Link>
             </div>
 
-            {(data.storeBalances || []).length > 0 && (
-              <div>
-                <h2 className="font-bold text-pickcourt-navy mb-3">各店專用積分</h2>
-                <p className="text-sm text-gray-500 mb-4">僅限該店使用，不可跨店</p>
-                <div className="grid sm:grid-cols-2 gap-4">
-                  {(data.storeBalances || []).map((item) => {
-                    const slug = item.store?.slug || '';
-                    const name = item.store?.branding?.displayName || item.store?.name || '店鋪';
-                    return (
-                      <button
-                        key={item.storeId}
-                        type="button"
-                        onClick={() => setSearchParams({ store: slug })}
-                        className={`${card} text-left hover:border-pickcourt-gold transition-colors`}
-                      >
-                        <BuildingStorefrontIcon className="w-8 h-8 text-pickcourt-gold mb-2" />
-                        <h3 className="font-bold text-pickcourt-navy">{name}</h3>
-                        <p className="text-2xl font-bold text-pickcourt-gold mt-1">{item.balance} 分</p>
-                        <p className="text-xs text-gray-500 mt-1">
-                          充值 {item.totalRecharged} · 消費 {item.totalSpent}
-                        </p>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             {transactions.length > 0 && (
               <div className={card}>
                 <h2 className="font-bold text-pickcourt-navy mb-4">平台交易記錄</h2>
@@ -205,6 +177,34 @@ const AccountBalance: React.FC = () => {
                     </button>
                   </div>
                 )}
+              </div>
+            )}
+
+            {(data.storeBalances || []).length > 0 && (
+              <div>
+                <h2 className="font-bold text-pickcourt-navy mb-3">各店專用積分</h2>
+                <p className="text-sm text-gray-500 mb-4">僅限該店使用，不可跨店</p>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  {(data.storeBalances || []).map((item) => {
+                    const slug = item.store?.slug || '';
+                    const name = item.store?.branding?.displayName || item.store?.name || '店鋪';
+                    return (
+                      <button
+                        key={item.storeId}
+                        type="button"
+                        onClick={() => setSearchParams({ store: slug })}
+                        className={`${card} text-left hover:border-pickcourt-gold transition-colors`}
+                      >
+                        <BuildingStorefrontIcon className="w-8 h-8 text-pickcourt-gold mb-2" />
+                        <h3 className="font-bold text-pickcourt-navy">{name}</h3>
+                        <p className="text-2xl font-bold text-pickcourt-gold mt-1">{item.balance} 分</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          充值 {item.totalRecharged} · 消費 {item.totalSpent}
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
           </div>

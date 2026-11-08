@@ -137,8 +137,8 @@ const RechargeOfferManagement: React.FC = () => {
       newErrors.points = '充值積分必須大於0';
     }
 
-    if (!formData.amount || formData.amount <= 0) {
-      newErrors.amount = '充值金額必須大於0';
+    if (!formData.amount || formData.amount < 100) {
+      newErrors.amount = '充值金額須至少 HK$100';
     }
 
     if (!formData.description.trim()) {

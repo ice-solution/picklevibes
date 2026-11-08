@@ -20,7 +20,7 @@ const { typeCountsForCourts, effectiveCourtSlug } = require('../utils/courtSlug'
 const router = express.Router();
 
 const allianceStoreSelect =
-  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding enableRecharge';
+  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding enableRecharge enableVipDiscount enableSoloAddon';
 
 function serializeAllianceStore(store) {
   const b = store.branding || {};
@@ -38,6 +38,8 @@ function serializeAllianceStore(store) {
     primaryColor: b.primaryColor || null,
     subscriptionPlan: store.subscriptionPlan || 'starter',
     enableRecharge: store.enableRecharge !== false,
+    enableVipDiscount: store.enableVipDiscount === true,
+    enableSoloAddon: store.enableSoloAddon === true,
   };
 }
 
@@ -134,7 +136,7 @@ router.get('/stores/:storeSlug', async (req, res) => {
       type: { $ne: 'full_venue' },
     })
       .sort({ number: 1 })
-      .select('name slug number type capacity description')
+      .select('name slug number type capacity description images operatingHours')
       .lean();
 
     const courtTypeCounts = typeCountsForCourts(courts);
@@ -158,6 +160,8 @@ router.get('/stores/:storeSlug', async (req, res) => {
           type: c.type,
           capacity: c.capacity,
           description: c.description || '',
+          images: Array.isArray(c.images) ? c.images : [],
+          operatingHours: c.operatingHours || null,
         })),
         gameHalls: gameHalls.map((h) => ({
           id: String(h._id),

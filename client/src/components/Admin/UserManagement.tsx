@@ -955,6 +955,9 @@ const UserManagement: React.FC = () => {
                   積分餘額
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  店鋪餘額
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   狀態
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -998,6 +1001,23 @@ const UserManagement: React.FC = () => {
                         <div>消費: {user.totalSpent || 0}</div>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-6 py-4">
+                    {(user as any).storeBalances?.length ? (
+                      <div className="text-xs text-gray-700 space-y-1 max-w-[180px]">
+                        {(user as any).storeBalances.map((sb: any) => (
+                          <div key={String(sb.storeId || sb.storeSlug)}>
+                            <span className="font-medium">{sb.storeName}</span>
+                            <span className="text-gray-500">：{sb.balance} 分</span>
+                            {sb.totalRecharged > 0 && (
+                              <span className="text-gray-400">（充值 {sb.totalRecharged}）</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">—</span>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${

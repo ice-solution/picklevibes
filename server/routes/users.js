@@ -5,6 +5,7 @@ const UserBalance = require('../models/UserBalance');
 const {
   getStoreBalanceSummary,
   getAvailableBalanceForStore,
+  listUserStoreBalances,
   addStoreBalance,
   addPlatformBalance,
   deductForStoreBooking,
@@ -203,12 +204,22 @@ router.get('/', [auth, adminAuth], async (req, res) => {
           totalSpent: summary.totalSpent,
         };
       }
-      const balance = await UserBalance.findOne({ user: user._id });
+      const [balance, storeBalances] = await Promise.all([
+        UserBalance.findOne({ user: user._id }),
+        listUserStoreBalances(user._id),
+      ]);
       return {
         ...user.toObject(),
         balance: balance ? balance.balance : 0,
         totalRecharged: balance ? balance.totalRecharged : 0,
         totalSpent: balance ? balance.totalSpent : 0,
+        storeBalances: (storeBalances || []).map((row) => ({
+          storeId: row.storeId || row.store?._id,
+          storeName: row.store?.branding?.displayName || row.store?.name || '店鋪',
+          storeSlug: row.store?.slug || '',
+          balance: row.balance || 0,
+          totalRecharged: row.totalRecharged || 0,
+        })),
       };
     }));
     

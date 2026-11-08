@@ -222,6 +222,30 @@ courtSchema.methods.isOpenAt = function(date, startTime = null, endTime = null) 
   return time >= daySchedule.start && time <= daySchedule.end;
 };
 
+/** 按小時加總時段價（跨價位正確） */
+courtSchema.methods.calculateRangePrice = function (startTime, endTime, date = null) {
+  const startMinutes =
+    parseInt(String(startTime).split(':')[0], 10) * 60 +
+    parseInt(String(startTime).split(':')[1] || '0', 10);
+  let endMinutes =
+    endTime === '24:00'
+      ? 24 * 60
+      : parseInt(String(endTime).split(':')[0], 10) * 60 +
+        parseInt(String(endTime).split(':')[1] || '0', 10);
+  if (endMinutes <= startMinutes) endMinutes += 24 * 60;
+  const durationHours = (endMinutes - startMinutes) / 60;
+  const hourCount = Math.max(1, Math.round(durationHours));
+  let total = 0;
+  for (let i = 0; i < hourCount; i++) {
+    const mins = startMinutes + i * 60;
+    const h = Math.floor((mins % (24 * 60)) / 60);
+    const m = mins % 60;
+    const slotStart = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    total += Number(this.getPriceForTime(slotStart, date)) || 0;
+  }
+  return total;
+};
+
 // 根據時間獲取價格
 courtSchema.methods.getPriceForTime = function(startTime, date = null) {
   // 如果沒有設置價格時段，使用舊的 peakHour/offPeak 結構
@@ -242,17 +266,12 @@ courtSchema.methods.getPriceForTime = function(startTime, date = null) {
   const weekendType = date ? weekendService.getWeekendType(date) : 'weekday';
   const hour = parseInt(startTime.split(':')[0]);
 
-  // 週末/紅日：08:00-24:00 優先使用「紅日」slot（若有配置），否則 fallback 到「繁忙時間」
-  // 注意：目前營運規則把星期六/日也視為可套用「紅日」價格（若場地有設置「紅日」時段）。
-  if (isWeekend) {
-    if (hour >= 8 && hour < 24) {
-      const holidaySlot = this.pricing.timeSlots.find((slot) => slot.name === '紅日');
-      if (holidaySlot) return holidaySlot.price;
-      const peakSlot = this.pricing.timeSlots.find((slot) => slot.name === '繁忙時間');
-      if (peakSlot) return peakSlot.price;
-    }
+  // 週末／公眾假期：只在有「紅日」slot 時用紅日價；否則按一般時段價（唔再強制 fallback 繁忙時間）
+  if (isWeekend && hour >= 8 && hour < 24) {
+    const holidaySlot = this.pricing.timeSlots.find((slot) => slot.name === '紅日');
+    if (holidaySlot) return holidaySlot.price;
   }
-  
+
   // 找到匹配的時段（含跨日貓頭鷹 23:00–07:00）
   for (const timeSlot of this.pricing.timeSlots) {
     if (isStartTimeInPricingSlot(startTime, timeSlot)) {
@@ -275,14 +294,11 @@ courtSchema.methods.getTimeSlotName = function(startTime, date = null) {
   const weekendType = date ? weekendService.getWeekendType(date) : 'weekday';
   const hour = parseInt(startTime.split(':')[0]);
 
-  // 週末/紅日：08:00-24:00 若有「紅日」slot 則顯示紅日，否則顯示繁忙時間
-  if (isWeekend) {
-    if (hour >= 8 && hour < 24) {
-      const hasHolidaySlot = this.pricing.timeSlots?.some((slot) => slot.name === '紅日');
-      return hasHolidaySlot ? '紅日' : '繁忙時間';
-    }
+  if (isWeekend && hour >= 8 && hour < 24) {
+    const hasHolidaySlot = this.pricing.timeSlots?.some((slot) => slot.name === '紅日');
+    if (hasHolidaySlot) return '紅日';
   }
-  
+
   for (const timeSlot of this.pricing.timeSlots) {
     if (isStartTimeInPricingSlot(startTime, timeSlot)) {
       return timeSlot.name;

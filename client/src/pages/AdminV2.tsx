@@ -26,6 +26,7 @@ import GameClientManagement from '../components/Admin/GameClientManagement';
 import GameLeaderboardManagement from '../components/Admin/GameLeaderboardManagement';
 import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
 import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
+import RechargeRecordsManagement from '../components/Admin/RechargeRecordsManagement';
 import ShopManagement from '../components/Admin/ShopManagement';
 import OrderManagement from '../components/Admin/OrderManagement';
 import MaintenanceControl from '../components/Admin/MaintenanceControl';
@@ -112,6 +113,7 @@ const AdminV2: React.FC = () => {
       { id: 'edm', name: 'EDM 發送', icon: EnvelopeIcon, element: <EdmSend />, platformOnly: true },
       { id: 'redeem', name: '兌換碼管理', icon: TicketIcon, element: <RedeemCodeManagement /> },
       { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
+      { id: 'recharge-records', name: '充值紀錄', icon: CreditCardIcon, element: <RechargeRecordsManagement />, platformOnly: true },
       { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement />, platformOnly: true },
       { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon, element: <OrderManagement /> },
       { id: 'activities', name: '活動管理', icon: CalendarIcon, element: <ActivityManagement /> },

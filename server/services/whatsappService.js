@@ -133,9 +133,13 @@ class WhatsAppService {
       weekday: 'long'
     });
 
-    return `🏓 *預約確認通知*
+    const storeName =
+      booking.store?.branding?.displayName || booking.store?.name || 'PickCourt';
+    const address = booking.store?.address || '';
+    return `*PickCourt 預約確認*
 
-場地：${booking.court?.name || '未知場地'}
+店鋪：${storeName}
+場地：${booking.court?.name || '未知場地'}${address ? `\n地址：${address}` : ''}
 日期：${date}
 時間：${booking.startTime} - ${booking.endTime}
 人數：${booking.totalPlayers} 人
@@ -144,7 +148,7 @@ class WhatsAppService {
 預約編號：${booking._id}
 狀態：已確認
 
-感謝您的預約！如有任何問題，請聯繫我們。`;
+感謝您的預約！如有問題請聯絡場地。`;
   }
 
   /**

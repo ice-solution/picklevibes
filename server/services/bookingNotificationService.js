@@ -23,7 +23,7 @@ function buildBookingEmailData(booking, court, store, overrides = {}) {
     endTime: booking.endTime,
     courtName: overrides.courtName || court?.name || '場地',
     courtNumber: court?.number,
-    storeName: store?.name || '',
+    storeName: store?.branding?.displayName || store?.name || '',
     storeAddress: store?.address || '',
     storePhone: store?.phone || '',
     ...overrides,
@@ -436,6 +436,7 @@ async function resendBookingNotification(booking) {
 
     await accessControlService.sendAccessEmail(visitorData, bookingData, qrCodeData, password, {
       deviceUserId: booking.tempAuth?.deviceUserId || null,
+      store,
     });
     const wa = await sendWhatsAppForBooking({
       phone: visitorData.phone,

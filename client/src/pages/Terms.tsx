@@ -7,9 +7,9 @@ const Terms: React.FC = () => {
   return (
     <>
       <SEO
-        title="服務使用條款 | Picklevibes"
-        description="Picklevibes 智能匹克球室服務使用條款。請仔細閱讀以下條款，使用我們的服務即表示您同意遵守這些條款。"
-        keywords="服務條款,使用條款,會員條款"
+        title="服務使用條款 | PickCourt"
+        description="PickCourt 聯盟平台服務使用條款。請仔細閱讀以下條款，使用我們的服務即表示您同意遵守這些條款。"
+        keywords="服務條款,使用條款,會員條款,PickCourt"
         url="/terms"
         noindex={true}
       />

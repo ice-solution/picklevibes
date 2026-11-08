@@ -6,7 +6,8 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function isVipActive({ tier, expiry }) {
   if (tier !== 'vip') return false;
-  if (!expiry) return true;
+  // 無到期日唔當有效 VIP（避免舊資料 membershipLevel=vip 永遠顯示 VIP）
+  if (!expiry) return false;
   return new Date(expiry) > new Date();
 }
 
@@ -110,13 +111,15 @@ async function isUserVipActive(userOrId) {
 
 /** 供 auth API 回傳 */
 function formatMembershipForClient(membership) {
+  const displayTier = membership.isVipActive ? 'vip' : 'basic';
   return {
-    membershipLevel: membership.tier,
-    membershipExpiry: membership.expiry,
+    membershipLevel: displayTier,
+    membershipExpiry: membership.isVipActive ? membership.expiry : null,
+    isVipActive: Boolean(membership.isVipActive),
     platformMembership: {
-      tier: membership.tier,
-      expiry: membership.expiry,
-      isVipActive: membership.isVipActive,
+      tier: displayTier,
+      expiry: membership.isVipActive ? membership.expiry : null,
+      isVipActive: Boolean(membership.isVipActive),
       source: membership.source,
     },
   };

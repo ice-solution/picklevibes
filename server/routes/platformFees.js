@@ -120,7 +120,12 @@ router.get('/', [auth, adminAuth], async (req, res) => {
     if (storeFilter.storeId) q.store = storeFilter.storeId;
     if (settled === 'true') q.settled = true;
     if (settled === 'false') q.settled = false;
-    if (type === 'store_recharge' || type === 'booking_points') q.type = type;
+    // 店充值不抽成：預設只顯示 booking_points；除非明確 filter store_recharge（相容舊資料查詢）
+    if (type === 'store_recharge' || type === 'booking_points') {
+      q.type = type;
+    } else {
+      q.type = { $ne: 'store_recharge' };
+    }
 
     const fromD = parseDateBound(from, false);
     const toD = parseDateBound(to, true);

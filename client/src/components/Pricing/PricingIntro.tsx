@@ -198,13 +198,6 @@ const PricingIntro: React.FC = () => {
                   viewport={{ once: true }}
                   className="bg-gray-50 rounded-2xl shadow-lg overflow-hidden"
                 >
-                  {/* VIP折扣提示 - 最醒目的位置 */}
-                  <div className="bg-gradient-to-r from-red-500 via-pink-500 to-red-500 text-white px-4 py-3 text-center font-bold text-lg shadow-lg animate-pulse">
-                    <span className="inline-block animate-bounce">🎉</span>
-                    <span className="mx-2">VIP會員8折!!</span>
-                    <span className="inline-block animate-bounce">🎉</span>
-                  </div>
-
                   {/* 場地圖片 */}
                   <div className="h-48 bg-gradient-to-br from-primary-500 to-primary-700 relative">
                     {court.images && court.images.length > 0 ? (
@@ -271,65 +264,50 @@ const PricingIntro: React.FC = () => {
                         <div className="flex items-center gap-1">
                           <ClockIcon className="w-4 h-4" />
                           <span>
-                            {court.type === 'solo' ? '每天 08:00-23:00' : '24小時營業(需預約方可進場)'}
+                            {(() => {
+                              const hours = (court as any).operatingHours;
+                              const day =
+                                hours?.monday ||
+                                hours?.tuesday ||
+                                hours?.wednesday ||
+                                hours?.thursday ||
+                                hours?.friday ||
+                                hours?.saturday ||
+                                hours?.sunday;
+                              const start = day?.start || day?.open;
+                              const end = day?.end || day?.close;
+                              if (start && end) return `每天 ${start}-${end}`;
+                              return court.type === 'solo' ? '每天 08:00-23:00' : '請參照預約日曆';
+                            })()}
                           </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* 價格信息 */}
+                    {/* 價格信息（顯示店鋪牌價；VIP 8 折僅個別店開啟時於預約頁處理） */}
                     <div className="border-t border-gray-200 pt-4">
-                      {/* VIP折扣提示框 */}
-                      <div className="mb-4 p-3 bg-gradient-to-r from-red-50 to-pink-50 border-2 border-red-400 rounded-lg shadow-md">
-                        <div className="flex items-center justify-center gap-2">
-                          <span className="text-2xl animate-bounce">🎉</span>
-                          <span className="text-lg font-bold text-red-600">
-                            VIP會員8折!!
-                          </span>
-                          <span className="text-2xl animate-bounce">🎉</span>
-                        </div>
-                        <p className="text-xs text-gray-600 text-center mt-1">
-                          成為VIP會員即可享受所有場地8折優惠
-                        </p>
-                      </div>
-
                       {court.pricing.timeSlots && court.pricing.timeSlots.length > 0 ? (
                         court.pricing.timeSlots.map((slot, idx) => (
                           <div key={idx} className="flex justify-between items-center mb-2">
                             <span className="text-sm text-gray-500">{slot.name}</span>
-                            <div className="flex flex-col items-end">
-                              <span className="text-lg font-bold text-primary-600">
-                                {slot.price} 積分/小時
-                              </span>
-                              <span className="text-xs text-red-600 font-semibold">
-                                VIP: {Math.round(slot.price * 0.8)} 積分/小時
-                              </span>
-                            </div>
+                            <span className="text-lg font-bold text-primary-600">
+                              {slot.price} 積分/小時
+                            </span>
                           </div>
                         ))
                       ) : (
                         <>
                           <div className="flex justify-between items-center mb-2">
                             <span className="text-sm text-gray-500">非繁忙時間</span>
-                            <div className="flex flex-col items-end">
-                              <span className="text-lg font-bold text-primary-600">
-                                {court.pricing.offPeak} 積分/小時
-                              </span>
-                              <span className="text-xs text-red-600 font-semibold">
-                                VIP: {Math.round(court.pricing.offPeak * 0.8)} 積分/小時
-                              </span>
-                            </div>
+                            <span className="text-lg font-bold text-primary-600">
+                              {court.pricing.offPeak} 積分/小時
+                            </span>
                           </div>
                           <div className="flex justify-between items-center">
                             <span className="text-sm text-gray-500">繁忙時間</span>
-                            <div className="flex flex-col items-end">
-                              <span className="text-lg font-bold text-primary-600">
-                                {court.pricing.peakHour} 積分/小時
-                              </span>
-                              <span className="text-xs text-red-600 font-semibold">
-                                VIP: {Math.round(court.pricing.peakHour * 0.8)} 積分/小時
-                              </span>
-                            </div>
+                            <span className="text-lg font-bold text-primary-600">
+                              {court.pricing.peakHour} 積分/小時
+                            </span>
                           </div>
                         </>
                       )}

@@ -69,19 +69,8 @@ async function recordStorePlatformFee({
 }
 
 async function recordFeeForStoreRecharge(recharge) {
-  if (!recharge?.store || !recharge?._id) {
-    return { skipped: true, reason: 'not_store_recharge' };
-  }
-  const gross = Number(recharge.amount) > 0 ? recharge.amount : recharge.points;
-  return recordStorePlatformFee({
-    storeId: recharge.store,
-    type: 'store_recharge',
-    sourceModel: 'Recharge',
-    sourceId: recharge._id,
-    grossAmount: gross,
-    occurredAt: recharge.payment?.paidAt || recharge.updatedAt || new Date(),
-    note: `店充值 ${recharge.points || 0} 分`,
-  });
+  // 產品規則：店充值不抽成，亦不應出現在「店鋪抽成／找數」
+  return { skipped: true, reason: 'store_recharge_excluded' };
 }
 
 async function recordFeeForBookingPoints(booking, pointsDeducted) {

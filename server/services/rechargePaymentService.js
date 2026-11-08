@@ -29,11 +29,14 @@ async function completeRechargePayment(rechargeId, transactionId) {
 
   await creditRechargeBalance(recharge, `充值 ${recharge.points} 分`);
 
+  // 店充值不抽成（只對積分預約場地抽成）；清除舊錯誤寫入嘅抽成紀錄
   try {
-    const { recordFeeForStoreRecharge } = require('./platformFeeService');
-    await recordFeeForStoreRecharge(recharge);
+    const { voidFeeForSource } = require('./platformFeeService');
+    if (recharge.store && recharge._id) {
+      await voidFeeForSource('Recharge', recharge._id, 'store_recharge_not_commissionable');
+    }
   } catch (feeErr) {
-    console.error('❌ 店充值抽成紀錄失敗:', feeErr.message);
+    console.warn('店充值清除抽成紀錄:', feeErr.message);
   }
 
   try {
