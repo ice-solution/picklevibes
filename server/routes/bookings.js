@@ -158,6 +158,21 @@ router.post('/', [
     endTime = normalizedEndTime.time;
     const endDate = normalizedEndTime.date;
 
+    // 已過時段：一般用戶／未完全 bypass 的後台建單一律擋（含連鎖店 early-return 路徑）
+    if (!bypassRestrictions && !adminRelaxRules) {
+      const { isBookingStartInPast, getHKCalendarYMD } = require('../utils/bookingDateTime');
+      const dateYmdEarly =
+        typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)
+          ? date
+          : getHKCalendarYMD(new Date(date));
+      if (isBookingStartInPast(dateYmdEarly, startTime)) {
+        return res.status(400).json({
+          message: '不可預約已過去的時段，請選擇稍後的時間',
+          code: 'PAST_SLOT',
+        });
+      }
+    }
+
     // 連鎖店（isChainStore）：扣 PickCourt 積分，再喺 PickleVibes 占場（含本機 stub court）
     let courtDoc = await Court.findById(court);
     {
@@ -533,7 +548,7 @@ router.post('/', [
       return res.status(400).json({ message: '場地在該時間段不開放' });
     }
 
-    // 過去日期：除完全繞過外一律禁止；可預約天數上限：僅一般用戶與非放寬後台建單需遵守
+    // 過去日期／今日已過時段：除完全繞過外一律禁止；可預約天數上限：僅一般用戶與非放寬後台建單需遵守
     if (!bypassRestrictions) {
       const today = new Date();
       today.setHours(0, 0, 0, 0);

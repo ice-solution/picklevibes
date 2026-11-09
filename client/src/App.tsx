@@ -96,12 +96,22 @@ function AppShell() {
     isStoreAdmin ||
     isStoreLogin ||
     isTenantHost;
+  /** 後台要鎖死 viewport 高度，主內容區先至可以 overflow scroll（唔好用 min-h-screen 撑爆） */
+  const isAdminViewportShell = isPickCourtAdminPath(location.pathname) || isStoreAdmin;
   useDocumentPlatformBrand(hideMainChrome);
 
   return (
-    <div className={hideMainChrome ? 'min-h-screen' : 'min-h-screen bg-gray-50'}>
+    <div
+      className={
+        isAdminViewportShell
+          ? 'h-dvh max-h-dvh overflow-hidden'
+          : hideMainChrome
+            ? 'min-h-screen'
+            : 'min-h-screen bg-gray-50'
+      }
+    >
       {!hideMainChrome && <Navbar />}
-      <main>
+      <main className={isAdminViewportShell ? 'h-full min-h-0' : undefined}>
         <TenantDomainRedirect />
         <Routes>
                 <Route path="/" element={<PickleCourtHome />} />

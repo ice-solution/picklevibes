@@ -83,6 +83,22 @@ function rangesOverlap(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && aEnd > bStart;
 }
 
+/** 與 TimeSlotSelector 一致：開始前 15 分鐘內視作已過期（不可搜尋／不可預約） */
+const PAST_SLOT_LEAD_MS = 15 * 60 * 1000;
+
+/**
+ * 預約開始時間（香港牆鐘）是否已過／即將開始。
+ * start ≤ now + 15 分鐘 → true。
+ */
+function isBookingStartInPast(dateYmd, startTime, now = new Date()) {
+  if (!dateYmd || !startTime) return false;
+  const ymd = resolveHKYmd(dateYmd);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return false;
+  if (!/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/.test(String(startTime))) return false;
+  const startMs = hkWallTimeToUtcMs(ymd, startTime);
+  return startMs <= now.getTime() + PAST_SLOT_LEAD_MS;
+}
+
 module.exports = {
   getHKCalendarYMD,
   hkYmdToBookingUtcMidnight,
@@ -92,5 +108,6 @@ module.exports = {
   normalizeBookingDateInput,
   resolveHKYmd,
   bookingRangeUtcMs,
-  rangesOverlap
+  rangesOverlap,
+  isBookingStartInPast,
 };

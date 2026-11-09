@@ -254,7 +254,7 @@ const AdminV2: React.FC = () => {
   );
 
   return (
-    <div className="min-h-screen bg-slate-100 flex flex-col overflow-hidden text-pickcourt-navy">
+    <div className="h-dvh max-h-dvh bg-slate-100 flex flex-col overflow-hidden text-pickcourt-navy">
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/50" onClick={() => setMobileOpen(false)} aria-hidden />

@@ -15,6 +15,7 @@ const {
   fetchStoreAvailabilityMap,
   mapWithConcurrency,
 } = require('../services/picklevibesAvailabilityClient');
+const { isBookingStartInPast } = require('./bookingDateTime');
 
 function addMinutesToTime(startTime, minutes) {
   const [h, m] = startTime.split(':').map(Number);
@@ -427,6 +428,14 @@ async function searchAllianceCourtAvailability({
     const err = new Error(window.reason || '日期不可預約');
     err.status = 400;
     err.code = window.code;
+    throw err;
+  }
+
+  // 今日已過開始時間：唔應再回傳空缺（避免帶去預約／付款）
+  if (isBookingStartInPast(date, startTime)) {
+    const err = new Error('不可搜尋已過去的時段，請選擇稍後或明日的時間');
+    err.status = 400;
+    err.code = 'PAST_SLOT';
     throw err;
   }
 

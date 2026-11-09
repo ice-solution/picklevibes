@@ -19,12 +19,47 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
   onAvailabilityChange
 }) => {
   const { checkAvailability, checkBatchAvailability } = useBooking();
-  const [timeSlots, setTimeSlots] = useState<Array<{ start: string; end: string; available: boolean; price: number; slotName?: string; isPast?: boolean }>>([]);
+  type SlotRow = {
+    start: string;
+    end: string;
+    available: boolean;
+    price: number;
+    slotName?: string;
+    isPast?: boolean;
+    reason?: string;
+  };
+  const [timeSlots, setTimeSlots] = useState<SlotRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedDuration, setSelectedDuration] = useState(60);
   const [currentTime, setCurrentTime] = useState(new Date());
   const batchRequestIdRef = useRef(0);
   const courtId = court?._id as string | undefined;
+
+  const normalizeSlot = (slot: SlotRow, availability?: { available?: boolean; pricing?: { totalPrice?: number; slotName?: string }; reason?: string }): SlotRow => {
+    const price = Number(availability?.pricing?.totalPrice ?? slot.price) || 0;
+    const apiAvailable = availability ? Boolean(availability.available) : slot.available;
+    // 無有效價錢 → 當不開放（唔再顯示「價格錯誤」）
+    const available = slot.isPast ? false : apiAvailable && price > 0;
+    let reason = availability?.reason || slot.reason;
+    if (!slot.isPast && apiAvailable && price <= 0) {
+      reason = reason || '該時段未設定價格或不開放';
+    }
+    return {
+      ...slot,
+      available,
+      price,
+      slotName: availability?.pricing?.slotName ?? slot.slotName,
+      reason,
+    };
+  };
+
+  const unavailableLabel = (slot: SlotRow) => {
+    if (slot.isPast) return '已過期';
+    const reason = String(slot.reason || '');
+    if (reason.includes('已預約') || reason.includes('已被預約')) return '已預約';
+    if (reason.includes('不開放') || reason.includes('未設定價格') || reason.includes('維護')) return '不開放';
+    return reason ? '不可用' : '已預約';
+  };
 
   const durations = [
     { value: 60, label: '1小時' },
@@ -118,35 +153,37 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
       endTime: slot.end,
     }));
 
+    const shouldShowSlot = (slot: SlotRow) => {
+      if (slot.available || slot.isPast) return true;
+      const reason = String(slot.reason || '');
+      // 無價／非營業時段唔佔格，避免全日出「價格錯誤／不開放」噪音
+      if (reason.includes('不開放') || reason.includes('未設定價格')) return false;
+      return true; // 已預約等仍顯示
+    };
+
     checkBatchAvailability(courtId, date, timeSlotData)
       .then((batchResult) => {
         if (requestId !== batchRequestIdRef.current) return;
-        const results = slots.map((slot, index) => {
-          const availability = batchResult.timeSlots[index];
-          return {
-            ...slot,
-            available: slot.isPast ? false : availability.available,
-            price: availability.pricing?.totalPrice || 0,
-            slotName: availability.pricing?.slotName,
-          };
-        });
+        const results = slots
+          .map((slot, index) => normalizeSlot(slot, batchResult.timeSlots[index]))
+          .filter(shouldShowSlot);
         setTimeSlots(results);
         setLoading(false);
       })
       .catch(async (error) => {
         if (requestId !== batchRequestIdRef.current) return;
         console.error('批量檢查可用性失敗:', error);
-        const results = await Promise.all(
-          slots.map(async (slot) => {
-            const availability = await checkSlotAvailability(slot);
-            return {
-              ...slot,
-              available: slot.isPast ? false : availability.available,
-              price: availability.price,
-              slotName: availability.slotName,
-            };
-          })
-        );
+        const results = (
+          await Promise.all(
+            slots.map(async (slot) => {
+              const availability = await checkSlotAvailability(slot);
+              return normalizeSlot(slot, {
+                available: availability.available,
+                pricing: { totalPrice: availability.price, slotName: availability.slotName },
+              });
+            })
+          )
+        ).filter(shouldShowSlot);
         if (requestId !== batchRequestIdRef.current) return;
         setTimeSlots(results);
         setLoading(false);
@@ -260,10 +297,8 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
                 slot.available
                   ? isSelected(slot)
                     ? 'bg-primary-600 text-white shadow-lg'
-                    : (slot.price === 0 || slot.price === undefined || slot.price === null)
-                      ? 'bg-red-50 border-2 border-red-300 text-red-700 hover:border-red-400'
-                      : 'bg-white border-2 border-gray-200 hover:border-primary-300 hover:shadow-md'
-                  : (slot as any).isPast
+                    : 'bg-white border-2 border-gray-200 hover:border-primary-300 hover:shadow-md'
+                  : slot.isPast
                     ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
                     : 'bg-gray-100 text-gray-400 cursor-not-allowed'
               }`}
@@ -285,15 +320,9 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
                 </div>
               )}
               
-              {slot.available && (slot.price === 0 || slot.price === undefined || slot.price === null) && (
-                <div className="text-xs font-semibold mt-1 text-red-600">
-                  ❌ 價格錯誤
-                </div>
-              )}
-              
               {!slot.available && (
                 <div className="text-xs mt-1">
-                  {(slot as any).isPast ? '已過期' : '已預約'}
+                  {unavailableLabel(slot)}
                 </div>
               )}
             </motion.button>

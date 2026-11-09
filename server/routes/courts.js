@@ -326,6 +326,16 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
           );
           const basePrice = court.getPriceForTime(slot.startTime, bookingDate);
           const slotName = court.getTimeSlotName(slot.startTime, bookingDate);
+
+          // 營業時間內但無對應價目 → 當不開放（避免前端顯示「價格錯誤」）
+          if (!totalPrice || totalPrice <= 0) {
+            return {
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              available: false,
+              reason: '該時段未設定價格或不開放',
+            };
+          }
           
           // 判斷是否為高峰時段（用於顯示）
           const hour = parseInt(slot.startTime.split(':')[0]);
@@ -355,9 +365,24 @@ router.post('/:id/availability/batch', batchLimiter, async (req, res) => {
         }
       })
     );
-    
-    // 合併營業時間外的不可用時間段和營業時間內的檢查結果
-    const allResults = [...unavailableSlots, ...availabilityResults];
+
+    // 必須跟請求 timeSlots 順序一致（前端按 index 對應）
+    const resultByKey = new Map();
+    for (const slot of unavailableSlots) {
+      resultByKey.set(`${slot.startTime}|${slot.endTime}`, slot);
+    }
+    for (const slot of availabilityResults) {
+      resultByKey.set(`${slot.startTime}|${slot.endTime}`, slot);
+    }
+    const allResults = timeSlots.map(
+      (slot) =>
+        resultByKey.get(`${slot.startTime}|${slot.endTime}`) || {
+          startTime: slot.startTime,
+          endTime: slot.endTime,
+          available: false,
+          reason: '檢查可用性時發生錯誤',
+        }
+    );
     
     res.json({
       date,

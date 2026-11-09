@@ -183,7 +183,7 @@ function StoreAdminShell() {
   );
 
   return (
-    <div className={`${STORE_BRAND_CLASS} bg-gray-50 min-h-screen flex flex-col overflow-hidden`} style={brandStyles}>
+    <div className={`${STORE_BRAND_CLASS} bg-gray-50 h-dvh max-h-dvh flex flex-col overflow-hidden`} style={brandStyles}>
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} aria-hidden />
@@ -279,7 +279,7 @@ function StoreAdminShell() {
               </button>
             </div>
           </header>
-          <main className="flex-1 overflow-y-auto p-4 sm:p-6">
+          <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-6">
             <motion.div key={current.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
               {current.element}
             </motion.div>

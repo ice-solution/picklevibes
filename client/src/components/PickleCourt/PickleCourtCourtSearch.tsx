@@ -36,20 +36,83 @@ type SearchResponse = {
   meta: { storeCount: number; courtCount: number; availableCount: number };
 };
 
-const TIME_OPTIONS = Array.from({ length: 15 }, (_, i) => {
+const ALL_TIME_OPTIONS = Array.from({ length: 15 }, (_, i) => {
   const hour = i + 8;
   return `${String(hour).padStart(2, '0')}:00`;
 });
 
+/** 香港日曆 YYYY-MM-DD（與後端 bookingDateTime 一致） */
+function hkYmdFromDate(d: Date) {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Hong_Kong',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(d);
+}
+
 function todayYmd() {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return hkYmdFromDate(new Date());
 }
 
 function maxDateYmd(days = 30) {
   const d = new Date();
   d.setDate(d.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return hkYmdFromDate(d);
+}
+
+/** 與 TimeSlotSelector／後端一致：開始前 15 分鐘內視作已過 */
+function isStartTimePast(dateYmd: string, startTime: string, now = new Date()) {
+  if (dateYmd !== hkYmdFromDate(now)) return false;
+  const [hour, minute] = startTime.split(':').map(Number);
+  const startMs = new Date(`${dateYmd}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}:00+08:00`).getTime();
+  return startMs <= now.getTime() + 15 * 60 * 1000;
+}
+
+function availableTimeOptions(dateYmd: string, now = new Date()) {
+  return ALL_TIME_OPTIONS.filter((t) => !isStartTimePast(dateYmd, t, now));
+}
+
+function hkHourMinute(now = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Hong_Kong',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(now);
+  return {
+    hour: Number(parts.find((p) => p.type === 'hour')?.value ?? '0'),
+    minute: Number(parts.find((p) => p.type === 'minute')?.value ?? '0'),
+  };
+}
+
+/** 下一個整點：4:09 → 17:00；剛好 5:00 → 17:00 */
+function nextUpcomingHour(now = new Date()): string {
+  const { hour, minute } = hkHourMinute(now);
+  let h = minute === 0 ? hour : hour + 1;
+  if (h < 8) h = 8;
+  if (h > 22) h = 22;
+  return `${String(h).padStart(2, '0')}:00`;
+}
+
+function firstAvailableStartTime(dateYmd: string, preferred?: string) {
+  const opts = availableTimeOptions(dateYmd);
+  if (preferred && opts.includes(preferred)) return preferred;
+  return opts[0] || ALL_TIME_OPTIONS[ALL_TIME_OPTIONS.length - 1];
+}
+
+/** 打開頁面預設：今日 → 最近下一個可預約整點；其他日期 → 10:00 */
+function defaultStartTime(dateYmd: string, preferredFromUrl?: string | null) {
+  if (preferredFromUrl && availableTimeOptions(dateYmd).includes(preferredFromUrl)) {
+    return preferredFromUrl;
+  }
+  if (dateYmd === todayYmd()) {
+    return firstAvailableStartTime(dateYmd, nextUpcomingHour());
+  }
+  if (preferredFromUrl && ALL_TIME_OPTIONS.includes(preferredFromUrl)) {
+    return preferredFromUrl;
+  }
+  return '10:00';
 }
 
 const courtTypeBadge: Record<string, string> = {
@@ -110,7 +173,11 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
 
   const [district, setDistrict] = useState(syncUrl ? searchParams.get('district') || '' : '');
   const [date, setDate] = useState(syncUrl ? searchParams.get('date') || todayYmd() : todayYmd());
-  const [startTime, setStartTime] = useState(syncUrl ? searchParams.get('startTime') || '10:00' : '10:00');
+  const [startTime, setStartTime] = useState(() => {
+    const d = syncUrl ? searchParams.get('date') || todayYmd() : todayYmd();
+    const urlTime = syncUrl ? searchParams.get('startTime') : null;
+    return defaultStartTime(d, urlTime);
+  });
   const [duration, setDuration] = useState(syncUrl ? searchParams.get('duration') || '60' : '60');
   const [courtType, setCourtType] = useState(syncUrl ? searchParams.get('courtType') || '' : '');
 
@@ -118,6 +185,16 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<SearchResponse | null>(null);
+
+  const timeOptions = availableTimeOptions(date);
+
+  // 改日期後：若目前開始時間已過，自動跳去下一個可選時段
+  useEffect(() => {
+    const opts = availableTimeOptions(date);
+    if (!opts.includes(startTime)) {
+      setStartTime(date === todayYmd() ? defaultStartTime(date) : opts[0] || '10:00');
+    }
+  }, [date, startTime]);
 
   const runSearch = useCallback(
     async (overrides?: Partial<{ district: string; date: string; startTime: string; duration: string; courtType: string }>) => {
@@ -128,6 +205,13 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
         duration: overrides?.duration ?? duration,
         courtType: overrides?.courtType ?? courtType,
       };
+
+      if (isStartTimePast(q.date, q.startTime)) {
+        setSearched(true);
+        setData(null);
+        setError('不可搜尋已過去的時段，請選擇稍後或明日的時間');
+        return;
+      }
 
       setLoading(true);
       setError('');
@@ -162,10 +246,12 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
   useEffect(() => {
     if (!syncUrl) return;
     if (searchParams.get('date') && searchParams.get('startTime')) {
+      const d = searchParams.get('date') || todayYmd();
+      const t = defaultStartTime(d, searchParams.get('startTime'));
       runSearch({
         district: searchParams.get('district') || '',
-        date: searchParams.get('date') || todayYmd(),
-        startTime: searchParams.get('startTime') || '10:00',
+        date: d,
+        startTime: t,
         duration: searchParams.get('duration') || '60',
         courtType: searchParams.get('courtType') || '',
       });
@@ -179,6 +265,11 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     runSearch();
+  };
+
+  const handleDateChange = (nextDate: string) => {
+    setDate(nextDate);
+    setStartTime(defaultStartTime(nextDate));
   };
 
   const courtTypeLabel =
@@ -259,7 +350,7 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                     value={date}
                     min={todayYmd()}
                     max={maxDateYmd(30)}
-                    onChange={(e) => setDate(e.target.value)}
+                    onChange={(e) => handleDateChange(e.target.value)}
                     className="w-full text-base font-medium text-gray-900 outline-none bg-transparent"
                     required
                   />
@@ -277,12 +368,17 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                     value={startTime}
                     onChange={(e) => setStartTime(e.target.value)}
                     className="w-full text-base font-medium text-gray-900 outline-none bg-transparent cursor-pointer"
+                    disabled={timeOptions.length === 0}
                   >
-                    {TIME_OPTIONS.map((t) => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
+                    {timeOptions.length === 0 ? (
+                      <option value="">今日已無可用時段</option>
+                    ) : (
+                      timeOptions.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))
+                    )}
                   </select>
                 </div>
               </div>
@@ -304,7 +400,7 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
 
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || timeOptions.length === 0}
                 className="flex items-center justify-center gap-2 bg-[#0062E3] hover:bg-[#0050b8] disabled:opacity-70 text-white font-bold text-lg px-8 py-4 xl:py-0 xl:min-w-[130px] transition-colors shrink-0"
               >
                 <MagnifyingGlassIcon className="h-6 w-6" />
