@@ -8,6 +8,10 @@
  * PICKLEVIBES_API_BASE_URL — PickleVibes API 根路徑，例如 https://uat.picklevibes.hk/api
  *   留空時連連鎖店都改用本地查詢。
  *
+ * PICKLEVIBES_API_INTERNAL_URL — （建議 UAT／同機）本機回環，例如 http://127.0.0.1:5009/api
+ *   有值時優先用，避免 PickCourt→Cloudflare→同機 PickleVibes hairpin
+ *   導致 POST /bot/booking 卡住、前端即刻 502。
+ *
  * PICKLEVIBES_BOT_API_KEY — 對應 main 的 BOT_API_KEY；有值時優先用
  *   GET /api/bot/availability（每店一次 request，較快），
  *   以及連鎖店訂場轉發 POST /api/bot/booking。
@@ -27,12 +31,18 @@ function isTruthyEnv(value) {
 }
 
 function getPickleVibesApiConfig() {
-  const baseUrl = normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
+  // 同機部署優先走 internal，避開 Cloudflare hairpin
+  const baseUrl =
+    normalizeBaseUrl(process.env.PICKLEVIBES_API_INTERNAL_URL) ||
+    normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
+  const publicBaseUrl = normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
   const botApiKey = String(process.env.PICKLEVIBES_BOT_API_KEY || '').trim();
   const fallbackLocal = isTruthyEnv(process.env.PICKLEVIBES_AVAILABILITY_FALLBACK_LOCAL);
 
   return {
     baseUrl,
+    publicBaseUrl,
+    usingInternalUrl: Boolean(normalizeBaseUrl(process.env.PICKLEVIBES_API_INTERNAL_URL)),
     botApiKey,
     fallbackLocal,
     remoteEnabled: Boolean(baseUrl),

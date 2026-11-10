@@ -64,6 +64,19 @@ async function createPickleVibesBotBooking({
   const url = new URL(`${config.baseUrl}/bot/booking`);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
+  const startedAt = Date.now();
+
+  console.log('🔍 PickleVibes bot booking request', {
+    url: url.toString(),
+    usingInternalUrl: Boolean(config.usingInternalUrl),
+    timeoutMs: config.requestTimeoutMs,
+    court: body.court,
+    date: body.date,
+    startTime: body.startTime,
+    endTime: body.endTime,
+    externalSettlement: body.externalSettlement,
+    settledPoints: body.settledPoints,
+  });
 
   try {
     const response = await fetch(url, {
@@ -78,6 +91,12 @@ async function createPickleVibesBotBooking({
     });
 
     const text = await response.text();
+    console.log('🔍 PickleVibes bot booking response', {
+      status: response.status,
+      ms: Date.now() - startedAt,
+      bodyPreview: String(text || '').slice(0, 200),
+    });
+
     let payload = null;
     if (text) {
       try {
@@ -103,6 +122,12 @@ async function createPickleVibesBotBooking({
 
     return payload?.data || payload;
   } catch (error) {
+    console.error('❌ PickleVibes bot booking failed', {
+      ms: Date.now() - startedAt,
+      name: error?.name,
+      message: error?.message,
+      code: error?.code,
+    });
     if (error.name === 'AbortError') {
       throw new PickleVibesApiError(`PickleVibes 預約逾時 (${config.requestTimeoutMs}ms)`, {
         path: url.pathname,
