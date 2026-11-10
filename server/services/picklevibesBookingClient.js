@@ -23,6 +23,21 @@ function httpJsonRequest(url, { method = 'GET', headers = {}, body, timeoutMs = 
   return new Promise((resolve, reject) => {
     const lib = url.protocol === 'https:' ? https : http;
     const payload = body == null ? null : Buffer.from(String(body), 'utf8');
+    let settled = false;
+    let timer = null;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      reject(err);
+    };
+    const ok = (value) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      resolve(value);
+    };
+
     const req = lib.request(
       {
         protocol: url.protocol,
@@ -34,25 +49,29 @@ function httpJsonRequest(url, { method = 'GET', headers = {}, body, timeoutMs = 
           ...headers,
           ...(payload ? { 'Content-Length': payload.length } : {}),
         },
-        timeout: timeoutMs,
       },
       (res) => {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
         res.on('end', () => {
-          const text = Buffer.concat(chunks).toString('utf8');
-          resolve({
+          ok({
             status: res.statusCode || 0,
-            text,
+            text: Buffer.concat(chunks).toString('utf8'),
           });
         });
       }
     );
 
+    // 連線期 + 閒置都要殺；單靠 req timeout 喺 hairpin 下有時唔夠
+    timer = setTimeout(() => {
+      req.destroy(new Error(`PickleVibes 預約逾時 (${timeoutMs}ms)`));
+    }, timeoutMs);
+
     req.on('timeout', () => {
       req.destroy(new Error(`PickleVibes 預約逾時 (${timeoutMs}ms)`));
     });
-    req.on('error', (err) => reject(err));
+    req.setTimeout(timeoutMs);
+    req.on('error', (err) => fail(err));
 
     if (payload) req.write(payload);
     req.end();
@@ -77,14 +96,23 @@ async function createPickleVibesBotBooking({
   externalNote = 'PickCourt 平台已結算',
   settledPoints,
 }) {
-  // 呢行一定要出現喺 pm2 log；冇就代表跑緊舊檔／錯目錄
+  const config = getPickleVibesApiConfig();
+  const previewUrl = config.baseUrl
+    ? `${config.baseUrl.replace(/\/+$/, '')}/bot/booking`
+    : '(no-base-url)';
+
+  // 單行寫死 stdout，避免 pm2 截斷／buffer 令「只有 ENTER、冇 request」難判斷
   console.log('🔍 PickleVibes bot booking ENTER', {
     pid: process.pid,
     nodeEnv: process.env.NODE_ENV || null,
     cwd: process.cwd(),
+    url: previewUrl,
+    source: config.baseUrlSource,
+    usingInternalUrl: Boolean(config.usingInternalUrl),
+    hasBotKey: Boolean(config.botApiKey),
+    timeoutMs: config.requestTimeoutMs,
   });
 
-  const config = getPickleVibesApiConfig();
   if (!isPickleVibesRemoteEnabled()) {
     throw new PickleVibesApiError('PICKLEVIBES_API_BASE_URL 未設定');
   }

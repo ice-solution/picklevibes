@@ -30,9 +30,34 @@ function isTruthyEnv(value) {
   return v === '1' || v === 'true' || v === 'yes';
 }
 
+function isHostedPickleVibesUrl(url) {
+  return /picklevibes\.hk/i.test(String(url || '')) || /uat\.picklevibes/i.test(String(url || ''));
+}
+
+function buildLoopbackBaseUrl() {
+  const autoPort = String(process.env.PICKLEVIBES_INTERNAL_PORT || '5009').trim() || '5009';
+  return normalizeBaseUrl(`http://127.0.0.1:${autoPort}/api`);
+}
+
+function shouldForceUatLoopback() {
+  if (isTruthyEnv(process.env.PICKLEVIBES_DISABLE_INTERNAL_AUTO)) return false;
+  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+  const publicBase = normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
+  return (
+    nodeEnv === 'uat' ||
+    nodeEnv === 'pickcourtuat' ||
+    String(process.env.PORT || '') === '5111' ||
+    isHostedPickleVibesUrl(publicBase)
+  );
+}
+
 function resolvePickleVibesBaseUrl() {
+  const publicBase = normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
   const internal = normalizeBaseUrl(process.env.PICKLEVIBES_API_INTERNAL_URL);
-  if (internal) {
+  const forceLoopback = shouldForceUatLoopback();
+
+  // INTERNAL 若誤設成公網 https://*.picklevibes.hk，一樣會 Cloudflare hairpin → 502
+  if (internal && !isHostedPickleVibesUrl(internal)) {
     return {
       baseUrl: internal,
       usingInternalUrl: true,
@@ -40,24 +65,17 @@ function resolvePickleVibesBaseUrl() {
     };
   }
 
-  // UAT／同機：只要 BASE 指向 *.picklevibes.hk，一律改打本機，避免 Cloudflare hairpin
-  // 若要強制公網：設 PICKLEVIBES_DISABLE_INTERNAL_AUTO=1
-  const disableAuto = isTruthyEnv(process.env.PICKLEVIBES_DISABLE_INTERNAL_AUTO);
-  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
-  const publicBase = normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
-  const looksLikeHostedPv =
-    /picklevibes\.hk/i.test(publicBase) || /uat\.picklevibes/i.test(publicBase);
-  const shouldAutoInternal =
-    !disableAuto &&
-    (nodeEnv === 'uat' ||
-      nodeEnv === 'pickcourtuat' ||
-      looksLikeHostedPv ||
-      String(process.env.PORT || '') === '5111');
-
-  if (shouldAutoInternal) {
-    const autoPort = String(process.env.PICKLEVIBES_INTERNAL_PORT || '5009').trim() || '5009';
+  if (internal && isHostedPickleVibesUrl(internal) && forceLoopback) {
     return {
-      baseUrl: normalizeBaseUrl(`http://127.0.0.1:${autoPort}/api`),
+      baseUrl: buildLoopbackBaseUrl(),
+      usingInternalUrl: true,
+      source: 'auto-uat-loopback-override-bad-internal',
+    };
+  }
+
+  if (forceLoopback) {
+    return {
+      baseUrl: buildLoopbackBaseUrl(),
       usingInternalUrl: true,
       source: 'auto-uat-loopback',
     };
