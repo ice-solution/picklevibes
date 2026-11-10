@@ -174,7 +174,13 @@ router.post('/', [
     }
 
     // 連鎖店（isChainStore）：扣 PickCourt 積分，再喺 PickleVibes 占場（含本機 stub court）
+    console.log('🔍 預約步驟: findCourt', court);
     let courtDoc = await Court.findById(court);
+    console.log('🔍 預約步驟: courtFound', {
+      found: Boolean(courtDoc),
+      name: courtDoc?.name,
+      store: String(courtDoc?.store || ''),
+    });
     {
       const {
         shouldProxyChainStore,
@@ -198,6 +204,11 @@ router.post('/', [
 
       const maybeChain =
         (chainLocalStore && shouldProxyChainStore(chainLocalStore)) || !courtDoc;
+      console.log('🔍 預約步驟: chainGate', {
+        maybeChain,
+        isChainStore: Boolean(chainLocalStore?.isChainStore),
+        storeSlug: chainLocalStore?.slug || null,
+      });
 
       if (maybeChain) {
         let remoteCourt = null;
@@ -206,6 +217,11 @@ router.post('/', [
         } catch (error) {
           console.error('解析遠端場地失敗:', error.message);
         }
+        console.log('🔍 預約步驟: remoteCourt', {
+          found: Boolean(remoteCourt),
+          name: remoteCourt?.name || null,
+          storeSlug: remoteCourt?.store?.slug || remoteCourt?.storeSlug || null,
+        });
 
         if (remoteCourt) {
           const remoteStoreSlug = remoteCourt.store?.slug || remoteCourt.storeSlug;
@@ -231,16 +247,25 @@ router.post('/', [
           code: 'PHONE_REQUIRED',
         });
       }
+      console.log('🔍 預約步驟: chainUserPhone', {
+        hasPhone: Boolean(phone),
+        phoneTail: String(phone).slice(-4),
+      });
 
       const endTimeForApi = req.body.endTime === '24:00' ? '24:00' : endTime;
       const bookingDate = new Date(date);
 
       let availability;
       try {
+        console.log('🔍 預約步驟: fetchRemoteAvailability');
         availability = await fetchCourtAvailability(court, {
           date,
           startTime,
           endTime: endTimeForApi,
+        });
+        console.log('🔍 預約步驟: remoteAvailability', {
+          available: availability?.available,
+          totalPrice: availability?.pricing?.totalPrice,
         });
       } catch (error) {
         console.error('查詢遠端時段失敗:', error.message);
@@ -306,6 +331,11 @@ router.post('/', [
 
       let remoteResult;
       try {
+        console.log('🔍 預約步驟: createPickleVibesBotBooking start', {
+          pointsToDeduct,
+          storeUsed: deductionSplit.storeUsed,
+          platformUsed: deductionSplit.platformUsed,
+        });
         remoteResult = await createPickleVibesBotBooking({
           phone,
           court,
@@ -319,6 +349,7 @@ router.post('/', [
           externalNote: 'PickCourt 平台已結算',
           settledPoints: pointsToDeduct,
         });
+        console.log('🔍 預約步驟: createPickleVibesBotBooking done');
       } catch (error) {
         try {
           await refundForStoreBooking(
@@ -354,8 +385,9 @@ router.post('/', [
 
       // 本機 stub court + 預約紀錄，方便「我的預約」同積分關聯
       let localBooking = null;
+      let stubCourt = null;
       try {
-        const stubCourt = await ensureLocalCourtStubFromRemote(remoteCourt, localStore);
+        stubCourt = await ensureLocalCourtStubFromRemote(remoteCourt, localStore);
         const startMinutes =
           parseInt(startTime.split(':')[0], 10) * 60 + parseInt(startTime.split(':')[1], 10);
         let endMinutes =
@@ -433,53 +465,6 @@ router.post('/', [
           );
         }
 
-        // PickCourt 品牌郵件 + WhatsApp（唔靠 PickleVibes 發顧客通知）
-        try {
-          const storeDocForNotify = await Store.findById(storeId).lean();
-          const courtDocForNotify =
-            (localBooking.court && typeof localBooking.court === 'object' && localBooking.court.name
-              ? localBooking.court
-              : null) ||
-            (await Court.findById(localBooking.court)) ||
-            stubCourt;
-
-          const unifiedWa = isUnifiedBookingWhatsAppEnabled();
-          if (!unifiedWa) {
-            try {
-              const phoneNumber =
-                localBooking.players?.[0]?.phone || phone || bookingUserDoc.phone;
-              if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
-                await whatsappService.sendBookingConfirmation(localBooking, phoneNumber);
-                console.log('✅ 連鎖店 Twilio WhatsApp 已發送');
-              }
-            } catch (whatsappError) {
-              console.error('❌ 連鎖店 Twilio WhatsApp 發送失敗:', whatsappError);
-            }
-          }
-
-          const notifyResult = await sendBookingNotification({
-            booking: localBooking,
-            courtDoc: courtDocForNotify,
-            store: storeDocForNotify,
-            userFallback: bookingUserDoc,
-          });
-          if (['hik', 'dahua'].includes(notifyResult.mode) && notifyResult.accessControlResult) {
-            await applyTempAuthToBooking(localBooking, notifyResult.accessControlResult);
-            console.log('✅ 連鎖店門禁／開門郵件流程完成', {
-              whatsapp: notifyResult.whatsapp?.success ?? notifyResult.whatsapp,
-            });
-          } else {
-            console.log('✅ 連鎖店 PickCourt 預約確認郵件／WhatsApp 已處理', {
-              mode: notifyResult.mode,
-              whatsapp: notifyResult.whatsapp,
-            });
-          }
-          if (!unifiedWa) {
-            await sendWhatsAppBookingConfirmationStub(localBooking, storeDocForNotify);
-          }
-        } catch (notifyError) {
-          console.error('❌ 連鎖店 PickCourt 通知發送失敗:', notifyError);
-        }
       } catch (localErr) {
         console.error('⚠️ 連鎖店本機預約紀錄建立失敗（遠端已占場、積分已扣）:', localErr);
       }
@@ -494,26 +479,96 @@ router.post('/', [
         platformUsed: deductionSplit.platformUsed,
       });
 
-      return res.status(201).json({
-        message: '預約創建成功',
-        booking: localBooking || remoteBooking,
-        remoteBooking,
-        soloCourtBooking: remoteResult?.soloCourtBooking || null,
-        source: 'pickcourt_chain',
-        store: {
-          id: localStore._id,
-          slug: localStore.slug,
-          name: localStore.name,
-        },
-        pointsDeducted: pointsToDeduct,
-        storePointsDeducted: deductionSplit.storeUsed,
-        platformPointsDeducted: deductionSplit.platformUsed,
-        remainingBalance: availableAfter.total,
-        remainingStoreBalance: availableAfter.store,
-        remainingPlatformBalance: availableAfter.platform,
-        discount: isVip ? 'VIP會員8折' : '無折扣',
-        remark: 'PickCourt 預約',
-      });
+      // 先回成功，通知改背景（避免 Meta／門禁卡住導致 502）
+      const bookingJson =
+        localBooking && typeof localBooking.toObject === 'function'
+          ? localBooking.toObject({ depopulate: false })
+          : localBooking || remoteBooking;
+      try {
+        res.status(201).json({
+          message: '預約創建成功',
+          booking: bookingJson,
+          remoteBooking,
+          soloCourtBooking: remoteResult?.soloCourtBooking || null,
+          source: 'pickcourt_chain',
+          store: {
+            id: localStore._id,
+            slug: localStore.slug,
+            name: localStore.name,
+          },
+          pointsDeducted: pointsToDeduct,
+          storePointsDeducted: deductionSplit.storeUsed,
+          platformPointsDeducted: deductionSplit.platformUsed,
+          remainingBalance: availableAfter.total,
+          remainingStoreBalance: availableAfter.store,
+          remainingPlatformBalance: availableAfter.platform,
+          discount: isVip ? 'VIP會員8折' : '無折扣',
+          remark: 'PickCourt 預約',
+        });
+        console.log('🔍 預約步驟: chain response 201 sent');
+      } catch (serializeErr) {
+        console.error('❌ 連鎖店預約回應序列化失敗:', serializeErr);
+        return res.status(500).json({
+          message: '預約已建立但回應失敗，請到「我的預約」確認',
+          code: 'BOOKING_RESPONSE_SERIALIZE_FAILED',
+        });
+      }
+
+      if (localBooking) {
+        setImmediate(() => {
+          (async () => {
+            try {
+              const storeDocForNotify = await Store.findById(storeId).lean();
+              const courtDocForNotify =
+                (localBooking.court &&
+                typeof localBooking.court === 'object' &&
+                localBooking.court.name
+                  ? localBooking.court
+                  : null) ||
+                (await Court.findById(localBooking.court)) ||
+                stubCourt;
+
+              const unifiedWa = isUnifiedBookingWhatsAppEnabled();
+              if (!unifiedWa) {
+                try {
+                  const phoneNumber =
+                    localBooking.players?.[0]?.phone || phone || bookingUserDoc.phone;
+                  if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+                    await whatsappService.sendBookingConfirmation(localBooking, phoneNumber);
+                    console.log('✅ 連鎖店 Twilio WhatsApp 已發送');
+                  }
+                } catch (whatsappError) {
+                  console.error('❌ 連鎖店 Twilio WhatsApp 發送失敗:', whatsappError);
+                }
+              }
+
+              const notifyResult = await sendBookingNotification({
+                booking: localBooking,
+                courtDoc: courtDocForNotify,
+                store: storeDocForNotify,
+                userFallback: bookingUserDoc,
+              });
+              if (['hik', 'dahua'].includes(notifyResult.mode) && notifyResult.accessControlResult) {
+                await applyTempAuthToBooking(localBooking, notifyResult.accessControlResult);
+                console.log('✅ 連鎖店門禁／開門郵件流程完成', {
+                  whatsapp: notifyResult.whatsapp?.success ?? notifyResult.whatsapp,
+                });
+              } else {
+                console.log('✅ 連鎖店 PickCourt 預約確認郵件／WhatsApp 已處理', {
+                  mode: notifyResult.mode,
+                  whatsapp: notifyResult.whatsapp,
+                });
+              }
+              if (!unifiedWa) {
+                await sendWhatsAppBookingConfirmationStub(localBooking, storeDocForNotify);
+              }
+            } catch (notifyError) {
+              console.error('❌ 連鎖店 PickCourt 通知發送失敗:', notifyError);
+            }
+          })().catch((err) => console.error('❌ 連鎖店背景通知失敗:', err));
+        });
+      }
+      return;
           }
         }
 
@@ -978,45 +1033,6 @@ router.post('/', [
     // 填充場地信息
     await booking.populate('court', 'name number type amenities');
 
-    // Meta／OpenWA 由 sendBookingNotification 統一發送；否則才用 Twilio（避免雙重）
-    const unifiedWa = isUnifiedBookingWhatsAppEnabled();
-    if (!unifiedWa) {
-      try {
-        const phoneNumber = booking.players[0]?.phone || req.user.phone;
-        if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
-          await whatsappService.sendBookingConfirmation(booking, phoneNumber);
-          console.log('✅ WhatsApp 預約確認通知已發送');
-        } else {
-          console.log('⚠️ 無法發送 WhatsApp 通知：電話號碼無效或不存在');
-        }
-      } catch (whatsappError) {
-        console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
-      }
-    }
-
-    const storeDoc = await Store.findById(courtDoc.store).lean();
-
-    try {
-      const notifyResult = await sendBookingNotification({
-        booking,
-        courtDoc,
-        store: storeDoc,
-        userFallback: bookingUser,
-      });
-      if (['hik', 'dahua'].includes(notifyResult.mode) && notifyResult.accessControlResult) {
-        await applyTempAuthToBooking(booking, notifyResult.accessControlResult);
-        console.log('✅ 門禁／開門郵件流程完成');
-      } else {
-        console.log('✅ 預約確認郵件已發送（無門禁）');
-      }
-      // 統一通道已在 sendBookingNotification 內發送；未啟用時保留 stub 相容
-      if (!unifiedWa) {
-        await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
-      }
-    } catch (notifyError) {
-      console.error('❌ 預約通知發送失敗:', notifyError);
-    }
-
     const tuyaCourtIds = [booking.court];
     if (soloCourtBooking?.court) tuyaCourtIds.push(soloCourtBooking.court);
     scheduleTuyaCourtsSync(tuyaCourtIds, 'booking_created');
@@ -1043,7 +1059,46 @@ router.post('/', [
       responseData.message = '預約創建成功（包含單人場）';
     }
 
+    // 先回成功，避免 Email／WhatsApp／門禁卡住令 Cloudflare／Apache 回 502
     res.status(201).json(responseData);
+
+    setImmediate(() => {
+      (async () => {
+        const unifiedWa = isUnifiedBookingWhatsAppEnabled();
+        if (!unifiedWa) {
+          try {
+            const phoneNumber = booking.players[0]?.phone || req.user.phone;
+            if (phoneNumber && whatsappService.isValidPhoneNumber(phoneNumber)) {
+              await whatsappService.sendBookingConfirmation(booking, phoneNumber);
+              console.log('✅ WhatsApp 預約確認通知已發送');
+            }
+          } catch (whatsappError) {
+            console.error('❌ WhatsApp 通知發送失敗:', whatsappError);
+          }
+        }
+
+        const storeDoc = await Store.findById(courtDoc.store).lean();
+        try {
+          const notifyResult = await sendBookingNotification({
+            booking,
+            courtDoc,
+            store: storeDoc,
+            userFallback: bookingUser,
+          });
+          if (['hik', 'dahua'].includes(notifyResult.mode) && notifyResult.accessControlResult) {
+            await applyTempAuthToBooking(booking, notifyResult.accessControlResult);
+            console.log('✅ 門禁／開門郵件流程完成');
+          } else {
+            console.log('✅ 預約確認郵件已發送（無門禁）');
+          }
+          if (!unifiedWa) {
+            await sendWhatsAppBookingConfirmationStub(booking, storeDoc);
+          }
+        } catch (notifyError) {
+          console.error('❌ 預約通知發送失敗:', notifyError);
+        }
+      })().catch((err) => console.error('❌ 背景預約通知失敗:', err));
+    });
   } catch (error) {
     console.error('創建預約錯誤:', error);
     res.status(500).json({ message: '服務器錯誤，請稍後再試' });

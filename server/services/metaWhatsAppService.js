@@ -135,7 +135,24 @@ class MetaWhatsAppService {
       headers['Content-Type'] = 'application/json';
       payload = JSON.stringify(body);
     }
-    const res = await fetch(url, { method: 'POST', headers, body: payload });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    let res;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: payload,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err?.name === 'AbortError') {
+        throw new Error('Meta WhatsApp API 逾時（12s）');
+      }
+      throw err;
+    } finally {
+      clearTimeout(timer);
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
       const msg = data?.error?.message || res.statusText || 'Meta API error';
