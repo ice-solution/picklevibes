@@ -77,6 +77,13 @@ async function createPickleVibesBotBooking({
   externalNote = 'PickCourt 平台已結算',
   settledPoints,
 }) {
+  // 呢行一定要出現喺 pm2 log；冇就代表跑緊舊檔／錯目錄
+  console.log('🔍 PickleVibes bot booking ENTER', {
+    pid: process.pid,
+    nodeEnv: process.env.NODE_ENV || null,
+    cwd: process.cwd(),
+  });
+
   const config = getPickleVibesApiConfig();
   if (!isPickleVibesRemoteEnabled()) {
     throw new PickleVibesApiError('PICKLEVIBES_API_BASE_URL 未設定');

@@ -40,11 +40,21 @@ function resolvePickleVibesBaseUrl() {
     };
   }
 
-  // UAT 同機預設走 loopback，避免仍用 https://uat.picklevibes.hk 經 Cloudflare hairpin
+  // UAT／同機：只要 BASE 指向 *.picklevibes.hk，一律改打本機，避免 Cloudflare hairpin
   // 若要強制公網：設 PICKLEVIBES_DISABLE_INTERNAL_AUTO=1
-  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
   const disableAuto = isTruthyEnv(process.env.PICKLEVIBES_DISABLE_INTERNAL_AUTO);
-  if (!disableAuto && (nodeEnv === 'uat' || nodeEnv === 'pickcourtuat')) {
+  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+  const publicBase = normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
+  const looksLikeHostedPv =
+    /picklevibes\.hk/i.test(publicBase) || /uat\.picklevibes/i.test(publicBase);
+  const shouldAutoInternal =
+    !disableAuto &&
+    (nodeEnv === 'uat' ||
+      nodeEnv === 'pickcourtuat' ||
+      looksLikeHostedPv ||
+      String(process.env.PORT || '') === '5111');
+
+  if (shouldAutoInternal) {
     const autoPort = String(process.env.PICKLEVIBES_INTERNAL_PORT || '5009').trim() || '5009';
     return {
       baseUrl: normalizeBaseUrl(`http://127.0.0.1:${autoPort}/api`),
@@ -54,7 +64,7 @@ function resolvePickleVibesBaseUrl() {
   }
 
   return {
-    baseUrl: normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL),
+    baseUrl: publicBase,
     usingInternalUrl: false,
     source: 'PICKLEVIBES_API_BASE_URL',
   };
