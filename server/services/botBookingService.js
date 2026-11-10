@@ -461,12 +461,17 @@ async function createBookingViaBot(params) {
     console.log('ℹ️ externalSettlement：略過 PickleVibes 顧客通知（由 PickCourt 發送）');
   }
 
-  try {
-    const { notifyOnBookingCreated } = require('./overnightDutyNotifyService');
-    await notifyOnBookingCreated(booking);
-  } catch (dutyErr) {
-    console.error('❌ Bot 夜間值班通知失敗（不影響預約）:', dutyErr);
-  }
+  // externalSettlement：值班通知唔阻擋 bot 回應（避免 PickCourt 等死→502）
+  setImmediate(() => {
+    Promise.resolve()
+      .then(async () => {
+        const { notifyOnBookingCreated } = require('./overnightDutyNotifyService');
+        await notifyOnBookingCreated(booking);
+      })
+      .catch((dutyErr) => {
+        console.error('❌ Bot 夜間值班通知失敗（不影響預約）:', dutyErr);
+      });
+  });
 
   const tuyaCourtIds = [booking.court._id || booking.court];
   if (soloCourtBooking?.court) tuyaCourtIds.push(soloCourtBooking.court._id || soloCourtBooking.court);
