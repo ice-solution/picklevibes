@@ -30,23 +30,51 @@ function isTruthyEnv(value) {
   return v === '1' || v === 'true' || v === 'yes';
 }
 
+function resolvePickleVibesBaseUrl() {
+  const internal = normalizeBaseUrl(process.env.PICKLEVIBES_API_INTERNAL_URL);
+  if (internal) {
+    return {
+      baseUrl: internal,
+      usingInternalUrl: true,
+      source: 'PICKLEVIBES_API_INTERNAL_URL',
+    };
+  }
+
+  // UAT 同機預設走 loopback，避免仍用 https://uat.picklevibes.hk 經 Cloudflare hairpin
+  // 若要強制公網：設 PICKLEVIBES_DISABLE_INTERNAL_AUTO=1
+  const nodeEnv = String(process.env.NODE_ENV || '').toLowerCase();
+  const disableAuto = isTruthyEnv(process.env.PICKLEVIBES_DISABLE_INTERNAL_AUTO);
+  if (!disableAuto && (nodeEnv === 'uat' || nodeEnv === 'pickcourtuat')) {
+    const autoPort = String(process.env.PICKLEVIBES_INTERNAL_PORT || '5009').trim() || '5009';
+    return {
+      baseUrl: normalizeBaseUrl(`http://127.0.0.1:${autoPort}/api`),
+      usingInternalUrl: true,
+      source: 'auto-uat-loopback',
+    };
+  }
+
+  return {
+    baseUrl: normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL),
+    usingInternalUrl: false,
+    source: 'PICKLEVIBES_API_BASE_URL',
+  };
+}
+
 function getPickleVibesApiConfig() {
-  // 同機部署優先走 internal，避開 Cloudflare hairpin
-  const baseUrl =
-    normalizeBaseUrl(process.env.PICKLEVIBES_API_INTERNAL_URL) ||
-    normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
+  const resolved = resolvePickleVibesBaseUrl();
   const publicBaseUrl = normalizeBaseUrl(process.env.PICKLEVIBES_API_BASE_URL);
   const botApiKey = String(process.env.PICKLEVIBES_BOT_API_KEY || '').trim();
   const fallbackLocal = isTruthyEnv(process.env.PICKLEVIBES_AVAILABILITY_FALLBACK_LOCAL);
 
   return {
-    baseUrl,
+    baseUrl: resolved.baseUrl,
     publicBaseUrl,
-    usingInternalUrl: Boolean(normalizeBaseUrl(process.env.PICKLEVIBES_API_INTERNAL_URL)),
+    usingInternalUrl: resolved.usingInternalUrl,
+    baseUrlSource: resolved.source,
     botApiKey,
     fallbackLocal,
-    remoteEnabled: Boolean(baseUrl),
-    botEnabled: Boolean(baseUrl && botApiKey),
+    remoteEnabled: Boolean(resolved.baseUrl),
+    botEnabled: Boolean(resolved.baseUrl && botApiKey),
     requestTimeoutMs: Math.max(
       3000,
       parseInt(process.env.PICKLEVIBES_API_TIMEOUT_MS || '15000', 10) || 15000
@@ -66,8 +94,21 @@ function isPickleVibesRemoteEnabled() {
   return getPickleVibesApiConfig().remoteEnabled;
 }
 
+function logPickleVibesApiTarget() {
+  const config = getPickleVibesApiConfig();
+  console.log('🔗 PickleVibes API target', {
+    baseUrl: config.baseUrl || '(disabled)',
+    source: config.baseUrlSource,
+    usingInternalUrl: config.usingInternalUrl,
+    publicBaseUrl: config.publicBaseUrl || null,
+    botEnabled: config.botEnabled,
+  });
+}
+
 module.exports = {
   getPickleVibesApiConfig,
   isPickleVibesRemoteEnabled,
   normalizeBaseUrl,
+  resolvePickleVibesBaseUrl,
+  logPickleVibesApiTarget,
 };

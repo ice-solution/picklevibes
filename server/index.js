@@ -275,6 +275,12 @@ scheduledSync.initialize();
 const PORT = process.env.PORT || 5009;
 server.listen(PORT, () => {
   console.log(`🚀 服務器運行在端口 ${PORT}`);
+  try {
+    const { logPickleVibesApiTarget } = require('./config/picklevibesApi');
+    logPickleVibesApiTarget();
+  } catch (err) {
+    console.warn('⚠️ 無法顯示 PickleVibes API target:', err.message);
+  }
 });
 
 

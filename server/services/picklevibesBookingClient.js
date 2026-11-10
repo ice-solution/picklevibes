@@ -1,3 +1,5 @@
+const http = require('http');
+const https = require('https');
 const {
   getPickleVibesApiConfig,
   isPickleVibesRemoteEnabled,
@@ -12,6 +14,49 @@ function withPickCourtRemark(specialRequests) {
   if (base.includes('PickCourt')) return base.slice(0, 500);
   const combined = `${PICKCOURT_BOOKING_REMARK}；${base}`;
   return combined.slice(0, 500);
+}
+
+/**
+ * 用 Node http/https（唔用 fetch），避免 Cloudflare hairpin／undici 卡住令 origin 502。
+ */
+function httpJsonRequest(url, { method = 'GET', headers = {}, body, timeoutMs = 15000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const lib = url.protocol === 'https:' ? https : http;
+    const payload = body == null ? null : Buffer.from(String(body), 'utf8');
+    const req = lib.request(
+      {
+        protocol: url.protocol,
+        hostname: url.hostname,
+        port: url.port || (url.protocol === 'https:' ? 443 : 80),
+        path: `${url.pathname}${url.search}`,
+        method,
+        headers: {
+          ...headers,
+          ...(payload ? { 'Content-Length': payload.length } : {}),
+        },
+        timeout: timeoutMs,
+      },
+      (res) => {
+        const chunks = [];
+        res.on('data', (c) => chunks.push(c));
+        res.on('end', () => {
+          const text = Buffer.concat(chunks).toString('utf8');
+          resolve({
+            status: res.statusCode || 0,
+            text,
+          });
+        });
+      }
+    );
+
+    req.on('timeout', () => {
+      req.destroy(new Error(`PickleVibes 預約逾時 (${timeoutMs}ms)`));
+    });
+    req.on('error', (err) => reject(err));
+
+    if (payload) req.write(payload);
+    req.end();
+  });
 }
 
 /**
@@ -62,12 +107,12 @@ async function createPickleVibesBotBooking({
   }
 
   const url = new URL(`${config.baseUrl}/bot/booking`);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), config.requestTimeoutMs);
   const startedAt = Date.now();
+  const payload = JSON.stringify(body);
 
   console.log('🔍 PickleVibes bot booking request', {
     url: url.toString(),
+    source: config.baseUrlSource,
     usingInternalUrl: Boolean(config.usingInternalUrl),
     timeoutMs: config.requestTimeoutMs,
     court: body.court,
@@ -79,64 +124,62 @@ async function createPickleVibesBotBooking({
   });
 
   try {
-    const response = await fetch(url, {
+    const response = await httpJsonRequest(url, {
       method: 'POST',
+      timeoutMs: config.requestTimeoutMs,
       headers: {
         Accept: 'application/json',
         'Content-Type': 'application/json',
         'X-Bot-Key': config.botApiKey,
       },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+      body: payload,
     });
 
-    const text = await response.text();
     console.log('🔍 PickleVibes bot booking response', {
       status: response.status,
       ms: Date.now() - startedAt,
-      bodyPreview: String(text || '').slice(0, 200),
+      bodyPreview: String(response.text || '').slice(0, 200),
     });
 
-    let payload = null;
-    if (text) {
+    let parsed = null;
+    if (response.text) {
       try {
-        payload = JSON.parse(text);
+        parsed = JSON.parse(response.text);
       } catch {
-        payload = { message: text };
+        parsed = { message: response.text };
       }
     }
 
-    if (!response.ok || payload?.success === false) {
+    if (response.status < 200 || response.status >= 300 || parsed?.success === false) {
       const message =
-        payload?.message ||
-        payload?.error ||
+        parsed?.message ||
+        parsed?.error ||
         `PickleVibes 預約失敗 (${response.status})`;
       const err = new PickleVibesApiError(message, {
         status: response.status,
-        code: payload?.code,
+        code: parsed?.code,
         path: url.pathname,
       });
-      err.details = payload?.details;
+      err.details = parsed?.details;
       throw err;
     }
 
-    return payload?.data || payload;
+    return parsed?.data || parsed;
   } catch (error) {
     console.error('❌ PickleVibes bot booking failed', {
       ms: Date.now() - startedAt,
       name: error?.name,
       message: error?.message,
       code: error?.code,
+      url: url.toString(),
     });
-    if (error.name === 'AbortError') {
-      throw new PickleVibesApiError(`PickleVibes 預約逾時 (${config.requestTimeoutMs}ms)`, {
-        path: url.pathname,
-      });
-    }
     if (error instanceof PickleVibesApiError) throw error;
-    throw new PickleVibesApiError(error.message || 'PickleVibes 預約請求失敗');
-  } finally {
-    clearTimeout(timer);
+    const msg = error?.message || 'PickleVibes 預約請求失敗';
+    const timedOut = /逾時|timeout/i.test(msg);
+    throw new PickleVibesApiError(
+      timedOut ? `PickleVibes 預約逾時 (${config.requestTimeoutMs}ms)` : msg,
+      { path: url.pathname, status: timedOut ? 504 : undefined }
+    );
   }
 }
 
