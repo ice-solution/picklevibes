@@ -33,63 +33,93 @@ const BOOKING_DISCOUNT_LABELS_ZH: Record<string, string> = {
   athlete: '選手／VIP 8折',
 };
 
-/** 限時 VIP 價再減（需同 server/utils/memberBenefits.js 對齊） */
-const DEFAULT_VIP_EXTRA_OFF_POINTS = 88;
-const DEFAULT_VIP_EXTRA_OFF_FROM = '2026-09-29T00:00:00+08:00';
-const DEFAULT_VIP_EXTRA_OFF_UNTIL = '2026-10-29T23:59:59.999+08:00';
+/**
+ * 限時：VIP 價「第二小時半價」（需同 server/utils/memberBenefits.js 對齊）
+ * 2026-11-19 起取代每小時 −88。
+ */
+const DEFAULT_VIP_EXTRA_OFF_FROM = '2026-11-19T00:00:00+08:00';
+const DEFAULT_VIP_EXTRA_OFF_UNTIL = '';
+export const EXTRA_OFF_LABEL_ZH = '第二小時半價';
 
 type DiscountUser = {
   role?: string | null;
   membershipLevel?: string | null;
 } | null | undefined;
 
-function parseCampaignDate(raw: string | undefined, fallbackIso: string, endOfDay = false): Date {
+function parseCampaignDate(
+  raw: string | undefined,
+  fallbackIso: string,
+  endOfDay = false
+): Date | null {
   const s = String(raw || '').trim();
-  if (!s) return new Date(fallbackIso);
+  if (!s) {
+    if (!fallbackIso) return null;
+    return new Date(fallbackIso);
+  }
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
     return new Date(`${s}T${endOfDay ? '23:59:59.999' : '00:00:00'}+08:00`);
   }
   const d = new Date(s);
-  return Number.isNaN(d.getTime()) ? new Date(fallbackIso) : d;
+  if (Number.isNaN(d.getTime())) {
+    return fallbackIso ? new Date(fallbackIso) : null;
+  }
+  return d;
+}
+
+function isExtraOffDisabledByEnv(): boolean {
+  const disabled = String(process.env.REACT_APP_VIP_BOOKING_EXTRA_OFF_DISABLED || '')
+    .trim()
+    .toLowerCase();
+  if (disabled === '1' || disabled === 'true' || disabled === 'yes') return true;
+  const rawPoints = process.env.REACT_APP_VIP_BOOKING_EXTRA_OFF_POINTS;
+  if (rawPoints !== undefined && rawPoints !== '') {
+    const points = Number(rawPoints);
+    if (Number.isFinite(points) && points <= 0) return true;
+  }
+  return false;
 }
 
 export function getVipBookingExtraFlatOffConfig(now: Date = new Date()): {
   active: boolean;
-  points: number;
+  mode: 'second_hour_half';
 } {
-  const rawPoints = process.env.REACT_APP_VIP_BOOKING_EXTRA_OFF_POINTS;
-  const points =
-    rawPoints === undefined || rawPoints === ''
-      ? DEFAULT_VIP_EXTRA_OFF_POINTS
-      : Number(rawPoints);
-  if (!Number.isFinite(points) || points <= 0) {
-    return { active: false, points: 0 };
+  if (isExtraOffDisabledByEnv()) {
+    return { active: false, mode: 'second_hour_half' };
   }
   const from = parseCampaignDate(
     process.env.REACT_APP_VIP_BOOKING_EXTRA_OFF_FROM,
     DEFAULT_VIP_EXTRA_OFF_FROM,
     false
   );
+  const untilRaw = process.env.REACT_APP_VIP_BOOKING_EXTRA_OFF_UNTIL;
   const until = parseCampaignDate(
-    process.env.REACT_APP_VIP_BOOKING_EXTRA_OFF_UNTIL,
+    untilRaw === undefined || untilRaw === '' ? DEFAULT_VIP_EXTRA_OFF_UNTIL : untilRaw,
     DEFAULT_VIP_EXTRA_OFF_UNTIL,
     true
   );
-  const active = now >= from && now <= until;
-  return { active, points: active ? points : 0 };
+  const afterFrom = !from || now >= from;
+  const beforeUntil = !until || now <= until;
+  return { active: afterFrom && beforeUntil, mode: 'second_hour_half' };
 }
 
+/** VIP 價上「第二小時半價」減額（vipAmount = 倍率後總價） */
 export function getVipBookingExtraFlatOff(
   user: DiscountUser,
   now: Date = new Date(),
-  durationMinutes: number = 60
+  durationMinutes: number = 60,
+  vipAmount: number = 0
 ): number {
   if (!hasBookingVipDiscount(user)) return 0;
-  const perHour = getVipBookingExtraFlatOffConfig(now).points;
-  if (perHour <= 0) return 0;
+  if (!getVipBookingExtraFlatOffConfig(now).active) return 0;
+
+  const amount = Number(vipAmount);
   const minutes = Number(durationMinutes);
-  const hours = Number.isFinite(minutes) && minutes > 0 ? minutes / 60 : 1;
-  return Math.round(perHour * hours);
+  if (!(amount > 0) || !(minutes > 0)) return 0;
+
+  const secondMins = Math.min(60, Math.max(0, minutes - 60));
+  if (secondMins <= 0) return 0;
+
+  return Math.round(amount * (secondMins / minutes) * 0.5);
 }
 
 export function isAthleteRole(user: DiscountUser): boolean {
@@ -133,7 +163,7 @@ export function applyBookingVipDiscount(
   const n = Number(amount) || 0;
   if (!hasBookingVipDiscount(user) || n <= 0) return n;
   const afterRate = applyBookingVipRateOnly(n, user);
-  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes);
+  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes, afterRate);
   return Math.max(0, afterRate - extra);
 }
 
@@ -174,8 +204,13 @@ export function membershipLevelLabelZh(level?: string | null): string {
 export function bookingMembershipDiscountLabelZh(user: DiscountUser, durationMinutes = 60): string {
   const level = resolveBookingDiscountLevel(user);
   const base = BOOKING_DISCOUNT_LABELS_ZH[level] || BOOKING_DISCOUNT_LABELS_ZH.basic;
-  const extra = getVipBookingExtraFlatOff(user, new Date(), durationMinutes);
-  if (extra > 0) return `${base}，周年減價`;
+  if (
+    hasBookingVipDiscount(user) &&
+    getVipBookingExtraFlatOffConfig(new Date()).active &&
+    Number(durationMinutes) > 60
+  ) {
+    return `${base}，${EXTRA_OFF_LABEL_ZH}`;
+  }
   return base;
 }
 

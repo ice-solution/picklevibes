@@ -355,24 +355,24 @@ router.post('/', [
           // 檢查用戶是否可以使用
           const canUse = await redeemCode.canUserUse(bookingUserId);
           if (canUse) {
-            // 計算兌換碼折扣 - 基於原價計算，不是基於已應用 VIP 折扣的價格
+            // 兌換碼折扣以 VIP／第二小時半價後的應付總價為基數（含單人場加租）
             let discountAmount = 0;
-            const originalPrice = tempBooking.pricing.totalPrice + soloCourtFee;
-            
+            const payableTotal = pointsToDeduct;
+
             // 檢查最低消費金額
-            if (originalPrice < redeemCode.minAmount) {
+            if (payableTotal < redeemCode.minAmount) {
               throw new Error(`此兌換碼需要最低消費 HK$${redeemCode.minAmount}`);
             }
-            
+
             if (redeemCode.type === 'fixed') {
               discountAmount = redeemCode.value;
             } else if (redeemCode.type === 'percentage') {
-              discountAmount = Math.round(originalPrice * (redeemCode.value / 100));
+              discountAmount = Math.round(payableTotal * (redeemCode.value / 100));
               if (redeemCode.maxDiscount && discountAmount > redeemCode.maxDiscount) {
                 discountAmount = redeemCode.maxDiscount;
               }
             }
-            
+
             // 應用兌換碼折扣
             pointsToDeduct = Math.max(0, pointsToDeduct - discountAmount);
             redeemCodeData = {

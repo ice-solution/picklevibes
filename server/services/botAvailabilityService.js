@@ -57,7 +57,7 @@ function buildPricingForUser(listTotal, durationMinutes, user) {
   }
 
   const vipRatePrice = applyBookingVipRateOnly(listPrice, user);
-  const extraOff = getVipBookingExtraFlatOff(user, new Date(), durationMinutes);
+  const extraOff = getVipBookingExtraFlatOff(user, new Date(), durationMinutes, vipRatePrice);
   const finalCost = applyBookingVipDiscount(listPrice, user, new Date(), durationMinutes);
 
   return {
@@ -138,7 +138,7 @@ async function checkCourtSlotAvailability(court, date, startTime, endTime, user 
 
 /**
  * 查詢指定店鋪、日期、時段內所有場地空缺。
- * 可選 phone：對應 WhatsApp 會員後回傳同網站嘅 finalCost（VIP／周年減價）。
+ * 可選 phone：對應 WhatsApp 會員後回傳同網站嘅 finalCost（VIP／第二小時半價）。
  */
 async function searchAvailability({ storeId, date, startTime, endTime, courtType, phone } = {}) {
   const store = await Store.findById(storeId).select('name slug isActive');

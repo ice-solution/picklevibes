@@ -202,10 +202,11 @@ async function createBookingViaBot(params) {
 
       const canUse = await redeemCode.canUserUse(user._id);
       if (canUse) {
+        // 兌換碼折扣以 VIP／第二小時半價後的應付總價為基數（含單人場加租）
         let discountAmount = 0;
-        const originalPrice = tempBooking.pricing.totalPrice + soloCourtFee;
+        const payableTotal = pointsToDeduct;
 
-        if (originalPrice < redeemCode.minAmount) {
+        if (payableTotal < redeemCode.minAmount) {
           const err = new Error(`此兌換碼需要最低消費 HK$${redeemCode.minAmount}`);
           err.code = 'INVALID_REDEEM_CODE';
           throw err;
@@ -214,7 +215,7 @@ async function createBookingViaBot(params) {
         if (redeemCode.type === 'fixed') {
           discountAmount = redeemCode.value;
         } else if (redeemCode.type === 'percentage') {
-          discountAmount = Math.round(originalPrice * (redeemCode.value / 100));
+          discountAmount = Math.round(payableTotal * (redeemCode.value / 100));
           if (redeemCode.maxDiscount && discountAmount > redeemCode.maxDiscount) {
             discountAmount = redeemCode.maxDiscount;
           }

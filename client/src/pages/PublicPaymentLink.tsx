@@ -26,6 +26,34 @@ type PublicLink = {
 
 type PayMethod = 'gateway' | 'points';
 
+const RECLUB_NOSHOW_TC_ZH = `Reclub 月費會員 No-show 條款及細則
+為保障所有會員的預約權益，避免場地及時段被無故佔用，並讓其他會員有足夠時間預約空缺時段，Reclub 將實施以下 No-show 管理措施：
+
+1. 首次 No-show
+會員將收到一次書面警告。
+2. 第二次 No-show
+將收取 HK$120 行政費，費用相當於現時每兩小時場地租用費。
+3. 第三次 No-show
+會員資格將被暫停 30日。
+4. 提前通知安排
+如會員於預約時間前最少 24小時通知取消或更改預約，將不會被計算為 No-show。
+
+以上措施旨在減少場地及時段浪費，並讓其他會員有足夠時間預約及使用相關時段。敬請各位會員珍惜預約，並於未能出席時盡早通知。`;
+
+const RECLUB_NOSHOW_TC_EN = `Reclub Monthly Membership No-show Terms & Conditions
+To protect the booking rights of all members, minimise the unnecessary reservation of court slots, and allow sufficient time for other members to book available slots, Reclub will implement the following No-show measures:
+
+1. First No-show
+The member will receive a written warning.
+2. Second No-show
+An administrative fee of HK$120 will be charged. This amount is equivalent to the current court rental fee for two hours.
+3. Third No-show
+The member’s membership will be suspended for 30 days.
+4. Cancellation Notice
+Cancellations or booking changes made at least 24 hours before the scheduled booking time will not be counted as a No-show.
+
+These measures are intended to minimise the wastage of court slots and provide other members with sufficient time to make use of any available bookings. Members are kindly reminded to respect their reservations and notify Reclub as early as possible if they are unable to attend.`;
+
 const PublicPaymentLink: React.FC = () => {
   const { code = '' } = useParams();
   const { user, loading: authLoading } = useAuth();
@@ -41,6 +69,7 @@ const PublicPaymentLink: React.FC = () => {
   const [contactEmail, setContactEmail] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [busy, setBusy] = useState(false);
+  const [acceptedNoShowTc, setAcceptedNoShowTc] = useState(false);
 
   useEffect(() => {
     const load = async () => {
@@ -51,6 +80,7 @@ const PublicPaymentLink: React.FC = () => {
         const res = await axios.get(`/payment-links/public/${encodeURIComponent(code)}`);
         const nextLink = res.data.link as PublicLink;
         setLink(nextLink);
+        setAcceptedNoShowTc(false);
         if (nextLink.allowPointsPayment === false) {
           setPayMethod('gateway');
         }
@@ -95,8 +125,15 @@ const PublicPaymentLink: React.FC = () => {
     balance != null &&
     balance < displayPrice;
 
+  const requiresNoShowTc = Boolean(link?.isReclub || link?.purpose === 'sell_pass');
+
   const handlePay = async () => {
     if (!link) return;
+
+    if (requiresNoShowTc && !acceptedNoShowTc) {
+      alert('請先閱讀並同意 No-show 條款及細則');
+      return;
+    }
 
     if (link.purpose === 'sell_pass' && !isAuthenticated) {
       alert('購買月卡請先登入');
@@ -377,12 +414,41 @@ const PublicPaymentLink: React.FC = () => {
                 <p className="text-sm text-red-600">積分不足，請先充值或改選線上付款</p>
               )}
 
+              {requiresNoShowTc && (
+                <div className="space-y-3 border border-gray-200 rounded-xl p-4 bg-slate-50">
+                  <p className="text-sm font-semibold text-gray-900">
+                    No-show 條款及細則 / No-show Terms & Conditions
+                  </p>
+                  <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-200 bg-white p-3 text-xs text-gray-700 whitespace-pre-wrap leading-relaxed">
+                    <p>{RECLUB_NOSHOW_TC_ZH}</p>
+                    <hr className="my-3 border-gray-200" />
+                    <p>{RECLUB_NOSHOW_TC_EN}</p>
+                  </div>
+                  <label className="flex items-start gap-2 text-sm text-gray-800 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={acceptedNoShowTc}
+                      onChange={(e) => setAcceptedNoShowTc(e.target.checked)}
+                      className="mt-1 h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                    />
+                    <span>
+                      本人已閱讀並同意以上 Reclub 月費會員 No-show 條款及細則
+                      <span className="block text-xs text-gray-500 mt-0.5">
+                        I have read and agree to the Reclub Monthly Membership No-show Terms &amp;
+                        Conditions above.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              )}
+
               <button
                 type="button"
                 disabled={
                   busy ||
                   pointsInsufficient ||
-                  (link.purpose === 'sell_pass' && !isAuthenticated)
+                  (link.purpose === 'sell_pass' && !isAuthenticated) ||
+                  (requiresNoShowTc && !acceptedNoShowTc)
                 }
                 onClick={() => void handlePay()}
                 className="w-full bg-primary-600 text-white py-3 rounded-xl font-medium hover:bg-primary-700 disabled:opacity-50"

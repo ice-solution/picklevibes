@@ -8,6 +8,7 @@ import { BOOKING_CANCELLATION_POLICY_LINES } from '../../constants/bookingCancel
 import {
   hasBookingVipDiscount,
   applyBookingVipDiscount,
+  applyBookingVipRateOnly,
   getBookingDiscountRate,
   getVipBookingExtraFlatOff,
   membershipLevelLabelZh,
@@ -153,6 +154,14 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
   const soloCourtFee = includeSoloCourt ? calculateSoloCourtFee(durationMinutes) : 0;
   const courtListPrice = availability?.pricing?.totalPrice || 0;
   const bookingDurationHours = soloCourtFeeHours(durationMinutes);
+  // 兌換碼／總計用 VIP 後應付總價（含單人場），唔好用牌價原價
+  const payableBeforeRedeem = (() => {
+    let total = courtListPrice;
+    if (hasBookingVipDiscount(user)) {
+      total = applyBookingVipDiscount(total, user, new Date(), durationMinutes);
+    }
+    return total + soloCourtFee;
+  })();
 
   // 將 24:00 轉換為 00:00
   const normalizeTime = (time: string) => {
@@ -475,7 +484,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
           <div className="bg-white border border-gray-200 rounded-xl p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">{t('bookingPage.bookingSummary.redeemTitle')}</h3>
             <RedeemCodeInput
-              amount={courtListPrice + soloCourtFee}
+              amount={payableBeforeRedeem}
               orderType="booking"
               onRedeemApplied={handleRedeemApplied}
               onRedeemRemoved={handleRedeemRemoved}
@@ -523,11 +532,23 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 </div>
               )}
 
-              {getVipBookingExtraFlatOff(user, new Date(), durationMinutes) > 0 && (
+              {getVipBookingExtraFlatOff(
+                user,
+                new Date(),
+                durationMinutes,
+                applyBookingVipRateOnly(courtListPrice, user)
+              ) > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span>周年減價</span>
+                  <span>第二小時半價</span>
                   <span className="font-medium">
-                    -{getVipBookingExtraFlatOff(user, new Date(), durationMinutes)} {t('common.currency')}
+                    -
+                    {getVipBookingExtraFlatOff(
+                      user,
+                      new Date(),
+                      durationMinutes,
+                      applyBookingVipRateOnly(courtListPrice, user)
+                    )}{' '}
+                    {t('common.currency')}
                   </span>
                 </div>
               )}
@@ -555,11 +576,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                   <span>{t('bookingPage.bookingSummary.total')}</span>
                   <span className="text-primary-600">
                     {(() => {
-                      let totalPrice = courtListPrice;
-                      if (hasBookingVipDiscount(user)) {
-                        totalPrice = applyBookingVipDiscount(totalPrice, user, new Date(), durationMinutes);
-                      }
-                      totalPrice += soloCourtFee;
+                      let totalPrice = payableBeforeRedeem;
                       if (redeemData) {
                         totalPrice = totalPrice - redeemData.discountAmount;
                       }

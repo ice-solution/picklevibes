@@ -143,7 +143,7 @@ GET /api/bot/activities?store={可選店名或別名}&limit={1-30}
 GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endTime={結束}&phone={WhatsApp電話}
 ```
 
-價錢跟網站：有 `phone` 且對到 VIP／會籍 → `finalCost`／`totalPrice` 已含 8 折同限時周年 −88×小時；搵唔到會員 → 正價，並回 `registerUrl`／`courtsUrl` 提示。
+價錢跟網站：有 `phone` 且對到 VIP／會籍 → `finalCost`／`totalPrice` 已含 8 折同限時「第二小時半價」（VIP 價上只減第二個小時）；搵唔到會員 → 正價，並回 `registerUrl`／`courtsUrl` 提示。
 
 ### Query
 
@@ -181,11 +181,11 @@ GET /api/bot/availability?store={店鋪ID}&date={日期}&startTime={開始}&endT
           "finalCost": 1072,
           "totalPrice": 1072,
           "vipRatePrice": 1248,
-          "extraOff": 176,
-          "vipDiscount": 488,
+          "extraOff": 160,
+          "vipDiscount": 360,
           "memberMatched": true,
           "hasMemberDiscount": true,
-          "discountLabel": "VIP會員8折，周年減價",
+          "discountLabel": "VIP會員8折，第二小時半價",
           "duration": 120,
           "isPeakHour": true,
           "slotName": "繁忙時間"
