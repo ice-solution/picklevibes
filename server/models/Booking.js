@@ -158,7 +158,21 @@ const bookingSchema = new mongoose.Schema({
     discount: {
       type: Number,
       default: 0
-    }
+    },
+    /** 優惠後場租（未含平台服務費） */
+    courtPointsPayable: {
+      type: Number,
+      default: 0,
+    },
+    /** 平台服務費（店佣成％ × 優惠後場租） */
+    platformServiceFee: {
+      type: Number,
+      default: 0,
+    },
+    platformServiceFeePercent: {
+      type: Number,
+      default: 0,
+    },
   },
   specialRequests: {
     type: String,

@@ -11,6 +11,14 @@ import {
   DEFAULT_USAGE_NOTICE,
 } from '../../utils/storeBookingPolicies';
 
+const DEFAULT_REVIEW_CATEGORIES = [
+  { key: 'court', label: '場地質素', score: '' as string | number },
+  { key: 'lighting', label: '燈光', score: '' as string | number },
+  { key: 'facilities', label: '設施', score: '' as string | number },
+  { key: 'service', label: '服務', score: '' as string | number },
+  { key: 'location', label: '交通位置', score: '' as string | number },
+];
+
 const StoreIntroSettings: React.FC = () => {
   const { store, refresh } = useStoreAdmin();
   const { user } = useAuth();
@@ -31,6 +39,10 @@ const StoreIntroSettings: React.FC = () => {
     cancellationText: '',
     importantRemindersText: '',
     usageNoticeText: '',
+    reviewOverallScore: '' as string | number,
+    reviewOverallLabel: '',
+    reviewSummaryText: '',
+    reviewCategories: DEFAULT_REVIEW_CATEGORIES,
   });
 
   useEffect(() => {
@@ -45,6 +57,14 @@ const StoreIntroSettings: React.FC = () => {
       return;
     }
     hydratedStoreIdRef.current = store._id;
+    const existingCats = store.playerReviews?.categories || [];
+    const reviewCategories = DEFAULT_REVIEW_CATEGORIES.map((def) => {
+      const found = existingCats.find((c) => c.key === def.key || c.label === def.label);
+      return {
+        ...def,
+        score: found?.score != null ? found.score : '',
+      };
+    });
     setForm({
       name: store.name || '',
       phone: store.phone || '',
@@ -62,6 +82,11 @@ const StoreIntroSettings: React.FC = () => {
         store.bookingPolicies?.importantRemindersText ||
         DEFAULT_IMPORTANT_REMINDERS_LINES.join('\n'),
       usageNoticeText: store.bookingPolicies?.usageNoticeText || DEFAULT_USAGE_NOTICE,
+      reviewOverallScore:
+        store.playerReviews?.overallScore != null ? store.playerReviews.overallScore : '',
+      reviewOverallLabel: store.playerReviews?.overallLabel || '',
+      reviewSummaryText: store.playerReviews?.summaryText || '',
+      reviewCategories,
     });
   }, [store]);
 
@@ -70,6 +95,15 @@ const StoreIntroSettings: React.FC = () => {
     if (!store?._id) return;
     setSaving(true);
     try {
+      const categories = form.reviewCategories
+        .map((c) => ({
+          key: c.key,
+          label: c.label,
+          score: c.score === '' ? null : Number(c.score),
+        }))
+        .filter((c) => c.score != null && Number.isFinite(c.score));
+      const overall =
+        form.reviewOverallScore === '' ? null : Number(form.reviewOverallScore);
       await axios.put(`/stores/${store._id}`, {
         name: form.name,
         phone: form.phone,
@@ -87,6 +121,14 @@ const StoreIntroSettings: React.FC = () => {
           cancellationText: form.cancellationText.trim(),
           importantRemindersText: form.importantRemindersText.trim(),
           usageNoticeText: form.usageNoticeText.trim(),
+        },
+        playerReviews: {
+          overallScore: overall != null && Number.isFinite(overall) ? overall : null,
+          overallLabel: form.reviewOverallLabel.trim(),
+          summaryText: form.reviewSummaryText.trim(),
+          categories,
+          categorySummaries: store.playerReviews?.categorySummaries || [],
+          updatedAt: new Date().toISOString(),
         },
       });
       await refresh();
@@ -211,6 +253,66 @@ const StoreIntroSettings: React.FC = () => {
             className="w-full border rounded-md px-3 py-2 text-sm"
             value={form.usageNoticeText}
             onChange={(e) => setForm({ ...form, usageNoticeText: e.target.value })}
+          />
+        </div>
+
+        <hr />
+        <h3 className="text-base font-semibold text-gray-900">球員評價（店主／Admin 填寫）</h3>
+        <p className="text-xs text-gray-500 -mt-2">
+          用戶只可瀏覽；會員自行評分日後再開。留空總分與分類則公開頁不顯示此區塊。
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">總分（0–10）</label>
+            <input
+              type="number"
+              min={0}
+              max={10}
+              step={0.1}
+              className="w-full border rounded-md px-3 py-2"
+              value={form.reviewOverallScore}
+              onChange={(e) => setForm({ ...form, reviewOverallScore: e.target.value })}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">總分標籤</label>
+            <input
+              className="w-full border rounded-md px-3 py-2"
+              placeholder="例如：非常好"
+              value={form.reviewOverallLabel}
+              onChange={(e) => setForm({ ...form, reviewOverallLabel: e.target.value })}
+            />
+          </div>
+        </div>
+        <div className="space-y-2">
+          {form.reviewCategories.map((cat, idx) => (
+            <div key={cat.key} className="flex items-center gap-3">
+              <span className="w-24 text-sm text-gray-700 shrink-0">{cat.label}</span>
+              <input
+                type="number"
+                min={0}
+                max={10}
+                step={0.1}
+                className="flex-1 border rounded-md px-3 py-2"
+                placeholder="分數"
+                value={cat.score}
+                onChange={(e) => {
+                  const next = [...form.reviewCategories];
+                  next[idx] = { ...cat, score: e.target.value };
+                  setForm({ ...form, reviewCategories: next });
+                }}
+              />
+            </div>
+          ))}
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">評價摘要</label>
+          <textarea
+            rows={4}
+            className="w-full border rounded-md px-3 py-2 text-sm"
+            value={form.reviewSummaryText}
+            onChange={(e) => setForm({ ...form, reviewSummaryText: e.target.value })}
+            placeholder="綜合球員／店方整理的評價重點…"
           />
         </div>
 

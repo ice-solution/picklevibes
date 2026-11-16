@@ -9,18 +9,58 @@ import {
   BuildingStorefrontIcon,
 } from '@heroicons/react/24/outline';
 import apiConfig from '../../config/api';
-import { COURT_TYPE_OPTIONS, HK_DISTRICTS } from '../../constants/hkDistricts';
+import {
+  COURT_TYPE_BADGE_LABEL,
+  COURT_TYPE_DESCRIPTIONS,
+  COURT_TYPE_OPTIONS,
+  HK_REGION_OPTIONS,
+} from '../../constants/hkDistricts';
 import { suggestCourtSlug } from '../../constants/courtSlug';
 import { isValidBookingDate } from '../../utils/bookingRoutes';
+import { resolveMediaUrl } from '../../utils/storeBrandUtils';
 
 type SearchResult = {
-  store: { id: string; name: string; slug: string; address: string; district?: string | null };
-  court: { id: string; name: string; slug: string; number: number; type: string };
+  store: {
+    id: string;
+    name: string;
+    slug: string;
+    address: string;
+    district?: string | null;
+    region?: string | null;
+    tagline?: string | null;
+    intro?: string | null;
+    coverImage?: string | null;
+    logoUrl?: string | null;
+    bannerUrl?: string | null;
+    amenities?: string[];
+    policySnippet?: string | null;
+    enableVipDiscount?: boolean;
+  };
+  court: {
+    id: string;
+    name: string;
+    slug: string;
+    number: number;
+    type: string;
+    amenities?: string[];
+    image?: string | null;
+  };
   available: boolean;
   startTime?: string;
   endTime?: string;
   pricing?: { totalPrice: number; slotName: string };
   bookingUrl?: string;
+};
+
+const AMENITY_LABEL: Record<string, string> = {
+  air_conditioning: '冷氣',
+  lighting: '燈光',
+  net: '球網',
+  paddles: '球拍',
+  balls: '球',
+  water: '飲用水',
+  shower: '淋浴',
+  vending_machine: '售賣機',
 };
 
 type SearchResponse = {
@@ -114,13 +154,6 @@ function defaultStartTime(dateYmd: string, preferredFromUrl?: string | null) {
   }
   return '10:00';
 }
-
-const courtTypeBadge: Record<string, string> = {
-  competition: '比賽場',
-  training: '訓練場',
-  solo: '單人場',
-  dink: '特色場',
-};
 
 function searchCourtSlug(item: SearchResult): string {
   if (item.court.slug?.trim()) return item.court.slug.trim().toLowerCase();
@@ -298,7 +331,7 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
 
           <form onSubmit={handleSubmit} className="mt-8 lg:mt-10">
             <div className="bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col xl:flex-row xl:items-stretch">
-              {/* 地區 */}
+              {/* 地區：香港／九龍／新界 */}
               <div className="flex-1 min-w-0 border-b xl:border-b-0 xl:border-r border-gray-200 px-4 py-3 lg:py-4">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   地區
@@ -310,10 +343,9 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                     onChange={(e) => setDistrict(e.target.value)}
                     className="w-full text-base font-medium text-gray-900 outline-none bg-transparent cursor-pointer"
                   >
-                    <option value="">全港</option>
-                    {HK_DISTRICTS.map((d) => (
-                      <option key={d} value={d}>
-                        {d}
+                    {HK_REGION_OPTIONS.map((o) => (
+                      <option key={o.value || 'all'} value={o.value}>
+                        {o.label}
                       </option>
                     ))}
                   </select>
@@ -407,6 +439,11 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                 {loading ? '搜尋中…' : '搜尋'}
               </button>
             </div>
+            {courtType && COURT_TYPE_DESCRIPTIONS[courtType] && (
+              <p className="mt-3 text-sm text-white/85 bg-white/10 border border-white/15 rounded-lg px-4 py-3">
+                {COURT_TYPE_DESCRIPTIONS[courtType]}
+              </p>
+            )}
           </form>
         </div>
       </div>
@@ -453,59 +490,109 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                   <p className="text-gray-600">請嘗試其他日期、時間、地區或場地類型</p>
                 </div>
               ) : (
-                <ul className="space-y-4">
-                  {data.available.map((item) => (
-                    <li
-                      key={`${item.court.id}-${item.startTime}`}
-                      className="flex flex-col sm:flex-row sm:items-center gap-4 p-5 rounded-xl border border-gray-200 hover:border-pickcourt-gold/40 hover:shadow-md transition-all bg-white"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <Link
-                          to={`/store/${item.store.slug}`}
-                          className="font-bold text-lg text-pickcourt-navy hover:text-pickcourt-gold transition-colors"
-                        >
-                          {item.store.name}
-                        </Link>
-                        <p className="text-sm text-gray-500 mt-0.5 flex items-center gap-1">
-                          <MapPinIcon className="h-4 w-4 shrink-0" />
-                          {item.store.district ? `${item.store.district} · ` : ''}
-                          {item.store.address}
-                        </p>
-                        <p className="mt-2 text-gray-700">
-                          <span className="font-semibold">{item.court.name}</span>
-                          {courtTypeBadge[item.court.type] && (
-                            <span className="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
-                              {courtTypeBadge[item.court.type]}
-                            </span>
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-6 sm:gap-8">
-                        <div className="text-right">
-                          <p className="text-sm text-gray-500">時段</p>
-                          <p className="font-semibold text-pickcourt-navy">
-                            {item.startTime} – {item.endTime}
-                          </p>
-                          {item.pricing?.slotName && (
-                            <p className="text-xs text-gray-400">{item.pricing.slotName}</p>
-                          )}
+                <ul className="space-y-5">
+                  {data.available.map((item) => {
+                    const cover =
+                      resolveMediaUrl(
+                        item.store.coverImage || item.court.image || item.store.bannerUrl || item.store.logoUrl
+                      ) || '';
+                    const amenities = (item.court.amenities?.length
+                      ? item.court.amenities
+                      : item.store.amenities || []
+                    ).slice(0, 4);
+                    const listPrice = Number(item.pricing?.totalPrice) || 0;
+                    return (
+                      <li
+                        key={`${item.court.id}-${item.startTime}`}
+                        className="overflow-hidden rounded-xl border border-gray-200 hover:border-pickcourt-gold/40 hover:shadow-md transition-all bg-white"
+                      >
+                        <div className="flex flex-col md:flex-row">
+                          <div className="relative md:w-64 lg:w-72 shrink-0 bg-slate-100 aspect-[16/10] md:aspect-auto md:min-h-[180px]">
+                            {cover ? (
+                              <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center text-slate-300">
+                                <BuildingStorefrontIcon className="h-14 w-14" />
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0 p-5 flex flex-col sm:flex-row gap-4">
+                            <div className="flex-1 min-w-0">
+                              <Link
+                                to={`/store/${item.store.slug}`}
+                                className="font-bold text-xl text-pickcourt-navy hover:text-pickcourt-gold transition-colors"
+                              >
+                                {item.store.name}
+                              </Link>
+                              <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
+                                <MapPinIcon className="h-4 w-4 shrink-0" />
+                                {item.store.region || item.store.district
+                                  ? `${item.store.region || item.store.district} · `
+                                  : ''}
+                                {item.store.address}
+                                <Link
+                                  to={`/store/${item.store.slug}`}
+                                  className="ml-1 text-[#0062E3] hover:underline shrink-0"
+                                >
+                                  詳情
+                                </Link>
+                              </p>
+                              {(item.store.tagline || item.store.intro) && (
+                                <p className="mt-2 text-sm text-gray-600 line-clamp-2">
+                                  {item.store.tagline || item.store.intro}
+                                </p>
+                              )}
+
+                              <div className="mt-3 rounded-lg border border-gray-200 bg-slate-50 px-3 py-2.5">
+                                <p className="font-semibold text-gray-900">
+                                  {item.court.name}
+                                  {(COURT_TYPE_BADGE_LABEL[item.court.type] ||
+                                    COURT_TYPE_OPTIONS.find((o) => o.value === item.court.type)?.label) && (
+                                    <span className="ml-2 text-xs font-medium bg-white text-gray-600 px-2 py-0.5 rounded border border-gray-200">
+                                      {COURT_TYPE_BADGE_LABEL[item.court.type] ||
+                                        COURT_TYPE_OPTIONS.find((o) => o.value === item.court.type)?.label}
+                                    </span>
+                                  )}
+                                </p>
+                                <p className="text-sm text-gray-600 mt-1">
+                                  {item.startTime} – {item.endTime}
+                                  {item.pricing?.slotName ? ` · ${item.pricing.slotName}` : ''}
+                                </p>
+                                {amenities.length > 0 && (
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    {amenities.map((a) => AMENITY_LABEL[a] || a).join(' · ')}
+                                  </p>
+                                )}
+                                {item.store.policySnippet && (
+                                  <p className="text-xs text-amber-700 mt-1.5">{item.store.policySnippet}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="sm:w-44 shrink-0 flex flex-col items-stretch sm:items-end justify-between gap-3">
+                              <div className="text-left sm:text-right">
+                                <p className="text-sm text-gray-500">時段費用</p>
+                                <p className="text-2xl font-bold text-[#0062E3]">
+                                  {listPrice > 0 ? `HK$${listPrice}` : '—'}
+                                </p>
+                                {item.store.enableVipDiscount && (
+                                  <p className="text-xs text-emerald-700 mt-0.5">本店可享 VIP 場租優惠</p>
+                                )}
+                              </div>
+                              <Link
+                                to={allianceBookingPath(item, data.query)}
+                                className="inline-flex items-center justify-center gap-2 bg-[#0062E3] text-white font-semibold px-5 py-3 rounded-lg hover:bg-[#0050b8] transition-colors"
+                              >
+                                查看可訂
+                                <ArrowRightIcon className="h-4 w-4" />
+                              </Link>
+                            </div>
+                          </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm text-gray-500">費用</p>
-                          <p className="text-xl font-bold text-pickcourt-gold-dark">
-                            HK${item.pricing?.totalPrice ?? '—'}
-                          </p>
-                        </div>
-                        <Link
-                          to={allianceBookingPath(item, data.query)}
-                          className="inline-flex items-center gap-2 bg-pickcourt-navy text-white font-semibold px-5 py-3 rounded-lg hover:bg-pickcourt-navy-light transition-colors shrink-0"
-                        >
-                          預約
-                          <ArrowRightIcon className="h-4 w-4" />
-                        </Link>
-                      </div>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               )}
             </>

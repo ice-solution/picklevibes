@@ -198,7 +198,7 @@ router.post('/', [
       let chainLocalStore = null;
       if (courtDoc?.store) {
         chainLocalStore = await Store.findById(courtDoc.store).select(
-          'name slug address isActive isChainStore enableVipDiscount enableSoloAddon'
+          'name slug address isActive isChainStore enableVipDiscount enableSoloAddon platformFeePercent'
         );
       }
 
@@ -294,17 +294,26 @@ router.post('/', [
         return res.status(400).json({ message: '無法計算預約積分，請稍後再試' });
       }
 
+      const { computePlatformServiceFee } = require('../utils/platformServiceFee');
+      const feeInfo = computePlatformServiceFee(
+        pointsToDeduct,
+        localStore.platformFeePercent
+      );
+      const courtPayable = feeInfo.base;
+      const chargeTotal = feeInfo.total;
+
       const storeId = localStore._id;
       const availableBalance = await getAvailableBalanceForStore(bookingUserId, storeId);
-      if (availableBalance.total < pointsToDeduct) {
+      if (availableBalance.total < chargeTotal) {
         return res.status(400).json({
           message: '積分餘額不足',
           code: 'INSUFFICIENT_STORE_BALANCE',
-          required: pointsToDeduct,
+          required: chargeTotal,
           available: availableBalance.total,
           availableStore: availableBalance.store,
           availablePlatform: availableBalance.platform,
           discount: isVip ? 'VIP會員8折' : '無折扣',
+          platformServiceFee: feeInfo.fee,
           storeId: String(storeId),
           storeSlug: localStore.slug || null,
           storeName: localStore.name || null,
@@ -316,7 +325,7 @@ router.post('/', [
         deductionSplit = await deductForStoreBooking(
           bookingUserId,
           storeId,
-          pointsToDeduct,
+          chargeTotal,
           `連鎖店預約 - ${localStore.name || localStore.slug} · ${remoteCourt.name || court} ${bookingDate.toDateString()} ${startTime}-${endTimeForApi}`,
           null
         );
@@ -324,7 +333,7 @@ router.post('/', [
         return res.status(400).json({
           message: error.message || '積分餘額不足',
           code: 'INSUFFICIENT_STORE_BALANCE',
-          required: pointsToDeduct,
+          required: chargeTotal,
           available: availableBalance.total,
         });
       }
@@ -332,7 +341,9 @@ router.post('/', [
       let remoteResult;
       try {
         console.log('🔍 預約步驟: createPickleVibesBotBooking start', {
-          pointsToDeduct,
+          pointsToDeduct: courtPayable,
+          platformServiceFee: feeInfo.fee,
+          chargeTotal,
           storeUsed: deductionSplit.storeUsed,
           platformUsed: deductionSplit.platformUsed,
         });
@@ -347,7 +358,7 @@ router.post('/', [
           includeSoloCourt,
           externalSettlement: true,
           externalNote: 'PickCourt 平台已結算',
-          settledPoints: pointsToDeduct,
+          settledPoints: courtPayable,
         });
         console.log('🔍 預約步驟: createPickleVibesBotBooking done');
       } catch (error) {
@@ -431,19 +442,22 @@ router.post('/', [
             status: 'paid',
             paidAt: new Date(),
             method: 'points',
-            pointsDeducted: pointsToDeduct,
+            pointsDeducted: chargeTotal,
+            courtPointsPayable: courtPayable,
+            platformServiceFee: feeInfo.fee,
+            platformServiceFeePercent: feeInfo.percent,
             storePointsDeducted: deductionSplit.storeUsed,
             platformPointsDeducted: deductionSplit.platformUsed,
-            originalPrice: Number(availability.pricing?.totalPrice) || pointsToDeduct,
+            originalPrice: Number(availability.pricing?.totalPrice) || courtPayable,
             discount: isVip ? 20 : 0,
             transactionId: remoteBookingId ? `pv:${remoteBookingId}` : undefined,
           },
           pricing: {
             basePrice: Number(availability.pricing?.basePrice) || 0,
             memberDiscount: 0,
-            totalPrice: pointsToDeduct,
+            totalPrice: chargeTotal,
             originalPrice: Number(availability.pricing?.totalPrice) || 0,
-            pointsDeducted: pointsToDeduct,
+            pointsDeducted: chargeTotal,
             vipDiscount: isVip
               ? Math.round(
                   ((Number(availability.pricing?.totalPrice) || 0) + (includeSoloCourt ? 100 : 0)) *
@@ -474,7 +488,9 @@ router.post('/', [
         store: localStore.slug,
         remoteBookingId: remoteBooking?._id,
         localBookingId: localBooking?._id,
-        pointsDeducted: pointsToDeduct,
+        pointsDeducted: chargeTotal,
+        courtPayable,
+        platformServiceFee: feeInfo.fee,
         storeUsed: deductionSplit.storeUsed,
         platformUsed: deductionSplit.platformUsed,
       });
@@ -790,35 +806,42 @@ router.post('/', [
     // 檢查該店可用積分（店鋪積分 + PickCourt 平台積分）
     const storeId = courtDoc.store;
     let deductionSplit = { storeUsed: 0, platformUsed: 0, total: 0 };
-    
+    const storeForFee = await Store.findById(storeId)
+      .select('name slug platformFeePercent')
+      .lean();
+    const { computePlatformServiceFee } = require('../utils/platformServiceFee');
+    const courtPayableBase = isCustomPoints ? customPoints : pointsToDeduct;
+    const feeInfo = bypassRestrictions
+      ? { fee: 0, percent: 0, base: courtPayableBase, total: courtPayableBase }
+      : computePlatformServiceFee(courtPayableBase, storeForFee?.platformFeePercent);
+    const chargeTotal = feeInfo.total;
+
     // 如果不是管理員 bypass，檢查積分餘額
     if (!bypassRestrictions) {
-      const finalPointsToDeduct = isCustomPoints ? customPoints : pointsToDeduct;
       const available = await getAvailableBalanceForStore(bookingUserId, storeId);
-      if (available.total < finalPointsToDeduct) {
-        const storeDoc = await Store.findById(storeId).select('name slug').lean();
+      if (available.total < chargeTotal) {
         return res.status(400).json({ 
           message: '積分餘額不足',
           code: 'INSUFFICIENT_STORE_BALANCE',
-          required: finalPointsToDeduct,
+          required: chargeTotal,
           available: available.total,
           availableStore: available.store,
           availablePlatform: available.platform,
           discount: isVip ? 'VIP會員8折' : '無折扣',
+          platformServiceFee: feeInfo.fee,
           storeId: String(storeId),
-          storeSlug: storeDoc?.slug || null,
-          storeName: storeDoc?.name || null,
+          storeSlug: storeForFee?.slug || null,
+          storeName: storeForFee?.name || null,
         });
       }
     }
     
     // 如果不是管理員 bypass，扣除積分
     if (!bypassRestrictions) {
-      const finalPointsToDeduct = isCustomPoints ? customPoints : pointsToDeduct;
       deductionSplit = await deductForStoreBooking(
         bookingUserId,
         storeId,
-        finalPointsToDeduct, 
+        chargeTotal, 
         `場地預約 - ${courtDoc.name} ${bookingDate.toDateString()} ${startTime}-${endTime}${isCustomPoints ? ' (自訂積分)' : ''}`,
         null
       );
@@ -853,7 +876,10 @@ router.post('/', [
         paidAt: new Date(),
         // 管理員繞過限制：未扣積分，標記 admin_waived 並記 pointsDeducted=0，避免取消時誤退
         method: bypassRestrictions ? 'admin_waived' : 'points',
-        pointsDeducted: bypassRestrictions ? 0 : pointsToDeduct,
+        pointsDeducted: bypassRestrictions ? 0 : chargeTotal,
+        courtPointsPayable: bypassRestrictions ? 0 : feeInfo.base,
+        platformServiceFee: bypassRestrictions ? 0 : feeInfo.fee,
+        platformServiceFeePercent: bypassRestrictions ? 0 : feeInfo.percent,
         storePointsDeducted: bypassRestrictions ? 0 : deductionSplit.storeUsed,
         platformPointsDeducted: bypassRestrictions ? 0 : deductionSplit.platformUsed,
         originalPrice: tempBooking.pricing.totalPrice,
@@ -863,9 +889,9 @@ router.post('/', [
         basePrice: tempBooking.pricing.basePrice,
         memberDiscount: tempBooking.pricing.memberDiscount,
         // 仍保存「參考應付」金額供列表顯示；實際扣款以 pointsDeducted / noUserBalanceDebited 為準
-        totalPrice: isCustomPoints ? customPoints : pointsToDeduct,
+        totalPrice: bypassRestrictions ? (isCustomPoints ? customPoints : pointsToDeduct) : chargeTotal,
         originalPrice: tempBooking.pricing.totalPrice, // 保存原價
-        pointsDeducted: bypassRestrictions ? 0 : (isCustomPoints ? customPoints : pointsToDeduct),
+        pointsDeducted: bypassRestrictions ? 0 : chargeTotal,
         vipDiscount: isVip ? Math.round((tempBooking.pricing.totalPrice + (includeSoloCourt ? 100 : 0)) * 0.2) : 0,
         soloCourtFee: includeSoloCourt ? 100 : 0, // 單人場費用
         customPoints: isCustomPoints ? customPoints : undefined, // 自訂積分

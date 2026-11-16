@@ -16,6 +16,8 @@ export interface StoreSummary {
   enableSoloAddon?: boolean;
   enableRecharge?: boolean;
   isChainStore?: boolean;
+  /** 平台服務費／佣成％（基數＝優惠後場租） */
+  platformFeePercent?: number;
   bookingPolicies?: {
     cancellationText?: string;
     importantRemindersText?: string;

@@ -7,7 +7,11 @@ const {
   getMaxAdvanceDaysForRole,
   buildBookingUrls,
 } = require('./bookingDeepLink');
-const { buildDistrictAddressFilter } = require('./hkDistricts');
+const {
+  buildDistrictAddressFilter,
+  districtsForRegion,
+  regionOfDistrict,
+} = require('./hkDistricts');
 const { typeCountsForCourts, effectiveCourtSlug } = require('./courtSlug');
 const { getPickleVibesApiConfig, isPickleVibesRemoteEnabled } = require('../config/picklevibesApi');
 const {
@@ -16,6 +20,7 @@ const {
   mapWithConcurrency,
 } = require('../services/picklevibesAvailabilityClient');
 const { isBookingStartInPast } = require('./bookingDateTime');
+const { resolveStoreBookingPolicies } = require('./storeBookingPolicies');
 
 function addMinutesToTime(startTime, minutes) {
   const [h, m] = startTime.split(':').map(Number);
@@ -27,12 +32,23 @@ function addMinutesToTime(startTime, minutes) {
   return `${String(endH).padStart(2, '0')}:${String(endM).padStart(2, '0')}`;
 }
 
-/** 單人／特色場包含 solo 與 dink */
+/**
+ * 標準場=competition、非標準場=training、單人場／發球機=solo+dink
+ */
 function resolveCourtTypes(courtType) {
   const t = String(courtType || '').trim();
   if (!t) return null;
-  if (t === 'solo') return ['solo', 'dink'];
+  if (t === 'solo' || t === 'machine' || t === 'solo_machine') return ['solo', 'dink'];
+  if (t === 'standard') return ['competition'];
+  if (t === 'non_standard' || t === 'non-standard') return ['training'];
   return [t];
+}
+
+function firstCourtImage(court) {
+  const img = Array.isArray(court?.images) ? court.images[0] : null;
+  if (!img) return null;
+  if (typeof img === 'string') return img;
+  return img.url || img.path || null;
 }
 
 async function findStoresForDistrict(district) {
@@ -40,6 +56,39 @@ async function findStoresForDistrict(district) {
   const keyword = String(district || '').trim();
   if (!keyword) {
     return Store.find(baseFilter).sort({ sortOrder: 1, name: 1 }).lean();
+  }
+
+  const regionDistricts = districtsForRegion(keyword);
+  if (regionDistricts) {
+    const withDistrict = await Store.find({
+      ...baseFilter,
+      district: { $in: regionDistricts },
+    })
+      .sort({ sortOrder: 1, name: 1 })
+      .lean();
+
+    const legacyFilter = {
+      ...baseFilter,
+      $or: [{ district: null }, { district: { $exists: false } }],
+    };
+    const addressOr = regionDistricts
+      .map((d) => buildDistrictAddressFilter(d))
+      .filter(Boolean)
+      .flatMap((f) => f.$or || []);
+    const legacy =
+      addressOr.length > 0
+        ? await Store.find({ ...legacyFilter, $or: addressOr })
+            .sort({ sortOrder: 1, name: 1 })
+            .lean()
+        : [];
+
+    const merged = new Map();
+    for (const s of [...withDistrict, ...legacy]) {
+      merged.set(String(s._id), s);
+    }
+    return Array.from(merged.values()).sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || String(a.name).localeCompare(String(b.name))
+    );
   }
 
   const withDistrict = await Store.find({ ...baseFilter, district: keyword })
@@ -66,27 +115,45 @@ async function findStoresForDistrict(district) {
   );
 }
 
-function serializeStore(store) {
+function serializeStore(store, court = null) {
+  const b = store.branding || {};
+  const policies = resolveStoreBookingPolicies(store);
+  const coverImage = b.bannerUrl || b.logoUrl || firstCourtImage(court) || null;
+  const amenities = Array.isArray(court?.amenities)
+    ? court.amenities.filter(Boolean)
+    : [];
   return {
     id: String(store._id),
-    name: store.branding?.displayName || store.name,
+    name: b.displayName || store.name,
     slug: store.slug,
     address: store.address,
     district: store.district || null,
+    region: regionOfDistrict(store.district),
     allianceEnabled: Boolean(store.allianceEnabled),
+    logoUrl: b.logoUrl || null,
+    bannerUrl: b.bannerUrl || null,
+    tagline: b.tagline || null,
+    intro: b.intro || null,
+    coverImage,
+    amenities,
+    policySnippet: policies.importantRemindersLines[0] || policies.cancellationLines[0] || null,
+    platformFeePercent: Number(store.platformFeePercent) || 0,
+    enableVipDiscount: store.enableVipDiscount === true && !store.isChainStore,
   };
 }
 
 function buildSearchResult(store, court, effectiveSlug, check, { date, startTime, durationNum }) {
   const courtId = String(court._id || court.id);
   return {
-    store: serializeStore(store),
+    store: serializeStore(store, court),
     court: {
       id: courtId,
       name: court.name,
       slug: effectiveSlug,
       number: court.number,
       type: court.type,
+      amenities: Array.isArray(court.amenities) ? court.amenities : [],
+      image: firstCourtImage(court),
     },
     ...check,
   };

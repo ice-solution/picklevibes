@@ -23,6 +23,7 @@ const navLinks: NavLink[] = [
   { href: pickcourtHomeHash('platform'), label: '平台介紹' },
   { href: pickcourtHomeHash('alliance'), label: 'PickCourt 聯盟' },
   { href: pickcourtHomeHash('activities'), label: '活動中心' },
+  { to: PICKCOURT_ACCOUNT.vouchers, label: '購買兌換券' },
   // 比賽功能暫時收起
   // { href: pickcourtHomeHash('tournaments'), label: '比賽賽事' },
 ];
@@ -108,6 +109,13 @@ function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: 
               className="text-sm font-medium text-pickcourt-navy/70 hover:text-pickcourt-gold transition-colors"
             >
               餘額
+            </Link>
+            <Link
+              to={PICKCOURT_ACCOUNT.vouchers}
+              onClick={onNavigate}
+              className="text-sm font-medium text-pickcourt-navy/70 hover:text-pickcourt-gold transition-colors"
+            >
+              兌換券
             </Link>
           </>
         )}

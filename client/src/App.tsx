@@ -47,6 +47,7 @@ import AccountProfile from './pages/pickcourt/AccountProfile';
 import AccountBalance from './pages/pickcourt/AccountBalance';
 import AccountOrders from './pages/pickcourt/AccountOrders';
 import AccountRecharge from './pages/pickcourt/AccountRecharge';
+import AccountVoucher from './pages/pickcourt/AccountVoucher';
 import { PickCourtMemberRedirect, PickCourtOrderDetailRedirect } from './components/PickleCourt/PickCourtMemberRedirect';
 import { PICKCOURT_ACCOUNT } from './utils/pickcourtRoutes';
 import Vlog from './pages/Vlog';
@@ -212,6 +213,14 @@ function AppShell() {
                   element={
                     <ProtectedRoute>
                       <AccountRecharge />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/account/vouchers"
+                  element={
+                    <ProtectedRoute>
+                      <AccountVoucher />
                     </ProtectedRoute>
                   }
                 />

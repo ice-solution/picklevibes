@@ -54,13 +54,25 @@ type StorePublicData = {
   courtCount?: number;
   courts?: StoreCourt[];
   gameHalls?: GameHall[];
+  bookingPoliciesResolved?: {
+    cancellationLines: string[];
+    importantRemindersLines: string[];
+    usageNoticeText: string;
+  };
+  playerReviews?: {
+    overallScore: number | null;
+    overallLabel?: string;
+    categories: Array<{ key: string; label: string; score: number }>;
+    summaryText?: string;
+    categorySummaries: Array<{ title: string; reviewCount: number; text: string }>;
+  } | null;
 };
 
 const COURT_TYPE_LABEL: Record<string, string> = {
-  competition: '比賽場',
-  training: '訓練場',
+  competition: '標準場',
+  training: '非標準場',
   solo: '單人場',
-  dink: '特色場',
+  dink: '發球機場',
 };
 
 const fadeUp = {
@@ -240,6 +252,96 @@ const StorePublic: React.FC = () => {
             <p className="text-gray-700 leading-relaxed whitespace-pre-line">{store.intro}</p>
           </motion.section>
         ) : null}
+
+        {store.playerReviews && (
+          <motion.section {...fadeUp} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">球員評價</h2>
+            <div className="grid lg:grid-cols-2 gap-8">
+              <div>
+                {store.playerReviews.overallScore != null && (
+                  <div className="mb-5">
+                    <p className="text-4xl font-bold text-pickcourt-navy">
+                      {store.playerReviews.overallScore.toFixed(1)}
+                      <span className="text-lg font-medium text-gray-500"> / 10</span>
+                    </p>
+                    {store.playerReviews.overallLabel && (
+                      <p className="text-sm text-gray-600 mt-1">{store.playerReviews.overallLabel}</p>
+                    )}
+                  </div>
+                )}
+                <ul className="space-y-3">
+                  {(store.playerReviews.categories || []).map((cat) => (
+                    <li key={cat.key || cat.label}>
+                      <div className="flex justify-between text-sm mb-1">
+                        <span className="text-gray-700">{cat.label}</span>
+                        <span className="font-semibold text-gray-900">{Number(cat.score).toFixed(1)}</span>
+                      </div>
+                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-pickcourt-navy"
+                          style={{ width: `${Math.min(100, (Number(cat.score) / 10) * 100)}%` }}
+                        />
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <div className="space-y-4">
+                {store.playerReviews.summaryText && (
+                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+                    <p className="text-sm font-semibold text-gray-900 mb-2">評價摘要</p>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                      {store.playerReviews.summaryText}
+                    </p>
+                  </div>
+                )}
+                {(store.playerReviews.categorySummaries || []).map((block) => (
+                  <div key={block.title} className="border-b border-slate-100 pb-3 last:border-0">
+                    <p className="text-sm font-semibold text-gray-900">
+                      {block.title}
+                      {block.reviewCount > 0 ? (
+                        <span className="text-gray-400 font-normal">（{block.reviewCount}）</span>
+                      ) : null}
+                    </p>
+                    <p className="text-sm text-gray-600 mt-1 leading-relaxed">{block.text}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </motion.section>
+        )}
+
+        {store.bookingPoliciesResolved && (
+          <motion.section {...fadeUp} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
+            <h2 className="text-xl font-bold text-gray-900 mb-6">訂場政策</h2>
+            <div className="space-y-6">
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-2">取消及惡劣天氣</h3>
+                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                  {store.bookingPoliciesResolved.cancellationLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900 mb-2">重要提醒</h3>
+                <ul className="list-disc list-inside text-sm text-gray-700 space-y-1">
+                  {store.bookingPoliciesResolved.importantRemindersLines.map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+              </div>
+              {store.bookingPoliciesResolved.usageNoticeText && (
+                <div>
+                  <h3 className="font-semibold text-gray-900 mb-2">場地使用須知</h3>
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                    {store.bookingPoliciesResolved.usageNoticeText}
+                  </p>
+                </div>
+              )}
+            </div>
+          </motion.section>
+        )}
 
         {courts.length > 0 && (
           <motion.section {...fadeUp} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">

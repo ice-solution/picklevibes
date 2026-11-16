@@ -22,8 +22,41 @@ const HK_DISTRICT_KEYWORDS = {
 
 const HK_DISTRICTS = Object.keys(HK_DISTRICT_KEYWORDS);
 
+/** 搜尋用三大區 → 18 區（Store.district 仍存細區） */
+const HK_REGIONS = {
+  香港: ['中西區', '灣仔區', '東區', '南區'],
+  九龍: ['油尖旺區', '深水埗區', '九龍城區', '黃大仙區', '觀塘區'],
+  新界: [
+    '荃灣區',
+    '屯門區',
+    '元朗區',
+    '北區',
+    '大埔區',
+    '西貢區',
+    '沙田區',
+    '葵青區',
+    '離島區',
+  ],
+};
+
+const HK_REGION_NAMES = Object.keys(HK_REGIONS);
+
 function escapeRegex(str) {
   return String(str).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function districtsForRegion(region) {
+  const key = String(region || '').trim();
+  return HK_REGIONS[key] || null;
+}
+
+function regionOfDistrict(district) {
+  const d = String(district || '').trim();
+  if (!d) return null;
+  for (const [region, list] of Object.entries(HK_REGIONS)) {
+    if (list.includes(d)) return region;
+  }
+  return null;
 }
 
 function buildDistrictAddressFilter(district) {
@@ -60,6 +93,10 @@ function isValidDistrict(value) {
 module.exports = {
   HK_DISTRICTS,
   HK_DISTRICT_KEYWORDS,
+  HK_REGIONS,
+  HK_REGION_NAMES,
+  districtsForRegion,
+  regionOfDistrict,
   buildDistrictAddressFilter,
   inferDistrictFromAddress,
   isValidDistrict,

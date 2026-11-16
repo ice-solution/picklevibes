@@ -20,7 +20,47 @@ const { typeCountsForCourts, effectiveCourtSlug } = require('../utils/courtSlug'
 const router = express.Router();
 
 const allianceStoreSelect =
-  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding enableRecharge enableVipDiscount enableSoloAddon';
+  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding enableRecharge enableVipDiscount enableSoloAddon bookingPolicies platformFeePercent playerReviews isChainStore';
+
+function serializePlayerReviews(store) {
+  const pr = store.playerReviews || {};
+  const overallScore =
+    pr.overallScore != null && Number.isFinite(Number(pr.overallScore))
+      ? Number(pr.overallScore)
+      : null;
+  const categories = Array.isArray(pr.categories)
+    ? pr.categories
+        .filter((c) => c && (c.label || c.key) && c.score != null)
+        .map((c) => ({
+          key: c.key || '',
+          label: c.label || c.key || '',
+          score: Number(c.score),
+        }))
+    : [];
+  const categorySummaries = Array.isArray(pr.categorySummaries)
+    ? pr.categorySummaries
+        .filter((c) => c && (c.title || c.text))
+        .map((c) => ({
+          title: c.title || '',
+          reviewCount: Number(c.reviewCount) || 0,
+          text: c.text || '',
+        }))
+    : [];
+  const hasContent =
+    overallScore != null ||
+    categories.length > 0 ||
+    Boolean(String(pr.summaryText || '').trim()) ||
+    categorySummaries.length > 0;
+  if (!hasContent) return null;
+  return {
+    overallScore,
+    overallLabel: pr.overallLabel || '',
+    categories,
+    summaryText: pr.summaryText || '',
+    categorySummaries,
+    updatedAt: pr.updatedAt || null,
+  };
+}
 
 function serializeAllianceStore(store) {
   const b = store.branding || {};
@@ -38,8 +78,11 @@ function serializeAllianceStore(store) {
     primaryColor: b.primaryColor || null,
     subscriptionPlan: store.subscriptionPlan || 'starter',
     enableRecharge: store.enableRecharge !== false,
-    enableVipDiscount: store.enableVipDiscount === true,
+    enableVipDiscount: store.enableVipDiscount === true && !store.isChainStore,
     enableSoloAddon: store.enableSoloAddon === true,
+    platformFeePercent: Number(store.platformFeePercent) || 0,
+    bookingPolicies: store.bookingPolicies || null,
+    playerReviews: serializePlayerReviews(store),
   };
 }
 
@@ -147,11 +190,18 @@ router.get('/stores/:storeSlug', async (req, res) => {
       .lean();
 
     const b = store.branding || {};
+    const { resolveStoreBookingPolicies } = require('../utils/storeBookingPolicies');
+    const policies = resolveStoreBookingPolicies(store);
     res.json({
       store: {
         ...serializeAllianceStore(store),
         intro: b.intro || '',
         courtCount: courts.length,
+        bookingPoliciesResolved: {
+          cancellationLines: policies.cancellationLines,
+          importantRemindersLines: policies.importantRemindersLines,
+          usageNoticeText: policies.usageNoticeText,
+        },
         courts: courts.map((c) => ({
           id: String(c._id),
           name: c.name,
@@ -161,6 +211,7 @@ router.get('/stores/:storeSlug', async (req, res) => {
           capacity: c.capacity,
           description: c.description || '',
           images: Array.isArray(c.images) ? c.images : [],
+          amenities: Array.isArray(c.amenities) ? c.amenities : [],
           operatingHours: c.operatingHours || null,
         })),
         gameHalls: gameHalls.map((h) => ({

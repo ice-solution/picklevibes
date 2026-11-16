@@ -6,6 +6,7 @@ import {
   CurrencyDollarIcon,
   ShoppingBagIcon,
   CreditCardIcon,
+  TicketIcon,
 } from '@heroicons/react/24/outline';
 import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
@@ -17,6 +18,7 @@ const tabs = [
   { to: PICKCOURT_ACCOUNT.profile, label: '個人資料', icon: UserCircleIcon },
   { to: PICKCOURT_ACCOUNT.balance, label: '積分餘額', icon: CurrencyDollarIcon },
   { to: PICKCOURT_ACCOUNT.recharge, label: '充值', icon: CreditCardIcon },
+  { to: PICKCOURT_ACCOUNT.vouchers, label: '兌換券', icon: TicketIcon },
   { to: PICKCOURT_ACCOUNT.orders, label: '訂單記錄', icon: ShoppingBagIcon },
 ];
 

@@ -487,74 +487,69 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
             )}
             
             <div className="space-y-3">
-              <div className="flex justify-between">
-                <span className="text-gray-600">場地費用</span>
-                <span className="font-medium">{availability.pricing?.totalPrice || 0} 積分</span>
-              </div>
-              
-              {includeSoloCourt && (
-                <div className="flex justify-between">
-                  <span className="text-gray-600">單人場租用</span>
-                  <span className="font-medium">100 積分</span>
-                </div>
-              )}
-              
-              {/* VIP 會員折扣 */}
-              {applyVipDiscount && (
-                <div className="flex justify-between text-green-600">
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">VIP</span>
-                    會員折扣 (8折)
-                  </span>
-                  <span className="font-medium">
-                    -{Math.round(((availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0)) * 0.2)} 積分
-                  </span>
-                </div>
-              )}
-              
-              {/* 兌換碼折扣 */}
-              {redeemData && (
-                <div className="flex justify-between text-blue-600">
-                  <span className="flex items-center gap-2">
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full">兌換碼</span>
-                    {redeemData.name}
-                  </span>
-                  <span className="font-medium">
-                    -{redeemData.discountAmount} 積分
-                  </span>
-                </div>
-              )}
-              
-              <div className="flex justify-between">
-                <span className="text-gray-600">時長</span>
-                <span className="font-medium">{calculateDuration()} 分鐘</span>
-              </div>
-              
-              <div className="border-t border-gray-200 pt-3">
-                <div className="flex justify-between text-lg font-semibold">
-                  <span>總計</span>
-                  <span className="text-primary-600">
-                    {(() => {
-                      let totalPrice = (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0);
-                      
-                      if (applyVipDiscount) {
-                        totalPrice = Math.round(totalPrice * 0.8);
-                      }
-                      
-                      // 應用兌換碼折扣
-                      if (redeemData) {
-                        totalPrice = totalPrice - redeemData.discountAmount;
-                      }
-                      
-                      return Math.max(0, totalPrice);
-                    })()} 積分
-                  </span>
-                </div>
-                <div className="text-sm text-gray-500 mt-1 text-right">
-                  {applyVipDiscount && '已享受 VIP 會員 8 折優惠'}
-                  {redeemData && ' + 兌換碼折扣'}
-                </div>
-              </div>
+              {(() => {
+                const listPrice =
+                  (availability.pricing?.totalPrice || 0) + (includeSoloCourt ? 100 : 0);
+                let discounted = listPrice;
+                const vipSaved = applyVipDiscount ? Math.round(listPrice * 0.2) : 0;
+                if (applyVipDiscount) discounted = Math.round(listPrice * 0.8);
+                if (redeemData) discounted = Math.max(0, discounted - redeemData.discountAmount);
+                const feePct = Number(selectedStore?.platformFeePercent) || 0;
+                const platformFee =
+                  feePct > 0 && discounted > 0 ? Math.round((discounted * feePct) / 100) : 0;
+                const grandTotal = discounted + platformFee;
+                return (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">訂場地價錢原價</span>
+                      <span className="font-medium text-gray-500 line-through">
+                        ${listPrice}
+                      </span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">優惠價</span>
+                      <span className="font-medium">${discounted}</span>
+                    </div>
+                    {applyVipDiscount && (
+                      <div className="flex justify-between text-green-600 text-sm">
+                        <span className="flex items-center gap-2">
+                          <span className="text-xs bg-green-100 text-green-800 px-2 py-0.5 rounded-full">
+                            VIP
+                          </span>
+                          會員場租優惠已減
+                        </span>
+                        <span>-${vipSaved}</span>
+                      </div>
+                    )}
+                    {redeemData && (
+                      <div className="flex justify-between text-blue-600 text-sm">
+                        <span>兌換碼 {redeemData.name}</span>
+                        <span>-${redeemData.discountAmount}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">
+                        平台服務費
+                        {feePct > 0 ? `（${feePct}%）` : ''}
+                      </span>
+                      <span className="font-medium">${platformFee}</span>
+                    </div>
+                    <div className="flex justify-between text-sm text-gray-500">
+                      <span>時長</span>
+                      <span>{calculateDuration()} 分鐘</span>
+                    </div>
+                    <div className="border-t border-gray-200 pt-3">
+                      <div className="flex justify-between text-lg font-semibold">
+                        <span>總價錢</span>
+                        <span className="text-primary-600">${grandTotal}</span>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1 text-right">
+                        服務費按優惠價計算；VIP 場租可優惠，服務費照收
+                      </p>
+                    </div>
+                  </>
+                );
+              })()}
             </div>
           </div>
         )}

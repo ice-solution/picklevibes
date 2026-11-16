@@ -18,6 +18,13 @@ export type StoreProfile = {
     importantRemindersText?: string;
     usageNoticeText?: string;
   };
+  playerReviews?: {
+    overallScore?: number | null;
+    overallLabel?: string;
+    categories?: Array<{ key?: string; label?: string; score?: number }>;
+    summaryText?: string;
+    categorySummaries?: Array<{ title?: string; reviewCount?: number; text?: string }>;
+  };
   branding?: {
     displayName?: string;
     tagline?: string;

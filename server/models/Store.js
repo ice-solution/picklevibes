@@ -143,8 +143,33 @@ const storeSchema = new mongoose.Schema({
     usageNoticeText: { type: String, trim: true, default: '' },
   },
   /**
+   * 球員評價（Admin／店主填寫；會員自行評分日後再開）
+   * 評分 UI 暫可隱藏；有資料先顯示。
+   */
+  playerReviews: {
+    overallScore: { type: Number, min: 0, max: 10, default: null },
+    overallLabel: { type: String, trim: true, default: '' },
+    categories: [
+      {
+        key: { type: String, trim: true },
+        label: { type: String, trim: true },
+        score: { type: Number, min: 0, max: 10 },
+      },
+    ],
+    summaryText: { type: String, trim: true, default: '' },
+    categorySummaries: [
+      {
+        title: { type: String, trim: true },
+        reviewCount: { type: Number, default: 0 },
+        text: { type: String, trim: true, default: '' },
+      },
+    ],
+    updatedAt: { type: Date, default: null },
+  },
+  /**
    * 平台向該店收取的抽成％（店充值 + 積分預約場地）
-   * 0 = 不抽成
+   * 同時用作消費者「平台服務費」％（基數＝優惠後場租）
+   * 0 = 不抽成／不收服務費
    */
   platformFeePercent: {
     type: Number,

@@ -11,6 +11,7 @@ export const PICKCOURT_ACCOUNT = {
   profile: '/account/profile',
   balance: '/account/balance',
   recharge: '/account/recharge',
+  vouchers: '/account/vouchers',
   orders: '/account/orders',
 } as const;
 
