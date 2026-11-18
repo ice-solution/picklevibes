@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
@@ -10,38 +10,6 @@ import {
   PLATFORM_TAGLINE,
 } from '../constants/platformBrand';
 import { useDocumentPlatformBrand } from '../hooks/useDocumentPlatformBrand';
-
-import BookingManagement from '../components/Admin/BookingManagement';
-import BookingCalendar from '../components/Admin/BookingCalendar';
-import CoachScheduleRequestManagement from '../components/Admin/CoachScheduleRequestManagement';
-import CoachClassManagement from '../components/Admin/CoachClassManagement';
-import CourtManagement from '../components/Admin/CourtManagement';
-import StoreManagement from '../components/Admin/StoreManagement';
-import UserManagement from '../components/Admin/UserManagement';
-import TierManagement from '../components/Admin/TierManagement';
-import VlogManagement from '../components/Admin/VlogManagement';
-import HotNewsManagement from '../components/Admin/HotNewsManagement';
-import GameHallManagement from '../components/Admin/GameHallManagement';
-import GameClientManagement from '../components/Admin/GameClientManagement';
-import GameLeaderboardManagement from '../components/Admin/GameLeaderboardManagement';
-import RedeemCodeManagement from '../components/Admin/RedeemCodeManagement';
-import RechargeOfferManagement from '../components/Admin/RechargeOfferManagement';
-import RechargeRecordsManagement from '../components/Admin/RechargeRecordsManagement';
-import ShopManagement from '../components/Admin/ShopManagement';
-import OrderManagement from '../components/Admin/OrderManagement';
-import MaintenanceControl from '../components/Admin/MaintenanceControl';
-import ActivityManagement from '../components/Admin/ActivityManagement';
-import RegularActivityManagement from '../components/Admin/RegularActivityManagement';
-import HolidayManagement from '../components/Admin/WeekendManagement';
-import BookingConfig from '../components/Admin/BookingConfig';
-import BulkUpgrade from '../components/Admin/BulkUpgrade';
-import AnalyticsDashboard from '../components/Admin/AnalyticsDashboard';
-import ReportManagement from '../components/Admin/ReportManagement';
-import AccountingManagement from '../components/Admin/AccountingManagement';
-import PlatformFeeManagement from '../components/Admin/PlatformFeeManagement';
-import StoreBookingStats from '../components/Admin/StoreBookingStats';
-import EdmSend from '../components/Admin/EdmSend';
-import TenantStaffManagement from '../components/Admin/TenantStaffManagement';
 
 import {
   Bars3Icon,
@@ -66,15 +34,71 @@ import {
   AcademicCapIcon,
   IdentificationIcon,
   ArrowLeftIcon,
+  ChevronDownIcon,
 } from '@heroicons/react/24/outline';
+
+const BookingManagement = lazy(() => import('../components/Admin/BookingManagement'));
+const BookingCalendar = lazy(() => import('../components/Admin/BookingCalendar'));
+const CoachScheduleRequestManagement = lazy(
+  () => import('../components/Admin/CoachScheduleRequestManagement')
+);
+const CoachClassManagement = lazy(() => import('../components/Admin/CoachClassManagement'));
+const CourtManagement = lazy(() => import('../components/Admin/CourtManagement'));
+const StoreManagement = lazy(() => import('../components/Admin/StoreManagement'));
+const UserManagement = lazy(() => import('../components/Admin/UserManagement'));
+const TierManagement = lazy(() => import('../components/Admin/TierManagement'));
+const VlogManagement = lazy(() => import('../components/Admin/VlogManagement'));
+const HotNewsManagement = lazy(() => import('../components/Admin/HotNewsManagement'));
+const GameHallManagement = lazy(() => import('../components/Admin/GameHallManagement'));
+const GameClientManagement = lazy(() => import('../components/Admin/GameClientManagement'));
+const GameLeaderboardManagement = lazy(
+  () => import('../components/Admin/GameLeaderboardManagement')
+);
+const RedeemCodeManagement = lazy(() => import('../components/Admin/RedeemCodeManagement'));
+const RechargeOfferManagement = lazy(() => import('../components/Admin/RechargeOfferManagement'));
+const RechargeRecordsManagement = lazy(
+  () => import('../components/Admin/RechargeRecordsManagement')
+);
+const ShopManagement = lazy(() => import('../components/Admin/ShopManagement'));
+const OrderManagement = lazy(() => import('../components/Admin/OrderManagement'));
+const MaintenanceControl = lazy(() => import('../components/Admin/MaintenanceControl'));
+const ActivityManagement = lazy(() => import('../components/Admin/ActivityManagement'));
+const RegularActivityManagement = lazy(
+  () => import('../components/Admin/RegularActivityManagement')
+);
+const HolidayManagement = lazy(() => import('../components/Admin/WeekendManagement'));
+const BookingConfig = lazy(() => import('../components/Admin/BookingConfig'));
+const BulkUpgrade = lazy(() => import('../components/Admin/BulkUpgrade'));
+const AnalyticsDashboard = lazy(() => import('../components/Admin/AnalyticsDashboard'));
+const ReportManagement = lazy(() => import('../components/Admin/ReportManagement'));
+const AccountingManagement = lazy(() => import('../components/Admin/AccountingManagement'));
+const PlatformFeeManagement = lazy(() => import('../components/Admin/PlatformFeeManagement'));
+const StoreBookingStats = lazy(() => import('../components/Admin/StoreBookingStats'));
+const EdmSend = lazy(() => import('../components/Admin/EdmSend'));
+const TenantStaffManagement = lazy(() => import('../components/Admin/TenantStaffManagement'));
 
 type Tab = {
   id: string;
   name: string;
   icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
   element: React.ReactNode;
-  platformOnly?: boolean;
 };
+
+type TabGroup = {
+  id: string;
+  label: string;
+  tabs: Tab[];
+};
+
+const TabFallback = () => (
+  <div className="flex items-center justify-center py-16">
+    <div className="animate-spin rounded-full h-10 w-10 border-2 border-pickcourt-gold border-t-transparent" />
+  </div>
+);
+
+function wrap(node: React.ReactNode) {
+  return <Suspense fallback={<TabFallback />}>{node}</Suspense>;
+}
 
 /** PickCourt 平台超級管理員後台（店鋪員工請用 /store/:slug/admin） */
 const AdminV2: React.FC = () => {
@@ -94,56 +118,145 @@ const AdminV2: React.FC = () => {
     if (tab) setActiveTab(tab);
   }, [searchParams]);
 
-  const allTabs: Tab[] = useMemo(
+  /** PickCourt 主線：訂場聯盟營運 */
+  const primaryGroups: TabGroup[] = useMemo(
     () => [
-      { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon, element: <BookingManagement /> },
-      { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: <BookingCalendar /> },
-      { id: 'coach-requests', name: '教練要請', icon: ChatBubbleLeftRightIcon, element: <CoachScheduleRequestManagement /> },
-      { id: 'coach-classes', name: '教練課堂', icon: AcademicCapIcon, element: <CoachClassManagement /> },
-      { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: <StoreManagement /> },
-      { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: <CourtManagement /> },
-      { id: 'tenant-staff', name: '店鋪登入帳號', icon: IdentificationIcon, element: <TenantStaffManagement />, platformOnly: true },
-      { id: 'users', name: '用戶管理', icon: UsersIcon, element: <UserManagement />, platformOnly: true },
-      { id: 'tiers', name: 'Tier 管理', icon: TagIcon, element: <TierManagement />, platformOnly: true },
-      { id: 'vlogs', name: 'Vlog 管理', icon: DocumentChartBarIcon, element: <VlogManagement />, platformOnly: true },
-      { id: 'hotnews', name: 'HotNews 管理', icon: DocumentChartBarIcon, element: <HotNewsManagement />, platformOnly: true },
-      { id: 'game-halls', name: 'GameHall 管理', icon: DocumentChartBarIcon, element: <GameHallManagement />, platformOnly: true },
-      { id: 'game-clients', name: 'GameClient 管理', icon: DocumentChartBarIcon, element: <GameClientManagement />, platformOnly: true },
-      { id: 'game-leaderboard', name: '排行榜', icon: DocumentChartBarIcon, element: <GameLeaderboardManagement />, platformOnly: true },
-      { id: 'edm', name: 'EDM 發送', icon: EnvelopeIcon, element: <EdmSend />, platformOnly: true },
-      { id: 'redeem', name: '兌換碼管理', icon: TicketIcon, element: <RedeemCodeManagement /> },
-      { id: 'recharge-offers', name: '充值優惠管理', icon: CreditCardIcon, element: <RechargeOfferManagement /> },
-      { id: 'recharge-records', name: '充值紀錄', icon: CreditCardIcon, element: <RechargeRecordsManagement />, platformOnly: true },
-      { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: <ShopManagement />, platformOnly: true },
-      { id: 'orders', name: '訂單管理', icon: ShoppingBagIcon, element: <OrderManagement /> },
-      { id: 'activities', name: '活動管理', icon: CalendarIcon, element: <ActivityManagement /> },
-      { id: 'regular-activities', name: '恆常活動管理', icon: CalendarIcon, element: <RegularActivityManagement /> },
-      { id: 'weekend', name: '假期管理', icon: ClockIcon, element: <HolidayManagement /> },
-      { id: 'booking-config', name: '預約設定', icon: Cog6ToothIcon, element: <BookingConfig /> },
-      { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon, element: <BulkUpgrade />, platformOnly: true },
-      { id: 'maintenance', name: '系統維護', icon: WrenchScrewdriverIcon, element: <MaintenanceControl />, platformOnly: true },
-      { id: 'analytics', name: '數據分析', icon: DocumentChartBarIcon, element: <AnalyticsDashboard />, platformOnly: true },
-      { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: <ReportManagement />, platformOnly: true },
-      { id: 'store-booking-stats', name: '各店預約統計', icon: DocumentChartBarIcon, element: <StoreBookingStats />, platformOnly: true },
-      { id: 'platform-fees', name: '店鋪抽成／找數', icon: CurrencyDollarIcon, element: <PlatformFeeManagement />, platformOnly: true },
-      { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: <AccountingManagement /> },
+      {
+        id: 'booking',
+        label: '訂場營運',
+        tabs: [
+          { id: 'bookings', name: '預約管理', icon: CalendarDaysIcon, element: wrap(<BookingManagement />) },
+          { id: 'calendar', name: '預約日曆', icon: CalendarDaysIcon, element: wrap(<BookingCalendar />) },
+          { id: 'stores', name: '店鋪管理', icon: BuildingStorefrontIcon, element: wrap(<StoreManagement />) },
+          { id: 'courts', name: '場地管理', icon: UserGroupIcon, element: wrap(<CourtManagement />) },
+          { id: 'activities', name: '活動管理', icon: CalendarIcon, element: wrap(<ActivityManagement />) },
+          {
+            id: 'regular-activities',
+            name: '恆常活動',
+            icon: CalendarIcon,
+            element: wrap(<RegularActivityManagement />),
+          },
+          { id: 'weekend', name: '假期管理', icon: ClockIcon, element: wrap(<HolidayManagement />) },
+          { id: 'booking-config', name: '預約設定', icon: Cog6ToothIcon, element: wrap(<BookingConfig />) },
+        ],
+      },
+      {
+        id: 'finance',
+        label: '兌換券／財務',
+        tabs: [
+          {
+            id: 'recharge-offers',
+            name: '兌換券方案',
+            icon: CreditCardIcon,
+            element: wrap(<RechargeOfferManagement />),
+          },
+          { id: 'redeem', name: '兌換碼', icon: TicketIcon, element: wrap(<RedeemCodeManagement />) },
+          {
+            id: 'recharge-records',
+            name: '充值紀錄',
+            icon: CreditCardIcon,
+            element: wrap(<RechargeRecordsManagement />),
+          },
+          {
+            id: 'platform-fees',
+            name: '店鋪抽成／找數',
+            icon: CurrencyDollarIcon,
+            element: wrap(<PlatformFeeManagement />),
+          },
+          { id: 'accounting', name: '會計', icon: CurrencyDollarIcon, element: wrap(<AccountingManagement />) },
+          {
+            id: 'store-booking-stats',
+            name: '各店預約統計',
+            icon: DocumentChartBarIcon,
+            element: wrap(<StoreBookingStats />),
+          },
+        ],
+      },
+      {
+        id: 'system',
+        label: '平台系統',
+        tabs: [
+          {
+            id: 'tenant-staff',
+            name: '店鋪登入帳號',
+            icon: IdentificationIcon,
+            element: wrap(<TenantStaffManagement />),
+          },
+          { id: 'users', name: '用戶管理', icon: UsersIcon, element: wrap(<UserManagement />) },
+          { id: 'analytics', name: '數據分析', icon: DocumentChartBarIcon, element: wrap(<AnalyticsDashboard />) },
+          { id: 'reports', name: '報告', icon: DocumentChartBarIcon, element: wrap(<ReportManagement />) },
+          {
+            id: 'maintenance',
+            name: '系統維護',
+            icon: WrenchScrewdriverIcon,
+            element: wrap(<MaintenanceControl />),
+          },
+        ],
+      },
     ],
     []
   );
 
-  const tabs = allTabs;
+  /**
+   * 舊版 PickleVibes 功能：PickCourt 前台無入口。
+   * 元件／API 暫留；側欄收進「舊版功能」，需要時仍可用 ?tab= 開啟。
+   */
+  const legacyTabs: Tab[] = useMemo(
+    () => [
+      {
+        id: 'coach-requests',
+        name: '教練要請',
+        icon: ChatBubbleLeftRightIcon,
+        element: wrap(<CoachScheduleRequestManagement />),
+      },
+      {
+        id: 'coach-classes',
+        name: '教練課堂',
+        icon: AcademicCapIcon,
+        element: wrap(<CoachClassManagement />),
+      },
+      { id: 'tiers', name: 'Tier 管理', icon: TagIcon, element: wrap(<TierManagement />) },
+      { id: 'bulk-upgrade', name: '批量升級', icon: ArrowTrendingUpIcon, element: wrap(<BulkUpgrade />) },
+      { id: 'vlogs', name: 'Vlog 管理', icon: DocumentChartBarIcon, element: wrap(<VlogManagement />) },
+      { id: 'hotnews', name: 'HotNews 管理', icon: DocumentChartBarIcon, element: wrap(<HotNewsManagement />) },
+      { id: 'game-halls', name: 'GameHall 管理', icon: DocumentChartBarIcon, element: wrap(<GameHallManagement />) },
+      {
+        id: 'game-clients',
+        name: 'GameClient 管理',
+        icon: DocumentChartBarIcon,
+        element: wrap(<GameClientManagement />),
+      },
+      {
+        id: 'game-leaderboard',
+        name: '排行榜',
+        icon: DocumentChartBarIcon,
+        element: wrap(<GameLeaderboardManagement />),
+      },
+      { id: 'shop', name: '商店管理', icon: ShoppingBagIcon, element: wrap(<ShopManagement />) },
+      { id: 'orders', name: '商城訂單', icon: ShoppingBagIcon, element: wrap(<OrderManagement />) },
+      { id: 'edm', name: 'EDM 發送', icon: EnvelopeIcon, element: wrap(<EdmSend />) },
+    ],
+    []
+  );
+
+  const allTabs = useMemo(
+    () => [...primaryGroups.flatMap((g) => g.tabs), ...legacyTabs],
+    [primaryGroups, legacyTabs]
+  );
 
   const current = useMemo(() => {
-    const found = tabs.find((t) => t.id === activeTab);
-    return found || tabs[0];
-  }, [tabs, activeTab]);
+    const found = allTabs.find((t) => t.id === activeTab);
+    return found || allTabs[0];
+  }, [allTabs, activeTab]);
+
+  const legacyActive = legacyTabs.some((t) => t.id === activeTab);
 
   useEffect(() => {
-    if (tabs.length > 0 && !tabs.some((t) => t.id === activeTab)) {
-      setActiveTab(tabs[0].id);
-      setSearchParams({ tab: tabs[0].id });
+    if (allTabs.length > 0 && !allTabs.some((t) => t.id === activeTab)) {
+      setActiveTab(allTabs[0].id);
+      setSearchParams({ tab: allTabs[0].id });
     }
-  }, [tabs, activeTab, setSearchParams]);
+  }, [allTabs, activeTab, setSearchParams]);
 
   if (loading) {
     return (
@@ -202,31 +315,70 @@ const AdminV2: React.FC = () => {
     </div>
   );
 
+  const selectTab = (id: string, onSelect?: () => void) => {
+    setActiveTab(id);
+    setSearchParams({ tab: id });
+    onSelect?.();
+  };
+
+  const TabButton = ({
+    t,
+    onSelect,
+  }: {
+    t: Tab;
+    onSelect?: () => void;
+  }) => {
+    const Icon = t.icon;
+    const active = t.id === current?.id;
+    return (
+      <button
+        key={t.id}
+        type="button"
+        onClick={() => selectTab(t.id, onSelect)}
+        className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors border ${
+          active
+            ? 'bg-pickcourt-gold/15 text-pickcourt-gold border-pickcourt-gold/30'
+            : 'border-transparent text-slate-300 hover:bg-white/5 hover:text-white'
+        }`}
+      >
+        <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-pickcourt-gold' : 'text-slate-400'}`} />
+        <span className="truncate">{t.name}</span>
+      </button>
+    );
+  };
+
   const Nav = ({ onSelect }: { onSelect?: () => void }) => (
-    <nav className="px-3 py-4 space-y-1">
-      {tabs.map((t) => {
-        const Icon = t.icon;
-        const active = t.id === current?.id;
-        return (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => {
-              setActiveTab(t.id);
-              setSearchParams({ tab: t.id });
-              onSelect?.();
-            }}
-            className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors border ${
-              active
-                ? 'bg-pickcourt-gold/15 text-pickcourt-gold border-pickcourt-gold/30'
-                : 'border-transparent text-slate-300 hover:bg-white/5 hover:text-white'
-            }`}
-          >
-            <Icon className={`w-5 h-5 shrink-0 ${active ? 'text-pickcourt-gold' : 'text-slate-400'}`} />
-            <span className="truncate">{t.name}</span>
-          </button>
-        );
-      })}
+    <nav className="px-3 py-4 space-y-5">
+      {primaryGroups.map((group) => (
+        <div key={group.id}>
+          <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            {group.label}
+          </p>
+          <div className="space-y-1">
+            {group.tabs.map((t) => (
+              <TabButton key={t.id} t={t} onSelect={onSelect} />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      <details className="group rounded-lg border border-white/10 open:bg-white/[0.03]" open={legacyActive}>
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-sm text-slate-400 hover:text-slate-200">
+          <span>
+            舊版功能
+            <span className="ml-1.5 text-[11px] text-slate-500">PickleVibes</span>
+          </span>
+          <ChevronDownIcon className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" />
+        </summary>
+        <p className="px-3 pb-2 text-[11px] leading-relaxed text-slate-500">
+          前台無入口：Vlog／新聞／遊戲／商店／教練／Tier。需要時再開。
+        </p>
+        <div className="space-y-1 pb-2">
+          {legacyTabs.map((t) => (
+            <TabButton key={t.id} t={t} onSelect={onSelect} />
+          ))}
+        </div>
+      </details>
     </nav>
   );
 

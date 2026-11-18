@@ -67,13 +67,42 @@ export function inferBookingSection(params: {
 }
 
 /** 建立預約 URL（路徑 + hash） */
+/** 聯盟深連結要保留嘅 query（時長／開場／courtId） */
+export const BOOKING_PREFILL_QUERY_KEYS = ['startTime', 'duration', 'courtId'] as const;
+
+export function pickBookingPrefillSearch(
+  search: string,
+  extra?: Record<string, string | undefined | null>
+): string {
+  const src = new URLSearchParams(search.startsWith('?') ? search.slice(1) : search);
+  const out = new URLSearchParams();
+  for (const key of BOOKING_PREFILL_QUERY_KEYS) {
+    const v = src.get(key)?.trim();
+    if (v) out.set(key, v);
+  }
+  if (extra) {
+    for (const [k, v] of Object.entries(extra)) {
+      if (v) out.set(k, v);
+    }
+  }
+  const qs = out.toString();
+  return qs ? `?${qs}` : '';
+}
+
 export function buildBookingUrl(
   params: BookingPathParams,
   section: BookingSection = 'store',
-  options?: { deepLink?: boolean }
+  options?: { deepLink?: boolean; search?: string }
 ): string {
   const path = buildBookingPath(params, options);
-  return `${path}#${section}`;
+  const qs = options?.search
+    ? options.search.startsWith('?')
+      ? options.search
+      : options.search
+        ? `?${options.search}`
+        : ''
+    : '';
+  return `${path}${qs}#${section}`;
 }
 
 /** 建立預約路徑（不含 hash） */

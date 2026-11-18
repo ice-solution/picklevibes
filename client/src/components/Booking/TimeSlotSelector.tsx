@@ -28,12 +28,34 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
     isPast?: boolean;
     reason?: string;
   };
+  const durationFromSlot = (slot: { start: string; end: string } | null) => {
+    if (!slot?.start || !slot?.end) return null;
+    const [sh, sm] = slot.start.split(':').map(Number);
+    const [eh, em] = slot.end.split(':').map(Number);
+    if ([sh, sm, eh, em].some((n) => Number.isNaN(n))) return null;
+    let endM = eh * 60 + em;
+    const startM = sh * 60 + sm;
+    if (slot.end === '24:00') endM = 24 * 60;
+    const mins = endM - startM;
+    return mins === 60 || mins === 120 ? mins : null;
+  };
+
   const [timeSlots, setTimeSlots] = useState<SlotRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDuration, setSelectedDuration] = useState(60);
+  const [selectedDuration, setSelectedDuration] = useState(
+    () => durationFromSlot(selectedTimeSlot) ?? 60
+  );
   const [currentTime, setCurrentTime] = useState(new Date());
   const batchRequestIdRef = useRef(0);
   const courtId = court?._id as string | undefined;
+
+  // 深連結／外層已選 2 小時時，同步時長按鈕（唔好永遠停喺預設 1 小時）
+  useEffect(() => {
+    const fromSlot = durationFromSlot(selectedTimeSlot);
+    if (fromSlot && fromSlot !== selectedDuration) {
+      setSelectedDuration(fromSlot);
+    }
+  }, [selectedTimeSlot]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const normalizeSlot = (slot: SlotRow, availability?: { available?: boolean; pricing?: { totalPrice?: number; slotName?: string }; reason?: string }): SlotRow => {
     const price = Number(availability?.pricing?.totalPrice ?? slot.price) || 0;
@@ -264,7 +286,13 @@ const TimeSlotSelector: React.FC<TimeSlotSelectorProps> = ({
           {durations.map((duration) => (
             <button
               key={duration.value}
-              onClick={() => setSelectedDuration(duration.value)}
+              onClick={() => {
+                if (duration.value !== selectedDuration) {
+                  onSelect(null);
+                  onAvailabilityChange(null);
+                }
+                setSelectedDuration(duration.value);
+              }}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 ${
                 selectedDuration === duration.value
                   ? 'bg-primary-600 text-white'

@@ -13,7 +13,12 @@ import {
   COURT_TYPE_BADGE_LABEL,
   COURT_TYPE_DESCRIPTIONS,
   COURT_TYPE_OPTIONS,
+  HK_REGIONS,
   HK_REGION_OPTIONS,
+  areaSearchKey,
+  districtShortLabel,
+  parseAreaParam,
+  type HkRegion,
 } from '../../constants/hkDistricts';
 import { suggestCourtSlug } from '../../constants/courtSlug';
 import { isValidBookingDate } from '../../utils/bookingRoutes';
@@ -35,6 +40,7 @@ type SearchResult = {
     amenities?: string[];
     policySnippet?: string | null;
     enableVipDiscount?: boolean;
+    premium?: { badge?: string; headline?: string } | null;
   };
   court: {
     id: string;
@@ -50,17 +56,6 @@ type SearchResult = {
   endTime?: string;
   pricing?: { totalPrice: number; slotName: string };
   bookingUrl?: string;
-};
-
-const AMENITY_LABEL: Record<string, string> = {
-  air_conditioning: '冷氣',
-  lighting: '燈光',
-  net: '球網',
-  paddles: '球拍',
-  balls: '球',
-  water: '飲用水',
-  shower: '淋浴',
-  vending_machine: '售賣機',
 };
 
 type SearchResponse = {
@@ -204,7 +199,9 @@ type Props = {
 const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = false }) => {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [district, setDistrict] = useState(syncUrl ? searchParams.get('district') || '' : '');
+  const initialArea = parseAreaParam(syncUrl ? searchParams.get('district') : '');
+  const [region, setRegion] = useState<'' | HkRegion>(initialArea.region);
+  const [district, setDistrict] = useState(initialArea.district);
   const [date, setDate] = useState(syncUrl ? searchParams.get('date') || todayYmd() : todayYmd());
   const [startTime, setStartTime] = useState(() => {
     const d = syncUrl ? searchParams.get('date') || todayYmd() : todayYmd();
@@ -218,8 +215,24 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState('');
   const [data, setData] = useState<SearchResponse | null>(null);
+  /** Step B：搜尋後或主動展開先顯示場類型 */
+  const [showMoreFilters, setShowMoreFilters] = useState(
+    () => Boolean(syncUrl && searchParams.get('courtType'))
+  );
 
   const timeOptions = availableTimeOptions(date);
+  const regionDistricts = region ? HK_REGIONS[region] : [];
+  const areaKey = areaSearchKey(region, district);
+
+  const selectRegion = (next: '' | HkRegion) => {
+    setRegion(next);
+    setDistrict('');
+  };
+
+  const selectDistrict = (next: string) => {
+    // 再撳同一細區 → 退回只揀大區
+    setDistrict((prev) => (prev === next ? '' : next));
+  };
 
   // 改日期後：若目前開始時間已過，自動跳去下一個可選時段
   useEffect(() => {
@@ -230,9 +243,20 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
   }, [date, startTime]);
 
   const runSearch = useCallback(
-    async (overrides?: Partial<{ district: string; date: string; startTime: string; duration: string; courtType: string }>) => {
+    async (
+      overrides?: Partial<{
+        district: string;
+        region: '' | HkRegion;
+        date: string;
+        startTime: string;
+        duration: string;
+        courtType: string;
+      }>
+    ) => {
+      const nextRegion = overrides?.region !== undefined ? overrides.region : region;
+      const nextDistrict = overrides?.district !== undefined ? overrides.district : district;
       const q = {
-        district: overrides?.district ?? district,
+        district: areaSearchKey(nextRegion, nextDistrict),
         date: overrides?.date ?? date,
         startTime: overrides?.startTime ?? startTime,
         duration: overrides?.duration ?? duration,
@@ -273,7 +297,7 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
         setLoading(false);
       }
     },
-    [district, date, startTime, duration, courtType, syncUrl, setSearchParams]
+    [region, district, date, startTime, duration, courtType, syncUrl, setSearchParams]
   );
 
   useEffect(() => {
@@ -281,8 +305,12 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
     if (searchParams.get('date') && searchParams.get('startTime')) {
       const d = searchParams.get('date') || todayYmd();
       const t = defaultStartTime(d, searchParams.get('startTime'));
+      const area = parseAreaParam(searchParams.get('district'));
+      setRegion(area.region);
+      setDistrict(area.district);
       runSearch({
-        district: searchParams.get('district') || '',
+        region: area.region,
+        district: area.district,
         date: d,
         startTime: t,
         duration: searchParams.get('duration') || '60',
@@ -323,55 +351,70 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
 
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white max-w-3xl leading-tight">
-            一鍵搜尋，全港匹克球場地輕鬆預約
+            揀日子，即睇全港空場
           </h1>
           <p className="mt-4 text-white/70 text-lg max-w-2xl">
-            選擇地區、日期、時間與場地類型，即時查看聯盟合作場地的空缺時段。
+            先揀地區、日期同打幾耐；要改開場時間或場類型再展開。
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-8 lg:mt-10">
-            <div className="bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col xl:flex-row xl:items-stretch">
-              {/* 地區：香港／九龍／新界 */}
-              <div className="flex-1 min-w-0 border-b xl:border-b-0 xl:border-r border-gray-200 px-4 py-3 lg:py-4">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  地區
-                </label>
-                <div className="flex items-center gap-2 mt-1">
-                  <MapPinIcon className="h-5 w-5 text-gray-400 shrink-0" />
-                  <select
-                    value={district}
-                    onChange={(e) => setDistrict(e.target.value)}
-                    className="w-full text-base font-medium text-gray-900 outline-none bg-transparent cursor-pointer"
-                  >
-                    {HK_REGION_OPTIONS.map((o) => (
-                      <option key={o.value || 'all'} value={o.value}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+          <form onSubmit={handleSubmit} className="mt-8 lg:mt-10 space-y-3">
+            {/* 地區：先港／九／新，再細區 clickbox */}
+            <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3">
+              <div className="flex items-center gap-2 mb-2">
+                <MapPinIcon className="h-4 w-4 text-white/80 shrink-0" />
+                <p className="text-xs font-semibold text-white/80 uppercase tracking-wide">地區</p>
               </div>
-
-              {/* 場地類型 */}
-              <div className="flex-1 min-w-0 border-b xl:border-b-0 xl:border-r border-gray-200 px-4 py-3 lg:py-4">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  場地類型
-                </label>
-                <select
-                  value={courtType}
-                  onChange={(e) => setCourtType(e.target.value)}
-                  className="mt-2 w-full text-base font-medium text-gray-900 outline-none bg-transparent cursor-pointer"
-                >
-                  {COURT_TYPE_OPTIONS.map((o) => (
-                    <option key={o.value || 'all'} value={o.value}>
+              <div className="flex flex-wrap gap-2">
+                {HK_REGION_OPTIONS.map((o) => {
+                  const active = region === o.value && !district;
+                  const regionActive = o.value !== '' && region === o.value;
+                  return (
+                    <button
+                      key={o.value || 'all'}
+                      type="button"
+                      onClick={() => selectRegion(o.value)}
+                      className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                        active || regionActive
+                          ? 'bg-pickcourt-gold text-pickcourt-navy-dark'
+                          : 'bg-white/90 text-pickcourt-navy hover:bg-white'
+                      }`}
+                    >
                       {o.label}
-                    </option>
-                  ))}
-                </select>
+                    </button>
+                  );
+                })}
               </div>
+              {region && regionDistricts.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-white/15">
+                  <p className="text-xs text-white/70 mb-2">
+                    {region}細區（可選；唔揀＝成個{region}）
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {regionDistricts.map((d) => {
+                      const active = district === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => selectDistrict(d)}
+                          className={`rounded-full px-3 py-1 text-sm font-medium transition-colors ${
+                            active
+                              ? 'bg-white text-pickcourt-navy ring-2 ring-pickcourt-gold'
+                              : 'bg-white/20 text-white hover:bg-white/30'
+                          }`}
+                        >
+                          {districtShortLabel(d)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
 
-              {/* 日期 */}
-              <div className="flex-1 min-w-0 border-b xl:border-b-0 xl:border-r border-gray-200 px-4 py-3 lg:py-4">
+            {/* Step A：日期 · 時長 */}
+            <div className="bg-white rounded-xl shadow-2xl overflow-hidden flex flex-col lg:flex-row lg:items-stretch">
+              <div className="flex-1 min-w-0 border-b lg:border-b-0 lg:border-r border-gray-200 px-4 py-3 lg:py-4">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   日期
                 </label>
@@ -389,61 +432,108 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
                 </div>
               </div>
 
-              {/* 時間 */}
-              <div className="flex-1 min-w-0 border-b xl:border-b-0 xl:border-r border-gray-200 px-4 py-3 lg:py-4">
-                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                  開始時間
-                </label>
-                <div className="flex items-center gap-2 mt-1">
-                  <ClockIcon className="h-5 w-5 text-gray-400 shrink-0" />
-                  <select
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full text-base font-medium text-gray-900 outline-none bg-transparent cursor-pointer"
-                    disabled={timeOptions.length === 0}
-                  >
-                    {timeOptions.length === 0 ? (
-                      <option value="">今日已無可用時段</option>
-                    ) : (
-                      timeOptions.map((t) => (
-                        <option key={t} value={t}>
-                          {t}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                </div>
-              </div>
-
-              {/* 時長 */}
-              <div className="flex-1 min-w-[100px] border-b xl:border-b-0 xl:border-r border-gray-200 px-4 py-3 lg:py-4">
+              <div className="flex-1 min-w-[140px] border-b lg:border-b-0 lg:border-r border-gray-200 px-4 py-3 lg:py-4">
                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   時長
                 </label>
-                <select
-                  value={duration}
-                  onChange={(e) => setDuration(e.target.value)}
-                  className="mt-2 w-full text-base font-medium text-gray-900 outline-none bg-transparent cursor-pointer"
-                >
-                  <option value="60">1 小時</option>
-                  <option value="120">2 小時</option>
-                </select>
+                <div className="mt-2 inline-flex w-full rounded-lg border border-gray-200 overflow-hidden text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setDuration('60')}
+                    className={`flex-1 py-2 font-semibold ${
+                      duration === '60' ? 'bg-pickcourt-navy text-white' : 'bg-white text-gray-700'
+                    }`}
+                  >
+                    1 小時
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDuration('120')}
+                    className={`flex-1 py-2 font-semibold ${
+                      duration === '120' ? 'bg-pickcourt-navy text-white' : 'bg-white text-gray-700'
+                    }`}
+                  >
+                    2 小時
+                  </button>
+                </div>
               </div>
 
               <button
                 type="submit"
                 disabled={loading || timeOptions.length === 0}
-                className="flex items-center justify-center gap-2 bg-[#0062E3] hover:bg-[#0050b8] disabled:opacity-70 text-white font-bold text-lg px-8 py-4 xl:py-0 xl:min-w-[130px] transition-colors shrink-0"
+                className="flex items-center justify-center gap-2 bg-[#0062E3] hover:bg-[#0050b8] disabled:opacity-70 text-white font-bold text-lg px-8 py-4 lg:py-0 lg:min-w-[140px] transition-colors shrink-0"
               >
                 <MagnifyingGlassIcon className="h-6 w-6" />
-                {loading ? '搜尋中…' : '搜尋'}
+                {loading ? '搵緊場…' : '搵場'}
               </button>
             </div>
-            {courtType && COURT_TYPE_DESCRIPTIONS[courtType] && (
-              <p className="mt-3 text-sm text-white/85 bg-white/10 border border-white/15 rounded-lg px-4 py-3">
-                {COURT_TYPE_DESCRIPTIONS[courtType]}
-              </p>
-            )}
+
+            <p className="mt-3 text-sm text-white/75 flex items-center gap-1.5">
+              <ClockIcon className="h-4 w-4 shrink-0" />
+              預設開場 {startTime || '—'}
+              {timeOptions.length === 0 ? '（今日已無可用時段，請改明日）' : '（可於下方改）'}
+            </p>
+
+            {/* Step B：時段 chips + 場類型 */}
+            <div className="mt-3 space-y-3">
+              {(showMoreFilters || searched) && (
+                <div className="bg-white/10 border border-white/20 rounded-xl px-3 py-3">
+                  <p className="text-xs font-semibold text-white/80 uppercase tracking-wide mb-2">
+                    開始時間
+                  </p>
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+                    {timeOptions.length === 0 ? (
+                      <span className="text-sm text-white/70">今日已無可用時段</span>
+                    ) : (
+                      timeOptions.map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setStartTime(t)}
+                          className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                            startTime === t
+                              ? 'bg-pickcourt-gold text-pickcourt-navy-dark'
+                              : 'bg-white/90 text-pickcourt-navy hover:bg-white'
+                          }`}
+                        >
+                          {t}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!showMoreFilters ? (
+                <button
+                  type="button"
+                  onClick={() => setShowMoreFilters(true)}
+                  className="text-sm text-white/80 hover:text-white underline underline-offset-2"
+                >
+                  改開場時間／場地類型
+                </button>
+              ) : (
+                <div className="bg-white/10 border border-white/20 rounded-xl px-4 py-3">
+                  <label className="block text-xs font-semibold text-white/80 uppercase tracking-wide">
+                    場地類型
+                  </label>
+                  <select
+                    value={courtType}
+                    onChange={(e) => setCourtType(e.target.value)}
+                    className="mt-2 w-full max-w-md rounded-lg border-0 text-base font-medium text-gray-900 px-3 py-2"
+                  >
+                    {COURT_TYPE_OPTIONS.map((o) => (
+                      <option key={o.value || 'all'} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                  {courtType && COURT_TYPE_DESCRIPTIONS[courtType] && (
+                    <p className="mt-2 text-sm text-white/85">{COURT_TYPE_DESCRIPTIONS[courtType]}</p>
+                  )}
+                </div>
+              )}
+            </div>
           </form>
         </div>
       </div>
@@ -458,9 +548,14 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
           )}
 
           {loading && (
-            <div className="text-center py-16 text-gray-500">
-              <div className="inline-block h-10 w-10 border-4 border-pickcourt-gold border-t-transparent rounded-full animate-spin mb-4" />
-              <p>正在查詢聯盟場地空缺…</p>
+            <div className="py-8 space-y-4" aria-busy="true" aria-label="搵緊場">
+              <p className="text-center text-sm text-gray-500">搵緊場…正查聯盟各店空缺</p>
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-36 rounded-xl border border-gray-100 bg-gradient-to-r from-slate-100 via-slate-50 to-slate-100 animate-pulse"
+                />
+              ))}
             </div>
           )}
 
@@ -485,111 +580,183 @@ const PickleCourtCourtSearch: React.FC<Props> = ({ embedded = false, syncUrl = f
               </div>
 
               {data.available.length === 0 ? (
-                <div className="text-center py-16 bg-gray-50 rounded-2xl border border-gray-100">
+                <div className="text-center py-12 px-4 bg-gray-50 rounded-2xl border border-gray-100">
                   <BuildingStorefrontIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-600">請嘗試其他日期、時間、地區或場地類型</p>
+                  <p className="text-gray-800 font-semibold">呢個時段暫時無空場</p>
+                  <p className="text-sm text-gray-500 mt-1">一鍵改條件再搜，或者改去「訂場」睇全日格子</p>
+                  <div className="mt-5 flex flex-wrap justify-center gap-2">
+                    <button
+                      type="button"
+                      className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-pickcourt-navy hover:border-pickcourt-gold"
+                      onClick={() => {
+                        const d = new Date(`${date}T12:00:00+08:00`);
+                        d.setDate(d.getDate() + 1);
+                        const next = hkYmdFromDate(d);
+                        setDate(next);
+                        setStartTime(defaultStartTime(next));
+                        void runSearch({ date: next, startTime: defaultStartTime(next) });
+                      }}
+                    >
+                      改睇明日
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-pickcourt-navy hover:border-pickcourt-gold"
+                      onClick={() => {
+                        const next = duration === '60' ? '120' : '60';
+                        setDuration(next);
+                        void runSearch({ duration: next });
+                      }}
+                    >
+                      改為{duration === '60' ? '2' : '1'}小時
+                    </button>
+                    {areaKey && (
+                      <button
+                        type="button"
+                        className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-pickcourt-navy hover:border-pickcourt-gold"
+                        onClick={() => {
+                          setRegion('');
+                          setDistrict('');
+                          void runSearch({ region: '', district: '' });
+                        }}
+                      >
+                        改睇全港
+                      </button>
+                    )}
+                    {courtType && (
+                      <button
+                        type="button"
+                        className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-pickcourt-navy hover:border-pickcourt-gold"
+                        onClick={() => {
+                          setCourtType('');
+                          void runSearch({ courtType: '' });
+                        }}
+                      >
+                        取消場類型篩選
+                      </button>
+                    )}
+                    {!showMoreFilters && (
+                      <button
+                        type="button"
+                        className="rounded-full border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-pickcourt-navy hover:border-pickcourt-gold"
+                        onClick={() => setShowMoreFilters(true)}
+                      >
+                        加場類型篩選
+                      </button>
+                    )}
+                    <Link
+                      to="/book"
+                      className="rounded-full border border-pickcourt-navy bg-pickcourt-navy px-4 py-2 text-sm font-medium text-white"
+                    >
+                      改用訂場全日格
+                    </Link>
+                  </div>
                 </div>
               ) : (
-                <ul className="space-y-5">
+                <ul className="divide-y divide-slate-100 border border-slate-200 rounded-2xl bg-white overflow-hidden">
                   {data.available.map((item) => {
                     const cover =
                       resolveMediaUrl(
                         item.store.coverImage || item.court.image || item.store.bannerUrl || item.store.logoUrl
                       ) || '';
-                    const amenities = (item.court.amenities?.length
-                      ? item.court.amenities
-                      : item.store.amenities || []
-                    ).slice(0, 4);
+                    const logo = resolveMediaUrl(item.store.logoUrl) || '';
                     const listPrice = Number(item.pricing?.totalPrice) || 0;
+                    const typeLabel =
+                      COURT_TYPE_BADGE_LABEL[item.court.type] ||
+                      COURT_TYPE_OPTIONS.find((o) => o.value === item.court.type)?.label ||
+                      '';
+                    const tags: Array<{ text: string; tone: 'gold' | 'green' | 'amber' }> = [];
+                    if (item.store.premium?.badge) {
+                      tags.push({ text: item.store.premium.badge, tone: 'gold' });
+                    }
+                    if (item.store.enableVipDiscount) {
+                      tags.push({ text: 'VIP 場租優惠', tone: 'green' });
+                    }
+                    if (item.pricing?.slotName) {
+                      tags.push({ text: item.pricing.slotName, tone: 'amber' });
+                    }
+                    if (item.store.premium?.headline) {
+                      tags.push({ text: item.store.premium.headline, tone: 'gold' });
+                    }
+                    const tagClass = {
+                      gold: 'bg-amber-50 text-amber-800',
+                      green: 'bg-emerald-50 text-emerald-800',
+                      amber: 'bg-orange-50 text-orange-800',
+                    } as const;
+
                     return (
-                      <li
-                        key={`${item.court.id}-${item.startTime}`}
-                        className="overflow-hidden rounded-xl border border-gray-200 hover:border-pickcourt-gold/40 hover:shadow-md transition-all bg-white"
-                      >
-                        <div className="flex flex-col md:flex-row">
-                          <div className="relative md:w-64 lg:w-72 shrink-0 bg-slate-100 aspect-[16/10] md:aspect-auto md:min-h-[180px]">
+                      <li key={`${item.court.id}-${item.startTime}`}>
+                        <Link
+                          to={allianceBookingPath(item, data.query)}
+                          className="flex gap-3 p-3 sm:p-4 hover:bg-slate-50 transition-colors"
+                        >
+                          <div className="relative w-[88px] h-[88px] sm:w-28 sm:h-28 shrink-0 rounded-xl overflow-hidden bg-slate-100">
                             {cover ? (
                               <img src={cover} alt="" className="absolute inset-0 w-full h-full object-cover" />
                             ) : (
                               <div className="absolute inset-0 flex items-center justify-center text-slate-300">
-                                <BuildingStorefrontIcon className="h-14 w-14" />
+                                <BuildingStorefrontIcon className="h-8 w-8" />
                               </div>
+                            )}
+                            {logo && (
+                              <img
+                                src={logo}
+                                alt=""
+                                className="absolute top-1.5 left-1.5 h-7 w-7 rounded-full object-contain bg-white border border-white shadow-sm"
+                              />
                             )}
                           </div>
 
-                          <div className="flex-1 min-w-0 p-5 flex flex-col sm:flex-row gap-4">
-                            <div className="flex-1 min-w-0">
-                              <Link
-                                to={`/store/${item.store.slug}`}
-                                className="font-bold text-xl text-pickcourt-navy hover:text-pickcourt-gold transition-colors"
-                              >
-                                {item.store.name}
-                              </Link>
-                              <p className="text-sm text-gray-500 mt-1 flex items-center gap-1">
-                                <MapPinIcon className="h-4 w-4 shrink-0" />
-                                {item.store.region || item.store.district
-                                  ? `${item.store.region || item.store.district} · `
-                                  : ''}
-                                {item.store.address}
-                                <Link
-                                  to={`/store/${item.store.slug}`}
-                                  className="ml-1 text-[#0062E3] hover:underline shrink-0"
-                                >
-                                  詳情
-                                </Link>
-                              </p>
-                              {(item.store.tagline || item.store.intro) && (
-                                <p className="mt-2 text-sm text-gray-600 line-clamp-2">
-                                  {item.store.tagline || item.store.intro}
+                          <div className="flex-1 min-w-0 flex flex-col">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-bold text-pickcourt-navy text-[15px] sm:text-base line-clamp-1">
+                                  {item.store.name}
                                 </p>
-                              )}
-
-                              <div className="mt-3 rounded-lg border border-gray-200 bg-slate-50 px-3 py-2.5">
-                                <p className="font-semibold text-gray-900">
+                                <p className="mt-0.5 text-xs text-slate-500 line-clamp-1">
                                   {item.court.name}
-                                  {(COURT_TYPE_BADGE_LABEL[item.court.type] ||
-                                    COURT_TYPE_OPTIONS.find((o) => o.value === item.court.type)?.label) && (
-                                    <span className="ml-2 text-xs font-medium bg-white text-gray-600 px-2 py-0.5 rounded border border-gray-200">
-                                      {COURT_TYPE_BADGE_LABEL[item.court.type] ||
-                                        COURT_TYPE_OPTIONS.find((o) => o.value === item.court.type)?.label}
-                                    </span>
-                                  )}
+                                  {typeLabel ? ` · ${typeLabel}` : ''}
                                 </p>
-                                <p className="text-sm text-gray-600 mt-1">
-                                  {item.startTime} – {item.endTime}
-                                  {item.pricing?.slotName ? ` · ${item.pricing.slotName}` : ''}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <p className="text-base sm:text-lg font-bold text-[#0062E3]">
+                                  {listPrice > 0 ? `$${listPrice}` : '—'}
                                 </p>
-                                {amenities.length > 0 && (
-                                  <p className="text-xs text-gray-500 mt-1">
-                                    {amenities.map((a) => AMENITY_LABEL[a] || a).join(' · ')}
-                                  </p>
-                                )}
-                                {item.store.policySnippet && (
-                                  <p className="text-xs text-amber-700 mt-1.5">{item.store.policySnippet}</p>
-                                )}
+                                <p className="text-[10px] text-slate-400">時段</p>
                               </div>
                             </div>
 
-                            <div className="sm:w-44 shrink-0 flex flex-col items-stretch sm:items-end justify-between gap-3">
-                              <div className="text-left sm:text-right">
-                                <p className="text-sm text-gray-500">時段費用</p>
-                                <p className="text-2xl font-bold text-[#0062E3]">
-                                  {listPrice > 0 ? `HK$${listPrice}` : '—'}
-                                </p>
-                                {item.store.enableVipDiscount && (
-                                  <p className="text-xs text-emerald-700 mt-0.5">本店可享 VIP 場租優惠</p>
-                                )}
+                            <p className="mt-1.5 text-xs text-slate-600 flex flex-wrap gap-x-2 gap-y-0.5">
+                              <span>
+                                {item.startTime}–{item.endTime}
+                              </span>
+                              {(item.store.region || item.store.district) && (
+                                <span className="inline-flex items-center gap-0.5">
+                                  <MapPinIcon className="h-3 w-3" />
+                                  {item.store.region || item.store.district}
+                                </span>
+                              )}
+                            </p>
+
+                            {tags.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-1.5">
+                                {tags.slice(0, 3).map((t) => (
+                                  <span
+                                    key={t.text}
+                                    className={`text-[11px] font-medium px-1.5 py-0.5 rounded ${tagClass[t.tone]}`}
+                                  >
+                                    {t.text}
+                                  </span>
+                                ))}
                               </div>
-                              <Link
-                                to={allianceBookingPath(item, data.query)}
-                                className="inline-flex items-center justify-center gap-2 bg-[#0062E3] text-white font-semibold px-5 py-3 rounded-lg hover:bg-[#0050b8] transition-colors"
-                              >
-                                查看可訂
-                                <ArrowRightIcon className="h-4 w-4" />
-                              </Link>
-                            </div>
+                            )}
+
+                            <span className="mt-auto pt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#0062E3]">
+                              立即預約
+                              <ArrowRightIcon className="h-3.5 w-3.5" />
+                            </span>
                           </div>
-                        </div>
+                        </Link>
                       </li>
                     );
                   })}

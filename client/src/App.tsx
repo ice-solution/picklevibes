@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
@@ -20,14 +20,11 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import MyBookings from './pages/MyBookings';
 import Profile from './pages/Profile';
-import Admin from './pages/Admin';
-import AdminV2 from './pages/AdminV2';
 import PaymentResult from './pages/PaymentResult';
 import Recharge from './pages/Recharge';
 import RechargeSuccess from './pages/RechargeSuccess';
 import Balance from './pages/Balance';
 import Maintenance from './pages/Maintenance';
-import Activities from './pages/Activities';
 import ActivityDetail from './pages/ActivityDetail';
 import ActivityRegister from './pages/ActivityRegister';
 import MyActivities from './pages/MyActivities';
@@ -48,13 +45,17 @@ import AccountBalance from './pages/pickcourt/AccountBalance';
 import AccountOrders from './pages/pickcourt/AccountOrders';
 import AccountRecharge from './pages/pickcourt/AccountRecharge';
 import AccountVoucher from './pages/pickcourt/AccountVoucher';
+import PickCourtBook from './pages/pickcourt/PickCourtBook';
+import PickCourtMe from './pages/pickcourt/PickCourtMe';
+import PickCourtActivities from './pages/pickcourt/PickCourtActivities';
+import PickCourtBottomNav from './components/PickleCourt/PickCourtBottomNav';
 import { PickCourtMemberRedirect, PickCourtOrderDetailRedirect } from './components/PickleCourt/PickCourtMemberRedirect';
 import { PICKCOURT_ACCOUNT } from './utils/pickcourtRoutes';
 import Vlog from './pages/Vlog';
 import GameJoin from './pages/GameJoin';
 import PickleCourtHome from './pages/PickleCourtHome';
 import PickleCourtSearch from './pages/PickleCourtSearch';
-import { isPickCourtPublicPath, isPickCourtAdminPath } from './utils/pickcourtRoutes';
+import { isPickCourtPublicPath, isPickCourtAdminPath, showPickCourtBottomNav } from './utils/pickcourtRoutes';
 import { useDocumentPlatformBrand } from './hooks/useDocumentPlatformBrand';
 import StoreAdmin from './pages/StoreAdmin';
 import StorePublic from './pages/StorePublic';
@@ -65,6 +66,15 @@ import { StoreTenantHostProvider, useStoreTenantHost } from './contexts/StoreTen
 import MaintenanceCheck from './components/Auth/MaintenanceCheck';
 import { ShopConfigProvider, useShopConfig } from './contexts/ShopConfigContext';
 import ShopDisabled from './pages/ShopDisabled';
+
+const Admin = lazy(() => import('./pages/Admin'));
+const AdminV2 = lazy(() => import('./pages/AdminV2'));
+
+const AdminRouteFallback = () => (
+  <div className="min-h-screen flex items-center justify-center bg-slate-50">
+    <div className="animate-spin rounded-full h-10 w-10 border-2 border-pickcourt-gold border-t-transparent" />
+  </div>
+);
 
 function App() {
   return (
@@ -117,6 +127,8 @@ function AppShell() {
         <Routes>
                 <Route path="/" element={<PickleCourtHome />} />
                 <Route path="/search" element={<PickleCourtSearch />} />
+                <Route path="/book" element={<PickCourtBook />} />
+                <Route path="/me" element={<PickCourtMe />} />
                 <Route path="/pickcourt" element={<Navigate to="/" replace />} />
                 <Route path="/pickcourt/search" element={<Navigate to="/search" replace />} />
                 <Route path="/picklecourt" element={<Navigate to="/" replace />} />
@@ -280,19 +292,23 @@ function AppShell() {
                   element={<StoreAdmin />}
                 />
                 <Route path="/store/:storeSlug" element={<StorePublic />} />
-                <Route 
-                  path="/admin" 
+                <Route
+                  path="/admin"
                   element={
                     <ProtectedRoute>
-                      <Admin />
+                      <Suspense fallback={<AdminRouteFallback />}>
+                        <Admin />
+                      </Suspense>
                     </ProtectedRoute>
-                  } 
+                  }
                 />
                 <Route
                   path="/admin-v2"
                   element={
                     <ProtectedRoute>
-                      <AdminV2 />
+                      <Suspense fallback={<AdminRouteFallback />}>
+                        <AdminV2 />
+                      </Suspense>
                     </ProtectedRoute>
                   }
                 />
@@ -356,7 +372,7 @@ function AppShell() {
                     </CoachRoute>
                   }
                 />
-                <Route path="/activities" element={<Activities />} />
+                <Route path="/activities" element={<PickCourtActivities />} />
                 <Route path="/activities/:id" element={<ActivityDetail />} />
                 <Route
                   path="/activities/:id/register"
@@ -423,6 +439,7 @@ function AppShell() {
         </Routes>
       </main>
       {!hideMainChrome && <Footer />}
+      {showPickCourtBottomNav(location.pathname) && <PickCourtBottomNav />}
     </div>
   );
 }

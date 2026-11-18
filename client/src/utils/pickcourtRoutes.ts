@@ -3,6 +3,10 @@ import { isReservedStoreSlug } from './storeSlugRoutes';
 /** PickCourt 平台公開路由（首頁即聯盟站） */
 export const PICKCOURT_HOME = '/';
 export const PICKCOURT_SEARCH = '/search';
+export const PICKCOURT_BOOK = '/book';
+export const PICKCOURT_ACTIVITIES = '/activities';
+/** 我的：未登入可進（登入閘）；已登入可當會員入口 */
+export const PICKCOURT_ME = '/me';
 
 /** PickCourt 會員中心（獨立於 PickleVibes /profile、/my-bookings 等） */
 export const PICKCOURT_ACCOUNT = {
@@ -69,12 +73,29 @@ export function isPickCourtAdminPath(pathname: string): boolean {
 
 export function isPickCourtPublicPath(pathname: string): boolean {
   if (pathname === PICKCOURT_HOME || pathname === PICKCOURT_SEARCH) return true;
+  if (pathname === PICKCOURT_BOOK || pathname.startsWith(`${PICKCOURT_BOOK}/`)) return true;
+  if (pathname === PICKCOURT_ACTIVITIES || pathname.startsWith(`${PICKCOURT_ACTIVITIES}/`)) return true;
+  if (pathname === PICKCOURT_ME) return true;
   if (pathname === '/pickcourt' || pathname.startsWith('/pickcourt/')) return true;
   if (pathname === '/tournaments' || pathname.startsWith('/tournaments/')) return true;
   if (isStorePublicPath(pathname)) return true;
   if (isPickCourtBookingPath(pathname)) return true;
   if (isPickCourtMemberPath(pathname)) return true;
   if (isPickCourtAuthPath(pathname)) return true;
+  return false;
+}
+
+/** 顯示窄屏底欄嘅頁（會員／公開主流程） */
+export function showPickCourtBottomNav(pathname: string): boolean {
+  if (isPickCourtAdminPath(pathname)) return false;
+  if (isPickCourtAuthPath(pathname)) return false;
+  if (isPickCourtBookingPath(pathname)) return true;
+  if (isPickCourtMemberPath(pathname)) return true;
+  if (pathname === PICKCOURT_HOME || pathname === PICKCOURT_SEARCH) return true;
+  if (pathname === PICKCOURT_BOOK || pathname === PICKCOURT_ME) return true;
+  if (pathname === PICKCOURT_ACTIVITIES || pathname.startsWith(`${PICKCOURT_ACTIVITIES}/`)) return true;
+  if (pathname === '/tournaments' || pathname.startsWith('/tournaments/')) return true;
+  if (isStorePublicPath(pathname)) return true;
   return false;
 }
 

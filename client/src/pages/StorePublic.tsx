@@ -16,7 +16,6 @@ import {
   ArrowRightIcon,
   TrophyIcon,
   UserGroupIcon,
-  CreditCardIcon,
 } from '@heroicons/react/24/outline';
 
 type StoreCourt = {
@@ -105,8 +104,9 @@ const StorePublic: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 gap-3">
         <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-pickcourt-gold" />
+        <p className="text-sm text-gray-500">載入場地資料…</p>
       </div>
     );
   }
@@ -131,7 +131,7 @@ const StorePublic: React.FC = () => {
   const gameHalls = store.gameHalls || [];
 
   return (
-    <div className="min-h-screen bg-slate-50" style={brandStyle}>
+    <div className="min-h-screen bg-slate-50 pb-24 lg:pb-0" style={brandStyle}>
       <SEO
         title={`${store.name} | PickCourt 聯盟場地`}
         description={store.tagline || store.intro?.slice(0, 120) || `${store.name} — PickCourt 聯盟匹克球場地`}
@@ -216,24 +216,15 @@ const StorePublic: React.FC = () => {
             </div>
           </div>
 
-          <div className="mt-8 flex flex-wrap gap-3">
+          <div className="mt-8 flex flex-wrap items-center gap-3">
             <Link
-              to={`/booking/${store.slug}#court`}
+              to={`/book?store=${encodeURIComponent(store.slug)}`}
               className="inline-flex items-center gap-2 bg-white font-bold px-6 py-3 rounded-xl shadow-md hover:bg-white/95 transition-colors"
               style={{ color: primary }}
             >
               <CalendarDaysIcon className="w-5 h-5" />
               立即預約
             </Link>
-            {store.enableRecharge !== false && (
-              <Link
-                to={`${PICKCOURT_ACCOUNT.recharge}?store=${encodeURIComponent(store.slug)}`}
-                className="inline-flex items-center gap-2 border border-white/40 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/10 transition-colors"
-              >
-                <CreditCardIcon className="w-5 h-5" />
-                充值此店積分
-              </Link>
-            )}
             <Link
               to={pickcourtHomeHash('search')}
               className="inline-flex items-center gap-2 border border-white/40 text-white font-semibold px-6 py-3 rounded-xl hover:bg-white/10 transition-colors"
@@ -242,6 +233,21 @@ const StorePublic: React.FC = () => {
               <ArrowRightIcon className="w-4 h-4" />
             </Link>
           </div>
+          {store.enableRecharge !== false && (
+            <p className="mt-3 text-xs text-white/70">
+              需要本店積分？
+              <Link
+                to={`${PICKCOURT_ACCOUNT.recharge}?store=${encodeURIComponent(store.slug)}`}
+                className="underline ml-1 hover:text-white"
+              >
+                充值此店（只限本店）
+              </Link>
+              {' · '}
+              <Link to={PICKCOURT_ACCOUNT.vouchers} className="underline hover:text-white">
+                平台兌換券（全聯盟通用）
+              </Link>
+            </p>
+          )}
         </div>
       </header>
 
@@ -253,60 +259,32 @@ const StorePublic: React.FC = () => {
           </motion.section>
         ) : null}
 
-        {store.playerReviews && (
+        {store.playerReviews &&
+          (store.playerReviews.summaryText ||
+            store.playerReviews.overallLabel ||
+            (store.playerReviews.categorySummaries || []).some((b) => b.text)) && (
           <motion.section {...fadeUp} className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 sm:p-8">
-            <h2 className="text-xl font-bold text-gray-900 mb-6">球員評價</h2>
-            <div className="grid lg:grid-cols-2 gap-8">
-              <div>
-                {store.playerReviews.overallScore != null && (
-                  <div className="mb-5">
-                    <p className="text-4xl font-bold text-pickcourt-navy">
-                      {store.playerReviews.overallScore.toFixed(1)}
-                      <span className="text-lg font-medium text-gray-500"> / 10</span>
-                    </p>
-                    {store.playerReviews.overallLabel && (
-                      <p className="text-sm text-gray-600 mt-1">{store.playerReviews.overallLabel}</p>
-                    )}
-                  </div>
-                )}
-                <ul className="space-y-3">
-                  {(store.playerReviews.categories || []).map((cat) => (
-                    <li key={cat.key || cat.label}>
-                      <div className="flex justify-between text-sm mb-1">
-                        <span className="text-gray-700">{cat.label}</span>
-                        <span className="font-semibold text-gray-900">{Number(cat.score).toFixed(1)}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
-                        <div
-                          className="h-full rounded-full bg-pickcourt-navy"
-                          style={{ width: `${Math.min(100, (Number(cat.score) / 10) * 100)}%` }}
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-              <div className="space-y-4">
-                {store.playerReviews.summaryText && (
-                  <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
-                    <p className="text-sm font-semibold text-gray-900 mb-2">評價摘要</p>
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
-                      {store.playerReviews.summaryText}
-                    </p>
-                  </div>
-                )}
-                {(store.playerReviews.categorySummaries || []).map((block) => (
+            <h2 className="text-xl font-bold text-gray-900 mb-4">球員評價</h2>
+            {/* 評分數值 UI 隱藏；只顯示 Admin 文字摘要 */}
+            <div className="space-y-4">
+              {store.playerReviews.overallLabel && (
+                <p className="text-sm font-medium text-pickcourt-navy">{store.playerReviews.overallLabel}</p>
+              )}
+              {store.playerReviews.summaryText && (
+                <div className="rounded-xl bg-slate-50 border border-slate-200 p-4">
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                    {store.playerReviews.summaryText}
+                  </p>
+                </div>
+              )}
+              {(store.playerReviews.categorySummaries || [])
+                .filter((block) => block.text)
+                .map((block) => (
                   <div key={block.title} className="border-b border-slate-100 pb-3 last:border-0">
-                    <p className="text-sm font-semibold text-gray-900">
-                      {block.title}
-                      {block.reviewCount > 0 ? (
-                        <span className="text-gray-400 font-normal">（{block.reviewCount}）</span>
-                      ) : null}
-                    </p>
+                    <p className="text-sm font-semibold text-gray-900">{block.title}</p>
                     <p className="text-sm text-gray-600 mt-1 leading-relaxed">{block.text}</p>
                   </div>
                 ))}
-              </div>
             </div>
           </motion.section>
         )}

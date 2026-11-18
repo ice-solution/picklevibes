@@ -167,8 +167,8 @@ router.get('/options', auth, (req, res) => {
 
 router.post('/create-checkout-session', [
   auth,
-  body('points').isInt({ min: MIN_RECHARGE_POINTS }).withMessage(`充值積分最少需要${MIN_RECHARGE_POINTS}分`),
-  body('amount').isFloat({ min: MIN_RECHARGE_AMOUNT }).withMessage(`充值金額最少需要HK$${MIN_RECHARGE_AMOUNT}`),
+  body('points').isInt({ min: 1 }).withMessage('充值積分必須大於 0'),
+  body('amount').isFloat({ min: 1 }).withMessage('充值金額必須大於 0'),
   body('rechargeOfferId').optional({ nullable: true, checkFalsy: true }).isMongoId().withMessage('充值優惠ID格式無效'),
   body('storeId').optional(),
   body('store').optional(),
@@ -194,13 +194,6 @@ router.post('/create-checkout-session', [
 
     const provider = getPaymentProvider();
 
-    if (points < MIN_RECHARGE_POINTS) {
-      return res.status(400).json({ message: `充值積分最少需要${MIN_RECHARGE_POINTS}分` });
-    }
-    if (amount < MIN_RECHARGE_AMOUNT) {
-      return res.status(400).json({ message: `充值金額最少需要HK$${MIN_RECHARGE_AMOUNT}` });
-    }
-
     if (rechargeOfferId) {
       const RechargeOffer = require('../models/RechargeOffer');
       const offer = await RechargeOffer.findById(rechargeOfferId);
@@ -219,6 +212,14 @@ router.post('/create-checkout-session', [
       }
       if (offer.points !== points || offer.amount !== amount) {
         return res.status(400).json({ message: '充值金額或積分與優惠不匹配' });
+      }
+      // 有有效優惠方案：以方案金額為準（支援外賣式券包低於 HK$100）
+    } else {
+      if (points < MIN_RECHARGE_POINTS) {
+        return res.status(400).json({ message: `充值積分最少需要${MIN_RECHARGE_POINTS}分` });
+      }
+      if (amount < MIN_RECHARGE_AMOUNT) {
+        return res.status(400).json({ message: `充值金額最少需要HK$${MIN_RECHARGE_AMOUNT}` });
       }
     }
 

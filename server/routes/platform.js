@@ -20,7 +20,21 @@ const { typeCountsForCourts, effectiveCourtSlug } = require('../utils/courtSlug'
 const router = express.Router();
 
 const allianceStoreSelect =
-  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding enableRecharge enableVipDiscount enableSoloAddon bookingPolicies platformFeePercent playerReviews isChainStore';
+  'name slug address district phone sortOrder allianceEnabled adminDomain consumerDomain subscriptionPlan branding enableRecharge enableVipDiscount enableSoloAddon bookingPolicies platformFeePercent playerReviews isChainStore premiumListing';
+
+function serializePremiumListing(store) {
+  const p = store.premiumListing || {};
+  const enabled = p.enabled === true;
+  const until = p.until ? new Date(p.until) : null;
+  const active = enabled && (!until || until.getTime() > Date.now());
+  if (!active) return null;
+  return {
+    badge: p.badge || '廣告',
+    headline: p.headline || '',
+    sortOrder: Number(p.sortOrder) || 0,
+    until: until ? until.toISOString() : null,
+  };
+}
 
 function serializePlayerReviews(store) {
   const pr = store.playerReviews || {};
@@ -83,6 +97,7 @@ function serializeAllianceStore(store) {
     platformFeePercent: Number(store.platformFeePercent) || 0,
     bookingPolicies: store.bookingPolicies || null,
     playerReviews: serializePlayerReviews(store),
+    premium: serializePremiumListing(store),
   };
 }
 

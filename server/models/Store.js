@@ -128,6 +128,16 @@ const storeSchema = new mongoose.Schema({
     default: false,
   },
   /**
+   * PickCourt Premium：付費廣告位（首頁橫滑／搜尋置頂標）
+   */
+  premiumListing: {
+    enabled: { type: Boolean, default: false },
+    until: { type: Date, default: null },
+    sortOrder: { type: Number, default: 0 },
+    badge: { type: String, trim: true, default: '廣告' },
+    headline: { type: String, trim: true, default: '' },
+  },
+  /**
    * 連鎖店：店鋪 admin 用戶管理可看全部會員，
    * 不受「必須曾在本店預約」限制；
    * 遠端價目視為已含 VIP，唔再套 8 折。

@@ -139,6 +139,17 @@ function serializeStore(store, court = null) {
     policySnippet: policies.importantRemindersLines[0] || policies.cancellationLines[0] || null,
     platformFeePercent: Number(store.platformFeePercent) || 0,
     enableVipDiscount: store.enableVipDiscount === true && !store.isChainStore,
+    premium: (() => {
+      const p = store.premiumListing || {};
+      const enabled = p.enabled === true;
+      const until = p.until ? new Date(p.until) : null;
+      const active = enabled && (!until || until.getTime() > Date.now());
+      if (!active) return null;
+      return {
+        badge: p.badge || '廣告',
+        headline: p.headline || '',
+      };
+    })(),
   };
 }
 

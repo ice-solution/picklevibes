@@ -20,6 +20,7 @@ import { storePrimaryColor } from '../utils/storeBrandUtils';
 import { CalendarDaysIcon, ClockIcon, UsersIcon } from '@heroicons/react/24/outline';
 import {
   buildBookingUrl,
+  pickBookingPrefillSearch,
   parseBookingParams,
   parseBookingSection,
   scrollToBookingSectionWhenReady,
@@ -59,6 +60,7 @@ const Booking: React.FC = () => {
     setSelectedTimeSlot,
     setIncludeSoloCourt,
     checkSoloCourtAvailability,
+    checkAvailability,
     clearError,
   } = useBooking();
 
@@ -147,12 +149,14 @@ const Booking: React.FC = () => {
   const goToSection = useCallback(
     (section: BookingSection, pathOverride?: BookingPathParams) => {
       const p = pathOverride ?? pathParams();
-      const url = buildBookingUrl(p, section, { deepLink: isDeepLinkRoute });
-      if (`${location.pathname}${location.hash}` !== url) {
+      const search = pickBookingPrefillSearch(location.search);
+      const url = buildBookingUrl(p, section, { deepLink: isDeepLinkRoute, search });
+      const current = `${location.pathname}${location.search}${location.hash}`;
+      if (current !== url) {
         navigate(url, { replace: true });
       }
     },
-    [isDeepLinkRoute, location.pathname, location.hash, navigate, pathParams]
+    [isDeepLinkRoute, location.pathname, location.search, location.hash, navigate, pathParams]
   );
 
   // hash / 路徑變更時才自動捲動一次（避免 loading 等狀態更新時反覆跳動）
@@ -291,7 +295,10 @@ const Booking: React.FC = () => {
           courtSlug: courtSlugInPath,
           date: routeParams.date,
         };
-        const url = buildBookingUrl(p, targetSection, { deepLink: isDeepLinkRoute });
+        const search = pickBookingPrefillSearch(location.search, {
+          courtId: courtIdParam || undefined,
+        });
+        const url = buildBookingUrl(p, targetSection, { deepLink: isDeepLinkRoute, search });
         const currentUrl = `${location.pathname}${location.search}${location.hash}`;
         if (currentUrl !== url) {
           navigate(url, { replace: true });
@@ -322,10 +329,12 @@ const Booking: React.FC = () => {
     courtSlugForUrl,
   ]);
 
-  // 聯盟搜尋深連結：?startTime=&duration= 預選時段
+  // 聯盟搜尋深連結：?startTime=&duration= 預選時段（須保留 query，唔好喺 hydrate 剝走）
   useEffect(() => {
     if (prefillTimeAppliedRef.current || hydrating) return;
-    if (!selectedStore?.slug || !courtSlugForUrl(selectedCourt) || !selectedDate) return;
+    if (!selectedStore?.slug || !selectedCourt?._id || !courtSlugForUrl(selectedCourt) || !selectedDate) {
+      return;
+    }
 
     const { startTime, duration } = parseBookingSearchPrefill(location.search);
     if (!startTime) return;
@@ -335,11 +344,34 @@ const Booking: React.FC = () => {
 
     prefillTimeAppliedRef.current = true;
     setSelectedTimeSlot({ start: startTime, end });
-    goToSection('details', {
-      storeSlug: selectedStore.slug,
-      courtSlug: courtSlugForUrl(selectedCourt)!,
-      date: selectedDate,
-    });
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const availability = await checkAvailability(
+          selectedCourt._id,
+          selectedDate,
+          startTime,
+          end
+        );
+        if (!cancelled && availability) {
+          setAvailability(availability);
+        }
+      } catch {
+        // 時段仍預選；價錢可喺確認前再查
+      }
+      if (!cancelled) {
+        goToSection('details', {
+          storeSlug: selectedStore.slug,
+          courtSlug: courtSlugForUrl(selectedCourt)!,
+          date: selectedDate,
+        });
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [
     hydrating,
     selectedStore,
@@ -347,6 +379,9 @@ const Booking: React.FC = () => {
     selectedDate,
     location.search,
     goToSection,
+    checkAvailability,
+    setSelectedTimeSlot,
+    setAvailability,
   ]);
 
   const handleSelectStore = (store: StoreSummary) => {
@@ -487,7 +522,7 @@ const Booking: React.FC = () => {
   const showConfirm = activeSection === 'confirm' && canProceedToConfirm();
 
   return (
-    <div className={`min-h-screen ${isPickCourtBooking ? 'bg-slate-50' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isPickCourtBooking ? 'bg-slate-50 pb-24 lg:pb-0' : 'bg-gray-50'}`}>
       {isPickCourtBooking && !isConsumerHost && <PickleCourtNav />}
       <div className={`${isPickCourtBooking ? 'pt-20' : ''} py-8`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

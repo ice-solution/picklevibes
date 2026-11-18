@@ -1,7 +1,14 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Bars3Icon, XMarkIcon, UserCircleIcon } from '@heroicons/react/24/outline';
-import { PICKCOURT_HOME, pickcourtHomeHash, PICKCOURT_ACCOUNT } from '../../utils/pickcourtRoutes';
+import {
+  PICKCOURT_HOME,
+  PICKCOURT_BOOK,
+  PICKCOURT_ACTIVITIES,
+  PICKCOURT_ME,
+  pickcourtHomeHash,
+  PICKCOURT_ACCOUNT,
+} from '../../utils/pickcourtRoutes';
 import { useAuth } from '../../contexts/AuthContext';
 import {
   getMembershipBadgeClass,
@@ -19,13 +26,11 @@ type NavLink =
   | { href: string; label: string };
 
 const navLinks: NavLink[] = [
-  { href: pickcourtHomeHash('search'), label: '搜尋場地' },
-  { href: pickcourtHomeHash('platform'), label: '平台介紹' },
-  { href: pickcourtHomeHash('alliance'), label: 'PickCourt 聯盟' },
-  { href: pickcourtHomeHash('activities'), label: '活動中心' },
-  { to: PICKCOURT_ACCOUNT.vouchers, label: '購買兌換券' },
-  // 比賽功能暫時收起
-  // { href: pickcourtHomeHash('tournaments'), label: '比賽賽事' },
+  { href: pickcourtHomeHash('search'), label: '搵場' },
+  { to: PICKCOURT_BOOK, label: '訂場' },
+  { to: PICKCOURT_ACTIVITIES, label: '活動' },
+  { to: PICKCOURT_ACCOUNT.vouchers, label: '兌換券' },
+  { to: PICKCOURT_ME, label: '我的' },
 ];
 
 const linkClass =
@@ -148,6 +153,7 @@ function AuthActions({ compact, onNavigate }: { compact?: boolean; onNavigate?: 
   return (
     <Link
       to="/login"
+      state={{ from: { pathname: PICKCOURT_ME } }}
       onClick={onNavigate}
       className={`text-sm font-semibold text-pickcourt-navy hover:text-pickcourt-gold transition-colors ${
         compact ? 'block py-2 text-center w-full' : 'px-4 py-2'
@@ -187,7 +193,7 @@ const PickleCourtNav: React.FC = () => {
             <AuthActions />
             <a
               href={pickcourtHomeHash('contact')}
-              className="text-sm font-semibold bg-pickcourt-gold text-pickcourt-navy-dark px-5 py-2.5 rounded-lg hover:bg-pickcourt-gold-light transition-colors shadow-md"
+              className="text-xs text-pickcourt-navy/50 hover:text-pickcourt-navy transition-colors"
             >
               場地合作
             </a>
@@ -217,10 +223,10 @@ const PickleCourtNav: React.FC = () => {
           <AuthActions compact onNavigate={() => setOpen(false)} />
           <a
             href={pickcourtHomeHash('contact')}
-            className="block text-center bg-pickcourt-gold text-pickcourt-navy-dark font-semibold py-3 rounded-lg"
+            className="block text-center text-sm text-pickcourt-navy/60 py-2"
             onClick={() => setOpen(false)}
           >
-            場地合作
+            場地合作（B2B）
           </a>
         </div>
       )}

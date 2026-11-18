@@ -57,6 +57,34 @@ export function regionOfDistrict(district?: string | null): HkRegion | null {
   return null;
 }
 
+/** UI 短名：觀塘區 → 觀塘 */
+export function districtShortLabel(district: string): string {
+  const d = String(district || '').trim();
+  return d.endsWith('區') ? d.slice(0, -1) : d;
+}
+
+/**
+ * URL／API 嘅 district 參數可能係三大區或 18 區。
+ * 回傳搜尋用關鍵字：有細區用細區，否則用大區，否則全港 ''。
+ */
+export function parseAreaParam(param?: string | null): {
+  region: '' | HkRegion;
+  district: string;
+} {
+  const raw = String(param || '').trim();
+  if (!raw) return { region: '', district: '' };
+  if (raw === '香港' || raw === '九龍' || raw === '新界') {
+    return { region: raw, district: '' };
+  }
+  const region = regionOfDistrict(raw);
+  if (region) return { region, district: raw };
+  return { region: '', district: '' };
+}
+
+export function areaSearchKey(region: '' | HkRegion, district: string): string {
+  return String(district || region || '').trim();
+}
+
 /**
  * 場地類型（UI 三類）
  * DB：competition=標準場、training=非標準場、solo+dink=單人場／發球機場

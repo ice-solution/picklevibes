@@ -68,6 +68,13 @@ interface Store {
   tuyaPostBufferMinutes?: number;
   tuyaMergeGapMinutes?: number;
   tuyaZones?: { _id?: string; name: string }[];
+  premiumListing?: {
+    enabled?: boolean;
+    until?: string | null;
+    sortOrder?: number;
+    badge?: string;
+    headline?: string;
+  };
 }
 
 type SubscriptionPlan = 'starter' | 'pro' | 'enterprise';
@@ -121,6 +128,11 @@ interface StoreForm {
   tuyaPreBufferMinutes: number;
   tuyaPostBufferMinutes: number;
   tuyaMergeGapMinutes: number;
+  premiumEnabled: boolean;
+  premiumUntil: string;
+  premiumSortOrder: number;
+  premiumBadge: string;
+  premiumHeadline: string;
 }
 
 const emptyForm: StoreForm = {
@@ -172,6 +184,11 @@ const emptyForm: StoreForm = {
   tuyaPreBufferMinutes: 15,
   tuyaPostBufferMinutes: 15,
   tuyaMergeGapMinutes: 0,
+  premiumEnabled: false,
+  premiumUntil: '',
+  premiumSortOrder: 0,
+  premiumBadge: '廣告',
+  premiumHeadline: '',
 };
 
 const StoreManagement: React.FC = () => {
@@ -259,6 +276,13 @@ const StoreManagement: React.FC = () => {
       tuyaPreBufferMinutes: s.tuyaPreBufferMinutes ?? 15,
       tuyaPostBufferMinutes: s.tuyaPostBufferMinutes ?? 15,
       tuyaMergeGapMinutes: s.tuyaMergeGapMinutes ?? 0,
+      premiumEnabled: Boolean(s.premiumListing?.enabled),
+      premiumUntil: s.premiumListing?.until
+        ? String(s.premiumListing.until).slice(0, 10)
+        : '',
+      premiumSortOrder: Number(s.premiumListing?.sortOrder) || 0,
+      premiumBadge: s.premiumListing?.badge || '廣告',
+      premiumHeadline: s.premiumListing?.headline || '',
     });
     setShowForm(true);
   };
@@ -315,6 +339,19 @@ const StoreManagement: React.FC = () => {
           bannerUrl: form.brandingBannerUrl.trim(),
           primaryColor: form.brandingPrimaryColor.trim(),
         },
+        ...(isPlatformAdmin
+          ? {
+              premiumListing: {
+                enabled: form.premiumEnabled,
+                until: form.premiumUntil
+                  ? new Date(`${form.premiumUntil}T23:59:59`).toISOString()
+                  : null,
+                sortOrder: Number(form.premiumSortOrder) || 0,
+                badge: form.premiumBadge.trim() || '廣告',
+                headline: form.premiumHeadline.trim(),
+              },
+            }
+          : {}),
       };
       if (editing) {
         await axios.put(`/stores/${editing._id}`, payload);
@@ -404,11 +441,16 @@ const StoreManagement: React.FC = () => {
                   {accessControlVendorLabel(s.enableHikAccess, s.accessControlVendor)}
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  {s.allianceEnabled ? (
-                    <span className="text-amber-600">PickCourt</span>
-                  ) : (
-                    <span className="text-gray-400">—</span>
-                  )}
+                  <div className="flex flex-col gap-0.5">
+                    {s.allianceEnabled ? (
+                      <span className="text-amber-600">PickCourt</span>
+                    ) : (
+                      <span className="text-gray-400">—</span>
+                    )}
+                    {s.premiumListing?.enabled && (
+                      <span className="text-xs font-medium text-pickcourt-gold-dark">Premium</span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {s.enableTuyaAutomation
@@ -716,6 +758,53 @@ const StoreManagement: React.FC = () => {
                 placeholder="前台域名（可選）lck.pickcourt.hk"
                 value={form.consumerDomain}
                 onChange={(e) => setForm({ ...form, consumerDomain: e.target.value })}
+              />
+              <hr className="border-gray-200" />
+              <p className="text-sm font-medium text-gray-800">PickCourt Premium（付費廣告）</p>
+              <p className="text-xs text-gray-500">
+                啟用後會出現在首頁 Premium 橫滑，並於搜尋結果顯示廣告標籤。
+              </p>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.premiumEnabled}
+                  onChange={(e) => setForm({ ...form, premiumEnabled: e.target.checked })}
+                />
+                啟用 Premium 廣告位
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">到期日（可空＝長期）</label>
+                  <input
+                    type="date"
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={form.premiumUntil}
+                    onChange={(e) => setForm({ ...form, premiumUntil: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-600 mb-1">排序（細→前）</label>
+                  <input
+                    type="number"
+                    className="w-full border rounded-md px-3 py-2 text-sm"
+                    value={form.premiumSortOrder}
+                    onChange={(e) =>
+                      setForm({ ...form, premiumSortOrder: parseInt(e.target.value, 10) || 0 })
+                    }
+                  />
+                </div>
+              </div>
+              <input
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                placeholder="標籤（預設：廣告）"
+                value={form.premiumBadge}
+                onChange={(e) => setForm({ ...form, premiumBadge: e.target.value })}
+              />
+              <input
+                className="w-full border rounded-md px-3 py-2 text-sm"
+                placeholder="廣告一句話／優惠標"
+                value={form.premiumHeadline}
+                onChange={(e) => setForm({ ...form, premiumHeadline: e.target.value })}
               />
               </>
               )}

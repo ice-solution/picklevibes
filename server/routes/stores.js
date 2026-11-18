@@ -186,6 +186,7 @@ router.put('/:id', [auth, adminAuth], async (req, res) => {
       delete update.consumerDomain;
       delete update.openApiKey;
       delete update.openApiEnabled;
+      delete update.premiumListing;
     }
     if (update.slug) update.slug = String(update.slug).trim().toLowerCase();
 

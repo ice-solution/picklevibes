@@ -30,7 +30,7 @@ router.get('/', async (req, res) => {
         expiryDate: { $gt: currentDate },
       })
         .sort({ sortOrder: 1, createdAt: 1 })
-        .select('name points amount description expiryDate store');
+        .select('name points amount ticketCount faceValue description expiryDate store');
 
       return res.json({ scope: 'platform', offers });
     }
@@ -59,7 +59,7 @@ router.get('/', async (req, res) => {
       expiryDate: { $gt: currentDate },
     })
       .sort({ sortOrder: 1, createdAt: 1 })
-      .select('name points amount description expiryDate store');
+      .select('name points amount ticketCount faceValue description expiryDate store');
 
     res.json({
       scope: 'store',
@@ -115,7 +115,9 @@ router.post('/', [
   adminAuth,
   body('name').trim().isLength({ min: 1, max: 100 }).withMessage('優惠名稱必須在1-100個字符之間'),
   body('points').isInt({ min: 1 }).withMessage('充值積分必須是大於0的整數'),
-  body('amount').isFloat({ min: 100 }).withMessage('充值金額須至少 HK$100'),
+  body('amount').isFloat({ min: 1 }).withMessage('售價必須大於 0'),
+  body('ticketCount').optional({ nullable: true }).isInt({ min: 1 }).withMessage('張數至少 1'),
+  body('faceValue').optional({ nullable: true }).isFloat({ min: 1 }).withMessage('面額至少 1'),
   body('description').trim().isLength({ min: 1, max: 500 }).withMessage('描述必須在1-500個字符之間'),
   body('expiryDate').isISO8601().withMessage('請提供有效的過期日期'),
   body('sortOrder').optional().isInt({ min: 0 }).withMessage('排序順序必須是非負整數'),
@@ -130,7 +132,7 @@ router.post('/', [
       });
     }
 
-    const { name, points, amount, description, expiryDate, sortOrder } = req.body;
+    const { name, points, amount, description, expiryDate, sortOrder, ticketCount, faceValue } = req.body;
     const storeResult = resolveStoreForCreate(req.tenantAccess, req.body.store);
     if (!storeResult.ok) {
       return res.status(storeResult.status).json({ message: storeResult.message });
@@ -148,6 +150,8 @@ router.post('/', [
       name,
       points,
       amount,
+      ticketCount: ticketCount != null ? Number(ticketCount) : null,
+      faceValue: faceValue != null ? Number(faceValue) : null,
       description,
       expiryDate: expiry,
       sortOrder: sortOrder || 0,
@@ -191,7 +195,9 @@ router.put('/:id', [
   adminAuth,
   body('name').optional().trim().isLength({ min: 1, max: 100 }).withMessage('優惠名稱必須在1-100個字符之間'),
   body('points').optional().isInt({ min: 1 }).withMessage('充值積分必須是大於0的整數'),
-  body('amount').optional().isFloat({ min: 100 }).withMessage('充值金額須至少 HK$100'),
+  body('amount').optional().isFloat({ min: 1 }).withMessage('售價必須大於 0'),
+  body('ticketCount').optional({ nullable: true }).isInt({ min: 1 }).withMessage('張數至少 1'),
+  body('faceValue').optional({ nullable: true }).isFloat({ min: 1 }).withMessage('面額至少 1'),
   body('description').optional().trim().isLength({ min: 1, max: 500 }).withMessage('描述必須在1-500個字符之間'),
   body('expiryDate').optional().isISO8601().withMessage('請提供有效的過期日期'),
   body('isActive').optional().isBoolean().withMessage('活動狀態必須是布爾值'),

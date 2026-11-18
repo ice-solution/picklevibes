@@ -13,13 +13,16 @@ import PickleCourtFooter from '../components/PickleCourt/PickleCourtFooter';
 import SEO from '../components/SEO/SEO';
 import { PICKCOURT_ACCOUNT } from '../utils/pickcourtRoutes';
 
-const tabs = [
+const primaryTabs = [
   { to: PICKCOURT_ACCOUNT.bookings, label: '我的預約', icon: CalendarDaysIcon },
-  { to: PICKCOURT_ACCOUNT.profile, label: '個人資料', icon: UserCircleIcon },
-  { to: PICKCOURT_ACCOUNT.balance, label: '積分餘額', icon: CurrencyDollarIcon },
-  { to: PICKCOURT_ACCOUNT.recharge, label: '充值', icon: CreditCardIcon },
   { to: PICKCOURT_ACCOUNT.vouchers, label: '兌換券', icon: TicketIcon },
+  { to: PICKCOURT_ACCOUNT.balance, label: '積分餘額', icon: CurrencyDollarIcon },
+];
+
+const secondaryTabs = [
+  { to: PICKCOURT_ACCOUNT.recharge, label: '店鋪充值', icon: CreditCardIcon },
   { to: PICKCOURT_ACCOUNT.orders, label: '訂單記錄', icon: ShoppingBagIcon },
+  { to: PICKCOURT_ACCOUNT.profile, label: '設定', icon: UserCircleIcon },
 ];
 
 type Props = {
@@ -33,7 +36,7 @@ const PickCourtMemberLayout: React.FC<Props> = ({ title, subtitle, seoDescriptio
   const { pathname } = useLocation();
 
   return (
-    <div className="min-h-screen bg-slate-50 flex flex-col">
+    <div className="min-h-screen bg-slate-50 flex flex-col pb-24 lg:pb-0">
       <SEO
         title={title}
         description={seoDescription || `${title} · PickCourt 會員中心`}
@@ -50,24 +53,46 @@ const PickCourtMemberLayout: React.FC<Props> = ({ title, subtitle, seoDescriptio
 
           <div className="flex flex-col lg:flex-row gap-8">
             <aside className="lg:w-56 shrink-0">
-              <nav className="bg-white rounded-xl border border-pickcourt-gold/20 shadow-sm p-2 space-y-1">
-                {tabs.map(({ to, label, icon: Icon }) => {
-                  const active = pathname === to || pathname.startsWith(`${to}/`);
-                  return (
-                    <Link
-                      key={to}
-                      to={to}
-                      className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                        active
-                          ? 'bg-pickcourt-gold/15 text-pickcourt-navy border border-pickcourt-gold/30'
-                          : 'text-gray-600 hover:bg-slate-50 hover:text-pickcourt-navy'
-                      }`}
-                    >
-                      <Icon className="w-5 h-5 shrink-0" />
-                      {label}
-                    </Link>
-                  );
-                })}
+              <nav className="bg-white rounded-xl border border-pickcourt-gold/20 shadow-sm p-2 space-y-3">
+                <div className="space-y-1">
+                  {primaryTabs.map(({ to, label, icon: Icon }) => {
+                    const active = pathname === to || pathname.startsWith(`${to}/`);
+                    return (
+                      <Link
+                        key={to}
+                        to={to}
+                        className={`flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                          active
+                            ? 'bg-pickcourt-gold/15 text-pickcourt-navy border border-pickcourt-gold/30'
+                            : 'text-gray-600 hover:bg-slate-50 hover:text-pickcourt-navy'
+                        }`}
+                      >
+                        <Icon className="w-5 h-5 shrink-0" />
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
+                <div className="border-t border-slate-100 pt-2 space-y-1">
+                  <p className="px-3 text-[10px] font-semibold uppercase tracking-wide text-gray-400">更多</p>
+                  {secondaryTabs.map(({ to, label, icon: Icon }) => {
+                    const active = pathname === to || pathname.startsWith(`${to}/`);
+                    return (
+                      <Link
+                        key={to}
+                        to={to}
+                        className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                          active
+                            ? 'bg-pickcourt-gold/10 text-pickcourt-navy font-medium'
+                            : 'text-gray-500 hover:bg-slate-50 hover:text-pickcourt-navy'
+                        }`}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        {label}
+                      </Link>
+                    );
+                  })}
+                </div>
               </nav>
             </aside>
 

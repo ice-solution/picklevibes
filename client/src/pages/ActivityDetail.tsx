@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SEO from '../components/SEO/SEO';
+import PickleCourtNav from '../components/PickleCourt/PickleCourtNav';
 import { 
   CalendarIcon, 
   MapPinIcon, 
@@ -195,10 +196,13 @@ const ActivityDetail: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">載入活動詳情中...</p>
+      <div className="min-h-screen bg-slate-50 pb-24 lg:pb-0">
+        <PickleCourtNav />
+        <div className="pt-28 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pickcourt-gold mx-auto"></div>
+            <p className="mt-4 text-gray-600">載入活動詳情中...</p>
+          </div>
         </div>
       </div>
     );
@@ -206,18 +210,21 @@ const ActivityDetail: React.FC = () => {
 
   if (error || !activity) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">活動不存在</h2>
-          <p className="text-gray-600 mb-6">{error || '找不到指定的活動'}</p>
-          <Link
-            to="/activities"
-            className="inline-flex items-center px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <ArrowLeftIcon className="h-4 w-4 mr-2" />
-            返回活動列表
-          </Link>
+      <div className="min-h-screen bg-slate-50 pb-24 lg:pb-0">
+        <PickleCourtNav />
+        <div className="pt-28 flex items-center justify-center px-4">
+          <div className="text-center">
+            <ExclamationTriangleIcon className="h-16 w-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-2xl font-bold text-gray-900 mb-2">活動不存在</h2>
+            <p className="text-gray-600 mb-6">{error || '找不到指定的活動'}</p>
+            <Link
+              to="/activities"
+              className="inline-flex items-center px-4 py-2 bg-pickcourt-navy text-white rounded-lg hover:opacity-90 transition-colors"
+            >
+              <ArrowLeftIcon className="h-4 w-4 mr-2" />
+              返回活動列表
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -227,11 +234,12 @@ const ActivityDetail: React.FC = () => {
   const activityImageUrl = getImageUrl(activityImage);
 
   return (
-    <>
+    <div className="min-h-screen bg-slate-50 pb-24 lg:pb-0">
+      <PickleCourtNav />
       <SEO
-        title={`${activity.title} | Picklevibes 活動詳情`}
+        title={`${activity.title} | PickCourt 活動詳情`}
         description={`${activity.description.substring(0, 150)}... 活動時間：${formatDate(activity.startDate)}，地點：${activity.location}，費用：${activity.price} 積分/人。立即報名參加！`}
-        keywords={`${activity.title},匹克球活動,活動報名,${activity.location},Picklevibes活動`}
+        keywords={`${activity.title},匹克球活動,活動報名,${activity.location},PickCourt活動`}
         url={`/activities/${activity._id}`}
         image={activityImageUrl}
         structuredData={{
@@ -266,7 +274,7 @@ const ActivityDetail: React.FC = () => {
           eventAttendanceMode: 'https://schema.org/OfflineEventAttendanceMode'
         }}
       />
-      <div className="min-h-screen bg-gray-50">
+      <div className="pt-20 lg:pt-24">
         {/* Header */}
         <div className="bg-white shadow-sm">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -543,7 +551,7 @@ const ActivityDetail: React.FC = () => {
         </motion.div>
       </div>
     </div>
-    </>
+    </div>
   );
 };
 

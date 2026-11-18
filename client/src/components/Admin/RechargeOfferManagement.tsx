@@ -19,10 +19,13 @@ interface RechargeOffer {
   name: string;
   points: number;
   amount: number;
+  ticketCount?: number | null;
+  faceValue?: number | null;
   description: string;
   expiryDate: string;
   isActive: boolean;
   sortOrder: number;
+  store?: { _id: string; name: string; slug: string } | null;
   createdBy: {
     name: string;
     email: string;
@@ -35,10 +38,23 @@ interface RechargeOfferFormData {
   name: string;
   points: number;
   amount: number;
+  ticketCount: number | '';
+  faceValue: number | '';
   description: string;
   expiryDate: string;
   sortOrder: number;
 }
+
+const emptyOfferForm = (): RechargeOfferFormData => ({
+  name: '',
+  points: 0,
+  amount: 0,
+  ticketCount: '',
+  faceValue: '',
+  description: '',
+  expiryDate: '',
+  sortOrder: 0,
+});
 
 interface RechargeUsage {
   _id: string;
@@ -65,14 +81,7 @@ const RechargeOfferManagement: React.FC = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingOffer, setEditingOffer] = useState<RechargeOffer | null>(null);
-  const [formData, setFormData] = useState<RechargeOfferFormData>({
-    name: '',
-    points: 0,
-    amount: 0,
-    description: '',
-    expiryDate: '',
-    sortOrder: 0
-  });
+  const [formData, setFormData] = useState<RechargeOfferFormData>(emptyOfferForm);
   const [errors, setErrors] = useState<{[key: string]: string}>({});
 
   // 使用記錄 modal 狀態
@@ -112,22 +121,52 @@ const RechargeOfferManagement: React.FC = () => {
   };
 
   const handleInputChange = (field: keyof RechargeOfferFormData, value: string | number) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-    
-    // 清除錯誤
+    setFormData((prev) => {
+      const next = { ...prev, [field]: value };
+      // 券包：改張數／面額時自動建議入帳積分 = 張數 × 面額
+      if (field === 'ticketCount' || field === 'faceValue') {
+        const count = Number(field === 'ticketCount' ? value : next.ticketCount) || 0;
+        const face = Number(field === 'faceValue' ? value : next.faceValue) || 0;
+        if (count > 0 && face > 0) {
+          next.points = count * face;
+        }
+      }
+      return next;
+    });
+
     if (errors[field]) {
-      setErrors(prev => ({
+      setErrors((prev) => ({
         ...prev,
-        [field]: ''
+        [field]: '',
       }));
     }
   };
 
+  const buildPayload = () => {
+    const ticketCount =
+      formData.ticketCount === '' || formData.ticketCount == null
+        ? null
+        : Number(formData.ticketCount);
+    const faceValue =
+      formData.faceValue === '' || formData.faceValue == null
+        ? null
+        : Number(formData.faceValue);
+    return {
+      name: formData.name,
+      points: formData.points,
+      amount: formData.amount,
+      description: formData.description,
+      expiryDate: formData.expiryDate,
+      sortOrder: formData.sortOrder,
+      ticketCount: ticketCount && ticketCount > 0 ? ticketCount : null,
+      faceValue: faceValue && faceValue > 0 ? faceValue : null,
+    };
+  };
+
   const validateForm = (): boolean => {
     const newErrors: {[key: string]: string} = {};
+    const isPack =
+      Number(formData.ticketCount) > 0 && Number(formData.faceValue) > 0;
 
     if (!formData.name.trim()) {
       newErrors.name = '優惠名稱為必填項目';
@@ -137,8 +176,10 @@ const RechargeOfferManagement: React.FC = () => {
       newErrors.points = '充值積分必須大於0';
     }
 
-    if (!formData.amount || formData.amount < 100) {
-      newErrors.amount = '充值金額須至少 HK$100';
+    if (!formData.amount || formData.amount < 1) {
+      newErrors.amount = '售價必須大於 0';
+    } else if (!isPack && formData.amount < 100) {
+      newErrors.amount = '一般充值須至少 HK$100（券包可低於 100）';
     }
 
     if (!formData.description.trim()) {
@@ -167,21 +208,21 @@ const RechargeOfferManagement: React.FC = () => {
 
     try {
       const storeId = lockedStoreId || selectedStoreId;
-      if (!storeId) {
+      // 店主必須有店鋪；平台管理員可留空 → PickCourt 平台兌換券
+      if (lockedStoreId && !storeId) {
         alert('請選擇歸屬店鋪');
         return;
       }
-      const payload = { ...formData, store: storeId };
+      if (!lockedStoreId && !storeId && !window.confirm('未選店鋪將建立「平台兌換券」（顯示於會員兌換券頁）。確定？')) {
+        return;
+      }
+      const payload = {
+        ...buildPayload(),
+        ...(storeId ? { store: storeId } : {}),
+      };
       await axios.post('/recharge-offers', payload);
       setShowCreateModal(false);
-      setFormData({
-        name: '',
-        points: 0,
-        amount: 0,
-        description: '',
-        expiryDate: '',
-        sortOrder: 0
-      });
+      setFormData(emptyOfferForm());
       fetchOffers();
     } catch (error: any) {
       console.error('創建充值優惠失敗:', error);
@@ -191,6 +232,8 @@ const RechargeOfferManagement: React.FC = () => {
           serverErrors[err.path] = err.msg;
         });
         setErrors(serverErrors);
+      } else {
+        alert(error.response?.data?.message || '創建失敗');
       }
     }
   };
@@ -201,9 +244,11 @@ const RechargeOfferManagement: React.FC = () => {
       name: offer.name,
       points: offer.points,
       amount: offer.amount,
+      ticketCount: offer.ticketCount ?? '',
+      faceValue: offer.faceValue ?? '',
       description: offer.description,
       expiryDate: offer.expiryDate.split('T')[0],
-      sortOrder: offer.sortOrder
+      sortOrder: offer.sortOrder,
     });
     setShowEditModal(true);
   };
@@ -216,7 +261,7 @@ const RechargeOfferManagement: React.FC = () => {
     }
 
     try {
-      await axios.put(`/recharge-offers/${editingOffer._id}`, formData);
+      await axios.put(`/recharge-offers/${editingOffer._id}`, buildPayload());
       setShowEditModal(false);
       setEditingOffer(null);
       fetchOffers();
@@ -322,14 +367,18 @@ const RechargeOfferManagement: React.FC = () => {
               onChange={(e) => setSelectedStoreId(e.target.value)}
               className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
             >
-              <option value="">全部店鋪</option>
+              <option value="">全部／平台券</option>
               {stores.map((s) => (
                 <option key={s._id} value={s._id}>{s.name}</option>
               ))}
             </select>
           )}
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={() => {
+            setFormData(emptyOfferForm());
+            setErrors({});
+            setShowCreateModal(true);
+          }}
           className="bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors flex items-center gap-2"
         >
           <PlusIcon className="w-5 h-5" />
@@ -386,8 +435,20 @@ const RechargeOfferManagement: React.FC = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">{offer.points} 分</div>
-                      <div className="text-sm text-gray-500">HK${offer.amount}</div>
+                      {offer.ticketCount && offer.faceValue ? (
+                        <div className="text-sm font-medium text-gray-900">
+                          {offer.ticketCount} 張 ${offer.faceValue}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-gray-900">{offer.points} 分</div>
+                      )}
+                      <div className="text-sm text-gray-500">
+                        售 HK${offer.amount}
+                        {offer.ticketCount && offer.faceValue ? ` · 入帳 ${offer.points}` : ''}
+                      </div>
+                      {!offer.store && (
+                        <div className="text-xs text-amber-700 mt-0.5">平台兌換券</div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center gap-2">
@@ -476,10 +537,59 @@ const RechargeOfferManagement: React.FC = () => {
                 {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
               </div>
 
+              {!lockedStoreId && (
+                <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+                  上方篩選選「全部／平台券」並留空店鋪時，會建立平台兌換券（例：3 張 $20 售 $30）。
+                </p>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    充值積分
+                    券包張數（可選）
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formData.ticketCount}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'ticketCount',
+                        e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    每張面額（可選）
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step="1"
+                    value={formData.faceValue}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'faceValue',
+                        e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="20"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 -mt-2">
+                外賣式券包：填張數 + 面額後，入帳積分會自動建議為張數×面額；售價可低於面額總和。
+              </p>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    入帳積分
                   </label>
                   <input
                     type="number"
@@ -488,14 +598,14 @@ const RechargeOfferManagement: React.FC = () => {
                     className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                       errors.points ? 'border-red-500' : 'border-gray-300'
                     }`}
-                    placeholder="500"
+                    placeholder="60"
                   />
                   {errors.points && <p className="text-red-500 text-sm mt-1">{errors.points}</p>}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    充值金額 (HK$)
+                    售價 (HK$)
                   </label>
                   <input
                     type="number"
@@ -505,7 +615,7 @@ const RechargeOfferManagement: React.FC = () => {
                     className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                       errors.amount ? 'border-red-500' : 'border-gray-300'
                     }`}
-                    placeholder="500.00"
+                    placeholder="30"
                   />
                   {errors.amount && <p className="text-red-500 text-sm mt-1">{errors.amount}</p>}
                 </div>
@@ -522,7 +632,7 @@ const RechargeOfferManagement: React.FC = () => {
                     errors.description ? 'border-red-500' : 'border-gray-300'
                   }`}
                   rows={3}
-                  placeholder="例如：1分 = 1元, 充值後立即可用"
+                  placeholder="例如：3 張 $20 券，用 $30 買，全聯盟訂場可用"
                 />
                 {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
               </div>
@@ -614,7 +724,47 @@ const RechargeOfferManagement: React.FC = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    充值積分
+                    券包張數（可選）
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={formData.ticketCount}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'ticketCount',
+                        e.target.value === '' ? '' : parseInt(e.target.value, 10) || 0
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="3"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    每張面額（可選）
+                  </label>
+                  <input
+                    type="number"
+                    min={1}
+                    step="1"
+                    value={formData.faceValue}
+                    onChange={(e) =>
+                      handleInputChange(
+                        'faceValue',
+                        e.target.value === '' ? '' : parseFloat(e.target.value) || 0
+                      )
+                    }
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    入帳積分
                   </label>
                   <input
                     type="number"
@@ -623,14 +773,14 @@ const RechargeOfferManagement: React.FC = () => {
                     className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                       errors.points ? 'border-red-500' : 'border-gray-300'
                     }`}
-                    placeholder="500"
+                    placeholder="60"
                   />
                   {errors.points && <p className="text-red-500 text-sm mt-1">{errors.points}</p>}
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    充值金額 (HK$)
+                    售價 (HK$)
                   </label>
                   <input
                     type="number"
@@ -640,7 +790,7 @@ const RechargeOfferManagement: React.FC = () => {
                     className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 ${
                       errors.amount ? 'border-red-500' : 'border-gray-300'
                     }`}
-                    placeholder="500.00"
+                    placeholder="30"
                   />
                   {errors.amount && <p className="text-red-500 text-sm mt-1">{errors.amount}</p>}
                 </div>
@@ -657,7 +807,7 @@ const RechargeOfferManagement: React.FC = () => {
                     errors.description ? 'border-red-500' : 'border-gray-300'
                   }`}
                   rows={3}
-                  placeholder="例如：1分 = 1元, 充值後立即可用"
+                  placeholder="例如：3 張 $20 券，用 $30 買，全聯盟訂場可用"
                 />
                 {errors.description && <p className="text-red-500 text-sm mt-1">{errors.description}</p>}
               </div>

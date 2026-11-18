@@ -17,6 +17,20 @@ const rechargeOfferSchema = new mongoose.Schema({
     required: true,
     min: [1, '充值金額必須大於0']
   },
+  /**
+   * 外賣式券包（可選）：例 ticketCount=3、faceValue=20 → 顯示「3張$20」，售價用 amount，
+   * 入帳積分仍用 points（通常 = ticketCount × faceValue）。
+   */
+  ticketCount: {
+    type: Number,
+    default: null,
+    min: [1, '張數至少 1'],
+  },
+  faceValue: {
+    type: Number,
+    default: null,
+    min: [1, '面額至少 1'],
+  },
   description: {
     type: String,
     required: true,
