@@ -39,7 +39,7 @@ const BOOKING_DISCOUNT_LABELS_ZH: Record<string, string> = {
  */
 const DEFAULT_VIP_EXTRA_OFF_FROM = '2026-11-19T00:00:00+08:00';
 const DEFAULT_VIP_EXTRA_OFF_UNTIL = '';
-export const EXTRA_OFF_LABEL_ZH = '第二小時半價（正價）';
+export const EXTRA_OFF_LABEL_ZH = '租用2小時半價優惠';
 
 type DiscountUser = {
   role?: string | null;

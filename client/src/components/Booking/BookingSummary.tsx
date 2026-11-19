@@ -540,7 +540,7 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 courtListPrice
               ) > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span>第二小時半價（正價）</span>
+                  <span>租用2小時半價優惠</span>
                   <span className="font-medium">
                     -
                     {getVipBookingExtraFlatOff(

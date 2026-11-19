@@ -19,7 +19,7 @@ const ATHLETE_PAYMENT_LINK_RATE = 0.5;
  */
 const DEFAULT_VIP_EXTRA_OFF_FROM = '2026-11-19T00:00:00+08:00';
 const DEFAULT_VIP_EXTRA_OFF_UNTIL = '';
-const EXTRA_OFF_LABEL_ZH = '第二小時半價（正價）';
+const EXTRA_OFF_LABEL_ZH = '租用2小時半價優惠';
 
 /**
  * 訂場／收款連結身份折扣（VIP、付費會籍、選手）。
