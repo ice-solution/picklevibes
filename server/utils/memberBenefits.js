@@ -10,7 +10,7 @@ const VIP_BOOKING_DISCOUNT_RATE = BOOKING_DISCOUNT_RATE_BY_LEVEL.vip;
 const ATHLETE_PAYMENT_LINK_RATE = 0.5;
 
 /**
- * 限時：VIP／會員價之後，「第二小時」半價（只減第二個小時；第 1／3／4… 小時維持 VIP 價）
+ * 限時：VIP／會員價之後，「第二小時」按正價半價（只改第二個小時；第 1／3／4… 小時維持 VIP 價）
  * 由 2026-11-19 起取代舊「每小時 −88」優惠。
  * env：
  *   VIP_BOOKING_EXTRA_OFF_FROM=2026-11-19
@@ -19,7 +19,7 @@ const ATHLETE_PAYMENT_LINK_RATE = 0.5;
  */
 const DEFAULT_VIP_EXTRA_OFF_FROM = '2026-11-19T00:00:00+08:00';
 const DEFAULT_VIP_EXTRA_OFF_UNTIL = '';
-const EXTRA_OFF_LABEL_ZH = '第二小時半價';
+const EXTRA_OFF_LABEL_ZH = '第二小時半價（正價）';
 
 /**
  * 訂場／收款連結身份折扣（VIP、付費會籍、選手）。
@@ -80,30 +80,37 @@ function getVipBookingExtraFlatOffConfig(now = new Date()) {
 }
 
 /**
- * VIP 價上「第二小時半價」減額。
+ * 「第二小時正價半價」相對全單 VIP 價嘅減額。
+ * 第 1／3／4… 小時 = VIP 價；第 2 小時 = 正價 × 0.5。
  * @param {object} user
  * @param {Date} now 活動窗口參考時間（通常為下單當下）
  * @param {number} durationMinutes
  * @param {number} vipAmount VIP／會員倍率後總價（未扣第二小時優惠）
+ * @param {number} listAmount 正價總價（牌價）
  */
 function getVipBookingExtraFlatOff(
   user,
   now = new Date(),
   durationMinutes = 60,
-  vipAmount = 0
+  vipAmount = 0,
+  listAmount = 0
 ) {
   if (!hasBookingVipDiscount(user)) return 0;
   if (!getVipBookingExtraFlatOffConfig(now).active) return 0;
 
-  const amount = Number(vipAmount);
   const minutes = Number(durationMinutes);
-  if (!(amount > 0) || !(minutes > 0)) return 0;
+  const list = Number(listAmount);
+  const vip = Number(vipAmount);
+  if (!(minutes > 0) || !(list > 0) || !(vip > 0)) return 0;
 
-  // 只減「第二個小時」：超過 60 分嘅首 60 分內以半價計
   const secondMins = Math.min(60, Math.max(0, minutes - 60));
   if (secondMins <= 0) return 0;
 
-  return Math.round(amount * (secondMins / minutes) * 0.5);
+  const ratio = secondMins / minutes;
+  const vipSecond = vip * ratio;
+  const halfListSecond = list * ratio * 0.5;
+  // 減額 = 該小時若用 VIP 價 − 改為正價半價
+  return Math.max(0, Math.round(vipSecond - halfListSecond));
 }
 
 function isAthleteRole(user) {
@@ -130,12 +137,18 @@ function hasBookingVipDiscount(user) {
   return getBookingDiscountRate(user) < 1;
 }
 
-function bookingVipDiscountLabel(user, durationMinutes = 60, vipAmount = 0) {
+function bookingVipDiscountLabel(user, durationMinutes = 60, vipAmount = 0, listAmount = 0) {
   const level = resolveBookingDiscountLevel(user);
   const base = BOOKING_DISCOUNT_LABELS_ZH[level] || BOOKING_DISCOUNT_LABELS_ZH.basic;
-  const extra = getVipBookingExtraFlatOff(user, new Date(), durationMinutes, vipAmount);
+  const extra = getVipBookingExtraFlatOff(
+    user,
+    new Date(),
+    durationMinutes,
+    vipAmount,
+    listAmount
+  );
   if (extra > 0) return `${base}，${EXTRA_OFF_LABEL_ZH}`;
-  // 窗口已開、時長達兩小時但未傳 vipAmount 時，仍提示優惠名
+  // 窗口已開、時長達兩小時但未傳金額時，仍提示優惠名
   if (
     hasBookingVipDiscount(user) &&
     getVipBookingExtraFlatOffConfig(new Date()).active &&
@@ -153,12 +166,12 @@ function applyBookingVipRateOnly(amount, user) {
   return Math.round(n * getBookingDiscountRate(user));
 }
 
-/** 牌價 → VIP／會員價；限時再套「第二小時半價」（floor 0） */
+/** 牌價 → VIP／會員價；限時再套「第二小時正價半價」（floor 0） */
 function applyBookingVipDiscount(amount, user, now = new Date(), durationMinutes = 60) {
   const n = Number(amount) || 0;
   if (!hasBookingVipDiscount(user) || n <= 0) return n;
   const afterRate = applyBookingVipRateOnly(n, user);
-  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes, afterRate);
+  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes, afterRate, n);
   return Math.max(0, afterRate - extra);
 }
 

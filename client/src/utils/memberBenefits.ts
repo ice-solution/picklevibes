@@ -34,12 +34,12 @@ const BOOKING_DISCOUNT_LABELS_ZH: Record<string, string> = {
 };
 
 /**
- * 限時：VIP 價「第二小時半價」（需同 server/utils/memberBenefits.js 對齊）
- * 2026-11-19 起取代每小時 −88。
+ * 限時：第二小時按正價半價（需同 server/utils/memberBenefits.js 對齊）
+ * 第 1／3／4… 小時維持 VIP 價；2026-11-19 起取代每小時 −88。
  */
 const DEFAULT_VIP_EXTRA_OFF_FROM = '2026-11-19T00:00:00+08:00';
 const DEFAULT_VIP_EXTRA_OFF_UNTIL = '';
-export const EXTRA_OFF_LABEL_ZH = '第二小時半價';
+export const EXTRA_OFF_LABEL_ZH = '第二小時半價（正價）';
 
 type DiscountUser = {
   role?: string | null;
@@ -102,24 +102,32 @@ export function getVipBookingExtraFlatOffConfig(now: Date = new Date()): {
   return { active: afterFrom && beforeUntil, mode: 'second_hour_half' };
 }
 
-/** VIP 價上「第二小時半價」減額（vipAmount = 倍率後總價） */
+/**
+ * 「第二小時正價半價」相對全單 VIP 價嘅減額。
+ * vipAmount = 倍率後總價；listAmount = 正價總價。
+ */
 export function getVipBookingExtraFlatOff(
   user: DiscountUser,
   now: Date = new Date(),
   durationMinutes: number = 60,
-  vipAmount: number = 0
+  vipAmount: number = 0,
+  listAmount: number = 0
 ): number {
   if (!hasBookingVipDiscount(user)) return 0;
   if (!getVipBookingExtraFlatOffConfig(now).active) return 0;
 
-  const amount = Number(vipAmount);
   const minutes = Number(durationMinutes);
-  if (!(amount > 0) || !(minutes > 0)) return 0;
+  const list = Number(listAmount);
+  const vip = Number(vipAmount);
+  if (!(minutes > 0) || !(list > 0) || !(vip > 0)) return 0;
 
   const secondMins = Math.min(60, Math.max(0, minutes - 60));
   if (secondMins <= 0) return 0;
 
-  return Math.round(amount * (secondMins / minutes) * 0.5);
+  const ratio = secondMins / minutes;
+  const vipSecond = vip * ratio;
+  const halfListSecond = list * ratio * 0.5;
+  return Math.max(0, Math.round(vipSecond - halfListSecond));
 }
 
 export function isAthleteRole(user: DiscountUser): boolean {
@@ -163,7 +171,7 @@ export function applyBookingVipDiscount(
   const n = Number(amount) || 0;
   if (!hasBookingVipDiscount(user) || n <= 0) return n;
   const afterRate = applyBookingVipRateOnly(n, user);
-  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes, afterRate);
+  const extra = getVipBookingExtraFlatOff(user, now, durationMinutes, afterRate, n);
   return Math.max(0, afterRate - extra);
 }
 

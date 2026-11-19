@@ -57,7 +57,13 @@ function buildPricingForUser(listTotal, durationMinutes, user) {
   }
 
   const vipRatePrice = applyBookingVipRateOnly(listPrice, user);
-  const extraOff = getVipBookingExtraFlatOff(user, new Date(), durationMinutes, vipRatePrice);
+  const extraOff = getVipBookingExtraFlatOff(
+    user,
+    new Date(),
+    durationMinutes,
+    vipRatePrice,
+    listPrice
+  );
   const finalCost = applyBookingVipDiscount(listPrice, user, new Date(), durationMinutes);
 
   return {

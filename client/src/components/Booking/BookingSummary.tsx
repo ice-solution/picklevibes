@@ -536,17 +536,19 @@ const BookingSummary: React.FC<BookingSummaryProps> = ({
                 user,
                 new Date(),
                 durationMinutes,
-                applyBookingVipRateOnly(courtListPrice, user)
+                applyBookingVipRateOnly(courtListPrice, user),
+                courtListPrice
               ) > 0 && (
                 <div className="flex justify-between text-green-600">
-                  <span>第二小時半價</span>
+                  <span>第二小時半價（正價）</span>
                   <span className="font-medium">
                     -
                     {getVipBookingExtraFlatOff(
                       user,
                       new Date(),
                       durationMinutes,
-                      applyBookingVipRateOnly(courtListPrice, user)
+                      applyBookingVipRateOnly(courtListPrice, user),
+                      courtListPrice
                     )}{' '}
                     {t('common.currency')}
                   </span>
