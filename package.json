@@ -9,6 +9,7 @@
     "client": "cd client && PORT=3000 npm start",
     "build": "cd client && npm run build",
     "build:pickcourtuat": "cd client && npm run build:pickcourtuat",
+    "build:pickcourtproduction": "cd client && npm run build:pickcourtproduction",
     "install-all": "npm install && cd client && npm install",
     "start": "node server/index.js",
     "dev:server": "nodemon server/index.js",
