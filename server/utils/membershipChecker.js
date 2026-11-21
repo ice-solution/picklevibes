@@ -1,14 +1,16 @@
+/**
+ * @deprecated PickCourt 已停用每日 VIP 續期／過期降級；此檔僅保留函式供舊呼叫參考，server 唔會再排程執行。
+ */
 const PlatformMembership = require('../models/PlatformMembership');
 const {
   DAY_MS,
-  grantVip,
   setBasic,
   syncUserLegacyFields,
 } = require('./platformMembershipService');
 const { VIP_PERIOD_DAYS, VIP_PERIOD_MS } = require('../constants/vipMembership');
 
 /**
- * VIP 且到期日在「未來」、以整日向上取整剩餘天數為 1 時，自動延長 VIP_PERIOD_DAYS
+ * @deprecated VIP 且到期日在「未來」、以整日向上取整剩餘天數為 1 時，自動延長 VIP_PERIOD_DAYS
  */
 async function renewVipMembershipsOneDayLeft() {
   try {

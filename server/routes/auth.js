@@ -91,7 +91,7 @@ router.post('/register', authLimiter, [
       });
     }
 
-    // 新用戶：VIP 會員，到期日為註冊日起 180 日（每日 00:00 任務會對「剩 1 整日」自動再延 180 日）
+    // 新用戶：VIP（PickCourt 唔再自動續期／到期降級；到期日僅作紀錄）
     const user = new User({
       name,
       email,

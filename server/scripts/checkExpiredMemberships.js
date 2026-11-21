@@ -1,30 +1,8 @@
 /**
- * 手動執行與伺服器每日排程相同的會員任務：VIP 餘 1 整日續期 180 日 + 過期降級。
- * 用法：MONGODB_URI=... node server/scripts/checkExpiredMemberships.js
+ * 已停用（PickCourt）。
+ * 舊版會執行 VIP 自動續期 + 過期降級；而家唔再檢查／改寫會籍。
+ *
+ * 用法（會直接退出）：node server/scripts/checkExpiredMemberships.js
  */
-require('dotenv').config();
-const mongoose = require('mongoose');
-const { runDailyMembershipJobs } = require('../utils/membershipChecker');
-
-async function main() {
-  const uri = process.env.MONGODB_URI;
-  if (!uri) {
-    console.error('請設定 MONGODB_URI');
-    process.exit(1);
-  }
-  await mongoose.connect(uri);
-  console.log('✅ 已連線 MongoDB');
-  const result = await runDailyMembershipJobs();
-  console.log('📊 結果:', result);
-  await mongoose.connection.close();
-  console.log('🔌 已關閉連線');
-}
-
-if (require.main === module) {
-  main().catch((e) => {
-    console.error(e);
-    process.exit(1);
-  });
-}
-
-module.exports = { main };
+console.log('已停用：PickCourt 不再執行 VIP 自動續期或過期檢查。');
+process.exit(0);

@@ -1266,23 +1266,15 @@ router.put('/:id/membership', [auth, adminAuth], async (req, res) => {
 });
 
 // @route   GET /api/users/check-membership
-// @desc    手動觸發：VIP 餘 1 整日續期 + 過期降級（與每日排程相同邏輯）
+// @desc    已停用（PickCourt 唔再自動續期／過期降級 VIP）
 // @access  Private (Admin)
 router.get('/check-membership', [auth, adminAuth], async (req, res) => {
-  try {
-    const { runDailyMembershipJobs } = require('../utils/membershipChecker');
-    const result = await runDailyMembershipJobs();
-
-    res.json({
-      message: `會員任務完成：續期 ${result.renewedCount ?? 0} 人，過期降級 ${result.expiredCount ?? 0} 人`,
-      renewedCount: result.renewedCount ?? 0,
-      expiredCount: result.expiredCount ?? 0,
-      totalVipUsers: result.totalVipUsers
-    });
-  } catch (error) {
-    console.error('檢查會員狀態錯誤:', error);
-    res.status(500).json({ message: '服務器錯誤，請稍後再試' });
-  }
+  res.status(410).json({
+    message: '已停用：PickCourt 不再執行 VIP 自動續期或過期檢查',
+    renewedCount: 0,
+    expiredCount: 0,
+    disabled: true,
+  });
 });
 
 // @route   POST /api/users/create

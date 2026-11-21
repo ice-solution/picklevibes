@@ -88,17 +88,8 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
-// 檢查會員狀態是否過期
+// PickCourt：唔再按到期日自動降級；vip = 有效
 userSchema.methods.checkMembershipStatus = function() {
-  if (this.membershipLevel === 'vip' && this.membershipExpiry) {
-    const now = new Date();
-    if (now > this.membershipExpiry) {
-      this.membershipLevel = 'basic';
-      this.membershipExpiry = null;
-      return false; // 已過期
-    }
-    return true; // 仍然有效
-  }
   return this.membershipLevel === 'vip';
 };
 

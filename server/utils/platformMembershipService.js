@@ -4,11 +4,9 @@ const { VIP_PERIOD_MS } = require('../constants/vipMembership');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-function isVipActive({ tier, expiry }) {
-  if (tier !== 'vip') return false;
-  // 無到期日唔當有效 VIP（避免舊資料 membershipLevel=vip 永遠顯示 VIP）
-  if (!expiry) return false;
-  return new Date(expiry) > new Date();
+function isVipActive({ tier }) {
+  // PickCourt：唔再按到期日自動失效／降級；有 vip tier 即當有效
+  return tier === 'vip';
 }
 
 function membershipFromUser(user) {
